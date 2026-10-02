@@ -25,6 +25,22 @@ class GravityFrameTest {
         assertVec(v(0, 101, 0), f.toMc(v(0, 920, 0)), 1e-9);  // 100 units = 1 block
     }
 
+    @Test void unitsPerBlockFromProperty() {
+        assertEquals(89, GravityFrame.unitsPerBlock("89"));
+        assertEquals(62.5, GravityFrame.unitsPerBlock(" 62.5 "));
+        assertEquals(GravityFrame.DEFAULT_UNITS_PER_BLOCK, GravityFrame.unitsPerBlock(null));
+        for (String bad : new String[] {"", "abc", "0", "-5", "NaN", "Infinity", "100000"}) {
+            assertEquals(GravityFrame.DEFAULT_UNITS_PER_BLOCK, GravityFrame.unitsPerBlock(bad), bad);
+        }
+    }
+
+    @Test void scaleFollowsTheProperty() {
+        // build.gradle pins -Dgalaxycraft.unitsPerBlock=100 for unit tests.
+        assertEquals(1.0 / 100, GravityFrame.SCALE);
+        var f = start();
+        assertVec(v(0, 101.78, 0), f.toMc(v(0, 820 + 178, 0)), 1e-9);
+    }
+
     @Test void upMatchesGravity() {
         var f = start();
         var g = v(1, 0, 0);

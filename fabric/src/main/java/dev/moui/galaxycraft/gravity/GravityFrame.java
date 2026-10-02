@@ -12,7 +12,13 @@ import org.joml.Vector3d;
  * mc = r · (SCALE · gal) + t
  */
 public final class GravityFrame {
-    public static final double SCALE = 0.01; // 100 galaxy units = 1 block
+    /**
+     * Galaxy units per Minecraft block. Measured on SB4E (docs/PHASE4.md): Mario stands about
+     * 145 units tall, and Steve is 1.8 blocks, so 1 block = 80 units. Override with
+     * -Dgalaxycraft.unitsPerBlock.
+     */
+    public static final double DEFAULT_UNITS_PER_BLOCK = 80;
+    public static final double SCALE = 1.0 / unitsPerBlock(System.getProperty("galaxycraft.unitsPerBlock"));
     private static final double MIN_ANGLE = Math.toRadians(0.05);
     private static final double REBASE_MIN_Y = 36, REBASE_MAX_Y = 164, REBASE_Y = 100;
     private static final Vector3d UP = new Vector3d(0, 1, 0);
@@ -28,6 +34,17 @@ public final class GravityFrame {
             r.set(minimalRotation(new Vector3d(gStart).normalize().negate(), UP));
         }
         t.set(mcStart).sub(r.transform(new Vector3d(galStart).mul(SCALE)));
+    }
+
+    /** Parses a units-per-block setting; anything missing or absurd gives the default. */
+    public static double unitsPerBlock(String value) {
+        if (value == null) return DEFAULT_UNITS_PER_BLOCK;
+        try {
+            double u = Double.parseDouble(value.strip());
+            return u >= 1 && u <= 10_000 ? u : DEFAULT_UNITS_PER_BLOCK;
+        } catch (NumberFormatException e) {
+            return DEFAULT_UNITS_PER_BLOCK;
+        }
     }
 
     private GravityFrame(GravityFrame o) {
