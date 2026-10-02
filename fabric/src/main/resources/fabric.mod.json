@@ -1,0 +1,21 @@
+{
+	"schemaVersion": 1,
+	"id": "galaxycraft",
+	"version": "${version}",
+	"name": "GalaxyCraft",
+	"description": "Play Super Mario Galaxy 2 (Dolphin) as a Minecraft player.",
+	"authors": ["moui"],
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["dev.moui.galaxycraft.GalaxyCraft"],
+		"client": ["dev.moui.galaxycraft.client.GalaxyCraftClient"]
+	},
+	"mixins": ["galaxycraft.mixins.json"],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
