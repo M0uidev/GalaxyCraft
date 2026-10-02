@@ -1,0 +1,450 @@
+diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
+index 56c8dba..c99982b 100644
+--- a/Source/Core/Core/CMakeLists.txt
++++ b/Source/Core/Core/CMakeLists.txt
+@@ -57,6 +57,8 @@ add_library(core
+   ConfigManager.h
+   Core.cpp
+   Core.h
++  GalaxyCraft.cpp
++  GalaxyCraft.h
+   CoreTiming.cpp
+   CoreTiming.h
+   CPUThreadConfigCallback.cpp
+@@ -681,8 +683,13 @@ elseif(_M_ARM_64)
+   )
+ endif()
+ 
++# GalaxyCraft host library (lives next to the Dolphin checkout, see dolphin/build.sh).
++set(GALAXYCRAFT_HOST_DIR "${CMAKE_SOURCE_DIR}/../galaxycraft" CACHE PATH "GalaxyCraft host library")
++add_subdirectory(${GALAXYCRAFT_HOST_DIR} ${CMAKE_BINARY_DIR}/galaxycraft_host)
++
+ target_link_libraries(core
+ PUBLIC
++  galaxycraft_host
+   audiocommon
+   common
+   discio
+diff --git a/Source/Core/Core/Core.cpp b/Source/Core/Core/Core.cpp
+index fc614fd..7a29ab0 100644
+--- a/Source/Core/Core/Core.cpp
++++ b/Source/Core/Core/Core.cpp
+@@ -2,6 +2,7 @@
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+ #include "Core/Core.h"
++#include "Core/GalaxyCraft.h"
+ 
+ #include <algorithm>
+ #include <atomic>
+@@ -596,6 +597,9 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
+     system.GetPowerPC().GetDebugInterface().Clear(guard);
+   }};
+ 
++  GalaxyCraft::Start(system);
++  Common::ScopeGuard galaxycraft_guard{[] { GalaxyCraft::Stop(); }};
++
+   // In single-core mode: This holds a video backend shutdown function.
+   // In dual-core mode: This holds a GPU thread stopping function (which does the backend shutdown).
+   const auto video_guard = GetInitializedVideoGuard(system, wsi);
+diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
+new file mode 100644
+index 0000000..a999e6b
+--- /dev/null
++++ b/Source/Core/Core/GalaxyCraft.cpp
+@@ -0,0 +1,185 @@
++// Copyright 2026 GalaxyCraft contributors
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "Core/GalaxyCraft.h"
++
++#include <chrono>
++#include <cstdlib>
++#include <cstring>
++#include <memory>
++#include <mutex>
++
++#include "Common/HookableEvent.h"
++#include "Common/Logging/Log.h"
++#include "Core/HW/Memmap.h"
++#include "Core/System.h"
++#include "VideoCommon/VideoEvents.h"
++
++#include "HostBridge.h"
++#include "Input.h"
++#include "Overlay.h"
++#include "Shm.h"
++#include "galaxycraft_protocol.h"
++
++namespace GalaxyCraft
++{
++namespace
++{
++// Emulated RAM through raw pointers with our own bounds checks: the game hands us addresses
++// (e.g. KCL data), and a bad one must be ignored rather than raise Dolphin's panic alerts.
++class DolphinGuestMemory final : public gxc::GuestMemory
++{
++public:
++  explicit DolphinGuestMemory(Memory::MemoryManager& mm) : m_mm(mm) {}
++
++  bool Read(u32 addr, void* dst, u32 n) override
++  {
++    u8* p = Ptr(addr, n);
++    if (!p)
++      return false;
++    std::memcpy(dst, p, n);
++    return true;
++  }
++
++  bool Write(u32 addr, const void* src, u32 n) override
++  {
++    u8* p = Ptr(addr, n);
++    if (!p)
++      return false;
++    std::memcpy(p, src, n);
++    return true;
++  }
++
++  std::vector<std::pair<u32, u32>> Regions() override
++  {
++    std::vector<std::pair<u32, u32>> out{{0x80000000u, m_mm.GetRamSizeReal()}};
++    if (m_mm.GetEXRAM())
++      out.emplace_back(0x90000000u, m_mm.GetExRamSizeReal());
++    return out;
++  }
++
++private:
++  u8* Ptr(u32 addr, u32 n)
++  {
++    const u32 base = addr & 0xF0000000u;
++    const u32 off = addr & 0x0FFFFFFFu;
++    if ((base == 0x80000000u || base == 0xC0000000u) &&
++        static_cast<u64>(off) + n <= m_mm.GetRamSizeReal())
++      return m_mm.GetRAM() + off;
++    if ((base == 0x90000000u || base == 0xD0000000u) && m_mm.GetEXRAM() &&
++        static_cast<u64>(off) + n <= m_mm.GetExRamSizeReal())
++      return m_mm.GetEXRAM() + off;
++    return nullptr;
++  }
++
++  Memory::MemoryManager& m_mm;
++};
++
++u64 NowMs()
++{
++  return static_cast<u64>(std::chrono::duration_cast<std::chrono::milliseconds>(
++                              std::chrono::steady_clock::now().time_since_epoch())
++                              .count());
++}
++
++struct State
++{
++  std::unique_ptr<gxc::Shm> shm;
++  std::unique_ptr<gxc::HostBridge> bridge;
++  std::unique_ptr<gxc::InputWriter> input;
++  std::unique_ptr<DolphinGuestMemory> memory;
++  Common::EventHook field_hook;
++};
++
++std::mutex s_mutex;
++std::unique_ptr<State> s_state;
++
++bool ModAlive(const gxc::Shm& shm)
++{
++  const u64 hb = shm.GetU64(offsetof(GxcHeader, mod_heartbeat_ms));
++  return hb != 0 && NowMs() - hb < GXC_HEARTBEAT_TIMEOUT_MS;
++}
++}  // namespace
++
++void Start(Core::System& system)
++{
++  const char* env = std::getenv("GALAXYCRAFT");
++  if (!env || std::strcmp(env, "1") != 0)
++    return;
++
++  auto state = std::make_unique<State>();
++  state->shm = gxc::Shm::Create("/dev/shm" GXC_SHM_NAME);
++  if (!state->shm)
++  {
++    ERROR_LOG_FMT(CORE, "GalaxyCraft: could not create /dev/shm{}", GXC_SHM_NAME);
++    return;
++  }
++  state->bridge = std::make_unique<gxc::HostBridge>(*state->shm, NowMs);
++  state->input = std::make_unique<gxc::InputWriter>(*state->shm);
++  state->memory = std::make_unique<DolphinGuestMemory>(system.GetMemory());
++  // Runs on the CPU thread at the end of every video field: emulated RAM is safe to touch.
++  state->field_hook = system.GetVideoEvents().vi_end_field_event.Register([] {
++    std::lock_guard lock(s_mutex);
++    if (s_state)
++      s_state->bridge->Tick(*s_state->memory);
++  });
++
++  std::lock_guard lock(s_mutex);
++  s_state = std::move(state);
++  NOTICE_LOG_FMT(CORE, "GalaxyCraft: bridge running on /dev/shm{}", GXC_SHM_NAME);
++}
++
++void Stop()
++{
++  std::unique_ptr<State> state;
++  {
++    std::lock_guard lock(s_mutex);
++    state = std::move(s_state);
++  }
++  // Destroying the hook here (outside the lock) waits for nothing: the hook takes s_mutex and
++  // sees s_state == nullptr if it runs concurrently.
++}
++
++bool InputActive()
++{
++  std::lock_guard lock(s_mutex);
++  return s_state && ModAlive(*s_state->shm);
++}
++
++void OnKey(int qt_key, bool down)
++{
++  std::lock_guard lock(s_mutex);
++  if (s_state)
++    s_state->input->Key(gxc::QtKeyToGlfw(qt_key), down);
++}
++
++void OnMouseDelta(double dx, double dy)
++{
++  std::lock_guard lock(s_mutex);
++  if (s_state)
++    s_state->input->MouseDelta(dx, dy);
++}
++
++void OnMouseButtons(u32 mask)
++{
++  std::lock_guard lock(s_mutex);
++  if (s_state)
++    s_state->input->Buttons(mask);
++}
++
++void OnWheel(double delta)
++{
++  std::lock_guard lock(s_mutex);
++  if (s_state)
++    s_state->input->Wheel(delta);
++}
++
++void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn)
++{
++  std::lock_guard lock(s_mutex);
++  if (!s_state || !ModAlive(*s_state->shm))
++    return;
++  if (auto frame = gxc::LatestOverlay(*s_state->shm))
++    fn(frame->width, frame->height, frame->frame_id, frame->rgba);
++}
++}  // namespace GalaxyCraft
+diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
+new file mode 100644
+index 0000000..b9db364
+--- /dev/null
++++ b/Source/Core/Core/GalaxyCraft.h
+@@ -0,0 +1,34 @@
++// Copyright 2026 GalaxyCraft contributors
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include <functional>
++
++#include "Common/CommonTypes.h"
++
++namespace Core
++{
++class System;
++}
++
++// GalaxyCraft: bridge between the emulated game and a Minecraft mod over shared memory.
++// Everything is a no-op unless the GALAXYCRAFT environment variable is set to 1.
++namespace GalaxyCraft
++{
++// EmuThread, after HW init / before HW shutdown.
++void Start(Core::System& system);
++void Stop();
++
++// True while Minecraft is connected, so keyboard and mouse belong to it.
++bool InputActive();
++
++// Qt thread.
++void OnKey(int qt_key, bool down);
++void OnMouseDelta(double dx, double dy);
++void OnMouseButtons(u32 mask);
++void OnWheel(double delta);
++
++// Video thread: calls fn(width, height, frame_id, rgba) with the newest overlay frame, if any.
++void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn);
++}  // namespace GalaxyCraft
+diff --git a/Source/Core/DolphinQt/RenderWidget.cpp b/Source/Core/DolphinQt/RenderWidget.cpp
+index 49680b8..633301d 100644
+--- a/Source/Core/DolphinQt/RenderWidget.cpp
++++ b/Source/Core/DolphinQt/RenderWidget.cpp
+@@ -12,6 +12,8 @@
+ #include <QKeyEvent>
+ #include <QMimeData>
+ #include <QMouseEvent>
++#include <QCursor>
++#include <QWheelEvent>
+ #include <QPalette>
+ #include <QScreen>
+ #include <QTimer>
+@@ -19,6 +21,7 @@
+ 
+ #include "Core/Config/MainSettings.h"
+ #include "Core/Core.h"
++#include "Core/GalaxyCraft.h"
+ #include "Core/State.h"
+ #include "Core/System.h"
+ 
+@@ -358,6 +361,9 @@ void RenderWidget::SetWaitingForMessageBox(bool waiting_for_message_box)
+ 
+ bool RenderWidget::event(QEvent* event)
+ {
++  if (PassEventToGalaxyCraft(event))
++    return true;
++
+   PassEventToPresenter(event);
+ 
+   switch (event->type())
+@@ -511,6 +517,57 @@ bool RenderWidget::event(QEvent* event)
+   return QWidget::event(event);
+ }
+ 
++// While Minecraft is connected (GalaxyCraft), keyboard and mouse go to it: keys as GLFW codes and
++// the mouse as relative motion, re-centering the hidden cursor. Escape still reaches Dolphin.
++bool RenderWidget::PassEventToGalaxyCraft(QEvent* event)
++{
++  const bool active = GalaxyCraft::InputActive();
++  if (active != m_galaxycraft_input)
++  {
++    m_galaxycraft_input = active;
++    setCursor(active ? Qt::BlankCursor : Qt::ArrowCursor);
++  }
++  if (!active)
++    return false;
++
++  switch (event->type())
++  {
++  case QEvent::KeyPress:
++  case QEvent::KeyRelease:
++  {
++    const auto* key_event = static_cast<const QKeyEvent*>(event);
++    if (key_event->key() == Qt::Key_Escape)
++      return false;
++    if (!key_event->isAutoRepeat())
++      GalaxyCraft::OnKey(key_event->key(), event->type() == QEvent::KeyPress);
++    return true;
++  }
++  case QEvent::MouseMove:
++  {
++    const QPoint center(width() / 2, height() / 2);
++    const QPoint delta = static_cast<const QMouseEvent*>(event)->pos() - center;
++    if (!delta.isNull())
++    {
++      const float scale = devicePixelRatio();
++      GalaxyCraft::OnMouseDelta(delta.x() * scale, delta.y() * scale);
++      QCursor::setPos(mapToGlobal(center));  // the resulting move event has a zero delta
++    }
++    return true;
++  }
++  case QEvent::MouseButtonPress:
++  case QEvent::MouseButtonRelease:
++    setFocus();
++    // Qt's left/right/middle bits match GLFW buttons 0/1/2.
++    GalaxyCraft::OnMouseButtons(static_cast<u32>(static_cast<const QMouseEvent*>(event)->buttons()) & 7);
++    return true;
++  case QEvent::Wheel:
++    GalaxyCraft::OnWheel(static_cast<const QWheelEvent*>(event)->angleDelta().y() / 120.0);
++    return true;
++  default:
++    return false;
++  }
++}
++
+ void RenderWidget::PassEventToPresenter(const QEvent* event)
+ {
+   if (!Core::IsRunning(Core::System::GetInstance()))
+diff --git a/Source/Core/DolphinQt/RenderWidget.h b/Source/Core/DolphinQt/RenderWidget.h
+index d828bf3..7240b1a 100644
+--- a/Source/Core/DolphinQt/RenderWidget.h
++++ b/Source/Core/DolphinQt/RenderWidget.h
+@@ -41,6 +41,8 @@ private:
+   void OnKeepOnTopChanged(bool top);
+   void UpdateCursor();
+   void PassEventToPresenter(const QEvent* event);
++  bool PassEventToGalaxyCraft(QEvent* event);
++  bool m_galaxycraft_input = false;
+   void SetPresenterKeyMap();
+   void dragEnterEvent(QDragEnterEvent* event) override;
+   void dropEvent(QDropEvent* event) override;
+diff --git a/Source/Core/VideoCommon/OnScreenUI.cpp b/Source/Core/VideoCommon/OnScreenUI.cpp
+index 209e96c..0c444ab 100644
+--- a/Source/Core/VideoCommon/OnScreenUI.cpp
++++ b/Source/Core/VideoCommon/OnScreenUI.cpp
+@@ -3,6 +3,8 @@
+ 
+ #include "VideoCommon/OnScreenUI.h"
+ 
++#include "Core/GalaxyCraft.h"
++
+ #include "Common/CommonPaths.h"
+ #include "Common/EnumMap.h"
+ #include "Common/FileUtil.h"
+@@ -413,10 +415,39 @@ void OnScreenUI::DrawChallengesAndLeaderboards()
+ #endif  // USE_RETRO_ACHIEVEMENTS
+ }
+ 
++void OnScreenUI::DrawGalaxyCraftOverlay()
++{
++  bool visible = false;
++  GalaxyCraft::WithOverlay([&](u32 width, u32 height, u32 frame_id, const u8* rgba) {
++    if (!m_galaxycraft_texture || m_galaxycraft_texture->GetWidth() != width ||
++        m_galaxycraft_texture->GetHeight() != height)
++    {
++      TextureConfig config(width, height, 1, 1, 1, AbstractTextureFormat::RGBA8, 0,
++                           AbstractTextureType::Texture_2DArray);
++      m_galaxycraft_texture = g_gfx->CreateTexture(config, "GalaxyCraft overlay");
++      m_galaxycraft_frame_id = UINT32_MAX;
++    }
++    if (!m_galaxycraft_texture)
++      return;
++    if (frame_id != m_galaxycraft_frame_id)
++    {
++      m_galaxycraft_texture->Load(0, width, height, width, rgba, sizeof(u32) * width * height);
++      m_galaxycraft_frame_id = frame_id;
++    }
++    visible = true;
++  });
++  if (visible)
++  {
++    ImGui::GetBackgroundDrawList()->AddImage(*m_galaxycraft_texture, ImVec2(0, 0),
++                                             ImGui::GetIO().DisplaySize);
++  }
++}
++
+ void OnScreenUI::Finalize()
+ {
+   auto lock = GetImGuiLock();
+ 
++  DrawGalaxyCraftOverlay();
+   auto& perf_metrics = Core::System::GetInstance().GetPerfMetrics();
+   perf_metrics.DrawImGuiStats(m_backbuffer_scale);
+   DrawDebugText();
+diff --git a/Source/Core/VideoCommon/OnScreenUI.h b/Source/Core/VideoCommon/OnScreenUI.h
+index e9a14e0..7c236c2 100644
+--- a/Source/Core/VideoCommon/OnScreenUI.h
++++ b/Source/Core/VideoCommon/OnScreenUI.h
+@@ -68,6 +68,10 @@ private:
+   // ImGui resources.
+   std::unique_ptr<NativeVertexFormat> m_imgui_vertex_format;
+   std::vector<std::unique_ptr<AbstractTexture>> m_imgui_textures;
++  // GalaxyCraft: the Minecraft overlay (hand, hotbar, screens).
++  void DrawGalaxyCraftOverlay();
++  std::unique_ptr<AbstractTexture> m_galaxycraft_texture;
++  u32 m_galaxycraft_frame_id = UINT32_MAX;
+   std::unique_ptr<AbstractPipeline> m_imgui_pipeline;
+   std::map<u32, int> m_dolphin_to_imgui_map;
+   std::mutex m_imgui_mutex;
