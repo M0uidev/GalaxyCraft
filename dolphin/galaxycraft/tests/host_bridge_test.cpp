@@ -53,10 +53,10 @@ void WriteMailbox(FakeGuestMemory& mem, u32 at, u32 scene, const std::vector<Par
   mem.PutU32(at + 20, scene);
   mem.PutF32(at + 24, 0), mem.PutF32(at + 28, -1), mem.PutF32(at + 32, 0);  // gravity
   mem.PutF32(at + 36, 1), mem.PutF32(at + 40, 2), mem.PutF32(at + 44, 3);   // anchor (Mario)
-  mem.PutU32(at + 100, static_cast<u32>(parts.size()));
+  mem.PutU32(at + offsetof(GxcMailbox, part_count), static_cast<u32>(parts.size()));
   for (size_t i = 0; i < parts.size(); i++)
   {
-    const u32 p = at + 104 + static_cast<u32>(i) * 60;
+    const u32 p = at + offsetof(GxcMailbox, parts) + static_cast<u32>(i) * 60;
     mem.PutU32(p, parts[i].id);
     mem.PutU32(p + 4, parts[i].addr);
     mem.PutU32(p + 8, parts[i].size);
@@ -92,10 +92,18 @@ struct Fixture
     return out;
   }
 
-  void ModReports(u64 frame, Vec3 pos)
+  void ModReports(u64 frame, Vec3 pos, Vec3 cam_offset = {}, u32 view = GXC_VIEW_FIRST)
   {
     shm->SetU64(offsetof(GxcHeader, mod_heartbeat_ms), now);
-    WritePlayer(*shm, {0, frame, pos, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f});
+    WritePlayer(*shm, {0, frame, pos, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, cam_offset, view});
+  }
+
+  // The game's camera at (10, 20, 30) looking -z, FOV 45; Mario faces +x.
+  void GameCameraInMailbox()
+  {
+    const float vals[] = {10, 20, 30, 0, 0, -1, 0, 1, 0, 45, 1, 0, 0};
+    for (int i = 0; i < 13; i++)
+      mem.PutF32(MBX + offsetof(GxcMailbox, cam_pos) + 4 * i, vals[i]);
   }
 };
 
@@ -184,6 +192,68 @@ TEST(follow_writes_flags_and_mario_position)
   auto w = ReadWorld(*f.shm);
   CHECK(w && (w->flags & GXC_WORLD_FOLLOW) && (w->flags & GXC_WORLD_ANCHOR) == 0);
   CHECK(w->query_pos.x == 1.f && w->query_pos.y == 2.f && w->query_pos.z == 3.f);
+}
+
+TEST(follow_writes_camera_offset)
+{
+  Fixture f;
+  f.Tick();
+  f.ModReports(1, {10, 20, 30}, {0, 130, -320}, GXC_VIEW_BACK);
+  f.Tick();
+  CHECK(f.mem.GetU32(MBX + 52) == GXC_MBX_FOLLOW);
+  CHECK(f.mem.GetF32(MBX + offsetof(GxcMailbox, cam_offset) + 4) == 130.f);
+  CHECK(f.mem.GetF32(MBX + offsetof(GxcMailbox, cam_offset) + 8) == -320.f);
+  CHECK(!f.bridge.GalaxyView());
+}
+
+TEST(no_camera_offset_means_eye_height_up)
+{
+  // An old-style pose (or a dev follow) without an offset still puts the camera in the eyes.
+  Fixture f;
+  f.Tick();
+  f.ModReports(1, {10, 20, 30});
+  f.Tick();
+  CHECK(f.mem.GetF32(MBX + offsetof(GxcMailbox, cam_offset)) == 0.f);
+  CHECK(f.mem.GetF32(MBX + offsetof(GxcMailbox, cam_offset) + 4) == 162.f);
+}
+
+TEST(galaxy_view_flag)
+{
+  Fixture f;
+  f.Tick();
+  f.ModReports(1, {10, 20, 30}, {0, 162, 0}, GXC_VIEW_GALAXY);
+  f.Tick();
+  CHECK(f.mem.GetU32(MBX + 52) == (GXC_MBX_FOLLOW | GXC_MBX_GALAXY_VIEW));
+  CHECK(f.bridge.GalaxyView());
+  f.bridge.SetMinecraftMode(false);
+  f.Tick();
+  CHECK(!f.bridge.GalaxyView() && f.mem.GetU32(MBX + 52) == 0);
+}
+
+TEST(publishes_game_camera)
+{
+  Fixture f;
+  f.GameCameraInMailbox();
+  f.mem.PutU32(MBX + offsetof(GxcMailbox, game_seq), 1);
+  f.Tick();
+  auto c = ReadGameCamera(*f.shm);
+  CHECK(c && (c->flags & GXC_GAMECAM_VALID) && (c->flags & GXC_GAMECAM_DEMO) == 0);
+  CHECK(c->cam_pos.x == 10.f && c->cam_dir.z == -1.f && c->cam_up.y == 1.f && c->fov_y == 45.f);
+  CHECK(c->mario_pos.y == 2.f && c->mario_front.x == 1.f);
+  f.mem.PutU32(MBX + offsetof(GxcMailbox, game_flags), GXC_MBX_GAME_DEMO);
+  f.mem.PutU32(MBX + offsetof(GxcMailbox, game_seq), 2);
+  f.Tick();
+  c = ReadGameCamera(*f.shm);
+  CHECK(c && (c->flags & GXC_GAMECAM_DEMO));
+}
+
+TEST(game_camera_invalid_without_fov)
+{
+  // A module that never filled the camera (or a menu without one) is not a camera to follow.
+  Fixture f;
+  f.Tick();
+  auto c = ReadGameCamera(*f.shm);
+  CHECK(c && (c->flags & GXC_GAMECAM_VALID) == 0);
 }
 
 TEST(matrix_only_change_sends_upsert_without_chunks)

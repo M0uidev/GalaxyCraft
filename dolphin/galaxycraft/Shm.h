@@ -81,10 +81,23 @@ struct PlayerState
   Vec3 pos, look, up;
   float fov_y;
   float eye_height;
+  Vec3 cam_offset{};  // camera minus pos; zero: up * eye_height
+  u32 view = 0;       // GXC_VIEW_*
+};
+
+struct GameCamera
+{
+  u32 flags;  // GXC_GAMECAM_*
+  u64 frame_id;
+  Vec3 cam_pos, cam_dir, cam_up;
+  float fov_y;
+  Vec3 mario_pos, mario_front;
 };
 
 void WriteWorld(Shm& shm, const WorldState& w);
 std::optional<WorldState> ReadWorld(const Shm& shm);
 void WritePlayer(Shm& shm, const PlayerState& p);
 std::optional<PlayerState> ReadPlayer(const Shm& shm);
+void WriteGameCamera(Shm& shm, const GameCamera& c);
+std::optional<GameCamera> ReadGameCamera(const Shm& shm);
 }  // namespace gxc

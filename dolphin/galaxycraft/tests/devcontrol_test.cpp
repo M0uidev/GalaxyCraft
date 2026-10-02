@@ -92,7 +92,7 @@ TEST(mbx_summarizes_mailbox)
   mem.PutF32(MBX + 36, 1.5f), mem.PutF32(MBX + 40, 2), mem.PutF32(MBX + 44, -3);
   mem.PutU32(MBX + 48, 2), mem.PutU32(MBX + 52, 1);  // host_flags
   mem.PutF32(MBX + 56, 7), mem.PutF32(MBX + 60, 8), mem.PutF32(MBX + 64, 9);
-  mem.PutU32(MBX + 100, 3);
+  mem.PutU32(MBX + offsetof(GxcMailbox, part_count), 3);
   auto c = ParseDevCommands("mbx");
   const std::string out = RunMemoryCommand(c[0], mem, MBX);
   for (const char* key : {"game_seq=1234 ", "scene=5 ", "grav=(0.000,-1.000,0.000) ",

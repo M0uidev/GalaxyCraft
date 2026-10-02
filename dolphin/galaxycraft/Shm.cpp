@@ -213,6 +213,8 @@ void WritePlayer(Shm& shm, const PlayerState& p)
   std::memcpy(s.up, &p.up, 12);
   s.fov_y = p.fov_y;
   s.eye_height = p.eye_height;
+  std::memcpy(s.cam_offset, &p.cam_offset, 12);
+  s.view = p.view;
   SeqWrite(shm, GXC_OFF_PLAYER, s);
 }
 
@@ -225,6 +227,36 @@ std::optional<PlayerState> ReadPlayer(const Shm& shm)
   std::memcpy(&p.pos, s->pos, 12);
   std::memcpy(&p.look, s->look, 12);
   std::memcpy(&p.up, s->up, 12);
+  std::memcpy(&p.cam_offset, s->cam_offset, 12);
+  p.view = s->view;
   return p;
+}
+
+void WriteGameCamera(Shm& shm, const GameCamera& c)
+{
+  GxcGameCamera s{};
+  s.flags = c.flags;
+  s.frame_id = c.frame_id;
+  std::memcpy(s.cam_pos, &c.cam_pos, 12);
+  std::memcpy(s.cam_dir, &c.cam_dir, 12);
+  std::memcpy(s.cam_up, &c.cam_up, 12);
+  s.fov_y = c.fov_y;
+  std::memcpy(s.mario_pos, &c.mario_pos, 12);
+  std::memcpy(s.mario_front, &c.mario_front, 12);
+  SeqWrite(shm, GXC_OFF_GAMECAM, s);
+}
+
+std::optional<GameCamera> ReadGameCamera(const Shm& shm)
+{
+  auto s = SeqRead<GxcGameCamera>(shm, GXC_OFF_GAMECAM);
+  if (!s)
+    return std::nullopt;
+  GameCamera c{s->flags, s->frame_id, {}, {}, {}, s->fov_y, {}, {}};
+  std::memcpy(&c.cam_pos, s->cam_pos, 12);
+  std::memcpy(&c.cam_dir, s->cam_dir, 12);
+  std::memcpy(&c.cam_up, s->cam_up, 12);
+  std::memcpy(&c.mario_pos, s->mario_pos, 12);
+  std::memcpy(&c.mario_front, s->mario_front, 12);
+  return c;
 }
 }  // namespace gxc

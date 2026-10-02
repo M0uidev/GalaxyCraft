@@ -49,13 +49,24 @@ struct HostBridge::Mailbox
   Vec3 gravity;
   Vec3 anchor;
   u32 game_flags;
+  Vec3 cam_pos, cam_dir, cam_up;
+  float cam_fov;
+  Vec3 mario_front;
   std::vector<std::pair<u32, PartState>> parts;
 
   static Mailbox Parse(const u8* b)
   {
-    Mailbox m{BE32(b + offsetof(GxcMailbox, game_seq)), BE32(b + offsetof(GxcMailbox, scene_id)),
-              BEVec(b + offsetof(GxcMailbox, gravity)), BEVec(b + offsetof(GxcMailbox, anchor_pos)),
-              BE32(b + offsetof(GxcMailbox, game_flags)), {}};
+    Mailbox m{BE32(b + offsetof(GxcMailbox, game_seq)),
+              BE32(b + offsetof(GxcMailbox, scene_id)),
+              BEVec(b + offsetof(GxcMailbox, gravity)),
+              BEVec(b + offsetof(GxcMailbox, anchor_pos)),
+              BE32(b + offsetof(GxcMailbox, game_flags)),
+              BEVec(b + offsetof(GxcMailbox, cam_pos)),
+              BEVec(b + offsetof(GxcMailbox, cam_dir)),
+              BEVec(b + offsetof(GxcMailbox, cam_up)),
+              BEF(b + offsetof(GxcMailbox, cam_fov)),
+              BEVec(b + offsetof(GxcMailbox, mario_front)),
+              {}};
     const u32 count =
         std::min<u32>(BE32(b + offsetof(GxcMailbox, part_count)), GXC_MBX_MAX_PARTS);
     for (u32 i = 0; i < count; i++)
@@ -105,6 +116,7 @@ void HostBridge::Tick(GuestMemory& mem)
     m_game_seq.reset();
   }
   m_following = false;
+  m_galaxy_view = false;
   if (!m_mailbox && (m_scan_cooldown-- > 0 || !FindMailbox(mem) ||
                      !mem.Read(*m_mailbox, raw.data(), MBX_SIZE)))
   {
@@ -156,6 +168,12 @@ void HostBridge::Tick(GuestMemory& mem)
   WorldState w{mbx.scene_id, m_frame, mbx.gravity, mbx.anchor,
                GXC_WORLD_FOLLOW | (m_anchored ? GXC_WORLD_ANCHOR : 0u)};
   WriteWorld(m_shm, w);
+  // The game's camera, with Mario from the same frame: the mod's Galaxy view follows it.
+  const bool camera = m_ticks_since_game_frame <= IN_GAME_TICKS && mbx.cam_fov > 0;
+  WriteGameCamera(m_shm, {(camera ? GXC_GAMECAM_VALID : 0u) |
+                              ((mbx.game_flags & GXC_MBX_GAME_DEMO) ? GXC_GAMECAM_DEMO : 0u),
+                          m_frame, mbx.cam_pos, mbx.cam_dir, mbx.cam_up, mbx.cam_fov, mbx.anchor,
+                          mbx.mario_front});
 
   if (m_dev_follow)
   {
@@ -168,6 +186,7 @@ void HostBridge::Tick(GuestMemory& mem)
     return;
   }
   m_following = mod_alive;
+  m_galaxy_view = m_following && m_player && m_player->view == GXC_VIEW_GALAXY;
   WriteFollow(mem, m_following && m_player ? &*m_player : nullptr);
 }
 
@@ -285,17 +304,24 @@ bool HostBridge::SendPart(GuestMemory& mem, u32 id, const PartState& p, bool wit
 
 void HostBridge::WriteFollow(GuestMemory& mem, const PlayerState* player)
 {
-  // host_flags .. eye_height is one contiguous block; host_seq is written last.
+  // host_flags .. cam_offset is one contiguous block; host_seq is written last.
   constexpr size_t FIRST = offsetof(GxcMailbox, host_flags);
-  constexpr size_t LAST = offsetof(GxcMailbox, eye_height) + 4;
+  constexpr size_t LAST = offsetof(GxcMailbox, cam_offset) + 12;
   std::array<u8, LAST - FIRST> b{};
-  PutBE32(b.data(), player ? GXC_MBX_FOLLOW : 0u);
+  const bool galaxy = player && player->view == GXC_VIEW_GALAXY;
+  PutBE32(b.data(), player ? GXC_MBX_FOLLOW | (galaxy ? GXC_MBX_GALAXY_VIEW : 0u) : 0u);
   if (player)
   {
-    const Vec3* vecs[] = {&player->pos, &player->look, &player->up};
-    for (int v = 0; v < 3; v++)
+    Vec3 offset = player->cam_offset;
+    if (offset.x == 0 && offset.y == 0 && offset.z == 0)
+      offset = {player->up.x * player->eye_height, player->up.y * player->eye_height,
+                player->up.z * player->eye_height};
+    const Vec3* vecs[] = {&player->pos, &player->look, &player->up, &offset};
+    const size_t at_of[] = {offsetof(GxcMailbox, player_pos), offsetof(GxcMailbox, look),
+                            offsetof(GxcMailbox, up), offsetof(GxcMailbox, cam_offset)};
+    for (int v = 0; v < 4; v++)
     {
-      u8* at = b.data() + offsetof(GxcMailbox, player_pos) - FIRST + 12 * v;
+      u8* at = b.data() + at_of[v] - FIRST;
       PutBEF(at, vecs[v]->x), PutBEF(at + 4, vecs[v]->y), PutBEF(at + 8, vecs[v]->z);
     }
     PutBEF(b.data() + offsetof(GxcMailbox, fov_y) - FIRST, player->fov_y);
