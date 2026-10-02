@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
+import net.minecraft.world.level.gamerules.GameRules;
 import org.joml.Vector3d;
 
 /**
@@ -26,6 +27,9 @@ public final class WalkOnGalaxyTest implements FabricClientGameTest {
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
             sp.getServer().runCommand("gamemode adventure @a");
             sp.getServer().runCommand("difficulty peaceful");
+            sp.getServer().runCommand("gamerule fall_damage false"); // as in the play world
+            check(!sp.getServer().computeOnServer(s -> s.getGlobalGameRules().get(GameRules.FALL_DAMAGE)),
+                    "no fall damage in the galaxy world");
             sp.getServer().runCommand("tp @a 0 100 0 0 0");
             ctx.waitFor(mc -> GalaxyCraftClient.galaxyPos().isPresent(), 400);
             ctx.waitFor(mc -> mc.player.onGround(), 200);

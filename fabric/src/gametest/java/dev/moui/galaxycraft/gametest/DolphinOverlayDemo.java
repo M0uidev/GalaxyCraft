@@ -17,6 +17,7 @@ public final class DolphinOverlayDemo implements FabricClientGameTest {
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
             sp.getServer().runCommand("gamemode adventure @a");
             sp.getServer().runCommand("difficulty peaceful");
+            sp.getServer().runCommand("gamerule fall_damage false"); // like Mario, no fall damage
             // No teleport up: linking can be minutes away (SMG2's menus), and a fall from y=100 to
             // the flat world kills the player first. Linking re-bases them wherever they stand.
             ctx.waitFor(mc -> GalaxyCraftClient.exportingOverlay(), 600);
