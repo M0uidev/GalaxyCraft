@@ -3,6 +3,7 @@
 #   build/CustomCode/CustomCode_SB4E.bin   module, linked by Kamek as a dynamic binary
 #   build/galaxycraft.xml                  Riivolution patch: Syati loader + CustomCode folder
 #   build/galaxycraft.json                 Dolphin game mod descriptor: dolphin-emu -e it
+#   build/ObjectData/*.arc                 Steve in place of Mario (tools/steve/build.py)
 # The game image is $GXC_GAME, or the SMG2 .rvz in ~/Documents/Games/Dolphin Games.
 set -e
 cd "$(dirname "$0")"
@@ -42,9 +43,14 @@ done
   -o build/obj/loader.o
 "$KAMEK" build/obj/loader.o -static=0x80001800 -externals="$SYATI/symbols/SB4E.txt" -quiet \
   -output-riiv=build/loader_patches.xml
+# Steve: Mario's model (and his gloves) replaced, built from the disc into build/ObjectData.
+GXC_GAME="$GAME" python3 ../tools/steve/build.py --out build
 python3 - "$GAME" <<'PY'
 import json, os, sys
 patches = open("build/loader_patches.xml").read().strip()
+for arc in sorted(os.listdir("build/ObjectData")):
+    if arc.endswith(".arc"):
+        patches += f'\n\t\t<file disc="/ObjectData/{arc}" external="/ObjectData/{arc}" />'
 xml = open("riivolution/galaxycraft.xml.in").read().replace("@LOADER_PATCHES@", patches)
 open("build/galaxycraft.xml", "w").write(xml)
 build = os.path.abspath("build")
