@@ -152,9 +152,8 @@ typedef struct {
 #define GXC_MBX_MAGIC "GXCRMBX1"
 #define GXC_MBX_VERSION 1u
 #define GXC_MBX_MAX_PARTS 64
-#define GXC_MBX_DRIVE 1u /* host_flags: the mod drives the player (Mario is a puppet) */
 #define GXC_MBX_FOLLOW 2u /* host_flags: Minecraft mode, the camera sits in Mario's eyes */
-#define GXC_MBX_GAME_DRIVEN 1u /* game_flags: Mario is a puppet this frame */
+#define GXC_MBX_GAME_FOLLOWING 1u /* game_flags: Mario hidden, first-person camera this frame */
 #define GXC_MBX_GAME_DEMO 2u   /* game_flags: a cutscene owns Mario and the camera */
 
 typedef struct {
@@ -170,11 +169,11 @@ typedef struct {
   uint32_t game_seq; /* game: +1 per frame */
   uint32_t host_seq; /* host: +1 per write */
   uint32_t scene_id;
-  float gravity[3];    /* game: gravity at player_pos (or at Mario when not driven) */
+  float gravity[3];    /* game: gravity at Mario */
   float anchor_pos[3]; /* game: Mario's position */
   uint32_t game_flags; /* GXC_MBX_GAME_* */
   uint32_t host_flags; /* GXC_MBX_FOLLOW */
-  float player_pos[3]; /* host: feet position, galaxy units */
+  float player_pos[3]; /* host: the mod's feet position (echo), galaxy units */
   float look[3];
   float up[3];
   float fov_y;

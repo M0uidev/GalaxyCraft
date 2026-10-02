@@ -1,6 +1,7 @@
 // GalaxyCraft module for SMG2 (SB4E), loaded by Syati's loader as CustomCode_SB4E.bin.
 // Publishes the GXCRMBX1 mailbox that Dolphin's host bridge mirrors to the Minecraft mod, and
-// while the host sets GXC_MBX_DRIVE turns Mario into a hidden puppet and takes over the camera.
+// while the host sets GXC_MBX_FOLLOW hides Mario and puts the camera in his eyes, looking where
+// Minecraft looks. Mario still moves by his own physics, played through the emulated Wii Remote.
 #include "syati.h"
 
 #include "Kcl.h"
@@ -13,6 +14,9 @@ extern "C" void* getCollisionDirector__2MRFv();
 extern "C" void init__10MarioActorFRC12JMapInfoIter(void* self, const void* iter);
 extern "C" void movement__10MarioActorFv(void* self);
 extern "C" void movement__14CameraDirectorFv(void* self);
+extern "C" void draw__10MarioActorCFv(const void* self);
+// Syati's StarPointerUtil.h declares it without the port argument the game takes.
+extern "C" bool isStarPointerValid__2MRFl(long port);
 
 namespace
 {
@@ -26,11 +30,12 @@ struct Debug
   u32 rejected_kcl;
   u32 first_part;
   u32 first_kcl;
-  u32 driven;
+  u32 following;
   u32 mario_height_x100;  // 200 * |center - feet|: Mario's height in units, times 100
   u32 demo;
   u32 head_height_x100;  // 100 * height of the model's "Head" joint above the feet
   u32 game_near_z_x100;  // 100 * the game's camera near plane, before the override
+  u32 star_pointer_valid;  // MR::isStarPointerValid(0): the game still takes the pointer
 };
 
 struct Published
@@ -48,15 +53,18 @@ Published gOut = {{{'G', 'X', 'C', 'R', 'M', 'B', 'X', '1'}, GXC_MBX_VERSION}};
 const f32 PART_MAX_DIST = 3000.f;
 // Candidates scanned per frame; the map keeper of a big galaxy stays well under this.
 const int MAX_CANDIDATES = 256;
-// Frames without a new host_seq after which the puppet is released (Dolphin bridge gone).
+// Frames without a new host_seq after which Mario and the camera are given back (bridge gone).
 const u32 HOST_TIMEOUT_FRAMES = 60;
 
 gxc::PartCandidate gCandidates[MAX_CANDIDATES];
-bool gDriven = false;
+bool gFollowing = false;
 bool gDemo = false;  // a cutscene owns Mario and the camera this frame
+// Mario is not drawn (following, outside cutscenes). MR::hidePlayer is no use: Mario then
+// ignores the stick. Skipping MarioActor::draw leaves him playable, and his shadow stays.
+bool gHidden = false;
 // In Mario's eyes the game's near plane (made for a camera metres behind him) clips whatever is
-// close; while driven the camera draws from almost at the eye. 10 units = 1/8 block.
-const f32 DRIVEN_NEAR_Z = 10.f;
+// close; while following the camera draws from almost at the eye. 10 units = 1/8 block.
+const f32 EYE_NEAR_Z = 10.f;
 f32 gGameNearZ = 0.f;
 bool gNearOverridden = false;
 u32 gLastHostSeq = 0;
@@ -93,9 +101,9 @@ void Copy3(f32* dst, const f32* src)
   dst[0] = src[0], dst[1] = src[1], dst[2] = src[2];
 }
 
-bool HostDrives()
+bool HostFollows()
 {
-  // A stale DRIVE (Dolphin's bridge stopped writing) must not leave Mario a puppet forever.
+  // A stale FOLLOW (Dolphin's bridge stopped writing) must not leave Mario hidden forever.
   if (gOut.mbx.host_seq != gLastHostSeq)
   {
     gLastHostSeq = gOut.mbx.host_seq;
@@ -105,7 +113,7 @@ bool HostDrives()
   {
     gFramesSinceHost++;
   }
-  return (gOut.mbx.host_flags & GXC_MBX_DRIVE) != 0 && gFramesSinceHost < HOST_TIMEOUT_FRAMES;
+  return (gOut.mbx.host_flags & GXC_MBX_FOLLOW) != 0 && gFramesSinceHost < HOST_TIMEOUT_FRAMES;
 }
 
 int GatherCandidates()
@@ -195,32 +203,19 @@ void MarioInit(void* self, const void* iter)
 {
   init__10MarioActorFRC12JMapInfoIter(self, iter);
   gOut.mbx.scene_id++;  // a new Mario means a new stage: the host republishes everything
-  // The new Mario starts visible and controllable: if still driven, the next movement must
-  // take him over again.
-  gDriven = false;
 }
 
 void MarioMovement(void* self)
 {
   movement__10MarioActorFv(self);
 
-  const bool drive = HostDrives();
-  if (drive && !gDriven)
-  {
-    MR::offPlayerControl();
-    MR::hidePlayer();
-  }
-  else if (!drive && gDriven)
-  {
-    MR::onPlayerControl(true);
-    MR::showPlayer();
-  }
-  gDriven = drive;
-  gOut.dbg.driven = drive;
+  gFollowing = HostFollows();
+  gOut.dbg.following = gFollowing;
   gDemo = MR::isDemoActive();
   gOut.dbg.demo = gDemo;
-  if (drive && !gDemo)
-    MR::setPlayerPos(TVec3f(gOut.mbx.player_pos[0], gOut.mbx.player_pos[1], gOut.mbx.player_pos[2]));
+  // Cutscenes show Mario with the game's camera; first person hides him again afterwards.
+  gHidden = gFollowing && !gDemo;
+  gOut.dbg.star_pointer_valid = isStarPointerValid__2MRFl(0);
 
   const TVec3f* mario = MR::getPlayerPos();
   const TVec3f* center = MR::getPlayerCenterPos();
@@ -237,7 +232,7 @@ void MarioMovement(void* self)
       static_cast<u32>(200.f * gxc::Sqrt(half[0] * half[0] + half[1] * half[1] + half[2] * half[2]));
   gOut.mbx.anchor_pos[0] = mario->x, gOut.mbx.anchor_pos[1] = mario->y, gOut.mbx.anchor_pos[2] = mario->z;
   f32 query[3];
-  Copy3(query, drive ? gOut.mbx.player_pos : gOut.mbx.anchor_pos);
+  Copy3(query, gOut.mbx.anchor_pos);
 
   TVec3f gravity(0.f, 0.f, 0.f);
   if (!MR::calcGravityVector(static_cast<const NameObj*>(self), TVec3f(query[0], query[1], query[2]),
@@ -246,14 +241,20 @@ void MarioMovement(void* self)
   gOut.mbx.gravity[0] = gravity.x, gOut.mbx.gravity[1] = gravity.y, gOut.mbx.gravity[2] = gravity.z;
 
   PublishParts(query);
-  gOut.mbx.game_flags = (drive ? GXC_MBX_GAME_DRIVEN : 0u) | (gDemo ? GXC_MBX_GAME_DEMO : 0u);
+  gOut.mbx.game_flags = (gFollowing ? GXC_MBX_GAME_FOLLOWING : 0u) | (gDemo ? GXC_MBX_GAME_DEMO : 0u);
   gOut.mbx.game_seq++;  // last: the host reads a consistent frame when this moves
+}
+
+void MarioDraw(const void* self)
+{
+  if (!gHidden)
+    draw__10MarioActorCFv(self);
 }
 
 void CameraMovement(void* self)
 {
   movement__14CameraDirectorFv(self);
-  if (!gDriven || gDemo)  // cutscenes keep their own camera
+  if (!gFollowing || gDemo)  // cutscenes keep their own camera
   {
     if (gNearOverridden)
     {
@@ -268,10 +269,11 @@ void CameraMovement(void* self)
     gOut.dbg.game_near_z_x100 = static_cast<u32>(gGameNearZ * 100.f);
     gNearOverridden = true;
   }
+  // From Mario's feet this frame (not the host's echo, a frame late) so the view keeps 60 fps.
   const f32* up = gOut.mbx.up;
-  const f32 eye[3] = {gOut.mbx.player_pos[0] + up[0] * gOut.mbx.eye_height,
-                      gOut.mbx.player_pos[1] + up[1] * gOut.mbx.eye_height,
-                      gOut.mbx.player_pos[2] + up[2] * gOut.mbx.eye_height};
+  const f32* feet = gOut.mbx.anchor_pos;
+  const f32 eye[3] = {feet[0] + up[0] * gOut.mbx.eye_height, feet[1] + up[1] * gOut.mbx.eye_height,
+                      feet[2] + up[2] * gOut.mbx.eye_height};
   f32 view[12];
   gxc::LookAtView(eye, gOut.mbx.look, up, view);
   TPos3f mtx;
@@ -280,12 +282,13 @@ void CameraMovement(void* self)
       mtx.mMtx[r][c] = view[4 * r + c];
   MR::setCameraViewMtx(mtx, false, false, TVec3f(0.f, 0.f, 0.f));
   MR::setFovy(gOut.mbx.fov_y);
-  MR::setNearZ(DRIVEN_NEAR_Z);
+  MR::setNearZ(EYE_NEAR_Z);
 }
 }  // namespace
 
-// Vtable slots (symbols/SB4E.txt): __vt__10MarioActor + 0xC init, + 0x14 movement;
+// Vtable slots (symbols/SB4E.txt): __vt__10MarioActor + 0xC init, + 0x14 movement, + 0x18 draw;
 // __vt__14CameraDirector + 0x14 movement.
 kmWritePointer(0x806C7448 + 0xC, MarioInit);
 kmWritePointer(0x806C7448 + 0x14, MarioMovement);
+kmWritePointer(0x806C7448 + 0x18, MarioDraw);
 kmWritePointer(0x8067C4D0 + 0x14, CameraMovement);
