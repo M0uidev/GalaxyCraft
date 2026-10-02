@@ -61,6 +61,18 @@ def running_pid():
         return None
 
 
+def nvidia_gpu():
+    """vendor:device of the first NVIDIA display controller, e.g. "10de:25a2", or None."""
+    for dev in sorted(Path("/sys/bus/pci/devices").glob("*")):
+        try:
+            if (dev / "class").read_text().startswith("0x03") and \
+                    (dev / "vendor").read_text().strip() == "0x10de":
+                return f"10de:{(dev / 'device').read_text().strip()[2:]}"
+        except OSError:
+            continue
+    return None
+
+
 def start(gui, speed, gdb=False):
     if running_pid():
         die("already running (gxdev.py stop first)")
@@ -77,6 +89,10 @@ def start(gui, speed, gdb=False):
         cmd = ["gdb", "-batch", "-ex", "handle SIGSEGV nostop noprint pass", "-ex", "break raise",
                "-ex", "run", "-ex", "thread apply all bt 16", "--args", *cmd]
     env = dict(os.environ, GALAXYCRAFT="1")
+    # Headless, Dolphin lands on the Intel iGPU, whose Vulkan driver crashes now and then in
+    # UpdateGXDescriptorSet. Prefer the NVIDIA GPU when there is one (Mesa's device-select layer).
+    if gpu := nvidia_gpu():
+        env.setdefault("MESA_VK_DEVICE_SELECT", f"{gpu}!")
     CTL.unlink(missing_ok=True)
     with open(LOG_FILE, "w") as log:
         proc = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT,
