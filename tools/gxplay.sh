@@ -1,8 +1,8 @@
 #!/bin/bash
 # Play GalaxyCraft by hand: the patched Dolphin (window, your usual Dolphin config and controllers)
 # runs SMG2 with the module, and Minecraft runs hidden in a test world, drawn over Dolphin's
-# picture. In Dolphin's window, F10 hands the game to Minecraft (keyboard + mouse) or back to
-# the Wii Remote for menus. Closing either side closes the other.
+# picture. In Dolphin's window, Ctrl+G (hotkey "GalaxyCraft: Toggle Minecraft Link") hands the
+# game to Minecraft (keyboard + mouse) or back to the Wii Remote for menus. Closing either side closes the other.
 #   tools/gxplay.sh            (build first: dolphin/build.sh, syati/build.sh)
 set -u
 cd "$(dirname "$0")/.." || exit 1

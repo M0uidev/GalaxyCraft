@@ -19,11 +19,14 @@ tools/gxplay.sh
 
 En la ventana de Dolphin:
 
-- **F10** alterna el enlace.
+- **Ctrl+G** alterna el enlace (hotkey de Dolphin «GalaxyCraft: Toggle Minecraft Link», en
+  Hotkey Settings → Wii; se puede cambiar). Al pulsarlo aparece un mensaje en pantalla.
   - *Activo*: teclado y ratón van a Minecraft, Mario es la marioneta y la cámara es la de
     Minecraft.
   - *Inactivo*: el juego vuelve a tu Wiimote. Úsalo para los menús: título, partidas, mapa y
     selección de estrella.
+  - No es F10 porque F10 es Play/Pause en los hotkeys por defecto de Dolphin, que leen el
+    teclado directamente; todas las F1–F12 tienen ya un uso.
 - **Esc** sigue siendo de Dolphin.
 - Al entrar en un nivel con el enlace activo, el jugador aparece donde está Mario.
 
@@ -81,7 +84,7 @@ con la escala nueva.
 
 ## Pendiente de probar a mano con `gxplay.sh`
 
-- F10 en la ventana real de Dolphin; los menús con tu Wiimote o mando con el enlace inactivo.
+- Ctrl+G en la ventana real de Dolphin, también a pantalla completa; los menús con tu Wiimote o mando con el enlace inactivo.
 - Morir con el mod enlazado: el mod debe re-anclar en el punto de reaparición. El host lo hace
   por tests, pero en vivo sólo se probó con `drive`.
 
