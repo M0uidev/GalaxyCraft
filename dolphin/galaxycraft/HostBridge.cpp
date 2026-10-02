@@ -212,6 +212,19 @@ bool HostBridge::SendPart(GuestMemory& mem, u32 id, const PartState& p, bool wit
     kcl.resize(p.kcl_size);
     if (p.kcl_size == 0 || !mem.Read(p.kcl_addr, kcl.data(), p.kcl_size))
       return false;  // bad address: ignore the part until the game reports something readable
+    // KCollisionServer::setData turns the header's four offsets into absolute pointers; the mod
+    // wants offsets. Anything that does not land inside the KCL means we misread the part.
+    if (kcl.size() < 16)
+      return false;
+    for (u32 k = 0; k < 4; k++)
+    {
+      u32 v = BE32(kcl.data() + 4 * k);
+      if (v >= p.kcl_addr)
+        v -= p.kcl_addr;
+      if (v > p.kcl_size)
+        return false;
+      PutBE32(kcl.data() + 4 * k, v);
+    }
   }
   // Only send if everything fits, so the mod never sees half a part.
   u64 need = Ring::Cost(sizeof(GxcPartUpsert));

@@ -16,6 +16,29 @@ namespace
 constexpr u32 MBX = 0x80401000u;
 constexpr u32 KCL = 0x80500000u;
 constexpr std::array<float, 12> IDENTITY = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+// KCL header offsets (positions, normals, prisms, octree) of the fixture's 300-byte KCL.
+constexpr std::array<u32, 4> KCL_HEADER = {0x40, 0x80, 0xC0, 300};
+
+// The fixture's KCL bytes: a valid header of offsets followed by a recognizable pattern.
+std::vector<u8> KclBytes()
+{
+  std::vector<u8> kcl(300);
+  for (size_t i = 0; i < kcl.size(); i++)
+    kcl[i] = static_cast<u8>(i % 251);
+  for (int k = 0; k < 4; k++)
+    for (int b = 0; b < 4; b++)
+      kcl[4 * k + b] = static_cast<u8>(KCL_HEADER[k] >> (24 - 8 * b));
+  return kcl;
+}
+
+std::vector<u8> SentKcl(const std::vector<Msg>& msgs)
+{
+  std::vector<u8> got;
+  for (auto& m : msgs)
+    if (m.type == GXC_MSG_KCL_CHUNK)
+      got.insert(got.end(), m.payload.begin() + sizeof(GxcKclChunk), m.payload.end());
+  return got;
+}
 
 struct Part
 {
@@ -52,9 +75,7 @@ struct Fixture
 
   Fixture()
   {
-    std::vector<u8> kcl(300);
-    for (size_t i = 0; i < kcl.size(); i++)
-      kcl[i] = static_cast<u8>(i % 251);
+    const std::vector<u8> kcl = KclBytes();
     mem.PutBytes(KCL, kcl.data(), 300);
     WriteMailbox(mem, MBX, 3, {{7, KCL, 300}});
   }
@@ -104,17 +125,35 @@ TEST(finds_mailbox_and_publishes_scene)
   auto msgs = f.Drain();
   CHECK(!msgs.empty() && msgs[0].type == GXC_MSG_SCENE_CHANGE && PayloadU32(msgs[0], 0) == 3);
   CHECK(Count(msgs, GXC_MSG_PART_UPSERT) == 1);
-  std::vector<u8> got;
   for (auto& m : msgs)
-  {
     if (m.type == GXC_MSG_PART_UPSERT)
       CHECK(PayloadU32(m, 0) == 7 && PayloadU32(m, 4) == 300);
-    if (m.type == GXC_MSG_KCL_CHUNK)
-      got.insert(got.end(), m.payload.begin() + sizeof(GxcKclChunk), m.payload.end());
-  }
-  CHECK(got.size() == 300);
-  for (size_t i = 0; i < got.size(); i++)
-    CHECK(got[i] == static_cast<u8>(i % 251));
+  CHECK(SentKcl(msgs) == KclBytes());
+}
+
+TEST(kcl_header_pointers_sent_as_offsets)
+{
+  // In RAM, KCollisionServer::setData has turned the header offsets into absolute pointers.
+  Fixture f;
+  for (int k = 0; k < 4; k++)
+    f.mem.PutU32(KCL + 4 * k, KCL + KCL_HEADER[k]);
+  f.Tick();
+  CHECK(SentKcl(f.Drain()) == KclBytes());
+}
+
+TEST(kcl_header_out_of_range_ignored)
+{
+  Fixture f;
+  f.mem.PutU32(KCL + 12, KCL + 301);  // octree pointer past the reported size
+  f.Tick();
+  auto msgs = f.Drain();
+  CHECK(Count(msgs, GXC_MSG_PART_UPSERT) == 0 && Count(msgs, GXC_MSG_KCL_CHUNK) == 0);
+  f.mem.PutU32(KCL + 12, 0x80001000u);  // pointer somewhere else entirely
+  f.Tick();
+  CHECK(Count(f.Drain(), GXC_MSG_PART_UPSERT) == 0);
+  f.mem.PutU32(KCL + 12, KCL + 300);  // fixed: the part goes out
+  f.Tick();
+  CHECK(Count(f.Drain(), GXC_MSG_PART_UPSERT) == 1);
 }
 
 TEST(anchor_until_fresh_player)
