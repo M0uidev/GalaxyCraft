@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -12,6 +13,9 @@ namespace gxc
 //   peek ADDR LEN   hex dump of guest memory (ADDR in hex, LEN 1..4096)
 //   mbx             one-line summary of the guest mailbox
 //   shot NAME | save PATH | load PATH   run by the emulator on its host thread
+//   drive X Y Z LX LY LZ [UX UY UZ]     puppet Mario from this pose, as if the mod sent it
+//                                       (no up: opposite of the game's gravity)
+//   undrive                             back to whatever the mod says
 struct DevCommand
 {
   enum Kind
@@ -21,10 +25,13 @@ struct DevCommand
     Shot,
     Save,
     Load,
+    Drive,
+    Undrive,
     Bad
   } kind;
   u32 addr = 0, len = 0;
   std::string arg;  // file name/path, or the offending line for Bad
+  std::array<float, 9> pose{};  // Drive: pos, look, up
 };
 
 std::vector<DevCommand> ParseDevCommands(std::string_view text);

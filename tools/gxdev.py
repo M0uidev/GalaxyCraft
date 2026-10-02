@@ -5,7 +5,7 @@ Never touches ~/.config/dolphin-emu or the user's screen: Dolphin gets its own u
 (~/.local/share/galaxycraft-dev, seeded from tools/dolphin-dev/), runs on the headless platform,
 and takes screenshots itself. The Wii Remote reads the FIFO <userdir>/Pipes/gxpad.
 
-  gxdev.py start [--gui]       build nothing; boot syati/build/galaxycraft.json
+  gxdev.py start [--gui] [--speed S]   boot syati/build/galaxycraft.json (S: 1 normal, 0 unlimited)
   gxdev.py stop
   gxdev.py ctl "mbx; shot boot" [--wait S]   dev control channel (see DevControl.h)
   gxdev.py pad "PRESS A; RELEASE A"          raw Pipes commands
@@ -14,6 +14,7 @@ and takes screenshots itself. The Wii Remote reads the FIFO <userdir>/Pipes/gxpa
   gxdev.py point X Y                         IR pointer, -1..1 (Y up)
 """
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -38,11 +39,14 @@ def die(msg):
     sys.exit(1)
 
 
-def prepare_user_dir():
+def prepare_user_dir(speed):
     config = USER_DIR / "Config"
     config.mkdir(parents=True, exist_ok=True)
     for ini in SEED.glob("*.ini"):
         shutil.copy(ini, config / ini.name)  # re-seeded every start: the repo is the truth
+    if speed is not None:  # 0 = unlimited, handy to get through cutscenes
+        ini = config / "Dolphin.ini"
+        ini.write_text(re.sub(r"EmulationSpeed = .*", f"EmulationSpeed = {speed:.8f}", ini.read_text()))
     PAD.parent.mkdir(exist_ok=True)
     if not PAD.exists():
         os.mkfifo(PAD)
@@ -57,12 +61,12 @@ def running_pid():
         return None
 
 
-def start(gui):
+def start(gui, speed):
     if running_pid():
         die("already running (gxdev.py stop first)")
     if not DESCRIPTOR.exists():
         die(f"missing {DESCRIPTOR}; run syati/build.sh")
-    prepare_user_dir()
+    prepare_user_dir(speed)
     exe = BINARIES / ("dolphin-emu" if gui else "dolphin-emu-nogui")
     cmd = [str(exe), "-u", str(USER_DIR), "-e", str(DESCRIPTOR)]
     if not gui:
@@ -141,7 +145,8 @@ def main(argv):
         die(__doc__)
     op, args = argv[1], argv[2:]
     if op == "start":
-        start("--gui" in args)
+        speed = float(args[args.index("--speed") + 1]) if "--speed" in args else None
+        start("--gui" in args, speed)
     elif op == "stop":
         stop()
     elif op == "ctl" and args:

@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..4f68c14
+index 0000000..362a889
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,243 @@
+@@ -0,0 +1,255 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -148,7 +148,7 @@ index 0000000..4f68c14
 +
 +// CPU thread. Memory commands run right away; screenshots and savestates go to the host thread,
 +// which is where Dolphin expects them to be started.
-+void RunControlFile(gxc::GuestMemory& mem, std::optional<u32> mailbox)
++void RunControlFile(gxc::GuestMemory& mem, gxc::HostBridge& bridge)
 +{
 +  std::error_code ec;
 +  if (!std::filesystem::exists(CTL_PATH, ec))
@@ -178,8 +178,20 @@ index 0000000..4f68c14
 +                     cmd.arg + "\n");
 +      });
 +      break;
++    case gxc::DevCommand::Drive:
++    {
++      const auto& v = cmd.pose;
++      bridge.SetDevDrive(gxc::PlayerState{0, 0, {v[0], v[1], v[2]}, {v[3], v[4], v[5]},
++                                          {v[6], v[7], v[8]}, 70.f, 162.f});
++      AppendCtlOut("ok drive\n");
++      break;
++    }
++    case gxc::DevCommand::Undrive:
++      bridge.SetDevDrive(std::nullopt);
++      AppendCtlOut("ok undrive\n");
++      break;
 +    default:
-+      AppendCtlOut(gxc::RunMemoryCommand(cmd, mem, mailbox));
++      AppendCtlOut(gxc::RunMemoryCommand(cmd, mem, bridge.MailboxAddress()));
 +      break;
 +    }
 +  }
@@ -233,7 +245,7 @@ index 0000000..4f68c14
 +    if (!s_state)
 +      return;
 +    s_state->bridge->Tick(*s_state->memory);
-+    RunControlFile(*s_state->memory, s_state->bridge->MailboxAddress());
++    RunControlFile(*s_state->memory, *s_state->bridge);
 +  });
 +
 +  std::lock_guard lock(s_mutex);

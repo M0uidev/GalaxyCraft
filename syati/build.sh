@@ -34,7 +34,7 @@ for src in src/core/*.cpp src/GalaxyCraft.cpp; do
   "$CC" $FLAGS -i src/core -i ../protocol -i "$SYATI/include" -I- -i src/shim "$src" -o "$obj"
   OBJS="$OBJS $obj"
 done
-"$KAMEK" $OBJS -dynamic -externals="$SYATI/symbols/SB4E.txt" -quiet \
+"$KAMEK" $OBJS -dynamic -externals="$SYATI/symbols/SB4E.txt" -externals=symbols_extra.txt -quiet \
   -output-kamek=build/CustomCode/CustomCode_SB4E.bin
 
 # Loader: same build as Syati's buildloader.py, patches only.

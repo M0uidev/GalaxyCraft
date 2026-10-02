@@ -1,0 +1,4 @@
+# Runtime helpers missing from Syati's SB4E.txt, next to their listed siblings
+# (_savegpr_15=0x8062E134, _restgpr_15=0x8062E180). Checked live: stw/lwz r14,-0x48(r11).
+_savegpr_14=0x8062E130
+_restgpr_14=0x8062E17C

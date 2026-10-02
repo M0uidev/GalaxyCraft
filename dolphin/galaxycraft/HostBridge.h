@@ -21,6 +21,10 @@ public:
 
   bool HasMailbox() const { return m_mailbox.has_value(); }
   std::optional<u32> MailboxAddress() const { return m_mailbox; }
+
+  // Development: drive the game from this pose instead of the mod's (nullopt: back to the mod).
+  // A zero up vector means "opposite of the game's gravity".
+  void SetDevDrive(std::optional<PlayerState> pose) { m_dev_drive = pose; }
   bool Driving() const { return m_driving; }
 
 private:
@@ -50,6 +54,7 @@ private:
   u64 m_seen_player_frame = 0;
   std::optional<PlayerState> m_player;
   bool m_driving = false;
+  std::optional<PlayerState> m_dev_drive;
   u32 m_host_seq = 0;
   u64 m_frame = 0;
 };

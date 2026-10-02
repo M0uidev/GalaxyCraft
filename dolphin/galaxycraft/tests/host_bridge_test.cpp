@@ -269,6 +269,25 @@ TEST(bad_kcl_address_ignored)
       CHECK(PayloadU32(m, 0) == 7);
 }
 
+TEST(dev_drive_overrides_mod)
+{
+  Fixture f;
+  f.Tick();
+  PlayerState pose{0, 0, {5, 6, 7}, {0, 0, -1}, {0, 0, 0}, 70.f, 162.f};
+  f.bridge.SetDevDrive(pose);
+  f.Tick();
+  CHECK(f.bridge.Driving());
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) != 0);
+  CHECK(f.mem.GetF32(MBX + 56) == 5.f && f.mem.GetF32(MBX + 64) == 7.f);
+  CHECK(f.mem.GetF32(MBX + 72) == 0.f && f.mem.GetF32(MBX + 76) == -1.f);
+  // No up given: opposite of the mailbox gravity (0, -1, 0).
+  CHECK(f.mem.GetF32(MBX + 80) == 0.f && f.mem.GetF32(MBX + 84) == 1.f);
+  CHECK(f.mem.GetF32(MBX + 92) == 70.f && f.mem.GetF32(MBX + 96) == 162.f);
+  f.bridge.SetDevDrive(std::nullopt);
+  f.Tick();
+  CHECK(!f.bridge.Driving() && (f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) == 0);
+}
+
 TEST(no_mailbox_reports_unlinked)
 {
   Fixture f;

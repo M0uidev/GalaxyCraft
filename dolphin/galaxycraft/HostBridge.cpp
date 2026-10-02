@@ -133,6 +133,18 @@ void HostBridge::Tick(GuestMemory& mem)
                m_anchored ? GXC_WORLD_ANCHOR : 0u};
   WriteWorld(m_shm, w);
 
+  if (m_dev_drive)
+  {
+    PlayerState pose = *m_dev_drive;
+    if (pose.up.x == 0 && pose.up.y == 0 && pose.up.z == 0)
+    {
+      const bool no_gravity = mbx.gravity.x == 0 && mbx.gravity.y == 0 && mbx.gravity.z == 0;
+      pose.up = no_gravity ? Vec3{0, 1, 0} : Vec3{-mbx.gravity.x, -mbx.gravity.y, -mbx.gravity.z};
+    }
+    m_driving = true;
+    WriteDrive(mem, &pose);
+    return;
+  }
   m_driving = mod_alive && !m_anchored && m_player.has_value();
   WriteDrive(mem, m_driving ? &*m_player : nullptr);
 }

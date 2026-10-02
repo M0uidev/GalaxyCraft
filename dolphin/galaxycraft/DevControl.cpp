@@ -42,6 +42,15 @@ std::optional<u32> ParseU32(std::string_view s, int base)
   return v;
 }
 
+std::optional<float> ParseFloat(std::string_view s)
+{
+  float v = 0;
+  auto [end, ec] = std::from_chars(s.data(), s.data() + s.size(), v);
+  if (s.empty() || ec != std::errc() || end != s.data() + s.size())
+    return std::nullopt;
+  return v;
+}
+
 DevCommand ParseLine(std::string_view line)
 {
   const auto w = Words(line);
@@ -58,6 +67,22 @@ DevCommand ParseLine(std::string_view line)
   }
   if (w[0] == "mbx")
     return w.size() == 1 ? DevCommand{DevCommand::Mbx, 0, 0, {}} : bad;
+  if (w[0] == "undrive")
+    return w.size() == 1 ? DevCommand{DevCommand::Undrive, 0, 0, {}} : bad;
+  if (w[0] == "drive")
+  {
+    if (w.size() != 7 && w.size() != 10)
+      return bad;
+    DevCommand cmd{DevCommand::Drive, 0, 0, {}};
+    for (size_t i = 1; i < w.size(); i++)
+    {
+      const auto v = ParseFloat(w[i]);
+      if (!v)
+        return bad;
+      cmd.pose[i - 1] = *v;
+    }
+    return cmd;
+  }
   const std::pair<std::string_view, DevCommand::Kind> with_arg[] = {
       {"shot", DevCommand::Shot}, {"save", DevCommand::Save}, {"load", DevCommand::Load}};
   for (const auto& [name, kind] : with_arg)
@@ -107,9 +132,9 @@ std::string Mailbox(GuestMemory& mem, u32 at)
   auto f = [&](size_t off) { return static_cast<double>(std::bit_cast<float>(u(off))); };
   char buf[512];
   std::snprintf(buf, sizeof(buf),
-                "game_seq=%u host_seq=%u scene=%u grav=(%.3f,%.3f,%.3f) anchor=(%.1f,%.1f,%.1f) "
+                "at=%08x game_seq=%u host_seq=%u scene=%u grav=(%.3f,%.3f,%.3f) anchor=(%.1f,%.1f,%.1f) "
                 "flags=%x/%x player=(%.1f,%.1f,%.1f) parts=%u\n",
-                u(offsetof(GxcMailbox, game_seq)), u(offsetof(GxcMailbox, host_seq)),
+                at, u(offsetof(GxcMailbox, game_seq)), u(offsetof(GxcMailbox, host_seq)),
                 u(offsetof(GxcMailbox, scene_id)), f(24), f(28), f(32), f(36), f(40), f(44),
                 u(offsetof(GxcMailbox, game_flags)), u(offsetof(GxcMailbox, host_flags)), f(56),
                 f(60), f(64), u(offsetof(GxcMailbox, part_count)));

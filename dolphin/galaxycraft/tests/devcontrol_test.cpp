@@ -94,3 +94,23 @@ TEST(mbx_unreadable_is_error)
   auto c = ParseDevCommands("mbx");
   CHECK(RunMemoryCommand(c[0], mem, 0x807fffc0u) == "error: unreadable 0x807fffc0\n");
 }
+
+TEST(parses_drive_and_undrive)
+{
+  auto c = ParseDevCommands("drive 1 2 3 0 0 -1\ndrive 1 2 3 0 0 -1 0 1 0\nundrive\n"
+                            "drive 1 2 3 0 0\nundrive now\ndrive 1 2 x 0 0 -1");
+  CHECK(c.size() == 6);
+  CHECK(c[0].kind == DevCommand::Drive && c[0].pose[0] == 1 && c[0].pose[2] == 3 &&
+        c[0].pose[5] == -1 && c[0].pose[7] == 0);  // no up given: zero, host picks -gravity
+  CHECK(c[1].kind == DevCommand::Drive && c[1].pose[7] == 1);
+  CHECK(c[2].kind == DevCommand::Undrive);
+  CHECK(c[3].kind == DevCommand::Bad && c[4].kind == DevCommand::Bad && c[5].kind == DevCommand::Bad);
+}
+
+TEST(mbx_reports_its_address)
+{
+  FakeGuestMemory mem;
+  mem.PutBytes(0x80401000u, GXC_MBX_MAGIC, 8);
+  auto c = ParseDevCommands("mbx");
+  CHECK(RunMemoryCommand(c[0], mem, 0x80401000u).starts_with("at=80401000 game_seq="));
+}
