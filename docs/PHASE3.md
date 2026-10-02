@@ -75,7 +75,7 @@ Los comandos de `ctl` los ejecuta Dolphin (`dolphin/galaxycraft/DevControl.h`):
 | `drive X Y Z LX LY LZ [UX UY UZ]` | Hace de mod falso: activa la marioneta en esa pose. Sin `up`, usa la opuesta a la gravedad. |
 | `undrive` | Vuelve a lo que diga el mod. |
 
-Justo después del buzón (`at + 0xF68`) el módulo deja 8 palabras de depuración:
+Justo después del buzón (`at + 0xFA8`, `sizeof(GxcMailbox)`) el módulo deja 8 palabras de depuración:
 
 | Palabra | Contenido |
 |---|---|

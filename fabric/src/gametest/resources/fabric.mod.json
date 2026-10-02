@@ -8,7 +8,7 @@
 		"fabric-client-gametest": [
 			"dev.moui.galaxycraft.gametest.WalkOnStubPlanetTest",
 			"dev.moui.galaxycraft.gametest.DolphinOverlayDemo",
-			"dev.moui.galaxycraft.gametest.WalkOnGalaxyTest"
+			"dev.moui.galaxycraft.gametest.MarioPerspectivesTest"
 		]
 	},
 	"depends": {"galaxycraft": "*"}
