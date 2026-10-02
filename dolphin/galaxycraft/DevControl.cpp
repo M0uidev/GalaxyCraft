@@ -106,10 +106,12 @@ DevCommand ParseLine(std::string_view line)
     return w.size() == 1 ? DevCommand{DevCommand::Unfollow, 0, 0, {}} : bad;
   if (w[0] == "follow")
   {
-    if (w.size() != 4 && w.size() != 7)
+    const bool back = w.back() == "back";
+    const size_t n = w.size() - (back ? 1 : 0);
+    if (n != 4 && n != 7)
       return bad;
-    DevCommand cmd{DevCommand::Follow, 0, 0, {}};
-    for (size_t i = 1; i < w.size(); i++)
+    DevCommand cmd{DevCommand::Follow, back ? 1u : 0u, 0, {}};
+    for (size_t i = 1; i < n; i++)
     {
       const auto v = ParseFloat(w[i]);
       if (!v)

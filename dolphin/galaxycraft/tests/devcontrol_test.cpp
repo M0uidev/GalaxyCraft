@@ -81,6 +81,14 @@ TEST(bad_and_host_commands_are_errors_here)
   CHECK(RunMemoryCommand(c[1], mem, std::nullopt).starts_with("error: "));
 }
 
+TEST(follow_back_is_third_person)
+{
+  auto c = ParseDevCommands("follow 0 0 -1 back\nfollow 0 0 -1 0 1 0\nfollow 0 0 back 1");
+  CHECK(c[0].kind == DevCommand::Follow && c[0].addr == 1 && c[0].pose[2] == -1.f);
+  CHECK(c[1].kind == DevCommand::Follow && c[1].addr == 0 && c[1].pose[4] == 1.f);
+  CHECK(c[2].kind == DevCommand::Bad);
+}
+
 TEST(mbx_summarizes_mailbox)
 {
   FakeGuestMemory mem;

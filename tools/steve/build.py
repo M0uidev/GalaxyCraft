@@ -2,6 +2,7 @@
 """Builds Steve for SMG2 into syati/build/ObjectData (loaded by Riivolution in place of Mario):
   Mario.arc       Mario.bdl replaced by Steve (Minecraft skin boxes on Mario's skeleton)
   MarioHandL.arc  MarioHandR.arc   Mario's gloves, emptied
+  MarioFace.arc  MarioHair.arc  MarioCap.arc   his face (nose, eyes, moustache), hair and cap, emptied
 Inputs come from this machine, never the repo: the game image ($GXC_GAME or the SMG2 .rvz in
 ~/Documents/Games/Dolphin Games), the skin (--skin, or Steve's from the Minecraft client jar), and
 SuperBMD 2.5.0 under wine (downloaded into the toolchain if missing). Skips work if nothing changed.
@@ -34,10 +35,14 @@ SUPERBMD_SHA256 = "6f5e7ff25b9da61eda0ba3f4c9b5cb53b3702cdc5ca515c9e41c839f9398a
 MC_JAR = os.path.expanduser("~/.gradle/caches/fabric-loom/26.3/minecraft-client.jar")
 MC_SKIN = "assets/minecraft/textures/entity/player/wide/steve.png"
 DOLPHIN_TOOL = os.path.join(ROOT, "dolphin/build/Binaries/dolphin-tool")
-# Archive -> (model inside it, what replaces it).
+# Archive -> (model inside it, what replaces it). Gloves, face, hair and cap are drawn on Mario's
+# joints from their own archives, so Steve needs them gone.
 MODELS = {"Mario": ("Mario.bdl", steve_model.steve),
           "MarioHandL": ("MarioHandL.bdl", steve_model.empty),
-          "MarioHandR": ("MarioHandR.bdl", steve_model.empty)}
+          "MarioHandR": ("MarioHandR.bdl", steve_model.empty),
+          "MarioFace": ("MarioFace.bdl", steve_model.empty),
+          "MarioHair": ("MarioHair.bdl", steve_model.empty),
+          "MarioCap": ("MarioCap.bdl", steve_model.empty)}
 TEX_HEADER = [{"Name": "steve", "Format": "RGB5A3", "AlphaSetting": 0, "WrapS": "ClampToEdge",
                "WrapT": "ClampToEdge", "PaletteFormat": "IA8", "MipMap": 0, "EdgeLOD": False,
                "BiasClamp": False, "MaxAniso": 0, "MinFilter": "Nearest", "MagFilter": "Nearest",

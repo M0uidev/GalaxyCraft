@@ -27,7 +27,8 @@ disco y el jar de Minecraft locales.
      Minecraft, o `--skin`), cada caja rígida a su hueso: cabeza → `Head`, torso → `Spine2`,
      muslo/pantorrilla → `LegX1`/`LegX2`, brazo/antebrazo → `ArmX1`/`ArmX2`; mismas proporciones
      que en la prueba (pierna = cadera de Mario);
-   - las manos: `MarioHandL/R.bdl` con su propio esqueleto y un único triángulo de área cero
+   - las manos, la cara, el pelo y la gorra (`MarioHandL/R`, `MarioFace`, `MarioHair`,
+     `MarioCap`): cada `.bdl` con su propio esqueleto y un único triángulo de área cero
      (invisibles);
    - convierte con SuperBMD (`-b`, material `tools/steve/material.json`, textura *nearest*);
    - reempaqueta los `.arc` en `syati/build/ObjectData/`.

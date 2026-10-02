@@ -14,7 +14,8 @@ namespace gxc
 //   poke ADDR HEX   write these bytes (HEX: even number of hex digits, up to 64 bytes)
 //   mbx             one-line summary of the guest mailbox
 //   shot NAME | save PATH | load PATH   run by the emulator on its host thread
-//   follow LX LY LZ [UX UY UZ]   follow Mario looking this way, as if the mod sent it
+//   follow LX LY LZ [UX UY UZ] [back]   follow Mario looking this way, as if the mod sent it;
+//                                back: third person, 4 blocks behind (addr = 1)
 //                                (no up: opposite of the game's gravity)
 //   unfollow                     back to whatever the mod says
 //   status                       focus/input gates, mode and mod state (Dolphin side)

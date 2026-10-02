@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..215c213
+index 0000000..af365af
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,434 @@
+@@ -0,0 +1,439 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -300,8 +300,13 @@ index 0000000..215c213
 +    case gxc::DevCommand::Follow:
 +    {
 +      const auto& v = cmd.pose;
-+      bridge.SetDevFollow(
-+          gxc::PlayerState{0, 0, {}, {v[0], v[1], v[2]}, {v[3], v[4], v[5]}, 70.f, 162.f});
++      gxc::PlayerState pose{0, 0, {}, {v[0], v[1], v[2]}, {v[3], v[4], v[5]}, 70.f, 162.f};
++      if (cmd.addr == 1)  // third person: 4 blocks (320 units) behind the eyes
++      {
++        pose.cam_offset = {-v[0] * 320.f, 130.f - v[1] * 320.f, -v[2] * 320.f};
++        pose.view = GXC_VIEW_BACK;
++      }
++      bridge.SetDevFollow(pose);
 +      AppendCtlOut("ok follow\n");
 +      break;
 +    }
