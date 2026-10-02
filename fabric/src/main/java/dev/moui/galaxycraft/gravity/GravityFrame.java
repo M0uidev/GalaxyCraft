@@ -30,6 +30,15 @@ public final class GravityFrame {
         t.set(mcStart).sub(r.transform(new Vector3d(galStart).mul(SCALE)));
     }
 
+    private GravityFrame(GravityFrame o) {
+        r.set(o.r);
+        t.set(o.t);
+    }
+
+    public GravityFrame copy() {
+        return new GravityFrame(this);
+    }
+
     public Vector3d toMc(Vector3d gal) {
         return r.transform(new Vector3d(gal).mul(SCALE)).add(t);
     }
