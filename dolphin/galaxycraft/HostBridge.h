@@ -20,6 +20,7 @@ public:
   void Tick(GuestMemory& mem);
 
   bool HasMailbox() const { return m_mailbox.has_value(); }
+  std::optional<u32> MailboxAddress() const { return m_mailbox; }
   bool Driving() const { return m_driving; }
 
 private:

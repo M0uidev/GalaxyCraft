@@ -49,16 +49,19 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..30787e5
+index 0000000..4f68c14
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,243 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
 +#include "Core/GalaxyCraft.h"
 +
 +#include <chrono>
++#include <filesystem>
++#include <fstream>
++#include <sstream>
 +#include <cstdio>
 +#include <cstdlib>
 +#include <cstring>
@@ -67,10 +70,13 @@ index 0000000..30787e5
 +
 +#include "Common/HookableEvent.h"
 +#include "Common/Logging/Log.h"
++#include "Core/Core.h"
 +#include "Core/HW/Memmap.h"
++#include "Core/State.h"
 +#include "Core/System.h"
 +#include "VideoCommon/VideoEvents.h"
 +
++#include "DevControl.h"
 +#include "HostBridge.h"
 +#include "Input.h"
 +#include "Overlay.h"
@@ -131,6 +137,54 @@ index 0000000..30787e5
 +  Memory::MemoryManager& m_mm;
 +};
 +
++// Development control channel (tools/gxdev.py): commands in, results appended out.
++constexpr const char* CTL_PATH = "/dev/shm/galaxycraft_ctl";
++constexpr const char* CTL_OUT_PATH = "/dev/shm/galaxycraft_ctl.out";
++
++void AppendCtlOut(const std::string& text)
++{
++  std::ofstream(CTL_OUT_PATH, std::ios::app) << text;
++}
++
++// CPU thread. Memory commands run right away; screenshots and savestates go to the host thread,
++// which is where Dolphin expects them to be started.
++void RunControlFile(gxc::GuestMemory& mem, std::optional<u32> mailbox)
++{
++  std::error_code ec;
++  if (!std::filesystem::exists(CTL_PATH, ec))
++    return;
++  std::stringstream text;
++  text << std::ifstream(CTL_PATH).rdbuf();
++  std::filesystem::remove(CTL_PATH, ec);
++
++  for (const gxc::DevCommand& cmd : gxc::ParseDevCommands(text.str()))
++  {
++    switch (cmd.kind)
++    {
++    case gxc::DevCommand::Shot:
++      Core::QueueHostJob([name = cmd.arg](Core::System&) {
++        Core::SaveScreenShot(name);
++        AppendCtlOut("ok shot " + name + "\n");
++      });
++      break;
++    case gxc::DevCommand::Save:
++    case gxc::DevCommand::Load:
++      Core::QueueHostJob([cmd](Core::System& system) {
++        if (cmd.kind == gxc::DevCommand::Save)
++          State::SaveAs(system, cmd.arg);
++        else
++          State::LoadAs(system, cmd.arg);
++        AppendCtlOut(std::string(cmd.kind == gxc::DevCommand::Save ? "ok save " : "ok load ") +
++                     cmd.arg + "\n");
++      });
++      break;
++    default:
++      AppendCtlOut(gxc::RunMemoryCommand(cmd, mem, mailbox));
++      break;
++    }
++  }
++}
++
 +u64 NowMs()
 +{
 +  return static_cast<u64>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -176,8 +230,10 @@ index 0000000..30787e5
 +  // Runs on the CPU thread at the end of every video field: emulated RAM is safe to touch.
 +  state->field_hook = system.GetVideoEvents().vi_end_field_event.Register([] {
 +    std::lock_guard lock(s_mutex);
-+    if (s_state)
-+      s_state->bridge->Tick(*s_state->memory);
++    if (!s_state)
++      return;
++    s_state->bridge->Tick(*s_state->memory);
++    RunControlFile(*s_state->memory, s_state->bridge->MailboxAddress());
 +  });
 +
 +  std::lock_guard lock(s_mutex);
