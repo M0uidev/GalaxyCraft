@@ -36,6 +36,7 @@ struct Debug
   u32 head_height_x100;  // 100 * height of the model's "Head" joint above the feet
   u32 game_near_z_x100;  // 100 * the game's camera near plane, before the override
   u32 star_pointer_valid;  // MR::isStarPointerValid(0): the game still takes the pointer
+  u32 galaxy_view;         // the host asked for the game's own camera
 };
 
 struct Published
@@ -99,6 +100,11 @@ u32 Word(u32 addr)
 void Copy3(f32* dst, const f32* src)
 {
   dst[0] = src[0], dst[1] = src[1], dst[2] = src[2];
+}
+
+bool GalaxyView()
+{
+  return (gOut.mbx.host_flags & GXC_MBX_GALAXY_VIEW) != 0;
 }
 
 bool HostFollows()
@@ -240,6 +246,10 @@ void MarioMovement(void* self)
     gravity = TVec3f(0.f, 0.f, 0.f);
   gOut.mbx.gravity[0] = gravity.x, gOut.mbx.gravity[1] = gravity.y, gOut.mbx.gravity[2] = gravity.z;
 
+  TVec3f front(0.f, 0.f, 0.f);
+  MR::getPlayerFrontVec(&front);
+  gOut.mbx.mario_front[0] = front.x, gOut.mbx.mario_front[1] = front.y, gOut.mbx.mario_front[2] = front.z;
+
   PublishParts(query);
   gOut.mbx.game_flags = (gFollowing ? GXC_MBX_GAME_FOLLOWING : 0u) | (gDemo ? GXC_MBX_GAME_DEMO : 0u);
   gOut.mbx.game_seq++;  // last: the host reads a consistent frame when this moves
@@ -251,10 +261,27 @@ void MarioDraw(const void* self)
     draw__10MarioActorCFv(self);
 }
 
+// The game's camera this frame, before any override: the mod's Galaxy view follows it.
+void PublishGameCamera()
+{
+  const TVec3f pos = MR::getCamPos();
+  // GX cameras look down their -z axis.
+  const TVec3f z = MR::getCamZdir();
+  const TVec3f y = MR::getCamYdir();
+  gOut.mbx.cam_pos[0] = pos.x, gOut.mbx.cam_pos[1] = pos.y, gOut.mbx.cam_pos[2] = pos.z;
+  gOut.mbx.cam_dir[0] = -z.x, gOut.mbx.cam_dir[1] = -z.y, gOut.mbx.cam_dir[2] = -z.z;
+  gOut.mbx.cam_up[0] = y.x, gOut.mbx.cam_up[1] = y.y, gOut.mbx.cam_up[2] = y.z;
+  gOut.mbx.cam_fov = MR::getFovy();
+}
+
 void CameraMovement(void* self)
 {
   movement__14CameraDirectorFv(self);
-  if (!gFollowing || gDemo)  // cutscenes keep their own camera
+  PublishGameCamera();
+  const bool galaxy = GalaxyView();
+  gOut.dbg.galaxy_view = galaxy;
+  // Cutscenes and the Galaxy view keep the game's camera (Mario stays hidden in the latter).
+  if (!gFollowing || gDemo || galaxy)
   {
     if (gNearOverridden)
     {
@@ -269,13 +296,12 @@ void CameraMovement(void* self)
     gOut.dbg.game_near_z_x100 = static_cast<u32>(gGameNearZ * 100.f);
     gNearOverridden = true;
   }
-  // From Mario's feet this frame (not the host's echo, a frame late) so the view keeps 60 fps.
-  const f32* up = gOut.mbx.up;
-  const f32* feet = gOut.mbx.anchor_pos;
-  const f32 eye[3] = {feet[0] + up[0] * gOut.mbx.eye_height, feet[1] + up[1] * gOut.mbx.eye_height,
-                      feet[2] + up[2] * gOut.mbx.eye_height};
+  // From Mario's feet this frame (not the host's echo, a frame late) so the view keeps 60 fps;
+  // the offset is where Minecraft's camera sits from the player (eyes, or behind/in front).
+  f32 eye[3];
+  gxc::CameraEye(gOut.mbx.anchor_pos, gOut.mbx.cam_offset, eye);
   f32 view[12];
-  gxc::LookAtView(eye, gOut.mbx.look, up, view);
+  gxc::LookAtView(eye, gOut.mbx.look, gOut.mbx.up, view);
   TPos3f mtx;
   for (int r = 0; r < 3; r++)
     for (int c = 0; c < 4; c++)

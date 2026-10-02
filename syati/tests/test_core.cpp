@@ -145,6 +145,15 @@ static void TestSqrt()
   CHECK(Sqrt(-4.f) == 0.f);
 }
 
+static void TestCameraEye()
+{
+  // Third person: the camera sits wherever Minecraft put it, relative to Mario's feet now.
+  const float feet[3] = {100, -20, 5}, offset[3] = {0, 130, -320};
+  float eye[3];
+  CameraEye(feet, offset, eye);
+  CHECK(Near(eye[0], 100) && Near(eye[1], 110) && Near(eye[2], -315));
+}
+
 static void TestKclSize()
 {
   const u32 base = 0x80600000u;
@@ -175,6 +184,7 @@ int main()
   TestViewDegenerate();
   TestSqrt();
   TestKclSize();
+  TestCameraEye();
   if (g_failures)
   {
     std::printf("%d of %d checks failed\n", g_failures, g_checks);

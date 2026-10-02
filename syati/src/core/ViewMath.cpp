@@ -47,6 +47,12 @@ float Sqrt(float x)
   return x * y;
 }
 
+void CameraEye(const float feet[3], const float offset[3], float out[3])
+{
+  for (int i = 0; i < 3; i++)
+    out[i] = feet[i] + offset[i];
+}
+
 void LookAtView(const float eye[3], const float look[3], const float up[3], float out[12])
 {
   // Rows are right, up', z = -look (GX cameras look down -z); translation is -R * eye.
