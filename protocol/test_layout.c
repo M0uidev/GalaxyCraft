@@ -38,4 +38,17 @@ _Static_assert(GXC_OFF_RING_M2S == 4198416, "off m2s");
 _Static_assert(GXC_OFF_OVERLAY == 4268032, "off overlay");
 _Static_assert(GXC_TOTAL_SIZE == 29151264, "total");
 
+_Static_assert(sizeof(GxcMbxPart) == 60, "mbx part");
+_Static_assert(offsetof(GxcMbxPart, mtx) == 12, "mbx part.mtx");
+_Static_assert(sizeof(GxcMailbox) == 3944, "mailbox");
+_Static_assert(offsetof(GxcMailbox, game_seq) == 12, "mbx.game_seq");
+_Static_assert(offsetof(GxcMailbox, scene_id) == 20, "mbx.scene");
+_Static_assert(offsetof(GxcMailbox, gravity) == 24, "mbx.gravity");
+_Static_assert(offsetof(GxcMailbox, anchor_pos) == 36, "mbx.anchor");
+_Static_assert(offsetof(GxcMailbox, host_flags) == 52, "mbx.host_flags");
+_Static_assert(offsetof(GxcMailbox, player_pos) == 56, "mbx.player_pos");
+_Static_assert(offsetof(GxcMailbox, fov_y) == 92, "mbx.fov");
+_Static_assert(offsetof(GxcMailbox, part_count) == 100, "mbx.part_count");
+_Static_assert(offsetof(GxcMailbox, parts) == 104, "mbx.parts");
+
 int main(void) { puts("OK"); return 0; }

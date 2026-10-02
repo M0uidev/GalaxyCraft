@@ -142,4 +142,40 @@ typedef struct {
   uint32_t reserved[2];
 } GxcOverlayHeader;
 
+/*
+ * Guest mailbox: lives in emulated Wii RAM, written by the Syati module inside SMG2 and
+ * synced with the shared memory by Dolphin once per video field. BIG-ENDIAN (PowerPC).
+ * Dolphin finds it by scanning MEM1/MEM2 for the magic.
+ */
+#define GXC_MBX_MAGIC "GXCRMBX1"
+#define GXC_MBX_VERSION 1u
+#define GXC_MBX_MAX_PARTS 64
+#define GXC_MBX_DRIVE 1u /* host_flags: the mod drives the player (Mario is a puppet) */
+
+typedef struct {
+  uint32_t part_id;
+  uint32_t kcl_addr; /* effective address of the KCL data in guest RAM */
+  uint32_t kcl_size;
+  float mtx[12]; /* 3x4 row-major, part local -> galaxy */
+} GxcMbxPart;
+
+typedef struct {
+  char magic[8];
+  uint32_t version;
+  uint32_t game_seq; /* game: +1 per frame */
+  uint32_t host_seq; /* host: +1 per write */
+  uint32_t scene_id;
+  float gravity[3];    /* game: gravity at player_pos (or at Mario when not driven) */
+  float anchor_pos[3]; /* game: Mario's position */
+  uint32_t game_flags;
+  uint32_t host_flags; /* GXC_MBX_DRIVE */
+  float player_pos[3]; /* host: feet position, galaxy units */
+  float look[3];
+  float up[3];
+  float fov_y;
+  float eye_height;
+  uint32_t part_count; /* <= GXC_MBX_MAX_PARTS */
+  GxcMbxPart parts[GXC_MBX_MAX_PARTS];
+} GxcMailbox;
+
 #endif
