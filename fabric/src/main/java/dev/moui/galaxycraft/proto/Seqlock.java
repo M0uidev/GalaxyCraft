@@ -13,6 +13,8 @@ public final class Seqlock {
     static final ValueLayout.OfLong LONG = ValueLayout.JAVA_LONG_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
     static final ValueLayout.OfFloat FLOAT = ValueLayout.JAVA_FLOAT_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
     static final VarHandle INT_VH = INT.varHandle();
+    static final ValueLayout.OfInt INT_U = ValueLayout.JAVA_INT_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
+    static final ValueLayout.OfDouble DOUBLE = ValueLayout.JAVA_DOUBLE_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
 
     public record WorldState(int sceneId, long frameId, Vector3d gravity, Vector3d queryPos, int flags) {
         /** The host has not seen a fresh PlayerState yet: queryPos is where the player is. */
@@ -20,6 +22,9 @@ public final class Seqlock {
             return (flags & Layout.WORLD_ANCHOR) != 0;
         }
     }
+
+    /** Keys as an SDL-scancode-indexed bitmap; mouse and wheel are accumulated since the host started. */
+    public record InputState(int buttons, double mouseX, double mouseY, double wheel, byte[] keys) {}
 
     public record PlayerOut(long frameId, Vector3d pos, Vector3d look, Vector3d up, float fovY, float eye,
             boolean onGround) {}
@@ -43,6 +48,22 @@ public final class Seqlock {
             var w = new WorldState(s.get(INT, o + 4), s.get(LONG, o + 8), vec(s, o + 16), vec(s, o + 28), s.get(INT, o + 40));
             VarHandle.acquireFence();
             if (getAcquire(s, o) == s1) return Optional.of(w);
+        }
+        return Optional.empty();
+    }
+
+    public static Optional<InputState> readInput(MemorySegment s) {
+        long o = Layout.OFF_INPUT;
+        for (int attempt = 0; attempt < 100; attempt++) {
+            int s1 = getAcquire(s, o);
+            if (s1 == 0) return Optional.empty();
+            if ((s1 & 1) != 0) continue;
+            byte[] keys = new byte[64];
+            MemorySegment.copy(s, ValueLayout.JAVA_BYTE, o + 32, keys, 0, 64);
+            var in = new InputState(s.get(INT_U, o + 4), s.get(DOUBLE, o + 8), s.get(DOUBLE, o + 16),
+                    s.get(DOUBLE, o + 24), keys);
+            VarHandle.acquireFence();
+            if (getAcquire(s, o) == s1) return Optional.of(in);
         }
         return Optional.empty();
     }

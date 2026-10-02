@@ -1,12 +1,18 @@
 package dev.moui.galaxycraft.gametest;
 
 import dev.moui.galaxycraft.client.GalaxyCraftClient;
+import dev.moui.galaxycraft.proto.Layout;
+import dev.moui.galaxycraft.proto.Shm;
 import java.io.IOException;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
+import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import org.joml.Vector3d;
 
 /**
@@ -17,9 +23,11 @@ import org.joml.Vector3d;
 public final class WalkOnStubPlanetTest implements FabricClientGameTest {
     private static final Vector3d[] CENTERS = {new Vector3d(0, 0, 0), new Vector3d(0, 2600, 0)};
     private static final double[] RADII = {800, 600};
+    private static final ValueLayout.OfInt INT = ValueLayout.JAVA_INT_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (Boolean.getBoolean("galaxycraft.demo")) return; // Dolphin owns the shared memory in demo mode
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
             sp.getServer().runCommand("gamemode adventure @a");
             sp.getServer().runCommand("difficulty peaceful");
@@ -34,6 +42,8 @@ public final class WalkOnStubPlanetTest implements FabricClientGameTest {
                 log("landed: altitude %.1f units", alt0);
                 check(alt0 > -5 && alt0 < 20, "standing on the planet surface, altitude " + alt0);
                 ctx.takeScreenshot("galaxycraft-standing");
+                checkOverlayExport(ctx);
+                checkHostInput(ctx);
 
                 ctx.getInput().holdKey(o -> o.keyUp);
                 double minAlt = Double.MAX_VALUE, maxAlt = -Double.MAX_VALUE, travelled = 0;
@@ -77,6 +87,46 @@ public final class WalkOnStubPlanetTest implements FabricClientGameTest {
 
     private static Vector3d galaxyPos(ClientGameTestContext ctx) {
         return ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyPos()).orElseThrow();
+    }
+
+    /** Phase 2: the frame Dolphin composites has a transparent sky and an opaque hotbar. */
+    private static void checkOverlayExport(ClientGameTestContext ctx) {
+        ctx.waitTicks(10);
+        MemorySegment seg = Shm.open(Path.of(Layout.SHM_PATH)).orElseThrow().seg();
+        int latest = seg.get(INT, Layout.OFF_OVERLAY);
+        int w = seg.get(INT, Layout.OFF_OVERLAY + 4), h = seg.get(INT, Layout.OFF_OVERLAY + 8);
+        check(latest >= 0 && latest <= 2 && w > 0 && h > 0, "overlay published: " + w + "x" + h + " in buffer " + latest);
+        long px = Layout.OFF_OVERLAY + 32 + latest * Layout.OVERLAY_FRAME_BYTES;
+        int skyAlpha = Byte.toUnsignedInt(seg.get(ValueLayout.JAVA_BYTE, px + ((5L * w) + w / 2) * 4 + 3));
+        int hotbarAlpha = Byte.toUnsignedInt(seg.get(ValueLayout.JAVA_BYTE, px + (((h - 12L) * w) + w / 2) * 4 + 3));
+        check(skyAlpha == 0, "sky is transparent in the overlay (alpha " + skyAlpha + ")");
+        check(hotbarAlpha > 128, "hotbar is opaque in the overlay (alpha " + hotbarAlpha + ")");
+    }
+
+    /** Phase 2: a key published in InputState (as Dolphin does) reaches Minecraft: E opens the inventory. */
+    private static void checkHostInput(ClientGameTestContext ctx) {
+        MemorySegment seg = Shm.open(Path.of(Layout.SHM_PATH)).orElseThrow().seg();
+        writeInput(seg, new byte[64]);
+        ctx.waitTicks(5);
+        byte[] e = new byte[64];
+        e[8 / 8] |= (byte) (1 << (8 % 8)); // SDL scancode for E
+        writeInput(seg, e);
+        ctx.waitFor(mc -> mc.gui.screen() instanceof InventoryScreen, 100);
+        check(true, "host key E opened the Minecraft inventory");
+        writeInput(seg, new byte[64]);
+        ctx.waitTicks(5);
+        writeInput(seg, e);
+        ctx.waitFor(mc -> mc.gui.screen() == null, 100);
+        writeInput(seg, new byte[64]);
+        check(true, "host key E closed it again");
+    }
+
+    private static void writeInput(MemorySegment seg, byte[] keys) {
+        long o = Layout.OFF_INPUT;
+        int seq = seg.get(INT, o);
+        seg.set(INT, o, seq + 1);
+        MemorySegment.copy(keys, 0, seg, ValueLayout.JAVA_BYTE, o + 32, 64);
+        seg.set(INT, o, seq + 2);
     }
 
     private static double altitude(ClientGameTestContext ctx) {

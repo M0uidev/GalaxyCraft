@@ -16,7 +16,7 @@
 - Buzón en RAM emulada: **big-endian**, magic `GXCRMBX1`, versión 1, alineado a 4. El host lo busca en MEM1 (`0x80000000`, 24 MiB) y MEM2 (`0x90000000`, 64 MiB).
 - Activación sólo con la variable de entorno `GALAXYCRAFT=1` (Dolphin sin ella se comporta igual que upstream).
 - Overlay: RGBA8, filas de arriba a abajo, alpha no premultiplicado, máx 1920×1080.
-- InputState: teclas como códigos GLFW (bitmap de 64 bytes = 512 teclas), ratón como deltas acumulados en píxeles.
+- InputState: teclas como **scancodes SDL** (Minecraft 26.x usa SDL3; corregido desde "GLFW"), bitmap de 64 bytes; botones bit n = botón SDL n; ratón como deltas acumulados en píxeles.
 - Heartbeat > 2000 ms = otro lado caído. Con el mod caído el host pone `drive = 0` en el buzón (Mario vuelve a su control).
 - Disco: ~7 GB libres; la build de Dolphin vive en `dolphin/build` (git-ignored).
 

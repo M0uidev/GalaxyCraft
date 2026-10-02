@@ -10,7 +10,9 @@ import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Seqlock;
 import java.nio.file.Path;
 import java.util.Optional;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -19,6 +21,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
+import org.lwjgl.sdl.SDLVideo;
 
 /**
  * Drives the local player through the galaxy: polls the bridge, re-aims the gravity frame
@@ -26,6 +29,8 @@ import org.joml.Vector3d;
  */
 public final class GalaxyCraftClient implements ClientModInitializer {
     private static BridgeClient bridge;
+    private static OverlayExporter exporter;
+    private static final InputInjector input = new InputInjector();
     private static GravityFrame frame;
     private static long frameId;
 
@@ -55,11 +60,37 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         ClientTickEvents.START_CLIENT_TICK.register(GalaxyCraftClient::beforeTick);
         ClientTickEvents.END_CLIENT_TICK.register(GalaxyCraftClient::afterTick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> resetFrame());
+        ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
+            if (Boolean.getBoolean("galaxycraft.hidden")) { // Dolphin shows the overlay instead
+                client.options.pauseOnLostFocus = false;
+                SDLVideo.SDL_HideWindow(client.getWindow().handle());
+            }
+        });
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(
                 literal("galaxycraft").then(literal("status").executes(c -> {
                     c.getSource().sendFeedback(Component.literal(status(c.getSource().getPlayer())));
                     return 1;
                 }))));
+    }
+
+    /** While a host is linked, Minecraft renders a transparent overlay and exports it. */
+    public static boolean exportingOverlay() {
+        return bridge != null && bridge.linked();
+    }
+
+    /** Render thread, before each frame: apply the host's keyboard and mouse. */
+    public static void onFrameStart() {
+        if (bridge == null) return;
+        bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
+    }
+
+    /** Render thread, after the GUI: publish the frame for Dolphin to composite. */
+    public static void onFrameEnd(RenderTarget target) {
+        if (bridge == null) return;
+        bridge.segment().ifPresentOrElse(seg -> {
+            if (exporter == null) exporter = new OverlayExporter(seg);
+            exporter.capture(target);
+        }, () -> exporter = null);
     }
 
     /** The local player's galaxy position, if linked and the frame is set up. */

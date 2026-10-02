@@ -84,11 +84,11 @@ typedef struct { /* M -> S */
 
 typedef struct { /* S -> M */
   uint32_t seq;
-  uint32_t buttons; /* mouse buttons bitmask */
+  uint32_t buttons; /* bit n = SDL mouse button n (1 left, 2 middle, 3 right) */
   double mouse_x;   /* accumulated deltas since start */
   double mouse_y;
   double wheel;
-  uint8_t keys[64]; /* bitmap indexed by GLFW key code */
+  uint8_t keys[64]; /* bitmap indexed by SDL scancode (USB HID usage), as Minecraft 26.x uses */
 } GxcInputState;
 
 /*

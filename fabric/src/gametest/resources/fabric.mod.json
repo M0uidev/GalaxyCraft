@@ -5,7 +5,10 @@
 	"name": "GalaxyCraft client game tests",
 	"environment": "client",
 	"entrypoints": {
-		"fabric-client-gametest": ["dev.moui.galaxycraft.gametest.WalkOnStubPlanetTest"]
+		"fabric-client-gametest": [
+			"dev.moui.galaxycraft.gametest.WalkOnStubPlanetTest",
+			"dev.moui.galaxycraft.gametest.DolphinOverlayDemo"
+		]
 	},
 	"depends": {"galaxycraft": "*"}
 }

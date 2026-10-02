@@ -11,7 +11,10 @@
 		"main": ["dev.moui.galaxycraft.GalaxyCraft"],
 		"client": ["dev.moui.galaxycraft.client.GalaxyCraftClient"]
 	},
-	"mixins": ["galaxycraft.mixins.json"],
+	"mixins": [
+		"galaxycraft.mixins.json",
+		{"config": "galaxycraft.client.mixins.json", "environment": "client"}
+	],
 	"depends": {
 		"fabricloader": ">=0.19.5",
 		"minecraft": "~26.3",

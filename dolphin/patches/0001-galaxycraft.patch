@@ -49,16 +49,17 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..a999e6b
+index 0000000..30787e5
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,187 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
 +#include "Core/GalaxyCraft.h"
 +
 +#include <chrono>
++#include <cstdio>
 +#include <cstdlib>
 +#include <cstring>
 +#include <memory>
@@ -182,6 +183,7 @@ index 0000000..a999e6b
 +  std::lock_guard lock(s_mutex);
 +  s_state = std::move(state);
 +  NOTICE_LOG_FMT(CORE, "GalaxyCraft: bridge running on /dev/shm{}", GXC_SHM_NAME);
++  std::fprintf(stderr, "GalaxyCraft: bridge running on /dev/shm%s\n", GXC_SHM_NAME);
 +}
 +
 +void Stop()
@@ -205,7 +207,7 @@ index 0000000..a999e6b
 +{
 +  std::lock_guard lock(s_mutex);
 +  if (s_state)
-+    s_state->input->Key(gxc::QtKeyToGlfw(qt_key), down);
++    s_state->input->Key(gxc::QtKeyToScancode(qt_key), down);
 +}
 +
 +void OnMouseDelta(double dx, double dy)
@@ -219,7 +221,7 @@ index 0000000..a999e6b
 +{
 +  std::lock_guard lock(s_mutex);
 +  if (s_state)
-+    s_state->input->Buttons(mask);
++    s_state->input->Buttons(gxc::QtButtonsToSdl(mask));
 +}
 +
 +void OnWheel(double delta)
@@ -240,7 +242,7 @@ index 0000000..a999e6b
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..b9db364
+index 0000000..f1fc49b
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
 @@ -0,0 +1,34 @@
@@ -272,14 +274,14 @@ index 0000000..b9db364
 +// Qt thread.
 +void OnKey(int qt_key, bool down);
 +void OnMouseDelta(double dx, double dy);
-+void OnMouseButtons(u32 mask);
++void OnMouseButtons(u32 qt_buttons);
 +void OnWheel(double delta);
 +
 +// Video thread: calls fn(width, height, frame_id, rgba) with the newest overlay frame, if any.
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn);
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/DolphinQt/RenderWidget.cpp b/Source/Core/DolphinQt/RenderWidget.cpp
-index 49680b8..633301d 100644
+index 49680b8..289fa72 100644
 --- a/Source/Core/DolphinQt/RenderWidget.cpp
 +++ b/Source/Core/DolphinQt/RenderWidget.cpp
 @@ -12,6 +12,8 @@
@@ -309,11 +311,11 @@ index 49680b8..633301d 100644
    PassEventToPresenter(event);
  
    switch (event->type())
-@@ -511,6 +517,57 @@ bool RenderWidget::event(QEvent* event)
+@@ -511,6 +517,56 @@ bool RenderWidget::event(QEvent* event)
    return QWidget::event(event);
  }
  
-+// While Minecraft is connected (GalaxyCraft), keyboard and mouse go to it: keys as GLFW codes and
++// While Minecraft is connected (GalaxyCraft), keyboard and mouse go to it: keys as SDL scancodes and
 +// the mouse as relative motion, re-centering the hidden cursor. Escape still reaches Dolphin.
 +bool RenderWidget::PassEventToGalaxyCraft(QEvent* event)
 +{
@@ -353,8 +355,7 @@ index 49680b8..633301d 100644
 +  case QEvent::MouseButtonPress:
 +  case QEvent::MouseButtonRelease:
 +    setFocus();
-+    // Qt's left/right/middle bits match GLFW buttons 0/1/2.
-+    GalaxyCraft::OnMouseButtons(static_cast<u32>(static_cast<const QMouseEvent*>(event)->buttons()) & 7);
++    GalaxyCraft::OnMouseButtons(static_cast<u32>(static_cast<const QMouseEvent*>(event)->buttons()));
 +    return true;
 +  case QEvent::Wheel:
 +    GalaxyCraft::OnWheel(static_cast<const QWheelEvent*>(event)->angleDelta().y() / 120.0);
@@ -381,19 +382,21 @@ index d828bf3..7240b1a 100644
    void dragEnterEvent(QDragEnterEvent* event) override;
    void dropEvent(QDropEvent* event) override;
 diff --git a/Source/Core/VideoCommon/OnScreenUI.cpp b/Source/Core/VideoCommon/OnScreenUI.cpp
-index 209e96c..0c444ab 100644
+index 209e96c..9c2c18f 100644
 --- a/Source/Core/VideoCommon/OnScreenUI.cpp
 +++ b/Source/Core/VideoCommon/OnScreenUI.cpp
-@@ -3,6 +3,8 @@
+@@ -3,6 +3,10 @@
  
  #include "VideoCommon/OnScreenUI.h"
  
 +#include "Core/GalaxyCraft.h"
 +
++#include <cstdio>
++
  #include "Common/CommonPaths.h"
  #include "Common/EnumMap.h"
  #include "Common/FileUtil.h"
-@@ -413,10 +415,39 @@ void OnScreenUI::DrawChallengesAndLeaderboards()
+@@ -413,10 +417,46 @@ void OnScreenUI::DrawChallengesAndLeaderboards()
  #endif  // USE_RETRO_ACHIEVEMENTS
  }
  
@@ -420,6 +423,13 @@ index 209e96c..0c444ab 100644
 +  });
 +  if (visible)
 +  {
++    static bool s_logged = false;
++    if (!s_logged)
++    {
++      s_logged = true;
++      std::fprintf(stderr, "GalaxyCraft: compositing Minecraft overlay %ux%u\n",
++                   m_galaxycraft_texture->GetWidth(), m_galaxycraft_texture->GetHeight());
++    }
 +    ImGui::GetBackgroundDrawList()->AddImage(*m_galaxycraft_texture, ImVec2(0, 0),
 +                                             ImGui::GetIO().DisplaySize);
 +  }

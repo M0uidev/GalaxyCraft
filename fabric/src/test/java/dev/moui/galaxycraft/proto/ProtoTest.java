@@ -70,6 +70,20 @@ class ProtoTest {
         assertTrue(Seqlock.readWorld(shm.seg()).isEmpty());
     }
 
+    @Test void readInputSlot() throws Exception {
+        Shm shm = Shm.create(dir.resolve("shm"));
+        MemorySegment s = shm.seg();
+        assertTrue(Seqlock.readInput(s).isEmpty());
+        s.set(I, 224 + 4, 3);
+        s.set(ValueLayout.JAVA_DOUBLE_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN), 224 + 8, 12.5);
+        s.set(ValueLayout.JAVA_BYTE, 224 + 32 + 8, (byte) 0x20);   // key 69
+        s.set(I, 224, 2);
+        var in = Seqlock.readInput(s).orElseThrow();
+        assertEquals(3, in.buttons());
+        assertEquals(12.5, in.mouseX());
+        assertEquals(0x20, in.keys()[8]);
+    }
+
     @Test void ringRoundtrip() throws Exception {
         Ring r = new Ring(Shm.create(dir.resolve("shm")).seg(), Layout.OFF_RING_S2M);
         assertTrue(r.push(4, new byte[] {1, 2, 3}));

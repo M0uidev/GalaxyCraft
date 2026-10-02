@@ -3,10 +3,13 @@
 
 namespace gxc
 {
-// GLFW key code for a Qt key code (Qt::Key values), or -1 if Minecraft has no such key.
-int QtKeyToGlfw(int qt_key);
+// SDL scancode (USB HID usage, what Minecraft 26.x uses) for a Qt key code, or -1 if none.
+int QtKeyToScancode(int qt_key);
 
-// Publishes the whole InputState (keys as GLFW codes, accumulated mouse deltas) on every change.
+// Qt mouse button bits (left 1, right 2, middle 4) -> protocol mask (bit n = SDL button n).
+u32 QtButtonsToSdl(u32 qt_buttons);
+
+// Publishes the whole InputState (keys as SDL scancodes, accumulated mouse deltas) on every change.
 class InputWriter
 {
 public:

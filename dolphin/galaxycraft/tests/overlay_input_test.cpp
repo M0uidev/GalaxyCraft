@@ -61,30 +61,45 @@ TEST(overlay_too_large_is_rejected)
   CHECK(!LatestOverlay(*f.shm).has_value());
 }
 
-TEST(qt_keys_map_to_glfw)
+TEST(qt_keys_map_to_sdl_scancodes)
 {
-  CHECK(QtKeyToGlfw(0x45) == 69);              // Qt::Key_E
-  CHECK(QtKeyToGlfw(0x31) == 49);              // Qt::Key_1
-  CHECK(QtKeyToGlfw(0x20) == 32);              // Qt::Key_Space
-  CHECK(QtKeyToGlfw(0x01000000) == 256);       // Qt::Key_Escape
-  CHECK(QtKeyToGlfw(0x01000020) == 340);       // Qt::Key_Shift
-  CHECK(QtKeyToGlfw(0x01000013) == 265);       // Qt::Key_Up
-  CHECK(QtKeyToGlfw(0x01000030) == 290);       // Qt::Key_F1
-  CHECK(QtKeyToGlfw(0x01000061) == -1);        // Qt::Key_VolumeDown: no GLFW key
+  CHECK(QtKeyToScancode(0x45) == 8);           // Qt::Key_E
+  CHECK(QtKeyToScancode(0x41) == 4);           // Qt::Key_A
+  CHECK(QtKeyToScancode(0x5A) == 29);          // Qt::Key_Z
+  CHECK(QtKeyToScancode(0x31) == 30);          // Qt::Key_1
+  CHECK(QtKeyToScancode(0x30) == 39);          // Qt::Key_0
+  CHECK(QtKeyToScancode(0x20) == 44);          // Qt::Key_Space
+  CHECK(QtKeyToScancode(0x01000000) == 41);    // Qt::Key_Escape
+  CHECK(QtKeyToScancode(0x01000001) == 43);    // Qt::Key_Tab
+  CHECK(QtKeyToScancode(0x01000004) == 40);    // Qt::Key_Return
+  CHECK(QtKeyToScancode(0x01000020) == 225);   // Qt::Key_Shift
+  CHECK(QtKeyToScancode(0x01000021) == 224);   // Qt::Key_Control
+  CHECK(QtKeyToScancode(0x01000013) == 82);    // Qt::Key_Up
+  CHECK(QtKeyToScancode(0x01000030) == 58);    // Qt::Key_F1
+  CHECK(QtKeyToScancode(0x0100003B) == 69);    // Qt::Key_F12
+  CHECK(QtKeyToScancode(0x01000061) == -1);    // Qt::Key_VolumeDown: no key
+}
+
+TEST(qt_buttons_map_to_sdl_buttons)
+{
+  CHECK(QtButtonsToSdl(0x1) == (1u << 1));     // left -> SDL button 1
+  CHECK(QtButtonsToSdl(0x2) == (1u << 3));     // right -> SDL button 3
+  CHECK(QtButtonsToSdl(0x4) == (1u << 2));     // middle -> SDL button 2
+  CHECK(QtButtonsToSdl(0x7) == 0b1110u);
 }
 
 TEST(input_writer_sets_keys_and_accumulates_mouse)
 {
   ShmFixture f;
   InputWriter in(*f.shm);
-  in.Key(69, true);
+  in.Key(8, true);
   in.MouseDelta(3, -2);
   in.MouseDelta(3, -2);
   in.Buttons(1);
   in.Wheel(1.5);
-  CHECK(KeyBit(*f.shm, 69));
-  in.Key(69, false);
-  CHECK(!KeyBit(*f.shm, 69));
+  CHECK(KeyBit(*f.shm, 8));
+  in.Key(8, false);
+  CHECK(!KeyBit(*f.shm, 8));
   GxcInputState s;
   std::memcpy(&s, f.shm->Data() + GXC_OFF_INPUT, sizeof(s));
   CHECK(s.mouse_x == 6 && s.mouse_y == -4 && s.buttons == 1 && s.wheel == 1.5);

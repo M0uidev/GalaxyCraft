@@ -5,6 +5,14 @@ plugins {
 loom {
 	splitEnvironmentSourceSets()
 
+	runs {
+		configureEach {
+			if (project.hasProperty("galaxycraftDemo")) {
+				vmArg "-Dgalaxycraft.demo=true"
+			}
+		}
+	}
+
 	mods {
 		"galaxycraft" {
 			sourceSet sourceSets.main

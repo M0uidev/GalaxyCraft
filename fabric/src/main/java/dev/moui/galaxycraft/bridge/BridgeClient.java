@@ -100,6 +100,16 @@ public final class BridgeClient {
         return linked() ? world : Optional.empty();
     }
 
+    /** The mapped shared memory, while the host is linked. */
+    public Optional<MemorySegment> segment() {
+        return linked() ? Optional.of(shm.seg()) : Optional.empty();
+    }
+
+    /** The host's keyboard and mouse state, if it publishes any (Dolphin does, the stub does not). */
+    public Optional<Seqlock.InputState> input() {
+        return linked() ? Seqlock.readInput(shm.seg()) : Optional.empty();
+    }
+
     public void sendPlayer(Seqlock.PlayerOut p) {
         if (shm != null) Seqlock.writePlayer(shm.seg(), p);
     }
