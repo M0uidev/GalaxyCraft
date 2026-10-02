@@ -185,6 +185,9 @@ void MarioInit(void* self, const void* iter)
 {
   init__10MarioActorFRC12JMapInfoIter(self, iter);
   gOut.mbx.scene_id++;  // a new Mario means a new stage: the host republishes everything
+  // The new Mario starts visible and controllable: if still driven, the next movement must
+  // take him over again.
+  gDriven = false;
 }
 
 void MarioMovement(void* self)
