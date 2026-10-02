@@ -1,0 +1,15 @@
+{
+	"required": true,
+	"package": "dev.moui.galaxycraft.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"mixins": [
+		"EntityCollideMixin",
+		"ServerGamePacketListenerMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

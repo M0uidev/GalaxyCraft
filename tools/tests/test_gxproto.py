@@ -96,3 +96,18 @@ class SeqlockTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CreateTest(unittest.TestCase):
+    def test_create_clears_stale_slots(self):
+        path = tmp_path()
+        shm = gxproto.Shm(path=path, create=True)
+        gxproto.write_player(shm, frame_id=3, pos=(1, 2, 3), look=(0, 0, 1), up=(0, 1, 0), fov_y=70, eye=1, on_ground=False)
+        shm.close()
+        shm = gxproto.Shm(path=path, create=True)
+        try:
+            self.assertIsNone(gxproto.read_player(shm))
+            self.assertIsNone(gxproto.read_world(shm))
+        finally:
+            shm.close()
+            os.unlink(path)

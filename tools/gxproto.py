@@ -32,6 +32,7 @@ MSG_HELLO = 101
 MSG_PAD = 0xFFFF
 
 PLAYER_ON_GROUND = 1
+WORLD_ANCHOR = 1  # WorldState.flags: query_pos is the host's anchor (where the player is)
 
 _HEADER = struct.Struct("<IIIIQQII24x")
 _WORLD = struct.Struct("<IIQ3f3fI20x")
@@ -64,6 +65,7 @@ class Shm:
         finally:
             os.close(fd)
         if create:
+            self.buf[0:RING_S2M_OFF] = bytes(RING_S2M_OFF)  # header and slots: drop stale state
             _RING.pack_into(self.buf, RING_S2M_OFF, 0, 0, RING_S2M_CAP, 0)
             _RING.pack_into(self.buf, RING_M2S_OFF, 0, 0, RING_M2S_CAP, 0)
             struct.pack_into("<I", self.buf, OFF_OVERLAY, 0xFFFFFFFF)

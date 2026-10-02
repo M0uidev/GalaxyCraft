@@ -1,0 +1,11 @@
+{
+	"schemaVersion": 1,
+	"id": "galaxycraft-gametest",
+	"version": "1.0.0",
+	"name": "GalaxyCraft client game tests",
+	"environment": "client",
+	"entrypoints": {
+		"fabric-client-gametest": ["dev.moui.galaxycraft.gametest.WalkOnStubPlanetTest"]
+	},
+	"depends": {"galaxycraft": "*"}
+}

@@ -67,9 +67,10 @@ Minecraft solo sabe caer hacia −Y. En vez de cambiar su física, **giramos el 
    del eje vertical). `R' = R · Q⁻¹`, que cumple `R'·u_new = +Y`.
 3. `t'` se elige para que la posición del jugador en Minecraft **no cambie** (rotación alrededor
    del jugador).
-4. La velocidad del jugador se conserva en el marco galáctico: `v_mc' = R'·R⁻¹·v_mc`.
-5. La dirección de la mirada también: se rota por `R'·R⁻¹` y se recalculan yaw/pitch.
-   Si la mirada queda casi vertical se limita pitch a ±90° como hace Minecraft.
+4. La velocidad y la mirada **no se tocan** en coordenadas de Minecraft: giran con el marco
+   (transporte paralelo). Así el momento sigue la curvatura del planeta como el de Mario.
+   (Corregido el 2026-10-02: conservarlas en el marco galáctico dejaba la mirada apuntando al
+   cielo tras un cuarto de vuelta y el jugador se trababa.)
 
 Resultado: "abajo" siempre apunta al planeta, la física de Minecraft queda intacta y caminar
 alrededor de una esfera funciona. Se aplica solo si el ángulo entre `g` anterior y nueva supera

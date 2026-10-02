@@ -14,7 +14,12 @@ public final class Seqlock {
     static final ValueLayout.OfFloat FLOAT = ValueLayout.JAVA_FLOAT_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
     static final VarHandle INT_VH = INT.varHandle();
 
-    public record WorldState(int sceneId, long frameId, Vector3d gravity, Vector3d queryPos) {}
+    public record WorldState(int sceneId, long frameId, Vector3d gravity, Vector3d queryPos, int flags) {
+        /** The host has not seen a fresh PlayerState yet: queryPos is where the player is. */
+        public boolean anchor() {
+            return (flags & Layout.WORLD_ANCHOR) != 0;
+        }
+    }
 
     public record PlayerOut(long frameId, Vector3d pos, Vector3d look, Vector3d up, float fovY, float eye,
             boolean onGround) {}
@@ -35,7 +40,7 @@ public final class Seqlock {
             int s1 = getAcquire(s, o);
             if (s1 == 0) return Optional.empty();
             if ((s1 & 1) != 0) continue;
-            var w = new WorldState(s.get(INT, o + 4), s.get(LONG, o + 8), vec(s, o + 16), vec(s, o + 28));
+            var w = new WorldState(s.get(INT, o + 4), s.get(LONG, o + 8), vec(s, o + 16), vec(s, o + 28), s.get(INT, o + 40));
             VarHandle.acquireFence();
             if (getAcquire(s, o) == s1) return Optional.of(w);
         }

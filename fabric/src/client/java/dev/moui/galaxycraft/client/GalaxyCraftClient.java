@@ -1,0 +1,126 @@
+package dev.moui.galaxycraft.client;
+
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
+
+import dev.moui.galaxycraft.GalaxyCraft;
+import dev.moui.galaxycraft.bridge.BridgeClient;
+import dev.moui.galaxycraft.gravity.GravityFrame;
+import dev.moui.galaxycraft.gravity.LookMath;
+import dev.moui.galaxycraft.proto.Layout;
+import dev.moui.galaxycraft.proto.Seqlock;
+import java.nio.file.Path;
+import java.util.Optional;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Vector3d;
+
+/**
+ * Drives the local player through the galaxy: polls the bridge, re-aims the gravity frame
+ * before each physics tick, and reports the player's galaxy pose after it.
+ */
+public final class GalaxyCraftClient implements ClientModInitializer {
+    private static BridgeClient bridge;
+    private static GravityFrame frame;
+    private static long frameId;
+
+    @Override
+    public void onInitializeClient() {
+        bridge = new BridgeClient(Path.of(Layout.SHM_PATH), () -> System.nanoTime() / 1_000_000L,
+                new BridgeClient.PartListener() {
+                    @Override public void onUpsert(int partId, double[] mtx, byte[] kcl) {
+                        try {
+                            GalaxyCraft.FIELD.upsertPart(partId, mtx, kcl);
+                        } catch (IllegalArgumentException e) {
+                            GalaxyCraft.LOG.warn("Ignoring bad KCL for part {}: {}", partId, e.getMessage());
+                            GalaxyCraft.FIELD.removePart(partId);
+                        }
+                    }
+
+                    @Override public void onRemove(int partId) {
+                        GalaxyCraft.FIELD.removePart(partId);
+                    }
+
+                    @Override public void onScene(int sceneId) {
+                        GalaxyCraft.LOG.info("Galaxy scene {}", sceneId);
+                        GalaxyCraft.FIELD.clear();
+                        resetFrame();
+                    }
+                });
+        ClientTickEvents.START_CLIENT_TICK.register(GalaxyCraftClient::beforeTick);
+        ClientTickEvents.END_CLIENT_TICK.register(GalaxyCraftClient::afterTick);
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> resetFrame());
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(
+                literal("galaxycraft").then(literal("status").executes(c -> {
+                    c.getSource().sendFeedback(Component.literal(status(c.getSource().getPlayer())));
+                    return 1;
+                }))));
+    }
+
+    /** The local player's galaxy position, if linked and the frame is set up. */
+    public static Optional<Vector3d> galaxyPos() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null || frame == null || !bridge.linked()) return Optional.empty();
+        return Optional.of(frame.toGal(vec(player.position())));
+    }
+
+    public static boolean linked() {
+        return bridge.linked();
+    }
+
+    private static void resetFrame() {
+        frame = null;
+        GalaxyCraft.FIELD.setFrame(null);
+    }
+
+    private static void beforeTick(Minecraft client) {
+        bridge.poll();
+        LocalPlayer player = client.player;
+        if (player == null || !bridge.linked()) return; // unlinked: keep the last frame frozen
+        Optional<Seqlock.WorldState> world = bridge.world();
+        if (world.isEmpty()) return;
+        Vector3d gravity = world.get().gravity();
+        Vector3d pos = vec(player.position());
+        if (frame == null) {
+            if (!world.get().anchor()) return; // wait for the host to say where the player is
+            frame = new GravityFrame(world.get().queryPos(), pos, gravity);
+            GalaxyCraft.LOG.info("Linked to galaxy at {}", world.get().queryPos());
+        } else {
+            // Look and velocity are left alone in Minecraft space, so they turn with the frame
+            // (parallel transport): walking keeps hugging the planet, as Mario's momentum does.
+            frame.update(gravity, pos);
+        }
+        frame.rebase(vec(player.position())).ifPresent(np -> {
+            player.setPos(np.x, np.y, np.z);
+            player.setOldPosAndRot();
+        });
+        GalaxyCraft.FIELD.setFrame(frame);
+    }
+
+    private static void afterTick(Minecraft client) {
+        LocalPlayer player = client.player;
+        if (player == null || frame == null || !bridge.linked()) return;
+        Vector3d look = LookMath.direction(player.getYRot(), player.getXRot());
+        bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())),
+                frame.dirToGal(look), frame.upGal(), client.options.fov().get().floatValue(),
+                (float) (player.getEyeHeight() / GravityFrame.SCALE), player.onGround()));
+    }
+
+    private static String status(LocalPlayer player) {
+        if (!bridge.linked()) return "GalaxyCraft: not linked (is fake_galaxy.py or Dolphin running?)";
+        if (frame == null || player == null) return "GalaxyCraft: linked, waiting for player";
+        Vector3d gal = frame.toGal(vec(player.position()));
+        Vector3d up = frame.upGal();
+        return String.format("GalaxyCraft: linked | galaxy pos (%.0f, %.0f, %.0f) | up (%.2f, %.2f, %.2f) | on ground %s",
+                gal.x, gal.y, gal.z, up.x, up.y, up.z, player.onGround());
+    }
+
+    private static Vector3d vec(Vec3 v) {
+        return new Vector3d(v.x, v.y, v.z);
+    }
+}

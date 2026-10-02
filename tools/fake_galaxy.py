@@ -85,29 +85,55 @@ def publish_scene(shm, planets):
             _push(ring, gxproto.MSG_KCL_CHUNK, gxproto.KCL_CHUNK.pack(part_id, off, len(data)) + chunk)
 
 
-def serve(shm, seconds=None, log=print):
-    gxproto.init_host(shm)
-    gxproto.heartbeat_host(shm, flags=1)
-    publish_scene(shm, PLANETS)
-    m2s = gxproto.Ring(shm, gxproto.RING_M2S_OFF)
-    frame, last_log, start = 0, 0.0, time.monotonic()
-    query = SPAWN
-    while seconds is None or time.monotonic() - start < seconds:
-        frame += 1
+class Host:
+    """One host frame per step(): heartbeat, HELLO handling, gravity at the player.
+
+    Until the mod reports a fresh PlayerState, WorldState carries the WORLD_ANCHOR flag and
+    query_pos is the host's idea of where the player is (SPAWN, or the last fresh position),
+    so the mod knows where to anchor its gravity frame.
+    """
+
+    def __init__(self, shm, log=print):
+        self.shm, self.log = shm, log
+        gxproto.init_host(shm)
         gxproto.heartbeat_host(shm, flags=1)
-        while (msg := m2s.pop()) is not None:
+        publish_scene(shm, PLANETS)
+        self.m2s = gxproto.Ring(shm, gxproto.RING_M2S_OFF)
+        self.frame = 0
+        self.query = SPAWN
+        self.anchored = True
+        self.seen_frame = self._player_frame()
+        self.last_log = 0.0
+
+    def _player_frame(self):
+        p = gxproto.read_player(self.shm)
+        return p.frame_id if p else 0
+
+    def step(self):
+        self.frame += 1
+        gxproto.heartbeat_host(self.shm, flags=1)
+        while (msg := self.m2s.pop()) is not None:
             if msg[0] == gxproto.MSG_HELLO:
-                log("mod said hello; resending scene")
-                publish_scene(shm, PLANETS)
-        player = gxproto.read_player(shm)
-        if player is not None:
-            query = player.pos
-        gxproto.write_world(shm, SCENE_ID, frame, gravity_at(query, PLANETS), query)
-        if player is not None and time.monotonic() - last_log > 1.0:
-            last_log = time.monotonic()
+                self.log("mod said hello; resending scene")
+                self.anchored, self.seen_frame = True, self._player_frame()
+                publish_scene(self.shm, PLANETS)
+        player = gxproto.read_player(self.shm)
+        if player is not None and player.frame_id != self.seen_frame:
+            self.seen_frame, self.anchored, self.query = player.frame_id, False, player.pos
+        flags = gxproto.WORLD_ANCHOR if self.anchored else 0
+        gxproto.write_world(self.shm, SCENE_ID, self.frame, gravity_at(self.query, PLANETS), self.query, flags)
+        if player is not None and not self.anchored and time.monotonic() - self.last_log > 1.0:
+            self.last_log = time.monotonic()
             alt = min(math.dist(player.pos, c) - r for c, r in PLANETS)
-            log(f"pos=({player.pos[0]:8.1f},{player.pos[1]:8.1f},{player.pos[2]:8.1f}) "
-                f"alt={alt:7.1f}u on_ground={int(player.on_ground)}")
+            self.log(f"pos=({player.pos[0]:8.1f},{player.pos[1]:8.1f},{player.pos[2]:8.1f}) "
+                     f"alt={alt:7.1f}u on_ground={int(player.on_ground)}")
+
+
+def serve(shm, seconds=None, log=print):
+    host = Host(shm, log)
+    start = time.monotonic()
+    while seconds is None or time.monotonic() - start < seconds:
+        host.step()
         time.sleep(1 / 60)
 
 

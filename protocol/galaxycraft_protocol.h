@@ -58,9 +58,15 @@ typedef struct { /* S -> M */
   uint64_t frame_id;
   float gravity[3];   /* galaxy space, unit vector (0 = no gravity) */
   float query_pos[3]; /* galaxy position gravity was evaluated at */
-  uint32_t flags;
+  uint32_t flags; /* GXC_WORLD_ANCHOR */
   uint8_t pad[20];
 } GxcWorldState;
+
+/*
+ * Set until the host sees a fresh PlayerState (after start, a scene change or HELLO):
+ * query_pos is then where the player is (e.g. Mario), and the mod anchors its frame there.
+ */
+#define GXC_WORLD_ANCHOR 1u
 
 #define GXC_PLAYER_ON_GROUND 1u
 

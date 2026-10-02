@@ -47,3 +47,12 @@ test {
 	systemProperty "galaxycraft.repoRoot", rootDir.parentFile.absolutePath
 	testLogging { events "failed"; exceptionFormat "full" }
 }
+
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "galaxycraft-gametest"
+		enableGameTests = false
+		eula = true
+	}
+}

@@ -54,12 +54,14 @@ class ProtoTest {
         s.set(L, 64 + 8, 99L);
         s.set(F, 64 + 16 + 4, -1f);
         s.set(F, 64 + 28, 7f);
+        s.set(I, 64 + 40, Layout.WORLD_ANCHOR);
         s.set(I, 64, 2);
         var w = Seqlock.readWorld(s).orElseThrow();
         assertEquals(5, w.sceneId());
         assertEquals(99L, w.frameId());
         assertEquals(new Vector3d(0, -1, 0), w.gravity());
         assertEquals(7.0, w.queryPos().x);
+        assertTrue(w.anchor());
     }
 
     @Test void readWorldRejectsOddSeq() throws Exception {

@@ -34,6 +34,8 @@ public final class Layout {
     public static final int MSG_PAD = 0xFFFF;
 
     public static final int PLAYER_ON_GROUND = 1;
+    /** WorldState.flags: queryPos is the host's anchor (where the player is). */
+    public static final int WORLD_ANCHOR = 1;
 
     private Layout() {}
 }

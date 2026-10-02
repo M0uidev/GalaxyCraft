@@ -50,5 +50,46 @@ class FakeGalaxyTest(unittest.TestCase):
             os.unlink(path)
 
 
+class HostAnchorTest(unittest.TestCase):
+    def setUp(self):
+        self.path = tmp_path()
+        self.shm = gxproto.Shm(path=self.path, create=True)
+        self.host = fake_galaxy.Host(self.shm, log=lambda *_: None)
+
+    def tearDown(self):
+        self.shm.close()
+        os.unlink(self.path)
+
+    def world(self):
+        return gxproto.read_world(self.shm)
+
+    def test_anchors_at_spawn_until_player_reports(self):
+        self.host.step()
+        self.assertEqual(self.world().flags & gxproto.WORLD_ANCHOR, gxproto.WORLD_ANCHOR)
+        self.assertEqual(self.world().query_pos, fake_galaxy.SPAWN)
+
+    def test_fresh_player_clears_anchor(self):
+        self.host.step()
+        gxproto.write_player(self.shm, frame_id=1, pos=(0, 900, 0), look=(0, 0, 1), up=(0, 1, 0), fov_y=70, eye=1, on_ground=False)
+        self.host.step()
+        self.assertEqual(self.world().flags & gxproto.WORLD_ANCHOR, 0)
+        self.assertEqual(self.world().query_pos, (0.0, 900.0, 0.0))
+
+    def test_hello_reanchors_at_last_fresh_position(self):
+        self.host.step()
+        gxproto.write_player(self.shm, frame_id=1, pos=(0, 900, 0), look=(0, 0, 1), up=(0, 1, 0), fov_y=70, eye=1, on_ground=False)
+        self.host.step()
+        gxproto.Ring(self.shm, gxproto.RING_M2S_OFF).push(gxproto.MSG_HELLO, (1).to_bytes(4, "little"))
+        self.host.step()
+        self.assertEqual(self.world().flags & gxproto.WORLD_ANCHOR, gxproto.WORLD_ANCHOR)
+        self.assertEqual(self.world().query_pos, (0.0, 900.0, 0.0))
+
+    def test_stale_player_from_before_hello_is_ignored(self):
+        gxproto.write_player(self.shm, frame_id=9, pos=(0, 673, 0), look=(0, 0, 1), up=(0, 1, 0), fov_y=70, eye=1, on_ground=False)
+        host = fake_galaxy.Host(self.shm, log=lambda *_: None)
+        host.step()
+        self.assertEqual(self.world().query_pos, fake_galaxy.SPAWN)
+
+
 if __name__ == "__main__":
     unittest.main()
