@@ -1,5 +1,6 @@
 #include "Input.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstring>
 
@@ -78,6 +79,13 @@ void InputWriter::MouseDelta(double dx, double dy)
 void InputWriter::Buttons(u32 mask)
 {
   m_buttons = mask;
+  Publish();
+}
+
+void InputWriter::ReleaseAll()
+{
+  std::fill(std::begin(m_keys), std::end(m_keys), u8{0});
+  m_buttons = 0;
   Publish();
 }
 

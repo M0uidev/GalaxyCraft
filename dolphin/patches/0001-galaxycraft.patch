@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..362a889
+index 0000000..b9d6f41
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,255 @@
+@@ -0,0 +1,277 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -186,6 +186,10 @@ index 0000000..362a889
 +      AppendCtlOut("ok drive\n");
 +      break;
 +    }
++    case gxc::DevCommand::Link:
++      bridge.SetLinkEnabled(cmd.arg == "on");
++      AppendCtlOut("ok link " + cmd.arg + "\n");
++      break;
 +    case gxc::DevCommand::Undrive:
 +      bridge.SetDevDrive(std::nullopt);
 +      AppendCtlOut("ok undrive\n");
@@ -265,10 +269,28 @@ index 0000000..362a889
 +  // sees s_state == nullptr if it runs concurrently.
 +}
 +
++bool Enabled()
++{
++  std::lock_guard lock(s_mutex);
++  return s_state != nullptr;
++}
++
 +bool InputActive()
 +{
 +  std::lock_guard lock(s_mutex);
-+  return s_state && ModAlive(*s_state->shm);
++  return s_state && s_state->bridge->LinkEnabled() && ModAlive(*s_state->shm);
++}
++
++void ToggleLink()
++{
++  std::lock_guard lock(s_mutex);
++  if (!s_state)
++    return;
++  const bool on = !s_state->bridge->LinkEnabled();
++  s_state->bridge->SetLinkEnabled(on);
++  if (!on)
++    s_state->input->ReleaseAll();  // keys held now would otherwise stay down in Minecraft
++  NOTICE_LOG_FMT(CORE, "GalaxyCraft: link {}", on ? "on" : "off");
 +}
 +
 +void OnKey(int qt_key, bool down)
@@ -302,7 +324,7 @@ index 0000000..362a889
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn)
 +{
 +  std::lock_guard lock(s_mutex);
-+  if (!s_state || !ModAlive(*s_state->shm))
++  if (!s_state || !s_state->bridge->LinkEnabled() || !ModAlive(*s_state->shm))
 +    return;
 +  if (auto frame = gxc::LatestOverlay(*s_state->shm))
 +    fn(frame->width, frame->height, frame->frame_id, frame->rgba);
@@ -310,10 +332,10 @@ index 0000000..362a889
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..f1fc49b
+index 0000000..5a2978c
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,40 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -336,8 +358,14 @@ index 0000000..f1fc49b
 +void Start(Core::System& system);
 +void Stop();
 +
-+// True while Minecraft is connected, so keyboard and mouse belong to it.
++// True while the bridge runs (GALAXYCRAFT=1 and a game started).
++bool Enabled();
++
++// True while Minecraft is connected and the link is on, so keyboard and mouse belong to it.
 +bool InputActive();
++
++// F10: hand the game to Minecraft or take it back (to use SMG2's menus with the Wii Remote).
++void ToggleLink();
 +
 +// Qt thread.
 +void OnKey(int qt_key, bool down);
@@ -349,7 +377,7 @@ index 0000000..f1fc49b
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn);
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/DolphinQt/RenderWidget.cpp b/Source/Core/DolphinQt/RenderWidget.cpp
-index 49680b8..289fa72 100644
+index 49680b8..2ba2142 100644
 --- a/Source/Core/DolphinQt/RenderWidget.cpp
 +++ b/Source/Core/DolphinQt/RenderWidget.cpp
 @@ -12,6 +12,8 @@
@@ -379,7 +407,7 @@ index 49680b8..289fa72 100644
    PassEventToPresenter(event);
  
    switch (event->type())
-@@ -511,6 +517,56 @@ bool RenderWidget::event(QEvent* event)
+@@ -511,6 +517,66 @@ bool RenderWidget::event(QEvent* event)
    return QWidget::event(event);
  }
  
@@ -387,6 +415,16 @@ index 49680b8..289fa72 100644
 +// the mouse as relative motion, re-centering the hidden cursor. Escape still reaches Dolphin.
 +bool RenderWidget::PassEventToGalaxyCraft(QEvent* event)
 +{
++  if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)
++  {
++    const auto* key_event = static_cast<const QKeyEvent*>(event);
++    if (key_event->key() == Qt::Key_F10 && GalaxyCraft::Enabled())
++    {
++      if (event->type() == QEvent::KeyPress && !key_event->isAutoRepeat())
++        GalaxyCraft::ToggleLink();
++      return true;
++    }
++  }
 +  const bool active = GalaxyCraft::InputActive();
 +  if (active != m_galaxycraft_input)
 +  {

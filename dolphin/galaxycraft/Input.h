@@ -18,6 +18,8 @@ public:
   void MouseDelta(double dx, double dy);
   void Buttons(u32 mask);
   void Wheel(double delta);
+  // Lets go of every key and mouse button (input is being taken away from the mod).
+  void ReleaseAll();
 
 private:
   void Publish();

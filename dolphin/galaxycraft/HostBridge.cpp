@@ -106,11 +106,20 @@ void HostBridge::Tick(GuestMemory& mem)
     m_shm.SetU32(offsetof(GxcHeader, host_flags), 0);
     return;
   }
+  if (!m_link_enabled)
+  {
+    m_shm.SetU32(offsetof(GxcHeader, host_flags), 0);
+    m_driving = false;
+    m_relink = true;
+    WriteDrive(mem, nullptr);
+    return;
+  }
   m_shm.SetU32(offsetof(GxcHeader, host_flags), 1);
 
   const Mailbox mbx = Mailbox::Parse(raw.data());
-  if (!m_scene || *m_scene != mbx.scene_id)
+  if (!m_scene || *m_scene != mbx.scene_id || m_relink)
     republish = true;
+  m_relink = false;
   if (republish)
   {
     m_anchored = true;

@@ -117,3 +117,19 @@ TEST(input_writer_ignores_out_of_range_keys)
   for (u8 b : s.keys)
     CHECK(b == 0);
 }
+
+TEST(input_writer_release_all_lets_go_of_keys_and_buttons)
+{
+  ShmFixture f;
+  InputWriter in(*f.shm);
+  in.Key(8, true);
+  in.Key(26, true);
+  in.Buttons(5);
+  in.MouseDelta(3, -2);
+  in.ReleaseAll();
+  CHECK(!KeyBit(*f.shm, 8) && !KeyBit(*f.shm, 26));
+  GxcInputState s;
+  std::memcpy(&s, f.shm->Data() + GXC_OFF_INPUT, sizeof(s));
+  CHECK(s.buttons == 0);
+  CHECK(s.mouse_x == 3 && s.mouse_y == -2);  // accumulated motion is not a held state
+}

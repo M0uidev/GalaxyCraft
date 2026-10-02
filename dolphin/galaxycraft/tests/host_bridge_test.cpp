@@ -288,6 +288,48 @@ TEST(dev_drive_overrides_mod)
   CHECK(!f.bridge.Driving() && (f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) == 0);
 }
 
+TEST(link_off_clears_drive_and_host_flag)
+{
+  Fixture f;
+  f.Tick();
+  f.ModReports(1, {10, 20, 30});
+  f.Tick();
+  CHECK(f.bridge.Driving() && (f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) != 0);
+  f.bridge.SetLinkEnabled(false);
+  f.ModReports(2, {11, 20, 30});
+  f.Tick();
+  CHECK(!f.bridge.LinkEnabled() && !f.bridge.Driving());
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) == 0);
+  CHECK(f.shm->GetU32(offsetof(GxcHeader, host_flags)) == 0);
+  // A dev drive does not get through either.
+  f.bridge.SetDevDrive(PlayerState{0, 0, {5, 6, 7}, {0, 0, -1}, {0, 1, 0}, 70.f, 162.f});
+  f.Tick();
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) == 0);
+}
+
+TEST(link_on_republishes_and_reanchors)
+{
+  Fixture f;
+  f.Tick();
+  f.ModReports(1, {10, 20, 30});
+  f.Tick();
+  f.bridge.SetLinkEnabled(false);
+  f.Tick();
+  f.Drain();
+  f.bridge.SetLinkEnabled(true);
+  f.Tick();
+  auto msgs = f.Drain();
+  CHECK(!msgs.empty() && msgs[0].type == GXC_MSG_SCENE_CHANGE);
+  CHECK(Count(msgs, GXC_MSG_PART_UPSERT) == 1);
+  auto w = ReadWorld(*f.shm);
+  CHECK(w && (w->flags & GXC_WORLD_ANCHOR) != 0);
+  CHECK(f.shm->GetU32(offsetof(GxcHeader, host_flags)) == 1);
+  CHECK(!f.bridge.Driving());  // until the mod reports a fresh pose
+  f.ModReports(2, {10, 20, 30});
+  f.Tick();
+  CHECK(f.bridge.Driving());
+}
+
 TEST(no_mailbox_reports_unlinked)
 {
   Fixture f;

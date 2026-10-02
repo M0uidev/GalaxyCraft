@@ -114,3 +114,12 @@ TEST(mbx_reports_its_address)
   auto c = ParseDevCommands("mbx");
   CHECK(RunMemoryCommand(c[0], mem, 0x80401000u).starts_with("at=80401000 game_seq="));
 }
+
+TEST(parses_link)
+{
+  auto c = ParseDevCommands("link on\nlink off\nlink maybe\nlink");
+  CHECK(c.size() == 4);
+  CHECK(c[0].kind == DevCommand::Link && c[0].arg == "on");
+  CHECK(c[1].kind == DevCommand::Link && c[1].arg == "off");
+  CHECK(c[2].kind == DevCommand::Bad && c[3].kind == DevCommand::Bad);
+}

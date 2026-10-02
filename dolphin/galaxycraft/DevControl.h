@@ -16,6 +16,7 @@ namespace gxc
 //   drive X Y Z LX LY LZ [UX UY UZ]     puppet Mario from this pose, as if the mod sent it
 //                                       (no up: opposite of the game's gravity)
 //   undrive                             back to whatever the mod says
+//   link on|off                         same as Dolphin's F10: hand the game to the mod or not
 struct DevCommand
 {
   enum Kind
@@ -27,6 +28,7 @@ struct DevCommand
     Load,
     Drive,
     Undrive,
+    Link,
     Bad
   } kind;
   u32 addr = 0, len = 0;
