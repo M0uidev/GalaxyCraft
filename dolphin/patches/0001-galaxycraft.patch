@@ -49,15 +49,16 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..d5d7396
+index 0000000..aea68c9
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,300 @@
+@@ -0,0 +1,432 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
 +#include "Core/GalaxyCraft.h"
 +
++#include <array>
 +#include <atomic>
 +#include <chrono>
 +#include <filesystem>
@@ -68,20 +69,29 @@ index 0000000..d5d7396
 +#include <cstring>
 +#include <memory>
 +#include <mutex>
++#include <optional>
++#include <string_view>
++#include <utility>
 +
 +#include "Common/HookableEvent.h"
 +#include "Common/Logging/Log.h"
 +#include "Core/Core.h"
 +#include "Core/Host.h"
 +#include "Core/HW/Memmap.h"
++#include "Core/HW/Wiimote.h"
++#include "InputCommon/InputConfig.h"
++#include "Core/HW/WiimoteEmu/Extension/Extension.h"
++#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 +#include "Core/State.h"
 +#include "Core/System.h"
++#include "InputCommon/ControllerEmu/ControlGroup/Attachments.h"
 +#include "VideoCommon/OnScreenDisplay.h"
 +#include "VideoCommon/VideoEvents.h"
 +
 +#include "DevControl.h"
 +#include "HostBridge.h"
 +#include "Input.h"
++#include "MarioInput.h"
 +#include "Overlay.h"
 +#include "Shm.h"
 +#include "galaxycraft_protocol.h"
@@ -147,6 +157,105 @@ index 0000000..d5d7396
 +std::atomic<int> s_xinput_updates{0};
 +u32 s_xinput_buttons = 0;  // under s_mutex
 +
++// The Wii Remote state Mario mode reports, read by the input override (CPU thread, under the
++// controllers' state lock) and written once per field. Its own mutex: the override must never
++// wait on s_mutex, which the field hook holds while it takes the state lock.
++std::mutex s_pad_mutex;
++gxc::WiimoteState s_pad;
++
++std::optional<ControlState> OverrideInput(std::string_view group, std::string_view control,
++                                          ControlState)
++{
++  gxc::WiimoteState pad;
++  {
++    std::lock_guard lock(s_pad_mutex);
++    pad = s_pad;
++  }
++  if (group == "Buttons")
++  {
++    const std::pair<std::string_view, bool> buttons[] = {
++        {"A", pad.a},   {"B", pad.b}, {"-", pad.minus}, {"+", pad.plus}, {"Home", pad.home},
++        {"1", pad.one}, {"2", pad.two}, {"C", pad.c},   {"Z", pad.z}};
++    for (const auto& [name, down] : buttons)
++      if (control == name)
++        return down ? 1.0 : 0.0;
++  }
++  if (group == "Stick" && (control == "X" || control == "Y"))
++    return control == "X" ? pad.stick_x : pad.stick_y;
++  if (group == "IR" && (control == "X" || control == "Y") && pad.center_ir)
++    return 0.0;
++  if (group == "Shake")
++    return pad.shake ? 1.0 : 0.0;
++  return std::nullopt;
++}
++
++// Wii Remote 1 and its Nunchuk (CPU thread, which is where they are read).
++void SetWiimoteOverride(bool on)
++{
++  const auto lock = ControllerEmu::EmulatedController::GetStateLock();
++  auto* wiimote = static_cast<WiimoteEmu::Wiimote*>(Wiimote::GetConfig()->GetController(0));
++  auto* attachments = static_cast<ControllerEmu::Attachments*>(
++      wiimote->GetWiimoteGroup(WiimoteEmu::WiimoteGroup::Attachments));
++  auto& nunchuk = attachments->GetAttachmentList()[WiimoteEmu::ExtensionNumber::NUNCHUK];
++  if (on)
++  {
++    wiimote->SetInputOverrideFunction(OverrideInput);
++    nunchuk->SetInputOverrideFunction(OverrideInput);
++  }
++  else
++  {
++    wiimote->ClearInputOverrideFunction();
++    nunchuk->ClearInputOverrideFunction();
++  }
++}
++
++struct State
++{
++  std::unique_ptr<gxc::Shm> shm;
++  std::unique_ptr<gxc::HostBridge> bridge;
++  std::unique_ptr<gxc::InputWriter> input;
++  std::unique_ptr<DolphinGuestMemory> memory;
++  Common::EventHook field_hook;
++  gxc::MarioInput mario;
++  bool override_on = false;
++  u8 keys[64] = {};  // keyboard and mouse as of the last XInput2 update (Escape included)
++  u32 buttons = 0;
++  std::optional<std::pair<std::array<u8, 64>, u32>> dev_keys;  // ctl keys, while set
++};
++
++// ctl keys: hold these (names as DevKeysToInput) until the next keys; none = back to XInput2.
++void SetDevKeys(State& state, const std::string& names)
++{
++  std::array<u8, 64> keys{};
++  u32 buttons = 0;
++  gxc::DevKeysToInput(names, keys.data(), buttons);
++  if (names.empty())
++    state.dev_keys.reset();
++  else
++    state.dev_keys.emplace(keys, buttons);
++}
++
++// Field hook, after Tick: Mario mode's Wii Remote follows keyboard and mouse while following.
++void UpdateMarioInput(State& state)
++{
++  const bool following = state.bridge->Following();
++  if (following != state.override_on)
++  {
++    state.mario.Reset();
++    SetWiimoteOverride(following);
++    state.override_on = following;
++  }
++  gxc::WiimoteState pad;
++  if (following)
++  {
++    const u8* keys = state.dev_keys ? state.dev_keys->first.data() : state.keys;
++    const u32 buttons = state.dev_keys ? state.dev_keys->second : state.buttons;
++    pad = state.mario.Update(keys, buttons, state.bridge->InGame());
++  }
++  std::lock_guard lock(s_pad_mutex);
++  s_pad = pad;
++}
++
 +// Development control channel (tools/gxdev.py): commands in, results appended out.
 +constexpr const char* CTL_PATH = "/dev/shm/galaxycraft_ctl";
 +constexpr const char* CTL_OUT_PATH = "/dev/shm/galaxycraft_ctl.out";
@@ -158,7 +267,7 @@ index 0000000..d5d7396
 +
 +// CPU thread. Memory commands run right away; screenshots and savestates go to the host thread,
 +// which is where Dolphin expects them to be started.
-+void RunControlFile(gxc::GuestMemory& mem, gxc::HostBridge& bridge, bool mod_alive)
++void RunControlFile(gxc::GuestMemory& mem, gxc::HostBridge& bridge, bool mod_alive, State& state)
 +{
 +  std::error_code ec;
 +  if (!std::filesystem::exists(CTL_PATH, ec))
@@ -181,9 +290,9 @@ index 0000000..d5d7396
 +    case gxc::DevCommand::Load:
 +      Core::QueueHostJob([cmd](Core::System& system) {
 +        if (cmd.kind == gxc::DevCommand::Save)
-+          State::SaveAs(system, cmd.arg);
++          ::State::SaveAs(system, cmd.arg);
 +        else
-+          State::LoadAs(system, cmd.arg);
++          ::State::LoadAs(system, cmd.arg);
 +        AppendCtlOut(std::string(cmd.kind == gxc::DevCommand::Save ? "ok save " : "ok load ") +
 +                     cmd.arg + "\n");
 +      });
@@ -211,6 +320,10 @@ index 0000000..d5d7396
 +                               s_focus_lost.load(), s_link_toggles.load(),
 +                               s_xinput_updates.load()));
 +      break;
++    case gxc::DevCommand::Keys:
++      SetDevKeys(state, cmd.arg);
++      AppendCtlOut("ok keys " + cmd.arg + "\n");
++      break;
 +    case gxc::DevCommand::Unfollow:
 +      bridge.SetDevFollow(std::nullopt);
 +      AppendCtlOut("ok unfollow\n");
@@ -229,14 +342,6 @@ index 0000000..d5d7396
 +                              .count());
 +}
 +
-+struct State
-+{
-+  std::unique_ptr<gxc::Shm> shm;
-+  std::unique_ptr<gxc::HostBridge> bridge;
-+  std::unique_ptr<gxc::InputWriter> input;
-+  std::unique_ptr<DolphinGuestMemory> memory;
-+  Common::EventHook field_hook;
-+};
 +
 +std::mutex s_mutex;
 +std::unique_ptr<State> s_state;
@@ -273,7 +378,8 @@ index 0000000..d5d7396
 +    if (!s_state)
 +      return;
 +    s_state->bridge->Tick(*s_state->memory);
-+    RunControlFile(*s_state->memory, *s_state->bridge, ModAlive(*s_state->shm));
++    RunControlFile(*s_state->memory, *s_state->bridge, ModAlive(*s_state->shm), *s_state);
++    UpdateMarioInput(*s_state);
 +  });
 +
 +  std::lock_guard lock(s_mutex);
@@ -289,6 +395,8 @@ index 0000000..d5d7396
 +    std::lock_guard lock(s_mutex);
 +    state = std::move(s_state);
 +  }
++  if (state && state->override_on)
++    SetWiimoteOverride(false);
 +  // Destroying the hook here (outside the lock) waits for nothing: the hook takes s_mutex and
 +  // sees s_state == nullptr if it runs concurrently.
 +}
@@ -306,7 +414,9 @@ index 0000000..d5d7396
 +  if (!active)
 +    return false;
 +  s_xinput_updates++;
-+  if (dx != 0 || dy != 0)
++  // In SMG2's menus the mouse is the Wii Remote pointer: Minecraft does not turn with it.
++  const bool capture = s_state->bridge->Following() && s_state->bridge->InGame();
++  if (capture && (dx != 0 || dy != 0))
 +    s_state->input->MouseDelta(dx, dy);
 +  if (dz != 0)
 +    s_state->input->Wheel(-dz / 8.0);  // notches, up positive (as Minecraft's scroll)
@@ -319,7 +429,26 @@ index 0000000..d5d7396
 +    s_xinput_buttons = buttons;
 +    s_state->input->Buttons(buttons);
 +  }
-+  return true;
++  // Mario mode also reads Escape (the + button), which Minecraft never gets.
++  std::memcpy(s_state->keys, keys, sizeof(keys));
++  constexpr int X_ESCAPE = 9;  // X keycode (evdev 1 + 8)
++  if ((keymap[X_ESCAPE / 8] >> (X_ESCAPE % 8)) & 1)
++    s_state->keys[gxc::SC_ESCAPE / 8] |= 1u << (gxc::SC_ESCAPE % 8);
++  s_state->buttons = buttons;
++  return capture;
++}
++
++bool MouseCaptured()
++{
++  std::lock_guard lock(s_mutex);
++  return s_state && s_state->bridge->Following() && s_state->bridge->InGame() &&
++         ModAlive(*s_state->shm);
++}
++
++bool BlocksStopHotkey()
++{
++  std::lock_guard lock(s_mutex);
++  return s_state && s_state->bridge->Following();
 +}
 +
 +void NoteRenderFocus(bool focus)
@@ -335,8 +464,11 @@ index 0000000..d5d7396
 +    return;
 +  const bool on = !s_state->bridge->MinecraftMode();
 +  s_state->bridge->SetMinecraftMode(on);
-+  if (!on)
-+    s_state->input->ReleaseAll();  // keys held now would otherwise stay down in Minecraft
++  // Nothing held across the switch, neither in Minecraft nor on the Wii Remote.
++  s_state->input->ReleaseAll();
++  s_state->mario.Reset();
++  std::memset(s_state->keys, 0, sizeof(s_state->keys));
++  s_state->buttons = 0;
 +  s_xinput_buttons = 0;
 +  NOTICE_LOG_FMT(CORE, "GalaxyCraft: link {}", on ? "on" : "off");
 +  OSD::AddMessage(on ? "GalaxyCraft: Minecraft has the controls" :
@@ -355,10 +487,10 @@ index 0000000..d5d7396
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..11be8c4
+index 0000000..d404613
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,48 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -386,8 +518,15 @@ index 0000000..11be8c4
 +
 +// XInput2 backend, after every input update (any thread): raw mouse motion since the previous
 +// update, X button bits, wheel motion (8 per notch, down positive) and the X keymap. Feeds them to
-+// Minecraft and returns true while it owns keyboard and mouse.
++// Minecraft and Mario mode's Wii Remote, and returns true while the pointer is to be captured
++// and recentred (playing, not in SMG2's menus, where the mouse is the Wii Remote pointer).
 +bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32]);
++
++// Same as OnXInput2's result: the mouse turns Minecraft's view (cursor hidden).
++bool MouseCaptured();
++
++// Mario mode: Escape is the + button, so it must not stop emulation.
++bool BlocksStopHotkey();
 +
 +// Diagnostics for ctl status: Host::SetRenderFocus reports every focus change here.
 +void NoteRenderFocus(bool focus);
@@ -400,6 +539,71 @@ index 0000000..11be8c4
 +// Video thread: calls fn(width, height, frame_id, rgba) with the newest overlay frame, if any.
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn);
 +}  // namespace GalaxyCraft
+diff --git a/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp b/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp
+index ebf24f7..e580a9b 100644
+--- a/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp
++++ b/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp
+@@ -80,9 +80,17 @@ Common::Quaternion ComplementaryFilter(const Common::Quaternion& gyroscope,
+ }
+ 
+ void EmulateShake(PositionalState* state, ControllerEmu::Shake* const shake_group,
+-                  float time_elapsed)
++                  const ControllerEmu::InputOverrideFunction& override_func, float time_elapsed)
+ {
+-  auto target_position = shake_group->GetState() * float(shake_group->GetIntensity() / 2);
++  auto shake = shake_group->GetState();
++  if (override_func)
++  {
++    static constexpr const char* AXES[] = {"X", "Y", "Z"};
++    for (std::size_t i = 0; i != shake.data.size(); ++i)
++      if (const auto v = override_func(shake_group->name, AXES[i], shake.data[i]))
++        shake.data[i] = *v;
++  }
++  auto target_position = shake * float(shake_group->GetIntensity() / 2);
+   for (std::size_t i = 0; i != target_position.data.size(); ++i)
+   {
+     if (state->velocity.data[i] * std::copysign(1.f, target_position.data[i]) < 0 ||
+diff --git a/Source/Core/Core/HW/WiimoteEmu/Dynamics.h b/Source/Core/Core/HW/WiimoteEmu/Dynamics.h
+index 8f35c30..9c07dad 100644
+--- a/Source/Core/Core/HW/WiimoteEmu/Dynamics.h
++++ b/Source/Core/Core/HW/WiimoteEmu/Dynamics.h
+@@ -75,7 +75,9 @@ void ApproachPositionWithJerk(PositionalState* state, const Common::Vec3& target
+ void ApproachAngleWithAccel(RotationalState* state, const Common::Vec3& target, float max_accel,
+                             float time_elapsed);
+ 
+-void EmulateShake(PositionalState* state, ControllerEmu::Shake* shake_group, float time_elapsed);
++// GalaxyCraft: override_func may replace the group's ("Shake", "X"|"Y"|"Z") inputs.
++void EmulateShake(PositionalState* state, ControllerEmu::Shake* shake_group,
++                  const ControllerEmu::InputOverrideFunction& override_func, float time_elapsed);
+ void EmulateTilt(RotationalState* state, ControllerEmu::Tilt* tilt_group, float time_elapsed);
+ void EmulateSwing(MotionState* state, ControllerEmu::Force* swing_group, float time_elapsed);
+ void EmulatePoint(MotionState* state, ControllerEmu::Cursor* ir_group,
+diff --git a/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp b/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp
+index 6745602..b365d0a 100644
+--- a/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp
++++ b/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp
+@@ -77,7 +77,7 @@ void Nunchuk::BuildDesiredExtensionState(DesiredExtensionState* target_state)
+   // Acceleration data:
+   EmulateSwing(&m_swing_state, m_swing, 1.f / ::Wiimote::UPDATE_FREQ);
+   EmulateTilt(&m_tilt_state, m_tilt, 1.f / ::Wiimote::UPDATE_FREQ);
+-  EmulateShake(&m_shake_state, m_shake, 1.f / ::Wiimote::UPDATE_FREQ);
++  EmulateShake(&m_shake_state, m_shake, m_input_override_function, 1.f / ::Wiimote::UPDATE_FREQ);
+ 
+   const auto transformation =
+       GetRotationalMatrix(-m_tilt_state.angle) * GetRotationalMatrix(-m_swing_state.angle);
+diff --git a/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp b/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp
+index bbbea66..bbe14cd 100644
+--- a/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp
++++ b/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp
+@@ -837,7 +837,7 @@ void Wiimote::StepDynamics()
+   EmulateSwing(&m_swing_state, m_swing, 1.f / ::Wiimote::UPDATE_FREQ);
+   EmulateTilt(&m_tilt_state, m_tilt, 1.f / ::Wiimote::UPDATE_FREQ);
+   EmulatePoint(&m_point_state, m_ir, m_input_override_function, 1.f / ::Wiimote::UPDATE_FREQ);
+-  EmulateShake(&m_shake_state, m_shake, 1.f / ::Wiimote::UPDATE_FREQ);
++  EmulateShake(&m_shake_state, m_shake, m_input_override_function, 1.f / ::Wiimote::UPDATE_FREQ);
+   EmulateIMUCursor(&m_imu_cursor_state, m_imu_ir, m_imu_accelerometer, m_imu_gyroscope,
+                    1.f / ::Wiimote::UPDATE_FREQ);
+ }
 diff --git a/Source/Core/Core/HotkeyManager.cpp b/Source/Core/Core/HotkeyManager.cpp
 index 915dc0d..85da7d9 100644
 --- a/Source/Core/Core/HotkeyManager.cpp
@@ -441,6 +645,19 @@ index 6a1b754..662cd8f 100644
  
    HK_NEXT_WIIMOTE_PROFILE_1,
    HK_PREV_WIIMOTE_PROFILE_1,
+diff --git a/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp b/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp
+index b0ebaac..a091c69 100644
+--- a/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp
++++ b/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp
+@@ -628,7 +628,7 @@ void SwingIndicator::Draw()
+ 
+ void ShakeMappingIndicator::Update(float elapsed_seconds)
+ {
+-  WiimoteEmu::EmulateShake(&m_motion_state, &m_shake_group, elapsed_seconds);
++  WiimoteEmu::EmulateShake(&m_motion_state, &m_shake_group, {}, elapsed_seconds);
+ 
+   for (auto& sample : m_position_samples)
+     sample.age += elapsed_seconds;
 diff --git a/Source/Core/DolphinQt/Host.cpp b/Source/Core/DolphinQt/Host.cpp
 index e2f1b21..3075bed 100644
 --- a/Source/Core/DolphinQt/Host.cpp
@@ -462,7 +679,7 @@ index e2f1b21..3075bed 100644
    if (g_gfx && m_render_fullscreen && g_ActiveConfig.ExclusiveFullscreenEnabled())
    {
 diff --git a/Source/Core/DolphinQt/HotkeyScheduler.cpp b/Source/Core/DolphinQt/HotkeyScheduler.cpp
-index 478454e..3a85248 100644
+index 478454e..d7e624e 100644
 --- a/Source/Core/DolphinQt/HotkeyScheduler.cpp
 +++ b/Source/Core/DolphinQt/HotkeyScheduler.cpp
 @@ -35,6 +35,7 @@
@@ -473,6 +690,15 @@ index 478454e..3a85248 100644
  
  #include "InputCommon/ControlReference/ControlReference.h"
  #include "InputCommon/ControllerInterface/ControllerInterface.h"
+@@ -223,7 +224,7 @@ void HotkeyScheduler::Run()
+         emit TogglePauseHotkey();
+ 
+       // Stop
+-      if (IsHotkey(HK_STOP))
++      if (IsHotkey(HK_STOP) && !GalaxyCraft::BlocksStopHotkey())
+         emit StopHotkey();
+ 
+       // Reset
 @@ -298,6 +299,9 @@ void HotkeyScheduler::Run()
            Settings::Instance().SetWiiSpeakMuted(muted);
            OSD::AddMessage(muted ? "Wii Speak muted" : "Wii Speak unmuted");
@@ -484,7 +710,7 @@ index 478454e..3a85248 100644
  
        if (IsHotkey(HK_PREV_WIIMOTE_PROFILE_1))
 diff --git a/Source/Core/DolphinQt/RenderWidget.cpp b/Source/Core/DolphinQt/RenderWidget.cpp
-index 49680b8..728024d 100644
+index 49680b8..b13b2d9 100644
 --- a/Source/Core/DolphinQt/RenderWidget.cpp
 +++ b/Source/Core/DolphinQt/RenderWidget.cpp
 @@ -12,6 +12,8 @@
@@ -514,7 +740,7 @@ index 49680b8..728024d 100644
    PassEventToPresenter(event);
  
    switch (event->type())
-@@ -511,6 +517,42 @@ bool RenderWidget::event(QEvent* event)
+@@ -511,6 +517,48 @@ bool RenderWidget::event(QEvent* event)
    return QWidget::event(event);
  }
  
@@ -534,7 +760,13 @@ index 49680b8..728024d 100644
 +  if (active != m_galaxycraft_input)
 +  {
 +    m_galaxycraft_input = active;
-+    setCursor(active ? Qt::BlankCursor : Qt::ArrowCursor);
++  }
++  // In SMG2's menus the mouse is the Wii Remote pointer: keep the cursor visible there.
++  const bool captured = active && GalaxyCraft::MouseCaptured();
++  if (captured != m_galaxycraft_captured)
++  {
++    m_galaxycraft_captured = captured;
++    setCursor(captured ? Qt::BlankCursor : Qt::ArrowCursor);
 +  }
 +  if (!active)
 +    return false;
@@ -558,15 +790,16 @@ index 49680b8..728024d 100644
  {
    if (!Core::IsRunning(Core::System::GetInstance()))
 diff --git a/Source/Core/DolphinQt/RenderWidget.h b/Source/Core/DolphinQt/RenderWidget.h
-index d828bf3..7240b1a 100644
+index d828bf3..89bda3b 100644
 --- a/Source/Core/DolphinQt/RenderWidget.h
 +++ b/Source/Core/DolphinQt/RenderWidget.h
-@@ -41,6 +41,8 @@ private:
+@@ -41,6 +41,9 @@ private:
    void OnKeepOnTopChanged(bool top);
    void UpdateCursor();
    void PassEventToPresenter(const QEvent* event);
 +  bool PassEventToGalaxyCraft(QEvent* event);
 +  bool m_galaxycraft_input = false;
++  bool m_galaxycraft_captured = false;
    void SetPresenterKeyMap();
    void dragEnterEvent(QDragEnterEvent* event) override;
    void dropEvent(QDropEvent* event) override;
