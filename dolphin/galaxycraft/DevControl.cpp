@@ -1,11 +1,13 @@
 #include "DevControl.h"
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <charconv>
 #include <cstdio>
 #include <cstring>
 
+#include "MarioInput.h"
 #include "galaxycraft_protocol.h"
 
 namespace gxc
@@ -91,6 +93,15 @@ DevCommand ParseLine(std::string_view line)
     return w.size() == 2 && (w[1] == "on" || w[1] == "off") ?
                DevCommand{DevCommand::Link, 0, 0, std::string(w[1])} :
                bad;
+  if (w[0] == "keys")
+  {
+    std::string names;
+    for (size_t i = 1; i < w.size(); i++)
+      names += (i > 1 ? " " : "") + std::string(w[i]);
+    u8 keys[64];
+    u32 buttons;
+    return DevKeysToInput(names, keys, buttons) ? DevCommand{DevCommand::Keys, 0, 0, names} : bad;
+  }
   if (w[0] == "unfollow")
     return w.size() == 1 ? DevCommand{DevCommand::Unfollow, 0, 0, {}} : bad;
   if (w[0] == "follow")
@@ -165,6 +176,30 @@ std::string Mailbox(GuestMemory& mem, u32 at)
   return buf;
 }
 }  // namespace
+
+bool DevKeysToInput(std::string_view names, u8 keys[64], u32& buttons)
+{
+  const std::pair<std::string_view, int> scancodes[] = {
+      {"w", SC_W},         {"a", SC_A},         {"s", SC_S},           {"d", SC_D},
+      {"space", SC_SPACE}, {"shift", SC_LSHIFT}, {"ctrl", SC_LCTRL}, {"esc", SC_ESCAPE},
+      {"tab", SC_TAB}};
+  std::fill(keys, keys + 64, u8{0});
+  buttons = 0;
+  for (const std::string_view name : Words(names))
+  {
+    if (name == "lmb" || name == "rmb")
+    {
+      buttons |= name == "lmb" ? MOUSE_LEFT : MOUSE_RIGHT;
+      continue;
+    }
+    const auto it = std::find_if(std::begin(scancodes), std::end(scancodes),
+                                 [&](const auto& p) { return p.first == name; });
+    if (it == std::end(scancodes))
+      return false;
+    keys[it->second / 8] |= static_cast<u8>(1u << (it->second % 8));
+  }
+  return true;
+}
 
 std::vector<DevCommand> ParseDevCommands(std::string_view text)
 {

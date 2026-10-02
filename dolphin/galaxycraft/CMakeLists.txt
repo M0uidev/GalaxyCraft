@@ -8,7 +8,7 @@ if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
-add_library(galaxycraft_host STATIC Shm.cpp HostBridge.cpp Overlay.cpp Input.cpp DevControl.cpp)
+add_library(galaxycraft_host STATIC Shm.cpp HostBridge.cpp Overlay.cpp Input.cpp DevControl.cpp MarioInput.cpp)
 target_include_directories(galaxycraft_host PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/../../protocol)
@@ -16,7 +16,7 @@ target_include_directories(galaxycraft_host PUBLIC
 if(PROJECT_IS_TOP_LEVEL)
   target_compile_options(galaxycraft_host PRIVATE -Wall -Wextra -Werror)
   add_executable(galaxycraft_host_tests tests/main.cpp tests/host_bridge_test.cpp
-    tests/overlay_input_test.cpp tests/devcontrol_test.cpp)
+    tests/overlay_input_test.cpp tests/devcontrol_test.cpp tests/mario_input_test.cpp)
   target_link_libraries(galaxycraft_host_tests PRIVATE galaxycraft_host)
   target_compile_options(galaxycraft_host_tests PRIVATE -Wall -Wextra -Werror)
 endif()

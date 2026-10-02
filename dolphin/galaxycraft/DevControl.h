@@ -19,6 +19,8 @@ namespace gxc
 //   unfollow                     back to whatever the mod says
 //   status                       focus/input gates, mode and mod state (Dolphin side)
 //   link on|off                  same as the Ctrl+G hotkey: Minecraft mode or Wiimote mode
+//   keys [w a s d space shift ctrl esc tab lmb rmb]...   hold these until the next keys, as if
+//                                typed in Minecraft mode (no list: release all)
 struct DevCommand
 {
   enum Kind
@@ -33,14 +35,18 @@ struct DevCommand
     Unfollow,
     Link,
     Status,
+    Keys,
     Bad
   } kind;
   u32 addr = 0, len = 0;
-  std::string arg;  // file name/path, Poke's raw bytes, or the offending line for Bad
+  std::string arg;  // file name/path, Poke's raw bytes, Keys' names, or the offending line for Bad
   std::array<float, 6> pose{};  // Follow: look, up
 };
 
 std::vector<DevCommand> ParseDevCommands(std::string_view text);
+
+// Keys' names -> SDL scancode bitmap and protocol mouse mask (both replaced); false on unknown names.
+bool DevKeysToInput(std::string_view names, u8 keys[64], u32& buttons);
 
 // Runs Peek/Mbx against guest memory; anything else (or a failure) yields "error: ...".
 std::string RunMemoryCommand(const DevCommand& cmd, GuestMemory& mem, std::optional<u32> mailbox);
