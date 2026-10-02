@@ -155,7 +155,9 @@ void HostBridge::Tick(GuestMemory& mem)
   }
   PublishParts(mem, mbx, republish);
 
-  if (auto p = ReadPlayer(m_shm); p && p->frame_id != m_seen_player_frame)
+  // Only a pose anchored in this scene counts: right after a scene change (Mario died, a new
+  // stage) the mod may still report one from the old scene before it hears of the new one.
+  if (auto p = ReadPlayer(m_shm); p && p->frame_id != m_seen_player_frame && p->scene_id == mbx.scene_id)
   {
     m_seen_player_frame = p->frame_id;
     m_anchored = false;

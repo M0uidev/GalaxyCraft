@@ -21,6 +21,7 @@ _Static_assert(offsetof(GxcPlayerState, fov_y) == 52, "player.fov");
 _Static_assert(offsetof(GxcPlayerState, eye_height) == 56, "player.eye");
 _Static_assert(offsetof(GxcPlayerState, cam_offset) == 60, "player.cam_offset");
 _Static_assert(offsetof(GxcPlayerState, view) == 72, "player.view");
+_Static_assert(offsetof(GxcPlayerState, scene_id) == 76, "player.scene");
 
 _Static_assert(sizeof(GxcGameCamera) == 96, "gamecam");
 _Static_assert(offsetof(GxcGameCamera, frame_id) == 8, "gamecam.frame");

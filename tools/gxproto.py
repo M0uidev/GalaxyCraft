@@ -41,7 +41,7 @@ GAMECAM_DEMO = 2
 
 _HEADER = struct.Struct("<IIIIQQII24x")
 _WORLD = struct.Struct("<IIQ3f3fI20x")
-_PLAYER = struct.Struct("<IIQ3f3f3fff3fI20x")
+_PLAYER = struct.Struct("<IIQ3f3f3fff3fII16x")
 _GAMECAM = struct.Struct("<IIQ3f3f3ff3f3f16x")
 _RING = struct.Struct("<IIII")
 _MSG = struct.Struct("<HHI")
@@ -50,7 +50,7 @@ KCL_CHUNK = struct.Struct("<III")
 
 Header = namedtuple("Header", "magic version host_pid mod_pid host_heartbeat_ms mod_heartbeat_ms host_flags mod_flags")
 WorldState = namedtuple("WorldState", "scene_id frame_id gravity query_pos flags")
-PlayerState = namedtuple("PlayerState", "frame_id pos look up fov_y eye_height on_ground cam_offset view")
+PlayerState = namedtuple("PlayerState", "frame_id pos look up fov_y eye_height on_ground cam_offset view scene_id")
 GameCamera = namedtuple("GameCamera", "flags frame_id cam_pos cam_dir cam_up fov_y mario_pos mario_front")
 
 
@@ -127,9 +127,9 @@ def read_world(shm):
     return WorldState(f[0], f[1], tuple(f[2:5]), tuple(f[5:8]), f[8])
 
 
-def write_player(shm, frame_id, pos, look, up, fov_y, eye, on_ground, cam_offset=(0, 0, 0), view=VIEW_FIRST):
+def write_player(shm, frame_id, pos, look, up, fov_y, eye, on_ground, cam_offset=(0, 0, 0), view=VIEW_FIRST, scene_id=0):
     flags = PLAYER_ON_GROUND if on_ground else 0
-    _seq_write(shm, OFF_PLAYER, _PLAYER, flags, frame_id, *pos, *look, *up, fov_y, eye, *cam_offset, view)
+    _seq_write(shm, OFF_PLAYER, _PLAYER, flags, frame_id, *pos, *look, *up, fov_y, eye, *cam_offset, view, scene_id)
 
 
 def read_player(shm):
@@ -138,7 +138,7 @@ def read_player(shm):
         return None
     flags = f[0]
     return PlayerState(f[1], tuple(f[2:5]), tuple(f[5:8]), tuple(f[8:11]), f[11], f[12],
-                       bool(flags & PLAYER_ON_GROUND), tuple(f[13:16]), f[16])
+                       bool(flags & PLAYER_ON_GROUND), tuple(f[13:16]), f[16], f[17])
 
 
 def write_game_camera(shm, flags, frame_id, cam_pos, cam_dir, cam_up, fov_y, mario_pos, mario_front):

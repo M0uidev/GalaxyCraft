@@ -84,7 +84,8 @@ typedef struct { /* M -> S */
   float eye_height; /* galaxy units above pos */
   float cam_offset[3]; /* camera minus pos, galaxy units (FIRST/BACK/FRONT) */
   uint32_t view;       /* GXC_VIEW_*: look/up above are the camera's */
-  uint8_t pad[20];
+  uint32_t scene_id;   /* WorldState.scene_id the mod's frame is anchored in */
+  uint8_t pad[16];
 } GxcPlayerState;
 
 /* Perspective chosen with F5 (PlayerState.view). */

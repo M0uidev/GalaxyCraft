@@ -55,7 +55,7 @@ class ProtoTest {
         Shm shm = Shm.create(dir.resolve("shm"));
         MemorySegment s = shm.seg();
         Seqlock.writePlayer(s, new Seqlock.PlayerOut(42, new Vector3d(1, 2, 3), new Vector3d(0, 0, -1),
-                new Vector3d(0, 1, 0), 70f, 162f, true, new Vector3d(0, 130, -320), Layout.VIEW_FRONT));
+                new Vector3d(0, 1, 0), 70f, 162f, true, new Vector3d(0, 130, -320), Layout.VIEW_FRONT, 9));
         assertEquals(2, s.get(I, 128));                 // seq even after one write
         assertEquals(1, s.get(I, 128 + 4));             // on ground flag
         assertEquals(42L, s.get(L, 128 + 8));
@@ -64,6 +64,7 @@ class ProtoTest {
         assertEquals(162f, s.get(F, 128 + 56));         // eye height
         assertEquals(-320f, s.get(F, 128 + 60 + 8));    // cam_offset.z
         assertEquals(Layout.VIEW_FRONT, s.get(I, 128 + 72));
+        assertEquals(9, s.get(I, 128 + 76));
     }
 
     @Test void readGameCameraSlot() throws Exception {

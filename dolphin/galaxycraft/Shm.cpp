@@ -215,6 +215,7 @@ void WritePlayer(Shm& shm, const PlayerState& p)
   s.eye_height = p.eye_height;
   std::memcpy(s.cam_offset, &p.cam_offset, 12);
   s.view = p.view;
+  s.scene_id = p.scene_id;
   SeqWrite(shm, GXC_OFF_PLAYER, s);
 }
 
@@ -229,6 +230,7 @@ std::optional<PlayerState> ReadPlayer(const Shm& shm)
   std::memcpy(&p.up, s->up, 12);
   std::memcpy(&p.cam_offset, s->cam_offset, 12);
   p.view = s->view;
+  p.scene_id = s->scene_id;
   return p;
 }
 

@@ -83,6 +83,7 @@ struct PlayerState
   float eye_height;
   Vec3 cam_offset{};  // camera minus pos; zero: up * eye_height
   u32 view = 0;       // GXC_VIEW_*
+  u32 scene_id = 0;   // the scene the mod's frame is anchored in
 };
 
 struct GameCamera

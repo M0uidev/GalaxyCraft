@@ -92,10 +92,10 @@ struct Fixture
     return out;
   }
 
-  void ModReports(u64 frame, Vec3 pos, Vec3 cam_offset = {}, u32 view = GXC_VIEW_FIRST)
+  void ModReports(u64 frame, Vec3 pos, Vec3 cam_offset = {}, u32 view = GXC_VIEW_FIRST, u32 scene = 3)
   {
     shm->SetU64(offsetof(GxcHeader, mod_heartbeat_ms), now);
-    WritePlayer(*shm, {0, frame, pos, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, cam_offset, view});
+    WritePlayer(*shm, {0, frame, pos, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, cam_offset, view, scene});
   }
 
   // The game's camera at (10, 20, 30) looking -z, FOV 45; Mario faces +x.
@@ -192,6 +192,26 @@ TEST(follow_writes_flags_and_mario_position)
   auto w = ReadWorld(*f.shm);
   CHECK(w && (w->flags & GXC_WORLD_FOLLOW) && (w->flags & GXC_WORLD_ANCHOR) == 0);
   CHECK(w->query_pos.x == 1.f && w->query_pos.y == 2.f && w->query_pos.z == 3.f);
+}
+
+TEST(pose_from_the_old_scene_does_not_anchor)
+{
+  // Mario dies: the stage reloads (new scene) while the mod, not yet told, still reports a pose
+  // anchored in the old one. That pose must not count, or the mod waits for an anchor forever.
+  Fixture f;
+  f.Tick();
+  f.ModReports(1, {10, 20, 30});
+  f.Tick();
+  f.mem.PutU32(MBX + offsetof(GxcMailbox, scene_id), 4);
+  f.Tick();
+  f.ModReports(2, {10, 20, 30}, {}, GXC_VIEW_FIRST, 3);
+  f.Tick();
+  auto w = ReadWorld(*f.shm);
+  CHECK(w && w->scene_id == 4 && (w->flags & GXC_WORLD_ANCHOR));
+  f.ModReports(3, {10, 20, 30}, {}, GXC_VIEW_FIRST, 4);
+  f.Tick();
+  w = ReadWorld(*f.shm);
+  CHECK(w && (w->flags & GXC_WORLD_ANCHOR) == 0);
 }
 
 TEST(follow_writes_camera_offset)

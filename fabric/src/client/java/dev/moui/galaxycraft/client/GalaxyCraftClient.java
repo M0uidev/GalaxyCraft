@@ -38,6 +38,8 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static final InputInjector input = new InputInjector();
     private static GravityFrame frame;
     private static long frameId;
+    /** The host's scene the frame was anchored in: poses from an older scene do not count. */
+    private static int frameScene;
     /** Ticks left to wait for the ground under a freshly linked player (then let go anyway). */
     private static final int SETTLE_TICKS = 60;
     private static final double SETTLE_DEPTH_BLOCKS = 6;
@@ -159,6 +161,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             hold(player, true);
             if (!world.get().anchor() || !world.get().hasGravity()) return;
             frame = new GravityFrame(world.get().queryPos(), pos, gravity);
+            frameScene = world.get().sceneId();
             settleTicks = SETTLE_TICKS;
             GalaxyCraft.LOG.info("Linked to galaxy at {}", world.get().queryPos());
         } else {
@@ -289,7 +292,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         Vector3d up = camUpGal != null ? camUpGal : frame.upGal();
         Vector3d offset = camOffsetGal != null ? camOffsetGal : frame.upGal().mul(eye);
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
-                client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId()));
+                client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene));
     }
 
     private static String status(LocalPlayer player) {
