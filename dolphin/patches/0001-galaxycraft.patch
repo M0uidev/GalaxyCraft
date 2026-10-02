@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..578c73a
+index 0000000..b77962e
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,297 @@
+@@ -0,0 +1,300 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -258,6 +258,9 @@ index 0000000..578c73a
 +    return;
 +  }
 +  state->bridge = std::make_unique<gxc::HostBridge>(*state->shm, NowMs);
++  // tools/gxplay.sh: start on the Wii Remote (menus), the player links with the hotkey in a level.
++  if (const char* unlinked = std::getenv("GALAXYCRAFT_START_UNLINKED"); unlinked && *unlinked == '1')
++    state->bridge->SetLinkEnabled(false);
 +  state->input = std::make_unique<gxc::InputWriter>(*state->shm);
 +  state->memory = std::make_unique<DolphinGuestMemory>(system.GetMemory());
 +  // Runs on the CPU thread at the end of every video field: emulated RAM is safe to touch.

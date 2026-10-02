@@ -19,6 +19,7 @@ tools/gxplay.sh
 
 En la ventana de Dolphin:
 
+- Arranca con el enlace **inactivo** (Wiimote) para los menús.
 - **Ctrl+G** alterna el enlace (hotkey de Dolphin «GalaxyCraft: Toggle Minecraft Link», en
   Hotkey Settings → Wii; se puede cambiar). Al pulsarlo aparece un mensaje en pantalla.
   - *Activo*: teclado y ratón van a Minecraft, Mario es la marioneta y la cámara es la de
