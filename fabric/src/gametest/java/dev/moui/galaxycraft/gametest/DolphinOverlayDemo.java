@@ -16,6 +16,7 @@ public final class DolphinOverlayDemo implements FabricClientGameTest {
         if (!Boolean.getBoolean("galaxycraft.demo")) return;
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
             sp.getServer().runCommand("gamemode adventure @a");
+            sp.getServer().runCommand("difficulty peaceful");
             sp.getServer().runCommand("tp @a 0 100 0 0 0");
             ctx.waitFor(mc -> GalaxyCraftClient.exportingOverlay(), 600);
             System.out.println("[GalaxyCraft demo] linked to Dolphin; overlay exporting");

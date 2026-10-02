@@ -10,6 +10,9 @@ loom {
 			if (project.hasProperty("galaxycraftDemo")) {
 				vmArg "-Dgalaxycraft.demo=true"
 			}
+			if (project.hasProperty("galaxycraftDemoTicks")) { // tools/gxplay.sh: play for that long
+				vmArg "-Dgalaxycraft.demoTicks=${project.property("galaxycraftDemoTicks")}"
+			}
 			if (project.hasProperty("galaxycraftHidden")) { // no window on the desktop
 				vmArg "-Dgalaxycraft.hidden=true"
 			}
