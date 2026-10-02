@@ -30,6 +30,7 @@ struct Debug
   u32 mario_height_x100;  // 200 * |center - feet|: Mario's height in units, times 100
   u32 demo;
   u32 head_height_x100;  // 100 * height of the model's "Head" joint above the feet
+  u32 game_near_z_x100;  // 100 * the game's camera near plane, before the override
 };
 
 struct Published
@@ -53,6 +54,11 @@ const u32 HOST_TIMEOUT_FRAMES = 60;
 gxc::PartCandidate gCandidates[MAX_CANDIDATES];
 bool gDriven = false;
 bool gDemo = false;  // a cutscene owns Mario and the camera this frame
+// In Mario's eyes the game's near plane (made for a camera metres behind him) clips whatever is
+// close; while driven the camera draws from almost at the eye. 10 units = 1/8 block.
+const f32 DRIVEN_NEAR_Z = 10.f;
+f32 gGameNearZ = 0.f;
+bool gNearOverridden = false;
 u32 gLastHostSeq = 0;
 u32 gFramesSinceHost = 0;
 
@@ -248,7 +254,20 @@ void CameraMovement(void* self)
 {
   movement__14CameraDirectorFv(self);
   if (!gDriven || gDemo)  // cutscenes keep their own camera
+  {
+    if (gNearOverridden)
+    {
+      MR::setNearZ(gGameNearZ);
+      gNearOverridden = false;
+    }
     return;
+  }
+  if (!gNearOverridden)
+  {
+    gGameNearZ = MR::getNearZ();
+    gOut.dbg.game_near_z_x100 = static_cast<u32>(gGameNearZ * 100.f);
+    gNearOverridden = true;
+  }
   const f32* up = gOut.mbx.up;
   const f32 eye[3] = {gOut.mbx.player_pos[0] + up[0] * gOut.mbx.eye_height,
                       gOut.mbx.player_pos[1] + up[1] * gOut.mbx.eye_height,
@@ -261,6 +280,7 @@ void CameraMovement(void* self)
       mtx.mMtx[r][c] = view[4 * r + c];
   MR::setCameraViewMtx(mtx, false, false, TVec3f(0.f, 0.f, 0.f));
   MR::setFovy(gOut.mbx.fov_y);
+  MR::setNearZ(DRIVEN_NEAR_Z);
 }
 }  // namespace
 
