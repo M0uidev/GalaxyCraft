@@ -82,4 +82,14 @@ class CollisionFieldTest {
             assertTrue(Math.abs(b[0]) <= 4.5 && Math.abs(b[3]) <= 4.5, "x clipped to 8 blocks around center");
         }
     }
+
+    @Test void rayStopsAtThePlanet() throws Exception {
+        var f = new CollisionField();
+        f.upsertPart(1, IDENTITY, icosphere());
+        assertEquals(10, f.clipDistance(new Vector3d(0, 103, 0), new Vector3d(0, -1, 0), 10), "no frame: full distance");
+        f.setFrame(frameAbove(new Vector3d(0, 820, 0))); // surface at about y = 99.8
+        double d = f.clipDistance(new Vector3d(0, 103, 0), new Vector3d(0, -1, 0), 10);
+        assertTrue(d > 3.0 && d < 3.4, "d=" + d);
+        assertEquals(10, f.clipDistance(new Vector3d(0, 103, 0), new Vector3d(0, 1, 0), 10), 1e-9);
+    }
 }

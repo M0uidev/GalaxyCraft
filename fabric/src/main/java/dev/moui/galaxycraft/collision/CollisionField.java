@@ -74,6 +74,21 @@ public final class CollisionField {
         return Voxelizer.voxelize(mc, q);
     }
 
+    /**
+     * How far (blocks, up to max) a ray from fromMc along the unit dirMc travels before the galaxy's
+     * collision: keeps the third-person camera out of planets and walls.
+     */
+    public synchronized double clipDistance(Vector3d fromMc, Vector3d dirMc, double max) {
+        if (frame == null) return max;
+        Vector3d o = frame.toGal(fromMc);
+        Vector3d d = frame.dirToGal(dirMc).normalize();
+        Vector3d end = new Vector3d(d).mul(max / GravityFrame.SCALE).add(o);
+        Vector3d min = new Vector3d(o).min(end), maxCorner = new Vector3d(o).max(end);
+        double best = max / GravityFrame.SCALE;
+        for (Tri t : index.query(min, maxCorner)) best = Math.min(best, t.rayHit(o, d));
+        return best * GravityFrame.SCALE;
+    }
+
     private static double[] clip(double[] q) {
         double[] out = q.clone();
         for (int a = 0; a < 3; a++) {

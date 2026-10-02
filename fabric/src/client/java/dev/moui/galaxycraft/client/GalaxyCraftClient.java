@@ -9,6 +9,8 @@ import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.gravity.LookMath;
 import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Seqlock;
+import dev.moui.galaxycraft.view.CameraMath;
+import dev.moui.galaxycraft.view.View;
 import java.nio.file.Path;
 import java.util.Optional;
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -17,10 +19,12 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.lwjgl.sdl.SDLVideo;
 
@@ -39,6 +43,17 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static final double SETTLE_DEPTH_BLOCKS = 6;
     private static int settleTicks;
     private static boolean holding;
+    /** Mario mode this tick: the player is carried to Mario, SMG2 owns the movement. */
+    private static boolean following;
+    /** Where the player goes at the start of its own tick (after its old position is saved). */
+    private static Vector3d followTarget;
+    /** F5 went past THIRD_PERSON_FRONT: SMG2's own camera, Minecraft drawn from it. */
+    private static boolean galaxyView;
+    /** The camera as last drawn, galaxy space: what SMG2's camera copies outside the Galaxy view. */
+    private static Vector3d camOffsetGal, camLookGal, camUpGal;
+
+    /** Minecraft's camera for the Galaxy view: SMG2's, placed relative to Steve as drawn. */
+    public record GalaxyCamera(Vector3d pos, Quaternionf rotation, Vector3d forward, float fovY) {}
 
     @Override
     public void onInitializeClient() {
@@ -118,6 +133,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
 
     private static void resetFrame() {
         frame = null;
+        camOffsetGal = camLookGal = camUpGal = null;
         GalaxyCraft.FIELD.setFrame(null);
     }
 
@@ -125,6 +141,8 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         bridge.poll();
         LocalPlayer player = client.player;
         if (player == null) return;
+        following = false;
+        followTarget = null;
         if (!bridge.gameLinked()) {
             // Host gone, or the game handed back to the Wii Remote (Dolphin's link toggle): stay
             // frozen in the last frame instead of falling through a galaxy nobody updates.
@@ -148,19 +166,29 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             // (parallel transport): walking keeps hugging the planet, as Mario's momentum does.
             frame.update(gravity, pos);
         }
-        if (world.get().follow()) {
+        following = world.get().follow();
+        if (following) {
             // Mario mode: SMG2 moves Mario (played on the emulated Wii Remote); the player is
-            // carried along at his feet, never walking or falling by Minecraft's physics.
+            // carried along at his feet, never walking or falling by Minecraft's physics. The move
+            // waits for the player's tick, after its old position is saved: Steve is drawn
+            // in between and his legs swing with Mario's steps.
             Vector3d target = Follow.target(frame, world.get().queryPos());
-            player.setPos(target.x, target.y, target.z);
-            player.setOldPosAndRot();
+            Optional<Vector3d> rebased = frame.rebase(target);
+            if (rebased.isPresent()) {
+                Vector3d np = rebased.get();
+                player.setPos(np.x, np.y, np.z);
+                player.setOldPosAndRot();
+            } else {
+                followTarget = target;
+            }
+        } else {
+            frame.rebase(vec(player.position())).ifPresent(np -> {
+                player.setPos(np.x, np.y, np.z);
+                player.setOldPosAndRot();
+            });
         }
-        frame.rebase(vec(player.position())).ifPresent(np -> {
-            player.setPos(np.x, np.y, np.z);
-            player.setOldPosAndRot();
-        });
         GalaxyCraft.FIELD.setFrame(frame);
-        if (world.get().follow()) {
+        if (following) {
             settleTicks = 0;
             hold(player, true);
             return;
@@ -190,13 +218,78 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     }
 
     private static void afterTick(Minecraft client) {
+        sendPose(client);
+    }
+
+    /** Start of the local player's own tick: Mario mode moves and turns Steve here. */
+    public static void onPlayerTick(LocalPlayer player) {
+        if (followTarget != null) {
+            player.setPos(followTarget.x, followTarget.y, followTarget.z);
+            followTarget = null;
+        }
+        Optional<Seqlock.GameCamera> cam = galaxyCameraState();
+        if (cam.isPresent() && cam.get().marioFront().lengthSquared() > 0.25) {
+            // SMG2's camera: Steve faces where Mario does (the mouse is the star pointer).
+            Vector3d front = frame.dirToMc(cam.get().marioFront());
+            float yaw = (float) LookMath.yaw(front);
+            player.setYRot(yaw);
+            player.setXRot(0);
+            player.setYHeadRot(yaw);
+            player.setYBodyRot(yaw);
+        }
+    }
+
+    /** F5: Minecraft's camera type after current; in Mario mode FRONT goes on to the Galaxy view. */
+    public static CameraType cycleCamera(CameraType current) {
+        View next = View.of(current.ordinal(), galaxyView).next(following);
+        galaxyView = next == View.GALAXY;
+        return CameraType.values()[next.cameraTypeOrdinal()];
+    }
+
+    public static View view() {
+        return View.of(Minecraft.getInstance().options.getCameraType().ordinal(), galaxyView && following);
+    }
+
+    private static Optional<Seqlock.GameCamera> galaxyCameraState() {
+        if (view() != View.GALAXY || frame == null) return Optional.empty();
+        return bridge.gameCamera().filter(Seqlock.GameCamera::valid);
+    }
+
+    /** Galaxy view with a camera from SMG2: where Minecraft draws from (else BACK as usual). */
+    public static Optional<GalaxyCamera> galaxyCamera(Vector3d steveFeetMc) {
+        return galaxyCameraState().map(c -> {
+            Vector3d forward = frame.dirToMc(c.camDir()).normalize();
+            return new GalaxyCamera(CameraMath.galaxyCamera(frame, steveFeetMc, c.marioPos(), c.camPos()),
+                    CameraMath.rotation(forward, frame.dirToMc(c.camUp())), forward, c.fovY());
+        });
+    }
+
+    /** A cutscene shows Mario with the game's camera: Steve is not drawn. */
+    public static boolean hideSteve() {
+        return following && bridge.gameCamera().map(Seqlock.GameCamera::demo).orElse(false);
+    }
+
+    /** Render thread, the camera placed: SMG2 copies it (outside the Galaxy view), sent right away. */
+    public static void onCameraAligned(Vector3d cameraMc, Vector3d forwardMc, Vector3d upMc, Vector3d feetMc) {
+        if (frame == null || !bridge.linked()) return;
+        if (view() != View.GALAXY) {
+            camOffsetGal = CameraMath.offsetGal(frame, cameraMc, feetMc);
+            camLookGal = frame.dirToGal(forwardMc);
+            camUpGal = frame.dirToGal(upMc);
+        }
+        sendPose(Minecraft.getInstance());
+    }
+
+    private static void sendPose(Minecraft client) {
         LocalPlayer player = client.player;
         if (player == null || frame == null || !bridge.linked()) return;
-        Vector3d look = LookMath.direction(player.getYRot(), player.getXRot());
         float eye = (float) (player.getEyeHeight() / GravityFrame.SCALE);
-        bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())),
-                frame.dirToGal(look), frame.upGal(), client.options.fov().get().floatValue(), eye,
-                player.onGround(), frame.upGal().mul(eye), Layout.VIEW_FIRST));
+        Vector3d look = camLookGal != null ? camLookGal
+                : frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
+        Vector3d up = camUpGal != null ? camUpGal : frame.upGal();
+        Vector3d offset = camOffsetGal != null ? camOffsetGal : frame.upGal().mul(eye);
+        bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
+                client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId()));
     }
 
     private static String status(LocalPlayer player) {

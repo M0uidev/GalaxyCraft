@@ -11,4 +11,14 @@ public final class LookMath {
         double yaw = Math.toRadians(yawDeg), pitch = Math.toRadians(pitchDeg);
         return new Vector3d(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
     }
+
+    /** Yaw (degrees) of a look vector, the inverse of {@link #direction}. */
+    public static double yaw(Vector3d d) {
+        return Math.toDegrees(Math.atan2(-d.x, d.z));
+    }
+
+    /** Pitch (degrees) of a look vector, the inverse of {@link #direction}. */
+    public static double pitch(Vector3d d) {
+        return Math.toDegrees(Math.asin(Math.max(-1, Math.min(1, -d.y / d.length()))));
+    }
 }
