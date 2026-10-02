@@ -60,6 +60,19 @@ TEST(mbx_without_mailbox_is_error)
   CHECK(RunMemoryCommand(c[0], mem, std::nullopt) == "error: no mailbox\n");
 }
 
+TEST(poke_writes_guest_bytes)
+{
+  FakeGuestMemory mem;
+  mem.PutU32(0x80401000u, 0);
+  auto c = ParseDevCommands("poke 80401000 deadbe01\npoke 80401000\npoke 80401000 abc\n"
+                            "poke 80401000 zz\npoke 12345678 00");
+  CHECK(c.size() == 5 && c[0].kind == DevCommand::Poke);
+  CHECK(c[1].kind == DevCommand::Bad && c[2].kind == DevCommand::Bad && c[3].kind == DevCommand::Bad);
+  CHECK(RunMemoryCommand(c[0], mem, std::nullopt) == "ok poke 80401000 4\n");
+  CHECK(mem.GetU32(0x80401000u) == 0xdeadbe01u);
+  CHECK(RunMemoryCommand(c[4], mem, std::nullopt) == "error: unreadable 0x12345678\n");
+}
+
 TEST(bad_and_host_commands_are_errors_here)
 {
   FakeGuestMemory mem;
@@ -77,7 +90,7 @@ TEST(mbx_summarizes_mailbox)
   mem.PutU32(MBX + 20, 5);     // scene
   mem.PutF32(MBX + 24, 0), mem.PutF32(MBX + 28, -1), mem.PutF32(MBX + 32, 0);
   mem.PutF32(MBX + 36, 1.5f), mem.PutF32(MBX + 40, 2), mem.PutF32(MBX + 44, -3);
-  mem.PutU32(MBX + 48, 2), mem.PutU32(MBX + 52, GXC_MBX_DRIVE);
+  mem.PutU32(MBX + 48, 2), mem.PutU32(MBX + 52, 1);  // host_flags
   mem.PutF32(MBX + 56, 7), mem.PutF32(MBX + 60, 8), mem.PutF32(MBX + 64, 9);
   mem.PutU32(MBX + 100, 3);
   auto c = ParseDevCommands("mbx");

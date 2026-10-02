@@ -13,6 +13,7 @@ namespace gxc
 namespace
 {
 constexpr u32 PEEK_MAX = 4096;
+constexpr u32 POKE_MAX = 64;
 
 std::vector<std::string_view> Words(std::string_view line)
 {
@@ -64,6 +65,23 @@ DevCommand ParseLine(std::string_view line)
     if (!addr || !len || *len == 0 || *len > PEEK_MAX)
       return bad;
     return {DevCommand::Peek, *addr, *len, {}};
+  }
+  if (w[0] == "poke")
+  {
+    if (w.size() != 3 || w[2].size() % 2 != 0 || w[2].size() > 2 * POKE_MAX)
+      return bad;
+    const auto addr = ParseU32(w[1], 16);
+    if (!addr)
+      return bad;
+    DevCommand cmd{DevCommand::Poke, *addr, static_cast<u32>(w[2].size() / 2), {}};
+    for (size_t i = 0; i < w[2].size(); i += 2)
+    {
+      const auto byte = ParseU32(w[2].substr(i, 2), 16);
+      if (!byte)
+        return bad;
+      cmd.arg.push_back(static_cast<char>(*byte));
+    }
+    return cmd;
   }
   if (w[0] == "mbx")
     return w.size() == 1 ? DevCommand{DevCommand::Mbx, 0, 0, {}} : bad;
@@ -168,6 +186,14 @@ std::string RunMemoryCommand(const DevCommand& cmd, GuestMemory& mem, std::optio
   {
   case DevCommand::Peek:
     return Peek(cmd, mem);
+  case DevCommand::Poke:
+  {
+    if (!mem.Write(cmd.addr, cmd.arg.data(), cmd.len))
+      return Unreadable(cmd.addr);
+    char buf[40];
+    std::snprintf(buf, sizeof(buf), "ok poke %08x %u\n", cmd.addr, cmd.len);
+    return buf;
+  }
   case DevCommand::Mbx:
     return mailbox ? Mailbox(mem, *mailbox) : "error: no mailbox\n";
   case DevCommand::Bad:

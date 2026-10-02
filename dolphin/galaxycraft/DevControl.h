@@ -11,6 +11,7 @@ namespace gxc
 {
 // Development commands written by tools/gxdev.py to /dev/shm/galaxycraft_ctl, one per line:
 //   peek ADDR LEN   hex dump of guest memory (ADDR in hex, LEN 1..4096)
+//   poke ADDR HEX   write these bytes (HEX: even number of hex digits, up to 64 bytes)
 //   mbx             one-line summary of the guest mailbox
 //   shot NAME | save PATH | load PATH   run by the emulator on its host thread
 //   follow LX LY LZ [UX UY UZ]   follow Mario looking this way, as if the mod sent it
@@ -23,6 +24,7 @@ struct DevCommand
   enum Kind
   {
     Peek,
+    Poke,
     Mbx,
     Shot,
     Save,
@@ -34,7 +36,7 @@ struct DevCommand
     Bad
   } kind;
   u32 addr = 0, len = 0;
-  std::string arg;  // file name/path, or the offending line for Bad
+  std::string arg;  // file name/path, Poke's raw bytes, or the offending line for Bad
   std::array<float, 6> pose{};  // Follow: look, up
 };
 
