@@ -36,6 +36,18 @@ class CollisionFieldTest {
         assertTrue(top >= 99.75 && top <= 100.0, "top=" + top);
     }
 
+    @Test void groundBelowOnlyWhenLoadedAndClose() throws Exception {
+        var f = new CollisionField();
+        f.setFrame(frameAbove(new Vector3d(0, 820, 0))); // feet at y=100 on top of the planet
+        assertFalse(f.hasGroundBelow(new double[] {0, 100, 0}, 6), "no parts yet");
+        f.upsertPart(1, IDENTITY, icosphere());
+        assertTrue(f.hasGroundBelow(new double[] {0, 100, 0}, 6));
+        assertTrue(f.hasGroundBelow(new double[] {0, 104, 0}, 6), "mid-jump, ground 4 blocks down");
+        assertFalse(f.hasGroundBelow(new double[] {0, 120, 0}, 6), "ground 20 blocks down");
+        f.setFrame(null);
+        assertFalse(f.hasGroundBelow(new double[] {0, 100, 0}, 6), "no frame");
+    }
+
     @Test void groundUnderFeetOnTheSideOfPlanet() throws Exception {
         var f = new CollisionField();
         f.upsertPart(1, IDENTITY, icosphere());

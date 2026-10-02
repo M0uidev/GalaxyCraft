@@ -50,6 +50,15 @@ public final class CollisionField {
         return frame != null;
     }
 
+    /**
+     * Whether loaded collision lies under the player's feet (Minecraft space), within depth
+     * blocks: after linking, the parts around the player can take a few ticks to arrive.
+     */
+    public boolean hasGroundBelow(double[] feet, double depth) {
+        return !boxesFor(new double[] {feet[0] - 0.3, feet[1] - depth, feet[2] - 0.3,
+                feet[0] + 0.3, feet[1] + 0.1, feet[2] + 0.3}).isEmpty();
+    }
+
     /** query = {minX, minY, minZ, maxX, maxY, maxZ} in Minecraft space. */
     public synchronized List<double[]> boxesFor(double[] query) {
         if (frame == null) return List.of();

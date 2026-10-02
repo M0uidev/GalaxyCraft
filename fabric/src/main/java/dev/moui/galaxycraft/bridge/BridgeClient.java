@@ -96,6 +96,11 @@ public final class BridgeClient {
                 && shm.seg().get(INT, Layout.H_MAGIC) == Layout.MAGIC;
     }
 
+    /** Linked and the host hands the game over (Dolphin's link toggle is on). */
+    public boolean gameLinked() {
+        return linked() && (shm.seg().get(INT, Layout.H_HOST_FLAGS) & 1) != 0;
+    }
+
     public Optional<Seqlock.WorldState> world() {
         return linked() ? world : Optional.empty();
     }

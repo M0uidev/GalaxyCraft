@@ -39,6 +39,23 @@ class BridgeClientTest {
         assertTrue(c.world().isEmpty());
     }
 
+    @Test void hostFlagSaysWhetherTheGameIsHandedOver() throws Exception {
+        // Dolphin's link toggle (Ctrl+G) keeps the heartbeat but clears host_flags bit 0.
+        Path p = dir.resolve("shm");
+        var seg = Shm.create(p).seg();
+        seg.set(I, 0, Layout.MAGIC);
+        seg.set(I, 4, Layout.VERSION);
+        seg.set(L, 16, 10_000L);
+        seg.set(I, Layout.H_HOST_FLAGS, 1);
+        var c = new BridgeClient(p, () -> 10_100L, new Recorder());
+        c.poll();
+        assertTrue(c.linked() && c.gameLinked());
+        seg.set(I, Layout.H_HOST_FLAGS, 0);
+        c.poll();
+        assertTrue(c.linked());
+        assertFalse(c.gameLinked());
+    }
+
     @Test void staleHeartbeatIsNotLinked() throws Exception {
         Path p = dir.resolve("shm");
         var seg = Shm.create(p).seg();

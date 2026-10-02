@@ -33,6 +33,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static final InputInjector input = new InputInjector();
     private static GravityFrame frame;
     private static long frameId;
+    /** Ticks left to wait for the ground under a freshly linked player (then let go anyway). */
+    private static final int SETTLE_TICKS = 60;
+    private static final double SETTLE_DEPTH_BLOCKS = 6;
+    private static int settleTicks;
+    private static boolean holding;
 
     @Override
     public void onInitializeClient() {
@@ -118,7 +123,13 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static void beforeTick(Minecraft client) {
         bridge.poll();
         LocalPlayer player = client.player;
-        if (player == null || !bridge.linked()) return; // unlinked: keep the last frame frozen
+        if (player == null) return;
+        if (!bridge.gameLinked()) {
+            // Host gone, or the game handed back to the Wii Remote (Dolphin's link toggle): stay
+            // frozen in the last frame instead of falling through a galaxy nobody updates.
+            hold(player, frame != null);
+            return;
+        }
         Optional<Seqlock.WorldState> world = bridge.world();
         if (world.isEmpty()) return;
         Vector3d gravity = world.get().gravity();
@@ -126,8 +137,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         if (frame == null) {
             // Wait for the host to say where the player is, somewhere with gravity: SMG2's title
             // screen has a Mario too, but nothing to stand on.
+            hold(player, true);
             if (!world.get().anchor() || !world.get().hasGravity()) return;
             frame = new GravityFrame(world.get().queryPos(), pos, gravity);
+            settleTicks = SETTLE_TICKS;
             GalaxyCraft.LOG.info("Linked to galaxy at {}", world.get().queryPos());
         } else {
             // Look and velocity are left alone in Minecraft space, so they turn with the frame
@@ -139,6 +152,28 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             player.setOldPosAndRot();
         });
         GalaxyCraft.FIELD.setFrame(frame);
+
+        // A new link resends the scene's collision, which can take a few ticks: hold the player
+        // until there is ground under them, or they fall through it before it exists.
+        if (settleTicks > 0) {
+            Vec3 feet = player.position();
+            settleTicks = GalaxyCraft.FIELD.hasGroundBelow(new double[] {feet.x, feet.y, feet.z},
+                    SETTLE_DEPTH_BLOCKS) ? 0 : settleTicks - 1;
+        }
+        hold(player, settleTicks > 0);
+    }
+
+    /** Freezes the player in place (no gravity, no momentum, no fall damage pending) or lets go. */
+    private static void hold(LocalPlayer player, boolean on) {
+        if (on) {
+            player.setNoGravity(true);
+            player.setDeltaMovement(Vec3.ZERO);
+            player.resetFallDistance();
+        } else if (holding) {
+            player.setNoGravity(false);
+            player.resetFallDistance();
+        }
+        holding = on;
     }
 
     private static void afterTick(Minecraft client) {
