@@ -49,7 +49,7 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..21a61b2
+index 0000000..d5d7396
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
 @@ -0,0 +1,300 @@
@@ -188,32 +188,32 @@ index 0000000..21a61b2
 +                     cmd.arg + "\n");
 +      });
 +      break;
-+    case gxc::DevCommand::Drive:
++    case gxc::DevCommand::Follow:
 +    {
 +      const auto& v = cmd.pose;
-+      bridge.SetDevDrive(gxc::PlayerState{0, 0, {v[0], v[1], v[2]}, {v[3], v[4], v[5]},
-+                                          {v[6], v[7], v[8]}, 70.f, 162.f});
-+      AppendCtlOut("ok drive\n");
++      bridge.SetDevFollow(
++          gxc::PlayerState{0, 0, {}, {v[0], v[1], v[2]}, {v[3], v[4], v[5]}, 70.f, 162.f});
++      AppendCtlOut("ok follow\n");
 +      break;
 +    }
 +    case gxc::DevCommand::Link:
-+      bridge.SetLinkEnabled(cmd.arg == "on");
++      bridge.SetMinecraftMode(cmd.arg == "on");
 +      AppendCtlOut("ok link " + cmd.arg + "\n");
 +      break;
 +    case gxc::DevCommand::Status:
 +      // Dolphin only reads controllers and hotkeys while these let it (Core::UpdateInputGate).
 +      AppendCtlOut(fmt::format("render_focus={} full_focus={} ui_blocks_input={} link={} mod_alive={} "
-+                               "driving={} focus_gained={} focus_lost={} link_toggles={} "
++                               "following={} in_game={} focus_gained={} focus_lost={} link_toggles={} "
 +                               "xinput_updates={}\n",
 +                               Host_RendererHasFocus(), Host_RendererHasFullFocus(),
-+                               Host_UIBlocksControllerState(), bridge.LinkEnabled(),
-+                               mod_alive, bridge.Driving(), s_focus_gained.load(),
++                               Host_UIBlocksControllerState(), bridge.MinecraftMode(),
++                               mod_alive, bridge.Following(), bridge.InGame(), s_focus_gained.load(),
 +                               s_focus_lost.load(), s_link_toggles.load(),
 +                               s_xinput_updates.load()));
 +      break;
-+    case gxc::DevCommand::Undrive:
-+      bridge.SetDevDrive(std::nullopt);
-+      AppendCtlOut("ok undrive\n");
++    case gxc::DevCommand::Unfollow:
++      bridge.SetDevFollow(std::nullopt);
++      AppendCtlOut("ok unfollow\n");
 +      break;
 +    default:
 +      AppendCtlOut(gxc::RunMemoryCommand(cmd, mem, bridge.MailboxAddress()));
@@ -264,7 +264,7 @@ index 0000000..21a61b2
 +  state->bridge = std::make_unique<gxc::HostBridge>(*state->shm, NowMs);
 +  // tools/gxplay.sh: start on the Wii Remote (menus), the player links with the hotkey in a level.
 +  if (const char* unlinked = std::getenv("GALAXYCRAFT_START_UNLINKED"); unlinked && *unlinked == '1')
-+    state->bridge->SetLinkEnabled(false);
++    state->bridge->SetMinecraftMode(false);
 +  state->input = std::make_unique<gxc::InputWriter>(*state->shm);
 +  state->memory = std::make_unique<DolphinGuestMemory>(system.GetMemory());
 +  // Runs on the CPU thread at the end of every video field: emulated RAM is safe to touch.
@@ -296,13 +296,13 @@ index 0000000..21a61b2
 +bool InputActive()
 +{
 +  std::lock_guard lock(s_mutex);
-+  return s_state && s_state->bridge->LinkEnabled() && ModAlive(*s_state->shm);
++  return s_state && s_state->bridge->MinecraftMode() && ModAlive(*s_state->shm);
 +}
 +
 +bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32])
 +{
 +  std::lock_guard lock(s_mutex);
-+  const bool active = s_state && s_state->bridge->LinkEnabled() && ModAlive(*s_state->shm);
++  const bool active = s_state && s_state->bridge->MinecraftMode() && ModAlive(*s_state->shm);
 +  if (!active)
 +    return false;
 +  s_xinput_updates++;
@@ -333,8 +333,8 @@ index 0000000..21a61b2
 +  std::lock_guard lock(s_mutex);
 +  if (!s_state)
 +    return;
-+  const bool on = !s_state->bridge->LinkEnabled();
-+  s_state->bridge->SetLinkEnabled(on);
++  const bool on = !s_state->bridge->MinecraftMode();
++  s_state->bridge->SetMinecraftMode(on);
 +  if (!on)
 +    s_state->input->ReleaseAll();  // keys held now would otherwise stay down in Minecraft
 +  s_xinput_buttons = 0;
@@ -347,7 +347,7 @@ index 0000000..21a61b2
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn)
 +{
 +  std::lock_guard lock(s_mutex);
-+  if (!s_state || !s_state->bridge->LinkEnabled() || !ModAlive(*s_state->shm))
++  if (!s_state || !s_state->bridge->MinecraftMode() || !ModAlive(*s_state->shm))
 +    return;
 +  if (auto frame = gxc::LatestOverlay(*s_state->shm))
 +    fn(frame->width, frame->height, frame->frame_id, frame->rgba);

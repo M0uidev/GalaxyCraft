@@ -95,16 +95,17 @@ TEST(mbx_unreadable_is_error)
   CHECK(RunMemoryCommand(c[0], mem, 0x807fffc0u) == "error: unreadable 0x807fffc0\n");
 }
 
-TEST(parses_drive_and_undrive)
+TEST(parses_follow_and_unfollow)
 {
-  auto c = ParseDevCommands("drive 1 2 3 0 0 -1\ndrive 1 2 3 0 0 -1 0 1 0\nundrive\n"
-                            "drive 1 2 3 0 0\nundrive now\ndrive 1 2 x 0 0 -1");
-  CHECK(c.size() == 6);
-  CHECK(c[0].kind == DevCommand::Drive && c[0].pose[0] == 1 && c[0].pose[2] == 3 &&
-        c[0].pose[5] == -1 && c[0].pose[7] == 0);  // no up given: zero, host picks -gravity
-  CHECK(c[1].kind == DevCommand::Drive && c[1].pose[7] == 1);
-  CHECK(c[2].kind == DevCommand::Undrive);
-  CHECK(c[3].kind == DevCommand::Bad && c[4].kind == DevCommand::Bad && c[5].kind == DevCommand::Bad);
+  auto c = ParseDevCommands("follow 1 0 0\nfollow 1 0 0 0 1 0\nunfollow\n"
+                            "follow 1 0\nunfollow now\nfollow 1 x 0\ndrive 1 2 3 0 0 1");
+  CHECK(c.size() == 7);
+  CHECK(c[0].kind == DevCommand::Follow && c[0].pose[0] == 1 && c[0].pose[1] == 0 &&
+        c[0].pose[4] == 0);  // no up given: zero, host picks -gravity
+  CHECK(c[1].kind == DevCommand::Follow && c[1].pose[4] == 1);
+  CHECK(c[2].kind == DevCommand::Unfollow);
+  for (int i = 3; i < 7; i++)
+    CHECK(c[i].kind == DevCommand::Bad);
 }
 
 TEST(mbx_reports_its_address)

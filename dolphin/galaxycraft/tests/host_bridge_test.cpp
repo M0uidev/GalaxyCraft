@@ -165,11 +165,25 @@ TEST(anchor_until_fresh_player)
   f.ModReports(1, {10, 20, 30});
   f.Tick();
   w = ReadWorld(*f.shm);
-  CHECK(w && (w->flags & GXC_WORLD_ANCHOR) == 0 && w->query_pos.z == 30.f);
-  CHECK(f.mem.GetF32(MBX + 56) == 10.f && f.mem.GetF32(MBX + 64) == 30.f);
-  CHECK(f.mem.GetF32(MBX + 92) == 70.f);
-  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) != 0);
-  CHECK(f.bridge.Driving());
+  CHECK(w && (w->flags & GXC_WORLD_ANCHOR) == 0);
+}
+
+TEST(follow_writes_flags_and_mario_position)
+{
+  Fixture f;
+  f.Tick();
+  f.ModReports(1, {10, 20, 30});
+  f.Tick();
+  CHECK(f.bridge.Following());
+  CHECK(f.mem.GetU32(MBX + 52) == GXC_MBX_FOLLOW);
+  CHECK(f.mem.GetF32(MBX + 56) == 10.f && f.mem.GetF32(MBX + 64) == 30.f);  // echo
+  CHECK(f.mem.GetF32(MBX + 68) == 0.f && f.mem.GetF32(MBX + 76) == 1.f);   // look
+  CHECK(f.mem.GetF32(MBX + 84) == 1.f);                                     // up
+  CHECK(f.mem.GetF32(MBX + 92) == 70.f && f.mem.GetF32(MBX + 96) == 162.f);
+  // Minecraft follows Mario: the query is Mario's position, never the player's.
+  auto w = ReadWorld(*f.shm);
+  CHECK(w && (w->flags & GXC_WORLD_FOLLOW) && (w->flags & GXC_WORLD_ANCHOR) == 0);
+  CHECK(w->query_pos.x == 1.f && w->query_pos.y == 2.f && w->query_pos.z == 3.f);
 }
 
 TEST(matrix_only_change_sends_upsert_without_chunks)
@@ -221,21 +235,20 @@ TEST(hello_republishes_and_reanchors)
   CHECK(Count(msgs, GXC_MSG_SCENE_CHANGE) == 1 && Count(msgs, GXC_MSG_PART_UPSERT) == 1);
   CHECK(Count(msgs, GXC_MSG_KCL_CHUNK) == 1);
   auto w = ReadWorld(*f.shm);
-  CHECK(w && (w->flags & GXC_WORLD_ANCHOR));
-  CHECK(!f.bridge.Driving());
+  CHECK(w && (w->flags & GXC_WORLD_ANCHOR) && (w->flags & GXC_WORLD_FOLLOW));
 }
 
-TEST(mod_heartbeat_stale_drops_drive)
+TEST(stale_mod_stops_following)
 {
   Fixture f;
   f.Tick();
   f.ModReports(1, {10, 20, 30});
   f.Tick();
-  CHECK(f.bridge.Driving());
-  f.now += GXC_HEARTBEAT_TIMEOUT_MS + 1;
+  CHECK(f.bridge.Following());
+  f.now += 2500;
   f.Tick();
-  CHECK(!f.bridge.Driving());
-  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) == 0);
+  CHECK(!f.bridge.Following());
+  CHECK(f.mem.GetU32(MBX + 52) == 0);
 }
 
 TEST(mailbox_moved_is_rescanned)
@@ -269,54 +282,53 @@ TEST(bad_kcl_address_ignored)
       CHECK(PayloadU32(m, 0) == 7);
 }
 
-TEST(dev_drive_overrides_mod)
+TEST(dev_follow_overrides_mod)
 {
   Fixture f;
   f.Tick();
-  PlayerState pose{0, 0, {5, 6, 7}, {0, 0, -1}, {0, 0, 0}, 70.f, 162.f};
-  f.bridge.SetDevDrive(pose);
+  CHECK(!f.bridge.Following());  // no mod
+  f.bridge.SetDevFollow(PlayerState{0, 0, {}, {0, 0, -1}, {0, 0, 0}, 70.f, 162.f});
   f.Tick();
-  CHECK(f.bridge.Driving());
-  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) != 0);
-  CHECK(f.mem.GetF32(MBX + 56) == 5.f && f.mem.GetF32(MBX + 64) == 7.f);
+  CHECK(f.bridge.Following());
+  CHECK(f.mem.GetU32(MBX + 52) == GXC_MBX_FOLLOW);
   CHECK(f.mem.GetF32(MBX + 72) == 0.f && f.mem.GetF32(MBX + 76) == -1.f);
   // No up given: opposite of the mailbox gravity (0, -1, 0).
   CHECK(f.mem.GetF32(MBX + 80) == 0.f && f.mem.GetF32(MBX + 84) == 1.f);
   CHECK(f.mem.GetF32(MBX + 92) == 70.f && f.mem.GetF32(MBX + 96) == 162.f);
-  f.bridge.SetDevDrive(std::nullopt);
+  f.bridge.SetDevFollow(std::nullopt);
   f.Tick();
-  CHECK(!f.bridge.Driving() && (f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) == 0);
+  CHECK(!f.bridge.Following() && f.mem.GetU32(MBX + 52) == 0);
 }
 
-TEST(link_off_clears_drive_and_host_flag)
+TEST(wiimote_mode_clears_follow)
 {
   Fixture f;
   f.Tick();
   f.ModReports(1, {10, 20, 30});
   f.Tick();
-  CHECK(f.bridge.Driving() && (f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) != 0);
-  f.bridge.SetLinkEnabled(false);
+  CHECK(f.bridge.MinecraftMode() && f.bridge.Following());
+  f.bridge.SetMinecraftMode(false);
   f.ModReports(2, {11, 20, 30});
   f.Tick();
-  CHECK(!f.bridge.LinkEnabled() && !f.bridge.Driving());
-  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) == 0);
+  CHECK(!f.bridge.MinecraftMode() && !f.bridge.Following());
+  CHECK(f.mem.GetU32(MBX + 52) == 0);
   CHECK(f.shm->GetU32(offsetof(GxcHeader, host_flags)) == 0);
-  // A dev drive does not get through either.
-  f.bridge.SetDevDrive(PlayerState{0, 0, {5, 6, 7}, {0, 0, -1}, {0, 1, 0}, 70.f, 162.f});
+  // A dev follow does not get through either.
+  f.bridge.SetDevFollow(PlayerState{0, 0, {}, {0, 0, -1}, {0, 1, 0}, 70.f, 162.f});
   f.Tick();
-  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_DRIVE) == 0);
+  CHECK(!f.bridge.Following() && f.mem.GetU32(MBX + 52) == 0);
 }
 
-TEST(link_on_republishes_and_reanchors)
+TEST(minecraft_mode_on_republishes_and_reanchors)
 {
   Fixture f;
   f.Tick();
   f.ModReports(1, {10, 20, 30});
   f.Tick();
-  f.bridge.SetLinkEnabled(false);
+  f.bridge.SetMinecraftMode(false);
   f.Tick();
   f.Drain();
-  f.bridge.SetLinkEnabled(true);
+  f.bridge.SetMinecraftMode(true);
   f.Tick();
   auto msgs = f.Drain();
   CHECK(!msgs.empty() && msgs[0].type == GXC_MSG_SCENE_CHANGE);
@@ -324,10 +336,37 @@ TEST(link_on_republishes_and_reanchors)
   auto w = ReadWorld(*f.shm);
   CHECK(w && (w->flags & GXC_WORLD_ANCHOR) != 0);
   CHECK(f.shm->GetU32(offsetof(GxcHeader, host_flags)) == 1);
-  CHECK(!f.bridge.Driving());  // until the mod reports a fresh pose
   f.ModReports(2, {10, 20, 30});
   f.Tick();
-  CHECK(f.bridge.Driving());
+  w = ReadWorld(*f.shm);
+  CHECK(w && (w->flags & GXC_WORLD_ANCHOR) == 0 && f.bridge.Following());
+}
+
+TEST(in_game_rule)
+{
+  Fixture f;
+  u32 seq = 0;
+  auto frame = [&] { f.mem.PutU32(MBX + 12, ++seq); f.Tick(); };
+  frame();
+  frame();
+  CHECK(f.bridge.InGame());  // game_seq advancing, gravity (0,-1,0), no DEMO
+  for (int i = 0; i < 30; i++)
+    f.Tick();
+  CHECK(f.bridge.InGame());  // advanced within the last 30 ticks
+  f.Tick();
+  CHECK(!f.bridge.InGame());  // 31 ticks without a game frame: no Mario
+  frame();
+  CHECK(f.bridge.InGame());
+  f.mem.PutF32(MBX + 28, 0);  // title screen: no gravity
+  frame();
+  CHECK(!f.bridge.InGame());
+  f.mem.PutF32(MBX + 28, -1);
+  f.mem.PutU32(MBX + 48, GXC_MBX_GAME_DEMO);  // cutscene
+  frame();
+  CHECK(!f.bridge.InGame());
+  f.mem.PutU32(MBX + 48, 0);
+  frame();
+  CHECK(f.bridge.InGame());
 }
 
 TEST(no_mailbox_reports_unlinked)

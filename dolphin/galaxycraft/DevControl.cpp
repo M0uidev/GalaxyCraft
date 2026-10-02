@@ -73,13 +73,13 @@ DevCommand ParseLine(std::string_view line)
     return w.size() == 2 && (w[1] == "on" || w[1] == "off") ?
                DevCommand{DevCommand::Link, 0, 0, std::string(w[1])} :
                bad;
-  if (w[0] == "undrive")
-    return w.size() == 1 ? DevCommand{DevCommand::Undrive, 0, 0, {}} : bad;
-  if (w[0] == "drive")
+  if (w[0] == "unfollow")
+    return w.size() == 1 ? DevCommand{DevCommand::Unfollow, 0, 0, {}} : bad;
+  if (w[0] == "follow")
   {
-    if (w.size() != 7 && w.size() != 10)
+    if (w.size() != 4 && w.size() != 7)
       return bad;
-    DevCommand cmd{DevCommand::Drive, 0, 0, {}};
+    DevCommand cmd{DevCommand::Follow, 0, 0, {}};
     for (size_t i = 1; i < w.size(); i++)
     {
       const auto v = ParseFloat(w[i]);

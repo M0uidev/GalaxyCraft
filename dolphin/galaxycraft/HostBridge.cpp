@@ -15,6 +15,7 @@ namespace
 constexpr int SCAN_INTERVAL_TICKS = 60;
 constexpr float MATRIX_EPSILON = 1e-4f;
 constexpr size_t MBX_SIZE = sizeof(GxcMailbox);
+constexpr int IN_GAME_TICKS = 30;
 
 u32 BE32(const u8* p)
 {
@@ -43,15 +44,18 @@ Vec3 BEVec(const u8* p)
 
 struct HostBridge::Mailbox
 {
+  u32 game_seq;
   u32 scene_id;
   Vec3 gravity;
   Vec3 anchor;
+  u32 game_flags;
   std::vector<std::pair<u32, PartState>> parts;
 
   static Mailbox Parse(const u8* b)
   {
-    Mailbox m{BE32(b + offsetof(GxcMailbox, scene_id)), BEVec(b + offsetof(GxcMailbox, gravity)),
-              BEVec(b + offsetof(GxcMailbox, anchor_pos)), {}};
+    Mailbox m{BE32(b + offsetof(GxcMailbox, game_seq)), BE32(b + offsetof(GxcMailbox, scene_id)),
+              BEVec(b + offsetof(GxcMailbox, gravity)), BEVec(b + offsetof(GxcMailbox, anchor_pos)),
+              BE32(b + offsetof(GxcMailbox, game_flags)), {}};
     const u32 count =
         std::min<u32>(BE32(b + offsetof(GxcMailbox, part_count)), GXC_MBX_MAX_PARTS);
     for (u32 i = 0; i < count; i++)
@@ -98,25 +102,36 @@ void HostBridge::Tick(GuestMemory& mem)
     m_scan_cooldown = 0;
     m_scene.reset();
     m_parts.clear();
-    m_driving = false;
+    m_game_seq.reset();
   }
+  m_following = false;
   if (!m_mailbox && (m_scan_cooldown-- > 0 || !FindMailbox(mem) ||
                      !mem.Read(*m_mailbox, raw.data(), MBX_SIZE)))
   {
     m_shm.SetU32(offsetof(GxcHeader, host_flags), 0);
+    m_in_game = false;
     return;
   }
-  if (!m_link_enabled)
+
+  const Mailbox mbx = Mailbox::Parse(raw.data());
+  if (m_game_seq != mbx.game_seq)
+    m_ticks_since_game_frame = 0;
+  else
+    m_ticks_since_game_frame++;
+  m_game_seq = mbx.game_seq;
+  const bool no_gravity = mbx.gravity.x == 0 && mbx.gravity.y == 0 && mbx.gravity.z == 0;
+  m_in_game = m_ticks_since_game_frame <= IN_GAME_TICKS && !no_gravity &&
+              (mbx.game_flags & GXC_MBX_GAME_DEMO) == 0;
+
+  if (!m_minecraft_mode)
   {
     m_shm.SetU32(offsetof(GxcHeader, host_flags), 0);
-    m_driving = false;
     m_relink = true;
-    WriteDrive(mem, nullptr);
+    WriteFollow(mem, nullptr);
     return;
   }
   m_shm.SetU32(offsetof(GxcHeader, host_flags), 1);
 
-  const Mailbox mbx = Mailbox::Parse(raw.data());
   if (!m_scene || *m_scene != mbx.scene_id || m_relink)
     republish = true;
   m_relink = false;
@@ -137,25 +152,23 @@ void HostBridge::Tick(GuestMemory& mem)
   const u64 mod_hb = m_shm.GetU64(offsetof(GxcHeader, mod_heartbeat_ms));
   const bool mod_alive = mod_hb != 0 && now - mod_hb < GXC_HEARTBEAT_TIMEOUT_MS;
 
-  WorldState w{mbx.scene_id, m_frame, mbx.gravity,
-               m_anchored || !m_player ? mbx.anchor : m_player->pos,
-               m_anchored ? GXC_WORLD_ANCHOR : 0u};
+  // SMG2 owns the movement: the player follows Mario, so the query is always where Mario is.
+  WorldState w{mbx.scene_id, m_frame, mbx.gravity, mbx.anchor,
+               GXC_WORLD_FOLLOW | (m_anchored ? GXC_WORLD_ANCHOR : 0u)};
   WriteWorld(m_shm, w);
 
-  if (m_dev_drive)
+  if (m_dev_follow)
   {
-    PlayerState pose = *m_dev_drive;
+    PlayerState pose = *m_dev_follow;
     if (pose.up.x == 0 && pose.up.y == 0 && pose.up.z == 0)
-    {
-      const bool no_gravity = mbx.gravity.x == 0 && mbx.gravity.y == 0 && mbx.gravity.z == 0;
       pose.up = no_gravity ? Vec3{0, 1, 0} : Vec3{-mbx.gravity.x, -mbx.gravity.y, -mbx.gravity.z};
-    }
-    m_driving = true;
-    WriteDrive(mem, &pose);
+    pose.pos = mbx.anchor;
+    m_following = true;
+    WriteFollow(mem, &pose);
     return;
   }
-  m_driving = mod_alive && !m_anchored && m_player.has_value();
-  WriteDrive(mem, m_driving ? &*m_player : nullptr);
+  m_following = mod_alive;
+  WriteFollow(mem, m_following && m_player ? &*m_player : nullptr);
 }
 
 bool HostBridge::FindMailbox(GuestMemory& mem)
@@ -270,13 +283,13 @@ bool HostBridge::SendPart(GuestMemory& mem, u32 id, const PartState& p, bool wit
   return true;
 }
 
-void HostBridge::WriteDrive(GuestMemory& mem, const PlayerState* player)
+void HostBridge::WriteFollow(GuestMemory& mem, const PlayerState* player)
 {
   // host_flags .. eye_height is one contiguous block; host_seq is written last.
   constexpr size_t FIRST = offsetof(GxcMailbox, host_flags);
   constexpr size_t LAST = offsetof(GxcMailbox, eye_height) + 4;
   std::array<u8, LAST - FIRST> b{};
-  PutBE32(b.data(), player ? GXC_MBX_DRIVE : 0u);
+  PutBE32(b.data(), player ? GXC_MBX_FOLLOW : 0u);
   if (player)
   {
     const Vec3* vecs[] = {&player->pos, &player->look, &player->up};

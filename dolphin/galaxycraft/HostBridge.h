@@ -22,15 +22,19 @@ public:
   bool HasMailbox() const { return m_mailbox.has_value(); }
   std::optional<u32> MailboxAddress() const { return m_mailbox; }
 
-  // Development: drive the game from this pose instead of the mod's (nullopt: back to the mod).
-  // A zero up vector means "opposite of the game's gravity".
-  void SetDevDrive(std::optional<PlayerState> pose) { m_dev_drive = pose; }
+  // Development: follow with this look/up/FOV instead of the mod's, as if the mod were alive
+  // (nullopt: back to the mod). A zero up vector means "opposite of the game's gravity".
+  void SetDevFollow(std::optional<PlayerState> pose) { m_dev_follow = pose; }
 
-  // Off: the game is left alone (no DRIVE, no new parts, host_flags 0) so its menus can be used
-  // with the Wii Remote. Back on: the scene is republished and the mod re-anchored on Mario.
-  void SetLinkEnabled(bool enabled) { m_link_enabled = enabled; }
-  bool LinkEnabled() const { return m_link_enabled; }
-  bool Driving() const { return m_driving; }
+  // Minecraft mode: keyboard and mouse play Mario, the camera sits in his eyes (FOLLOW) and the
+  // player follows him. Wiimote mode: the game is left alone (no FOLLOW, no new parts,
+  // host_flags 0). Back to Minecraft: the scene is republished and the mod re-anchored on Mario.
+  void SetMinecraftMode(bool on) { m_minecraft_mode = on; }
+  bool MinecraftMode() const { return m_minecraft_mode; }
+  // Minecraft mode with a live mod (or a dev follow): the Wii Remote override belongs to us.
+  bool Following() const { return m_following; }
+  // Mario is playable: game frames within the last 30 ticks, gravity, no cutscene. Else a menu.
+  bool InGame() const { return m_in_game; }
 
 private:
   struct PartState
@@ -45,7 +49,7 @@ private:
   bool FindMailbox(GuestMemory& mem);
   void PublishParts(GuestMemory& mem, const Mailbox& mbx, bool republish);
   bool SendPart(GuestMemory& mem, u32 id, const PartState& p, bool with_kcl);
-  void WriteDrive(GuestMemory& mem, const PlayerState* player);
+  void WriteFollow(GuestMemory& mem, const PlayerState* player);
 
   Shm& m_shm;
   std::function<u64()> m_clock;
@@ -58,9 +62,12 @@ private:
   bool m_anchored = true;
   u64 m_seen_player_frame = 0;
   std::optional<PlayerState> m_player;
-  bool m_driving = false;
-  std::optional<PlayerState> m_dev_drive;
-  bool m_link_enabled = true;
+  bool m_following = false;
+  bool m_in_game = false;
+  std::optional<u32> m_game_seq;
+  int m_ticks_since_game_frame = 0;
+  std::optional<PlayerState> m_dev_follow;
+  bool m_minecraft_mode = true;
   bool m_relink = false;
   u32 m_host_seq = 0;
   u64 m_frame = 0;
