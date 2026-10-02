@@ -100,6 +100,12 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         return Optional.of(frame.toGal(vec(player.position())));
     }
 
+    /** The galaxy's "up" at the player (opposite of its gravity), if linked. */
+    public static Optional<Vector3d> galaxyUp() {
+        if (Minecraft.getInstance().player == null || frame == null || !bridge.linked()) return Optional.empty();
+        return Optional.of(frame.upGal());
+    }
+
     public static boolean linked() {
         return bridge.linked();
     }

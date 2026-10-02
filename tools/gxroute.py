@@ -5,7 +5,7 @@ Savestates hold the module's code, so after rebuilding syati/ the dev savestates
 the game has to be walked to the test stage again; these routes do that.
 
   gxroute.py new-game   title -> file 2 -> Start -> storybook intro (Mario controllable)
-  gxroute.py sky        from the intro to Sky Station, then save <userdir>/sky.sav
+  gxroute.py sky        from the intro to Sky Station, past its dialog; save <userdir>/sky.sav
 
 Every step prints the mailbox summary and leaves ScreenShots/SB4E01/route-N.png.
 """
@@ -115,6 +115,12 @@ def sky():
     _, (scene, grav) = mbx()
     if scene <= start_scene:
         raise SystemExit(f"sky: still in scene {scene}; check the route-N.png captures")
+    for _ in range(60):  # arrival dialog: until no cutscene owns Mario (game_flags bit 2)
+        if re.search(r"flags=0/", mbx()[0]):
+            break
+        press("A", 0.1, 1)
+    time.sleep(2)
+    checkpoint("free to walk")
     gx("ctl", f"save {USER_DIR / 'sky.sav'}", "--wait", "30")
 
 

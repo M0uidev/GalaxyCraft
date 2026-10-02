@@ -10,6 +10,14 @@ loom {
 			if (project.hasProperty("galaxycraftDemo")) {
 				vmArg "-Dgalaxycraft.demo=true"
 			}
+			if (project.hasProperty("galaxycraftHidden")) { // no window on the desktop
+				vmArg "-Dgalaxycraft.hidden=true"
+			}
+			if (project.hasProperty("galaxycraftGalaxy")) { // tools/gxe2e.sh: SMG2 in the dev Dolphin
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 		}
 	}
 
