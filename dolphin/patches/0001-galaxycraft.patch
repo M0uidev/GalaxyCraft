@@ -49,15 +49,16 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..d096888
+index 0000000..578c73a
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,284 @@
+@@ -0,0 +1,297 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
 +#include "Core/GalaxyCraft.h"
 +
++#include <atomic>
 +#include <chrono>
 +#include <filesystem>
 +#include <fstream>
@@ -139,6 +140,11 @@ index 0000000..d096888
 +  Memory::MemoryManager& m_mm;
 +};
 +
++// Diagnostics (ctl status); atomics because focus changes arrive on the Qt thread.
++std::atomic<int> s_focus_gained{0};
++std::atomic<int> s_focus_lost{0};
++std::atomic<int> s_link_toggles{0};
++
 +// Development control channel (tools/gxdev.py): commands in, results appended out.
 +constexpr const char* CTL_PATH = "/dev/shm/galaxycraft_ctl";
 +constexpr const char* CTL_OUT_PATH = "/dev/shm/galaxycraft_ctl.out";
@@ -195,10 +201,11 @@ index 0000000..d096888
 +    case gxc::DevCommand::Status:
 +      // Dolphin only reads controllers and hotkeys while these let it (Core::UpdateInputGate).
 +      AppendCtlOut(fmt::format("render_focus={} full_focus={} ui_blocks_input={} link={} mod_alive={} "
-+                               "driving={}\n",
++                               "driving={} focus_gained={} focus_lost={} link_toggles={}\n",
 +                               Host_RendererHasFocus(), Host_RendererHasFullFocus(),
 +                               Host_UIBlocksControllerState(), bridge.LinkEnabled(),
-+                               mod_alive, bridge.Driving()));
++                               mod_alive, bridge.Driving(), s_focus_gained.load(),
++                               s_focus_lost.load(), s_link_toggles.load()));
 +      break;
 +    case gxc::DevCommand::Undrive:
 +      bridge.SetDevDrive(std::nullopt);
@@ -285,8 +292,14 @@ index 0000000..d096888
 +  return s_state && s_state->bridge->LinkEnabled() && ModAlive(*s_state->shm);
 +}
 +
++void NoteRenderFocus(bool focus)
++{
++  (focus ? s_focus_gained : s_focus_lost)++;
++}
++
 +void ToggleLink()
 +{
++  s_link_toggles++;
 +  std::lock_guard lock(s_mutex);
 +  if (!s_state)
 +    return;
@@ -339,10 +352,10 @@ index 0000000..d096888
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..05f4fce
+index 0000000..2dc14e7
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,41 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -367,6 +380,9 @@ index 0000000..05f4fce
 +
 +// True while Minecraft is connected and the link is on, so keyboard and mouse belong to it.
 +bool InputActive();
++
++// Diagnostics for ctl status: Host::SetRenderFocus reports every focus change here.
++void NoteRenderFocus(bool focus);
 +
 +// Hotkey "GalaxyCraft: Toggle Minecraft Link" (Ctrl+G by default, under Hotkey Settings > Wii):
 +// hand the game to Minecraft or take it back (to use SMG2's menus with the Wii Remote).
@@ -422,6 +438,26 @@ index 6a1b754..662cd8f 100644
  
    HK_NEXT_WIIMOTE_PROFILE_1,
    HK_PREV_WIIMOTE_PROFILE_1,
+diff --git a/Source/Core/DolphinQt/Host.cpp b/Source/Core/DolphinQt/Host.cpp
+index e2f1b21..3075bed 100644
+--- a/Source/Core/DolphinQt/Host.cpp
++++ b/Source/Core/DolphinQt/Host.cpp
+@@ -19,6 +19,7 @@
+ #include "Core/Config/MainSettings.h"
+ #include "Core/ConfigManager.h"
+ #include "Core/Core.h"
++#include "Core/GalaxyCraft.h"
+ #include "Core/Debugger/PPCDebugInterface.h"
+ #include "Core/Host.h"
+ #include "Core/NetPlayProto.h"
+@@ -136,6 +137,7 @@ bool Host::GetRenderFullFocus()
+ 
+ void Host::SetRenderFocus(bool focus)
+ {
++  GalaxyCraft::NoteRenderFocus(focus);
+   m_render_focus = focus;
+   if (g_gfx && m_render_fullscreen && g_ActiveConfig.ExclusiveFullscreenEnabled())
+   {
 diff --git a/Source/Core/DolphinQt/HotkeyScheduler.cpp b/Source/Core/DolphinQt/HotkeyScheduler.cpp
 index 478454e..3a85248 100644
 --- a/Source/Core/DolphinQt/HotkeyScheduler.cpp
