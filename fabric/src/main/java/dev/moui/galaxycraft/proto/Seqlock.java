@@ -22,6 +22,11 @@ public final class Seqlock {
             return (flags & Layout.WORLD_ANCHOR) != 0;
         }
 
+        /** Minecraft mode: the player follows Mario at queryPos; SMG2 owns the movement. */
+        public boolean follow() {
+            return (flags & Layout.WORLD_FOLLOW) != 0;
+        }
+
         /** Real gravity to stand by (menus and SMG2's title screen have none). */
         public boolean hasGravity() {
             return gravity.lengthSquared() > 0.25; // the game publishes unit vectors or zero

@@ -4,7 +4,7 @@ package dev.moui.galaxycraft.proto;
 public final class Layout {
     public static final String SHM_PATH = "/dev/shm/galaxycraft_v1";
     public static final int MAGIC = 0x52435847; // "GXCR"
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
     public static final int MOD_VERSION = 1;
 
     public static final long OFF_HEADER = 0;
@@ -36,6 +36,7 @@ public final class Layout {
     public static final int PLAYER_ON_GROUND = 1;
     /** WorldState.flags: queryPos is the host's anchor (where the player is). */
     public static final int WORLD_ANCHOR = 1;
+    public static final int WORLD_FOLLOW = 2;
 
     private Layout() {}
 }

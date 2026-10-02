@@ -7,7 +7,7 @@ from collections import namedtuple
 
 SHM_PATH = "/dev/shm/galaxycraft_v1"
 MAGIC = 0x52435847  # "GXCR"
-VERSION = 1
+VERSION = 2
 
 OFF_HEADER = 0
 OFF_WORLD = 64
@@ -33,6 +33,7 @@ MSG_PAD = 0xFFFF
 
 PLAYER_ON_GROUND = 1
 WORLD_ANCHOR = 1  # WorldState.flags: query_pos is the host's anchor (where the player is)
+WORLD_FOLLOW = 2  # WorldState.flags: Minecraft mode, the player follows Mario (query_pos)
 
 _HEADER = struct.Struct("<IIIIQQII24x")
 _WORLD = struct.Struct("<IIQ3f3fI20x")

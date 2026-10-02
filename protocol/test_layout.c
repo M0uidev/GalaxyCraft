@@ -51,5 +51,6 @@ _Static_assert(offsetof(GxcMailbox, fov_y) == 92, "mbx.fov");
 _Static_assert(offsetof(GxcMailbox, part_count) == 100, "mbx.part_count");
 _Static_assert(offsetof(GxcMailbox, parts) == 104, "mbx.parts");
 _Static_assert(GXC_MBX_DRIVE == 1u && GXC_MBX_GAME_DRIVEN == 1u && GXC_MBX_GAME_DEMO == 2u, "mbx flags");
+_Static_assert(GXC_VERSION == 2u && GXC_MBX_FOLLOW == 2u && GXC_WORLD_FOLLOW == 2u, "v2");
 
 int main(void) { puts("OK"); return 0; }

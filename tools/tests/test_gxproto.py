@@ -24,6 +24,10 @@ class LayoutTest(unittest.TestCase):
         self.assertEqual(gxproto.OFF_OVERLAY, 4268032)
         self.assertEqual(gxproto.TOTAL_SIZE, 29151264)
 
+    def test_v2_follow(self):
+        self.assertEqual(gxproto.VERSION, 2)
+        self.assertEqual(gxproto.WORLD_FOLLOW, 2)
+
 
 class RingTest(unittest.TestCase):
     def setUp(self):
@@ -89,7 +93,7 @@ class SeqlockTest(unittest.TestCase):
         gxproto.init_host(self.shm)
         h = gxproto.read_header(self.shm)
         self.assertEqual(h.magic, gxproto.MAGIC)
-        self.assertEqual(h.version, 1)
+        self.assertEqual(h.version, 2)
         self.assertEqual(h.host_pid, os.getpid())
         self.assertGreater(h.host_heartbeat_ms, 0)
 
