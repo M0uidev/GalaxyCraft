@@ -151,6 +151,8 @@ typedef struct {
 #define GXC_MBX_VERSION 1u
 #define GXC_MBX_MAX_PARTS 64
 #define GXC_MBX_DRIVE 1u /* host_flags: the mod drives the player (Mario is a puppet) */
+#define GXC_MBX_GAME_DRIVEN 1u /* game_flags: Mario is a puppet this frame */
+#define GXC_MBX_GAME_DEMO 2u   /* game_flags: a cutscene owns Mario and the camera */
 
 typedef struct {
   uint32_t part_id;
@@ -167,7 +169,7 @@ typedef struct {
   uint32_t scene_id;
   float gravity[3];    /* game: gravity at player_pos (or at Mario when not driven) */
   float anchor_pos[3]; /* game: Mario's position */
-  uint32_t game_flags;
+  uint32_t game_flags; /* GXC_MBX_GAME_* */
   uint32_t host_flags; /* GXC_MBX_DRIVE */
   float player_pos[3]; /* host: feet position, galaxy units */
   float look[3];

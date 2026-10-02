@@ -5,7 +5,7 @@ Never touches ~/.config/dolphin-emu or the user's screen: Dolphin gets its own u
 (~/.local/share/galaxycraft-dev, seeded from tools/dolphin-dev/), runs on the headless platform,
 and takes screenshots itself. The Wii Remote reads the FIFO <userdir>/Pipes/gxpad.
 
-  gxdev.py start [--gui] [--speed S]   boot syati/build/galaxycraft.json (S: 1 normal, 0 unlimited)
+  gxdev.py start [--gui] [--speed S] [--gdb]   boot syati/build/galaxycraft.json (S: 1 normal, 0 unlimited)
   gxdev.py stop
   gxdev.py ctl "mbx; shot boot" [--wait S]   dev control channel (see DevControl.h)
   gxdev.py pad "PRESS A; RELEASE A"          raw Pipes commands
@@ -61,7 +61,7 @@ def running_pid():
         return None
 
 
-def start(gui, speed):
+def start(gui, speed, gdb=False):
     if running_pid():
         die("already running (gxdev.py stop first)")
     if not DESCRIPTOR.exists():
@@ -71,6 +71,11 @@ def start(gui, speed):
     cmd = [str(exe), "-u", str(USER_DIR), "-e", str(DESCRIPTOR)]
     if not gui:
         cmd[1:1] = ["-p", "headless"]
+    if gdb:  # backtrace of every thread into the log if Dolphin crashes
+        # Fastmem faults on purpose (SIGSEGV, handled by the JIT); a fault it cannot handle is
+        # re-raised from MemTools' handler, so stop at raise() instead.
+        cmd = ["gdb", "-batch", "-ex", "handle SIGSEGV nostop noprint pass", "-ex", "break raise",
+               "-ex", "run", "-ex", "thread apply all bt 16", "--args", *cmd]
     env = dict(os.environ, GALAXYCRAFT="1")
     CTL.unlink(missing_ok=True)
     with open(LOG_FILE, "w") as log:
@@ -146,7 +151,7 @@ def main(argv):
     op, args = argv[1], argv[2:]
     if op == "start":
         speed = float(args[args.index("--speed") + 1]) if "--speed" in args else None
-        start("--gui" in args, speed)
+        start("--gui" in args, speed, "--gdb" in args)
     elif op == "stop":
         stop()
     elif op == "ctl" and args:

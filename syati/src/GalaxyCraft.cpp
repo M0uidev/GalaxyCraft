@@ -27,6 +27,9 @@ struct Debug
   u32 first_part;
   u32 first_kcl;
   u32 driven;
+  u32 mario_height_x100;  // 200 * |center - feet|: Mario's height in units, times 100
+  u32 demo;
+  u32 head_height_x100;  // 100 * height of the model's "Head" joint above the feet
 };
 
 struct Published
@@ -49,6 +52,7 @@ const u32 HOST_TIMEOUT_FRAMES = 60;
 
 gxc::PartCandidate gCandidates[MAX_CANDIDATES];
 bool gDriven = false;
+bool gDemo = false;  // a cutscene owns Mario and the camera this frame
 u32 gLastHostSeq = 0;
 u32 gFramesSinceHost = 0;
 
@@ -207,10 +211,24 @@ void MarioMovement(void* self)
   }
   gDriven = drive;
   gOut.dbg.driven = drive;
-  if (drive)
+  gDemo = MR::isDemoActive();
+  gOut.dbg.demo = gDemo;
+  if (drive && !gDemo)
     MR::setPlayerPos(TVec3f(gOut.mbx.player_pos[0], gOut.mbx.player_pos[1], gOut.mbx.player_pos[2]));
 
   const TVec3f* mario = MR::getPlayerPos();
+  const TVec3f* center = MR::getPlayerCenterPos();
+  const f32 half[3] = {center->x - mario->x, center->y - mario->y, center->z - mario->z};
+  MtxPtr head = MR::getJointMtx(static_cast<const LiveActor*>(self), "Head");
+  if (IsRam(reinterpret_cast<u32>(head)))
+  {
+    const f32 up[3] = {-gOut.mbx.gravity[0], -gOut.mbx.gravity[1], -gOut.mbx.gravity[2]};
+    const f32 h = (head[0][3] - mario->x) * up[0] + (head[1][3] - mario->y) * up[1] +
+                  (head[2][3] - mario->z) * up[2];
+    gOut.dbg.head_height_x100 = static_cast<u32>(h * 100.f);
+  }
+  gOut.dbg.mario_height_x100 =
+      static_cast<u32>(200.f * gxc::Sqrt(half[0] * half[0] + half[1] * half[1] + half[2] * half[2]));
   gOut.mbx.anchor_pos[0] = mario->x, gOut.mbx.anchor_pos[1] = mario->y, gOut.mbx.anchor_pos[2] = mario->z;
   f32 query[3];
   Copy3(query, drive ? gOut.mbx.player_pos : gOut.mbx.anchor_pos);
@@ -222,14 +240,14 @@ void MarioMovement(void* self)
   gOut.mbx.gravity[0] = gravity.x, gOut.mbx.gravity[1] = gravity.y, gOut.mbx.gravity[2] = gravity.z;
 
   PublishParts(query);
-  gOut.mbx.game_flags = drive ? 1u : 0u;
+  gOut.mbx.game_flags = (drive ? GXC_MBX_GAME_DRIVEN : 0u) | (gDemo ? GXC_MBX_GAME_DEMO : 0u);
   gOut.mbx.game_seq++;  // last: the host reads a consistent frame when this moves
 }
 
 void CameraMovement(void* self)
 {
   movement__14CameraDirectorFv(self);
-  if (!gDriven)
+  if (!gDriven || gDemo)  // cutscenes keep their own camera
     return;
   const f32* up = gOut.mbx.up;
   const f32 eye[3] = {gOut.mbx.player_pos[0] + up[0] * gOut.mbx.eye_height,
