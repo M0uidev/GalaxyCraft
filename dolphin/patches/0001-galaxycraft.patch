@@ -481,7 +481,7 @@ index 478454e..3a85248 100644
  
        if (IsHotkey(HK_PREV_WIIMOTE_PROFILE_1))
 diff --git a/Source/Core/DolphinQt/RenderWidget.cpp b/Source/Core/DolphinQt/RenderWidget.cpp
-index 49680b8..289fa72 100644
+index 49680b8..69f93d9 100644
 --- a/Source/Core/DolphinQt/RenderWidget.cpp
 +++ b/Source/Core/DolphinQt/RenderWidget.cpp
 @@ -12,6 +12,8 @@
@@ -511,7 +511,7 @@ index 49680b8..289fa72 100644
    PassEventToPresenter(event);
  
    switch (event->type())
-@@ -511,6 +517,56 @@ bool RenderWidget::event(QEvent* event)
+@@ -511,6 +517,62 @@ bool RenderWidget::event(QEvent* event)
    return QWidget::event(event);
  }
  
@@ -519,6 +519,12 @@ index 49680b8..289fa72 100644
 +// the mouse as relative motion, re-centering the hidden cursor. Escape still reaches Dolphin.
 +bool RenderWidget::PassEventToGalaxyCraft(QEvent* event)
 +{
++  // Under some XWayland compositors (Hyprland) a click focuses this window without Qt ever
++  // hearing about it, so Dolphin never feels focused and ignores controllers and hotkeys.
++  // Asking for activation on click brings Qt (and Host::SetRenderFocus) back in line.
++  if (event->type() == QEvent::MouseButtonPress && !isActiveWindow())
++    activateWindow();
++
 +  const bool active = GalaxyCraft::InputActive();
 +  if (active != m_galaxycraft_input)
 +  {
