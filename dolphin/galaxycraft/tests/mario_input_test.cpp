@@ -84,6 +84,14 @@ TEST(center_ir_only_in_game)
   CHECK(!in.Update(Keys{}.bits, 0, false).center_ir);
 }
 
+TEST(galaxy_view_frees_pointer_and_left_click_only_shakes)
+{
+  // SMG2's own camera: the mouse is the pointer, but this is still play, not a menu.
+  MarioInput in;
+  const WiimoteState s = in.Update(Keys{}.bits, MOUSE_LEFT, true, true);
+  CHECK(!s.center_ir && s.shake && !s.a);
+}
+
 TEST(mode_switch_releases_everything)
 {
   MarioInput in;

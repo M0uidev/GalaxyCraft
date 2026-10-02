@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..aea68c9
+index 0000000..215c213
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,432 @@
+@@ -0,0 +1,434 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -250,7 +250,7 @@ index 0000000..aea68c9
 +  {
 +    const u8* keys = state.dev_keys ? state.dev_keys->first.data() : state.keys;
 +    const u32 buttons = state.dev_keys ? state.dev_keys->second : state.buttons;
-+    pad = state.mario.Update(keys, buttons, state.bridge->InGame());
++    pad = state.mario.Update(keys, buttons, state.bridge->InGame(), state.bridge->GalaxyView());
 +  }
 +  std::lock_guard lock(s_pad_mutex);
 +  s_pad = pad;
@@ -414,8 +414,10 @@ index 0000000..aea68c9
 +  if (!active)
 +    return false;
 +  s_xinput_updates++;
-+  // In SMG2's menus the mouse is the Wii Remote pointer: Minecraft does not turn with it.
-+  const bool capture = s_state->bridge->Following() && s_state->bridge->InGame();
++  // In SMG2's menus and its own camera (Galaxy view) the mouse is the Wii Remote pointer:
++  // Minecraft does not turn with it.
++  const bool capture = s_state->bridge->Following() && s_state->bridge->InGame() &&
++                       !s_state->bridge->GalaxyView();
 +  if (capture && (dx != 0 || dy != 0))
 +    s_state->input->MouseDelta(dx, dy);
 +  if (dz != 0)
@@ -442,7 +444,7 @@ index 0000000..aea68c9
 +{
 +  std::lock_guard lock(s_mutex);
 +  return s_state && s_state->bridge->Following() && s_state->bridge->InGame() &&
-+         ModAlive(*s_state->shm);
++         !s_state->bridge->GalaxyView() && ModAlive(*s_state->shm);
 +}
 +
 +bool BlocksStopHotkey()

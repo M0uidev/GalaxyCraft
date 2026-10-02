@@ -39,9 +39,10 @@ public:
   // Frames a click keeps shaking, so a quick click still reads as a spin.
   static constexpr int SHAKE_MIN_FRAMES = 6;
 
-  // keys: SDL scancode bitmap (64 bytes); buttons: protocol mouse mask; in_game: game/menu rule.
+  // keys: SDL scancode bitmap (64 bytes); buttons: protocol mouse mask; in_game: game/menu rule;
+  // free_pointer: the Galaxy view, where the mouse points even while playing.
   // Called once per Wii Remote frame.
-  WiimoteState Update(const u8 keys[64], u32 buttons, bool in_game);
+  WiimoteState Update(const u8 keys[64], u32 buttons, bool in_game, bool free_pointer = false);
   // Mode switch: everything released, counters cleared.
   void Reset();
 

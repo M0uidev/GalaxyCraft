@@ -12,7 +12,7 @@ bool Down(const u8 keys[64], int scancode)
 }
 }  // namespace
 
-WiimoteState MarioInput::Update(const u8 keys[64], u32 buttons, bool in_game)
+WiimoteState MarioInput::Update(const u8 keys[64], u32 buttons, bool in_game, bool free_pointer)
 {
   WiimoteState s;
   float x = static_cast<float>(Down(keys, SC_D)) - static_cast<float>(Down(keys, SC_A));
@@ -39,7 +39,7 @@ WiimoteState MarioInput::Update(const u8 keys[64], u32 buttons, bool in_game)
   if (m_shake_frames > 0)
     m_shake_frames--;
 
-  s.center_ir = in_game;
+  s.center_ir = in_game && !free_pointer;
   return s;
 }
 
