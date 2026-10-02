@@ -11,5 +11,9 @@ float Sqrt(float x);
 // player's feet (eyes in first person, behind or in front in third).
 void CameraEye(const float feet[3], const float offset[3], float out[3]);
 
+// Whether Mario's model (Steve) is drawn: everywhere but first person, where the camera is in
+// his eyes; cutscenes always show him.
+bool MarioVisible(bool following, bool demo, bool third_person);
+
 void LookAtView(const float eye[3], const float look[3], const float up[3], float out[12]);
 }  // namespace gxc

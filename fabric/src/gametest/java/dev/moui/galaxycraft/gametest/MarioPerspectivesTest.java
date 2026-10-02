@@ -16,12 +16,13 @@ import org.joml.Vector3d;
  * End to end against the real game, only with -Dgalaxycraft.galaxy=true (tools/gxe2e.sh): the dev
  * Dolphin (tools/gxdev.py) runs SMG2 at the Sky Station savestate in Mario mode. F5 goes through
  * the four perspectives and SMG2's camera goes with them: Minecraft's camera offset in the first
- * three, the game's own camera (and the Galaxy view flag) in the fourth.
+ * three, the game's own camera (and the Galaxy view flag) in the fourth; Steve is drawn by SMG2
+ * outside first person.
  */
 public final class MarioPerspectivesTest implements FabricClientGameTest {
     private static final Pattern MBX = Pattern.compile("^at=([0-9a-f]+).* flags=(\\d+)/(\\d+) ", Pattern.MULTILINE);
     private static final int MBX_HOST_FLAGS = 52, MBX_LOOK = 68, MBX_CAM_OFFSET = 100;
-    private static final int FOLLOW = 2, GALAXY_VIEW = 4;
+    private static final int FOLLOW = 2, GALAXY_VIEW = 4, THIRD_PERSON = 8;
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
@@ -41,6 +42,7 @@ public final class MarioPerspectivesTest implements FabricClientGameTest {
 
             f5(ctx);
             check(view(ctx) == View.BACK, "F5: third person behind");
+            check(hostFlags() == (FOLLOW | THIRD_PERSON), "behind: SMG2 draws Steve");
             Vector3d back = peekVec(MBX_CAM_OFFSET);
             check(back.length() > 250, "behind: camera " + back.length() + " units from the feet");
             Vector3d lookBack = peekVec(MBX_LOOK);
@@ -54,9 +56,7 @@ public final class MarioPerspectivesTest implements FabricClientGameTest {
 
             f5(ctx);
             check(view(ctx) == View.GALAXY, "F5: the Galaxy view");
-            check(hostFlags() == (FOLLOW | GALAXY_VIEW), "Galaxy view: FOLLOW and GALAXY_VIEW in the mailbox");
-            check(ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyCamera(new Vector3d()).isPresent()),
-                    "Galaxy view: SMG2's camera reaches Minecraft");
+            check(hostFlags() == (FOLLOW | GALAXY_VIEW | THIRD_PERSON), "Galaxy view: the game's camera, Steve drawn");
             gxdev("ctl", "shot e2e-view-galaxy");
             gxdev("ctl", "keys w");
             ctx.waitTicks(30);

@@ -24,7 +24,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.lwjgl.sdl.SDLVideo;
 
@@ -51,13 +50,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static boolean following;
     /** Where the player goes at the start of its own tick (after its old position is saved). */
     private static Vector3d followTarget;
-    /** F5 went past THIRD_PERSON_FRONT: SMG2's own camera, Minecraft drawn from it. */
+    /** F5 went past THIRD_PERSON_FRONT: SMG2's own camera (Minecraft only draws the HUD). */
     private static boolean galaxyView;
     /** The camera as last drawn, galaxy space: what SMG2's camera copies outside the Galaxy view. */
     private static Vector3d camOffsetGal, camLookGal, camUpGal;
-
-    /** Minecraft's camera for the Galaxy view: SMG2's, placed relative to Steve as drawn. */
-    public record GalaxyCamera(Vector3d pos, Quaternionf rotation, Vector3d forward, float fovY) {}
 
     @Override
     public void onInitializeClient() {
@@ -234,21 +230,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         sendPose(client);
     }
 
-    /** Start of the local player's own tick: Mario mode moves and turns Steve here. */
+    /** Start of the local player's own tick: Mario mode moves the player here. */
     public static void onPlayerTick(LocalPlayer player) {
         if (followTarget != null) {
             player.setPos(followTarget.x, followTarget.y, followTarget.z);
             followTarget = null;
-        }
-        Optional<Seqlock.GameCamera> cam = galaxyCameraState();
-        if (cam.isPresent() && cam.get().marioFront().lengthSquared() > 0.25) {
-            // SMG2's camera: Steve faces where Mario does (the mouse is the star pointer).
-            Vector3d front = frame.dirToMc(cam.get().marioFront());
-            float yaw = (float) LookMath.yaw(front);
-            player.setYRot(yaw);
-            player.setXRot(0);
-            player.setYHeadRot(yaw);
-            player.setYBodyRot(yaw);
         }
     }
 
@@ -261,25 +247,6 @@ public final class GalaxyCraftClient implements ClientModInitializer {
 
     public static View view() {
         return View.of(Minecraft.getInstance().options.getCameraType().ordinal(), galaxyView && following);
-    }
-
-    private static Optional<Seqlock.GameCamera> galaxyCameraState() {
-        if (view() != View.GALAXY || frame == null) return Optional.empty();
-        return bridge.gameCamera().filter(Seqlock.GameCamera::valid);
-    }
-
-    /** Galaxy view with a camera from SMG2: where Minecraft draws from (else BACK as usual). */
-    public static Optional<GalaxyCamera> galaxyCamera(Vector3d steveFeetMc) {
-        return galaxyCameraState().map(c -> {
-            Vector3d forward = frame.dirToMc(c.camDir()).normalize();
-            return new GalaxyCamera(CameraMath.galaxyCamera(frame, steveFeetMc, c.marioPos(), c.camPos()),
-                    CameraMath.rotation(forward, frame.dirToMc(c.camUp())), forward, c.fovY());
-        });
-    }
-
-    /** A cutscene shows Mario with the game's camera: Steve is not drawn. */
-    public static boolean hideSteve() {
-        return following && bridge.gameCamera().map(Seqlock.GameCamera::demo).orElse(false);
     }
 
     /** Render thread, the camera placed: SMG2 copies it (outside the Galaxy view), sent right away. */

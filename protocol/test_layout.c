@@ -68,7 +68,8 @@ _Static_assert(offsetof(GxcMailbox, mario_front) == 152, "mbx.mario_front");
 _Static_assert(offsetof(GxcMailbox, part_count) == 164, "mbx.part_count");
 _Static_assert(offsetof(GxcMailbox, parts) == 168, "mbx.parts");
 _Static_assert(GXC_MBX_GAME_FOLLOWING == 1u && GXC_MBX_GAME_DEMO == 2u, "mbx flags");
-_Static_assert(GXC_MBX_FOLLOW == 2u && GXC_WORLD_FOLLOW == 2u && GXC_MBX_GALAXY_VIEW == 4u, "flags");
+_Static_assert(GXC_MBX_FOLLOW == 2u && GXC_WORLD_FOLLOW == 2u && GXC_MBX_GALAXY_VIEW == 4u &&
+               GXC_MBX_THIRD_PERSON == 8u, "flags");
 _Static_assert(GXC_VERSION == 3u && GXC_MBX_VERSION == 2u, "v3");
 
 int main(void) { puts("OK"); return 0; }

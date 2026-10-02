@@ -154,6 +154,14 @@ static void TestCameraEye()
   CHECK(Near(eye[0], 100) && Near(eye[1], 110) && Near(eye[2], -315));
 }
 
+static void TestMarioVisible()
+{
+  CHECK(MarioVisible(false, false, false));  // the game's own play (Wii Remote mode)
+  CHECK(!MarioVisible(true, false, false));  // first person
+  CHECK(MarioVisible(true, false, true));    // third person and the Galaxy view
+  CHECK(MarioVisible(true, true, false));    // cutscene
+}
+
 static void TestKclSize()
 {
   const u32 base = 0x80600000u;
@@ -185,6 +193,7 @@ int main()
   TestSqrt();
   TestKclSize();
   TestCameraEye();
+  TestMarioVisible();
   if (g_failures)
   {
     std::printf("%d of %d checks failed\n", g_failures, g_checks);

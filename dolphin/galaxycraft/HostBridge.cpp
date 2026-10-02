@@ -311,7 +311,10 @@ void HostBridge::WriteFollow(GuestMemory& mem, const PlayerState* player)
   constexpr size_t LAST = offsetof(GxcMailbox, cam_offset) + 12;
   std::array<u8, LAST - FIRST> b{};
   const bool galaxy = player && player->view == GXC_VIEW_GALAXY;
-  PutBE32(b.data(), player ? GXC_MBX_FOLLOW | (galaxy ? GXC_MBX_GALAXY_VIEW : 0u) : 0u);
+  const bool third = player && player->view != GXC_VIEW_FIRST;
+  PutBE32(b.data(), player ? GXC_MBX_FOLLOW | (galaxy ? GXC_MBX_GALAXY_VIEW : 0u) |
+                                 (third ? GXC_MBX_THIRD_PERSON : 0u) :
+                             0u);
   if (player)
   {
     Vec3 offset = player->cam_offset;

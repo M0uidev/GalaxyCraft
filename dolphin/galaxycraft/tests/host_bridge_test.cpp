@@ -220,7 +220,7 @@ TEST(follow_writes_camera_offset)
   f.Tick();
   f.ModReports(1, {10, 20, 30}, {0, 130, -320}, GXC_VIEW_BACK);
   f.Tick();
-  CHECK(f.mem.GetU32(MBX + 52) == GXC_MBX_FOLLOW);
+  CHECK(f.mem.GetU32(MBX + 52) == (GXC_MBX_FOLLOW | GXC_MBX_THIRD_PERSON));
   CHECK(f.mem.GetF32(MBX + offsetof(GxcMailbox, cam_offset) + 4) == 130.f);
   CHECK(f.mem.GetF32(MBX + offsetof(GxcMailbox, cam_offset) + 8) == -320.f);
   CHECK(!f.bridge.GalaxyView());
@@ -243,7 +243,7 @@ TEST(galaxy_view_flag)
   f.Tick();
   f.ModReports(1, {10, 20, 30}, {0, 162, 0}, GXC_VIEW_GALAXY);
   f.Tick();
-  CHECK(f.mem.GetU32(MBX + 52) == (GXC_MBX_FOLLOW | GXC_MBX_GALAXY_VIEW));
+  CHECK(f.mem.GetU32(MBX + 52) == (GXC_MBX_FOLLOW | GXC_MBX_GALAXY_VIEW | GXC_MBX_THIRD_PERSON));
   CHECK(f.bridge.GalaxyView());
   f.bridge.SetMinecraftMode(false);
   f.Tick();

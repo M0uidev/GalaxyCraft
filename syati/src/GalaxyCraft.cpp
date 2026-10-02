@@ -60,7 +60,7 @@ const u32 HOST_TIMEOUT_FRAMES = 60;
 gxc::PartCandidate gCandidates[MAX_CANDIDATES];
 bool gFollowing = false;
 bool gDemo = false;  // a cutscene owns Mario and the camera this frame
-// Mario is not drawn (following, outside cutscenes). MR::hidePlayer is no use: Mario then
+// Mario (Steve) is not drawn (first person, outside cutscenes). MR::hidePlayer is no use: Mario then
 // ignores the stick. Skipping MarioActor::draw leaves him playable, and his shadow stays.
 bool gHidden = false;
 // In Mario's eyes the game's near plane (made for a camera metres behind him) clips whatever is
@@ -219,8 +219,8 @@ void MarioMovement(void* self)
   gOut.dbg.following = gFollowing;
   gDemo = MR::isDemoActive();
   gOut.dbg.demo = gDemo;
-  // Cutscenes show Mario with the game's camera; first person hides him again afterwards.
-  gHidden = gFollowing && !gDemo;
+  // Steve (Mario's model) is hidden only in first person; cutscenes always show him.
+  gHidden = !gxc::MarioVisible(gFollowing, gDemo, (gOut.mbx.host_flags & GXC_MBX_THIRD_PERSON) != 0);
   gOut.dbg.star_pointer_valid = isStarPointerValid__2MRFl(0);
 
   const TVec3f* mario = MR::getPlayerPos();

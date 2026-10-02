@@ -180,7 +180,8 @@ typedef struct {
 #define GXC_MBX_VERSION 2u
 #define GXC_MBX_MAX_PARTS 64
 #define GXC_MBX_FOLLOW 2u /* host_flags: Minecraft mode, the camera sits in Mario's eyes */
-#define GXC_MBX_GALAXY_VIEW 4u /* host_flags: keep the game's camera (Mario still hidden) */
+#define GXC_MBX_GALAXY_VIEW 4u /* host_flags: keep the game's camera */
+#define GXC_MBX_THIRD_PERSON 8u /* host_flags: not first person, the model (Steve) is drawn */
 #define GXC_MBX_GAME_FOLLOWING 1u /* game_flags: Mario hidden, first-person camera this frame */
 #define GXC_MBX_GAME_DEMO 2u   /* game_flags: a cutscene owns Mario and the camera */
 

@@ -115,11 +115,6 @@ public final class BridgeClient {
         return linked() ? Seqlock.readInput(shm.seg()) : Optional.empty();
     }
 
-    /** SMG2's camera this frame (for the Galaxy view), if linked and published. */
-    public Optional<Seqlock.GameCamera> gameCamera() {
-        return linked() ? Seqlock.readGameCamera(shm.seg()) : Optional.empty();
-    }
-
     public void sendPlayer(Seqlock.PlayerOut p) {
         if (shm != null) Seqlock.writePlayer(shm.seg(), p);
     }

@@ -53,6 +53,11 @@ void CameraEye(const float feet[3], const float offset[3], float out[3])
     out[i] = feet[i] + offset[i];
 }
 
+bool MarioVisible(bool following, bool demo, bool third_person)
+{
+  return !following || demo || third_person;
+}
+
 void LookAtView(const float eye[3], const float look[3], const float up[3], float out[12])
 {
   // Rows are right, up', z = -look (GX cameras look down -z); translation is -R * eye.
