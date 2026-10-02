@@ -23,6 +23,7 @@ class ProtoTest {
         assertEquals(64, Layout.OFF_WORLD);
         assertEquals(128, Layout.OFF_PLAYER);
         assertEquals(224, Layout.OFF_INPUT);
+        assertEquals(320, Layout.OFF_GAMECAM);
         assertEquals(4096, Layout.OFF_RING_S2M);
         assertEquals(4198416, Layout.OFF_RING_M2S);
         assertEquals(4268032, Layout.OFF_OVERLAY);
@@ -43,7 +44,7 @@ class ProtoTest {
         var g = new Vector3d(0, -1, 0);
         assertTrue(new Seqlock.WorldState(1, 1, g, new Vector3d(), Layout.WORLD_FOLLOW).follow());
         assertFalse(new Seqlock.WorldState(1, 1, g, new Vector3d(), Layout.WORLD_ANCHOR).follow());
-        assertEquals(2, Layout.VERSION);
+        assertEquals(3, Layout.VERSION);
     }
 
     @Test void openMissingFileIsEmpty() {
@@ -54,13 +55,33 @@ class ProtoTest {
         Shm shm = Shm.create(dir.resolve("shm"));
         MemorySegment s = shm.seg();
         Seqlock.writePlayer(s, new Seqlock.PlayerOut(42, new Vector3d(1, 2, 3), new Vector3d(0, 0, -1),
-                new Vector3d(0, 1, 0), 70f, 162f, true));
+                new Vector3d(0, 1, 0), 70f, 162f, true, new Vector3d(0, 130, -320), Layout.VIEW_FRONT));
         assertEquals(2, s.get(I, 128));                 // seq even after one write
         assertEquals(1, s.get(I, 128 + 4));             // on ground flag
         assertEquals(42L, s.get(L, 128 + 8));
         assertEquals(2f, s.get(F, 128 + 16 + 4));       // pos.y
         assertEquals(-1f, s.get(F, 128 + 28 + 8));      // look.z
         assertEquals(162f, s.get(F, 128 + 56));         // eye height
+        assertEquals(-320f, s.get(F, 128 + 60 + 8));    // cam_offset.z
+        assertEquals(Layout.VIEW_FRONT, s.get(I, 128 + 72));
+    }
+
+    @Test void readGameCameraSlot() throws Exception {
+        MemorySegment s = Shm.create(dir.resolve("shm")).seg();
+        assertTrue(Seqlock.readGameCamera(s).isEmpty());
+        s.set(I, 320 + 4, Layout.GAMECAM_VALID);
+        s.set(F, 320 + 16 + 4, 500f);   // cam_pos.y
+        s.set(F, 320 + 28 + 8, -1f);    // cam_dir.z
+        s.set(F, 320 + 52, 45f);        // fov
+        s.set(F, 320 + 68, 1f);         // mario_front.x
+        s.set(I, 320, 2);
+        var c = Seqlock.readGameCamera(s).orElseThrow();
+        assertTrue(c.valid());
+        assertFalse(c.demo());
+        assertEquals(500, c.camPos().y);
+        assertEquals(-1, c.camDir().z);
+        assertEquals(45f, c.fovY());
+        assertEquals(1, c.marioFront().x);
     }
 
     @Test void readWorldAbsentUntilWritten() throws Exception {

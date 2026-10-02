@@ -25,7 +25,8 @@ class LayoutTest(unittest.TestCase):
         self.assertEqual(gxproto.TOTAL_SIZE, 29151264)
 
     def test_v2_follow(self):
-        self.assertEqual(gxproto.VERSION, 2)
+        self.assertEqual(gxproto.VERSION, 3)
+        self.assertEqual(gxproto.OFF_GAMECAM, 320)
         self.assertEqual(gxproto.WORLD_FOLLOW, 2)
 
 
@@ -81,6 +82,20 @@ class SeqlockTest(unittest.TestCase):
         self.assertEqual(p.pos, (1.0, 2.0, 3.0))
         self.assertTrue(p.on_ground)
 
+    def test_player_camera_fields(self):
+        gxproto.write_player(self.shm, frame_id=1, pos=(0, 0, 0), look=(0, 0, 1), up=(0, 1, 0), fov_y=70,
+                             eye=1, on_ground=False, cam_offset=(0, 130, -320), view=gxproto.VIEW_BACK)
+        p = gxproto.read_player(self.shm)
+        self.assertEqual((p.cam_offset, p.view), ((0.0, 130.0, -320.0), gxproto.VIEW_BACK))
+
+    def test_game_camera_roundtrip(self):
+        self.assertIsNone(gxproto.read_game_camera(self.shm))
+        gxproto.write_game_camera(self.shm, gxproto.GAMECAM_VALID, 5, (1, 2, 3), (0, 0, -1), (0, 1, 0), 45,
+                                  (4, 5, 6), (1, 0, 0))
+        c = gxproto.read_game_camera(self.shm)
+        self.assertEqual((c.flags, c.frame_id, c.cam_pos, c.fov_y, c.mario_front),
+                         (gxproto.GAMECAM_VALID, 5, (1.0, 2.0, 3.0), 45.0, (1.0, 0.0, 0.0)))
+
     def test_player_absent_before_first_write(self):
         self.assertIsNone(gxproto.read_player(self.shm))
 
@@ -93,7 +108,7 @@ class SeqlockTest(unittest.TestCase):
         gxproto.init_host(self.shm)
         h = gxproto.read_header(self.shm)
         self.assertEqual(h.magic, gxproto.MAGIC)
-        self.assertEqual(h.version, 2)
+        self.assertEqual(h.version, 3)
         self.assertEqual(h.host_pid, os.getpid())
         self.assertGreater(h.host_heartbeat_ms, 0)
 

@@ -36,8 +36,22 @@ public final class Seqlock {
     /** Keys as an SDL-scancode-indexed bitmap; mouse and wheel are accumulated since the host started. */
     public record InputState(int buttons, double mouseX, double mouseY, double wheel, byte[] keys) {}
 
+    /** look/up are the camera's; camOffset is the camera minus pos (galaxy units); view is Layout.VIEW_*. */
     public record PlayerOut(long frameId, Vector3d pos, Vector3d look, Vector3d up, float fovY, float eye,
-            boolean onGround) {}
+            boolean onGround, Vector3d camOffset, int view) {}
+
+    /** SMG2's camera and Mario from one game frame (galaxy space). */
+    public record GameCamera(int flags, long frameId, Vector3d camPos, Vector3d camDir, Vector3d camUp, float fovY,
+            Vector3d marioPos, Vector3d marioFront) {
+        public boolean valid() {
+            return (flags & Layout.GAMECAM_VALID) != 0;
+        }
+
+        /** A cutscene shows Mario himself. */
+        public boolean demo() {
+            return (flags & Layout.GAMECAM_DEMO) != 0;
+        }
+    }
 
     private Seqlock() {}
 
@@ -58,6 +72,20 @@ public final class Seqlock {
             var w = new WorldState(s.get(INT, o + 4), s.get(LONG, o + 8), vec(s, o + 16), vec(s, o + 28), s.get(INT, o + 40));
             VarHandle.acquireFence();
             if (getAcquire(s, o) == s1) return Optional.of(w);
+        }
+        return Optional.empty();
+    }
+
+    public static Optional<GameCamera> readGameCamera(MemorySegment s) {
+        long o = Layout.OFF_GAMECAM;
+        for (int attempt = 0; attempt < 100; attempt++) {
+            int s1 = getAcquire(s, o);
+            if (s1 == 0) return Optional.empty();
+            if ((s1 & 1) != 0) continue;
+            var c = new GameCamera(s.get(INT, o + 4), s.get(LONG, o + 8), vec(s, o + 16), vec(s, o + 28),
+                    vec(s, o + 40), s.get(FLOAT, o + 52), vec(s, o + 56), vec(s, o + 68));
+            VarHandle.acquireFence();
+            if (getAcquire(s, o) == s1) return Optional.of(c);
         }
         return Optional.empty();
     }
@@ -90,6 +118,8 @@ public final class Seqlock {
         putVec(s, o + 40, p.up());
         s.set(FLOAT, o + 52, p.fovY());
         s.set(FLOAT, o + 56, p.eye());
+        putVec(s, o + 60, p.camOffset());
+        s.set(INT, o + 72, p.view());
         setRelease(s, o, seq + 2);
     }
 

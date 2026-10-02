@@ -1,4 +1,4 @@
-"""Python mirror of protocol/galaxycraft_protocol.h (shared memory layout v1)."""
+"""Python mirror of protocol/galaxycraft_protocol.h (shared memory layout v3)."""
 import mmap
 import os
 import struct
@@ -7,12 +7,13 @@ from collections import namedtuple
 
 SHM_PATH = "/dev/shm/galaxycraft_v1"
 MAGIC = 0x52435847  # "GXCR"
-VERSION = 2
+VERSION = 3
 
 OFF_HEADER = 0
 OFF_WORLD = 64
 OFF_PLAYER = 128
 OFF_INPUT = 224
+OFF_GAMECAM = 320
 RING_S2M_OFF = 4096
 RING_S2M_CAP = 4 * 1024 * 1024
 RING_M2S_OFF = RING_S2M_OFF + 16 + RING_S2M_CAP
@@ -34,10 +35,14 @@ MSG_PAD = 0xFFFF
 PLAYER_ON_GROUND = 1
 WORLD_ANCHOR = 1  # WorldState.flags: query_pos is the host's anchor (where the player is)
 WORLD_FOLLOW = 2  # WorldState.flags: Minecraft mode, the player follows Mario (query_pos)
+VIEW_FIRST, VIEW_BACK, VIEW_FRONT, VIEW_GALAXY = 0, 1, 2, 3  # PlayerState.view (F5)
+GAMECAM_VALID = 1
+GAMECAM_DEMO = 2
 
 _HEADER = struct.Struct("<IIIIQQII24x")
 _WORLD = struct.Struct("<IIQ3f3fI20x")
-_PLAYER = struct.Struct("<IIQ3f3f3fff36x")
+_PLAYER = struct.Struct("<IIQ3f3f3fff3fI20x")
+_GAMECAM = struct.Struct("<IIQ3f3f3ff3f3f16x")
 _RING = struct.Struct("<IIII")
 _MSG = struct.Struct("<HHI")
 PART_UPSERT = struct.Struct("<II12f")
@@ -45,7 +50,8 @@ KCL_CHUNK = struct.Struct("<III")
 
 Header = namedtuple("Header", "magic version host_pid mod_pid host_heartbeat_ms mod_heartbeat_ms host_flags mod_flags")
 WorldState = namedtuple("WorldState", "scene_id frame_id gravity query_pos flags")
-PlayerState = namedtuple("PlayerState", "frame_id pos look up fov_y eye_height on_ground")
+PlayerState = namedtuple("PlayerState", "frame_id pos look up fov_y eye_height on_ground cam_offset view")
+GameCamera = namedtuple("GameCamera", "flags frame_id cam_pos cam_dir cam_up fov_y mario_pos mario_front")
 
 
 def now_ms():
@@ -121,9 +127,9 @@ def read_world(shm):
     return WorldState(f[0], f[1], tuple(f[2:5]), tuple(f[5:8]), f[8])
 
 
-def write_player(shm, frame_id, pos, look, up, fov_y, eye, on_ground):
+def write_player(shm, frame_id, pos, look, up, fov_y, eye, on_ground, cam_offset=(0, 0, 0), view=VIEW_FIRST):
     flags = PLAYER_ON_GROUND if on_ground else 0
-    _seq_write(shm, OFF_PLAYER, _PLAYER, flags, frame_id, *pos, *look, *up, fov_y, eye)
+    _seq_write(shm, OFF_PLAYER, _PLAYER, flags, frame_id, *pos, *look, *up, fov_y, eye, *cam_offset, view)
 
 
 def read_player(shm):
@@ -132,7 +138,20 @@ def read_player(shm):
         return None
     flags = f[0]
     return PlayerState(f[1], tuple(f[2:5]), tuple(f[5:8]), tuple(f[8:11]), f[11], f[12],
-                       bool(flags & PLAYER_ON_GROUND))
+                       bool(flags & PLAYER_ON_GROUND), tuple(f[13:16]), f[16])
+
+
+def write_game_camera(shm, flags, frame_id, cam_pos, cam_dir, cam_up, fov_y, mario_pos, mario_front):
+    _seq_write(shm, OFF_GAMECAM, _GAMECAM, flags, frame_id, *cam_pos, *cam_dir, *cam_up, fov_y,
+               *mario_pos, *mario_front)
+
+
+def read_game_camera(shm):
+    f = _seq_read(shm, OFF_GAMECAM, _GAMECAM)
+    if f is None:
+        return None
+    return GameCamera(f[0], f[1], tuple(f[2:5]), tuple(f[5:8]), tuple(f[8:11]), f[11],
+                      tuple(f[12:15]), tuple(f[15:18]))
 
 
 def _align8(n):

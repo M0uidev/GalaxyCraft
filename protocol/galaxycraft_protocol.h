@@ -1,5 +1,5 @@
 /*
- * GalaxyCraft shared-memory protocol, version 1.
+ * GalaxyCraft shared-memory protocol, version 3.
  *
  * Source of truth for the layout of /dev/shm/galaxycraft_v1. Mirrors:
  *   tools/gxproto.py
@@ -16,13 +16,14 @@
 
 #define GXC_SHM_NAME "/galaxycraft_v1"
 #define GXC_MAGIC 0x52435847u /* "GXCR" */
-#define GXC_VERSION 2u
+#define GXC_VERSION 3u
 
 /* Regions (byte offsets from the start of the mapping). */
 #define GXC_OFF_HEADER 0
 #define GXC_OFF_WORLD 64
 #define GXC_OFF_PLAYER 128
 #define GXC_OFF_INPUT 224
+#define GXC_OFF_GAMECAM 320
 #define GXC_OFF_RING_S2M 4096
 #define GXC_RING_S2M_CAP (4u * 1024u * 1024u)
 #define GXC_OFF_RING_M2S (GXC_OFF_RING_S2M + 16 + GXC_RING_S2M_CAP)
@@ -81,8 +82,33 @@ typedef struct { /* M -> S */
   float up[3];   /* galaxy space unit vector */
   float fov_y;   /* degrees */
   float eye_height; /* galaxy units above pos */
-  uint8_t pad[36];
+  float cam_offset[3]; /* camera minus pos, galaxy units (FIRST/BACK/FRONT) */
+  uint32_t view;       /* GXC_VIEW_*: look/up above are the camera's */
+  uint8_t pad[20];
 } GxcPlayerState;
+
+/* Perspective chosen with F5 (PlayerState.view). */
+#define GXC_VIEW_FIRST 0u
+#define GXC_VIEW_BACK 1u
+#define GXC_VIEW_FRONT 2u
+#define GXC_VIEW_GALAXY 3u /* SMG2's own camera; Minecraft follows it */
+
+/* S -> M: SMG2's camera and Mario, from the same game frame (Galaxy view). */
+typedef struct {
+  uint32_t seq;
+  uint32_t flags; /* GXC_GAMECAM_* */
+  uint64_t frame_id;
+  float cam_pos[3];
+  float cam_dir[3]; /* unit, where the camera looks */
+  float cam_up[3];
+  float fov_y;      /* degrees */
+  float mario_pos[3];
+  float mario_front[3];
+  uint8_t pad[16];
+} GxcGameCamera;
+
+#define GXC_GAMECAM_VALID 1u
+#define GXC_GAMECAM_DEMO 2u /* a cutscene shows Mario: Steve is not drawn */
 
 typedef struct { /* S -> M */
   uint32_t seq;
@@ -150,9 +176,10 @@ typedef struct {
  * Dolphin finds it by scanning MEM1/MEM2 for the magic.
  */
 #define GXC_MBX_MAGIC "GXCRMBX1"
-#define GXC_MBX_VERSION 1u
+#define GXC_MBX_VERSION 2u
 #define GXC_MBX_MAX_PARTS 64
 #define GXC_MBX_FOLLOW 2u /* host_flags: Minecraft mode, the camera sits in Mario's eyes */
+#define GXC_MBX_GALAXY_VIEW 4u /* host_flags: keep the game's camera (Mario still hidden) */
 #define GXC_MBX_GAME_FOLLOWING 1u /* game_flags: Mario hidden, first-person camera this frame */
 #define GXC_MBX_GAME_DEMO 2u   /* game_flags: a cutscene owns Mario and the camera */
 
@@ -178,6 +205,12 @@ typedef struct {
   float up[3];
   float fov_y;
   float eye_height;
+  float cam_offset[3]; /* host: camera minus Mario's feet (FOLLOW without GALAXY_VIEW) */
+  float cam_pos[3];    /* game: its camera this frame */
+  float cam_dir[3];
+  float cam_up[3];
+  float cam_fov;
+  float mario_front[3]; /* game: where Mario faces */
   uint32_t part_count; /* <= GXC_MBX_MAX_PARTS */
   GxcMbxPart parts[GXC_MBX_MAX_PARTS];
 } GxcMailbox;

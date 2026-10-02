@@ -193,9 +193,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         LocalPlayer player = client.player;
         if (player == null || frame == null || !bridge.linked()) return;
         Vector3d look = LookMath.direction(player.getYRot(), player.getXRot());
+        float eye = (float) (player.getEyeHeight() / GravityFrame.SCALE);
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())),
-                frame.dirToGal(look), frame.upGal(), client.options.fov().get().floatValue(),
-                (float) (player.getEyeHeight() / GravityFrame.SCALE), player.onGround()));
+                frame.dirToGal(look), frame.upGal(), client.options.fov().get().floatValue(), eye,
+                player.onGround(), frame.upGal().mul(eye), Layout.VIEW_FIRST));
     }
 
     private static String status(LocalPlayer player) {
