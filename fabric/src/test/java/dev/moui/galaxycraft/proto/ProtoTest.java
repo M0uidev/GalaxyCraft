@@ -29,6 +29,16 @@ class ProtoTest {
         assertEquals(29151264L, Layout.TOTAL_SIZE);
     }
 
+    @Test void worldWithoutGravityCannotAnchor() {
+        // SMG2's title screen has a Mario but no gravity: nothing to stand on, so no anchoring.
+        var none = new Seqlock.WorldState(1, 1, new Vector3d(), new Vector3d(0, 0, 0), Layout.WORLD_ANCHOR);
+        var tiny = new Seqlock.WorldState(1, 1, new Vector3d(0, 1e-4, 0), new Vector3d(), Layout.WORLD_ANCHOR);
+        var real = new Seqlock.WorldState(3, 1, new Vector3d(0, -1, 0), new Vector3d(), Layout.WORLD_ANCHOR);
+        assertFalse(none.hasGravity());
+        assertFalse(tiny.hasGravity());
+        assertTrue(real.hasGravity());
+    }
+
     @Test void openMissingFileIsEmpty() {
         assertTrue(Shm.open(dir.resolve("nope")).isEmpty());
     }

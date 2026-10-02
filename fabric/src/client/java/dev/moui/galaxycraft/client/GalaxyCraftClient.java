@@ -124,7 +124,9 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         Vector3d gravity = world.get().gravity();
         Vector3d pos = vec(player.position());
         if (frame == null) {
-            if (!world.get().anchor()) return; // wait for the host to say where the player is
+            // Wait for the host to say where the player is, somewhere with gravity: SMG2's title
+            // screen has a Mario too, but nothing to stand on.
+            if (!world.get().anchor() || !world.get().hasGravity()) return;
             frame = new GravityFrame(world.get().queryPos(), pos, gravity);
             GalaxyCraft.LOG.info("Linked to galaxy at {}", world.get().queryPos());
         } else {

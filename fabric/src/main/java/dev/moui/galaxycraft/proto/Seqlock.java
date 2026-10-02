@@ -21,6 +21,11 @@ public final class Seqlock {
         public boolean anchor() {
             return (flags & Layout.WORLD_ANCHOR) != 0;
         }
+
+        /** Real gravity to stand by (menus and SMG2's title screen have none). */
+        public boolean hasGravity() {
+            return gravity.lengthSquared() > 0.25; // the game publishes unit vectors or zero
+        }
     }
 
     /** Keys as an SDL-scancode-indexed bitmap; mouse and wheel are accumulated since the host started. */

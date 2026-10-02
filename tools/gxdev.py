@@ -109,8 +109,7 @@ def split_cmds(text):
 
 
 def ctl(text, wait):
-    if not running_pid():
-        die("not running")
+    # Any GALAXYCRAFT=1 Dolphin serves the channel (also tools/gxplay.sh's); none -> timeout.
     cmds = split_cmds(text)
     CTL_OUT.write_text("")
     tmp = CTL.with_suffix(".tmp")

@@ -16,6 +16,7 @@ namespace gxc
 //   drive X Y Z LX LY LZ [UX UY UZ]     puppet Mario from this pose, as if the mod sent it
 //                                       (no up: opposite of the game's gravity)
 //   undrive                             back to whatever the mod says
+//   status                              focus/input gates, link and mod state (Dolphin side)
 //   link on|off                         same as the Ctrl+G hotkey: hand the game to the mod or not
 struct DevCommand
 {
@@ -29,6 +30,7 @@ struct DevCommand
     Drive,
     Undrive,
     Link,
+    Status,
     Bad
   } kind;
   u32 addr = 0, len = 0;

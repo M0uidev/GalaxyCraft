@@ -123,3 +123,9 @@ TEST(parses_link)
   CHECK(c[1].kind == DevCommand::Link && c[1].arg == "off");
   CHECK(c[2].kind == DevCommand::Bad && c[3].kind == DevCommand::Bad);
 }
+
+TEST(parses_status)
+{
+  auto c = ParseDevCommands("status\nstatus now");
+  CHECK(c.size() == 2 && c[0].kind == DevCommand::Status && c[1].kind == DevCommand::Bad);
+}

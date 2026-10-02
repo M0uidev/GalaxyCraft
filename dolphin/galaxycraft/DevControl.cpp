@@ -67,6 +67,8 @@ DevCommand ParseLine(std::string_view line)
   }
   if (w[0] == "mbx")
     return w.size() == 1 ? DevCommand{DevCommand::Mbx, 0, 0, {}} : bad;
+  if (w[0] == "status")
+    return w.size() == 1 ? DevCommand{DevCommand::Status, 0, 0, {}} : bad;
   if (w[0] == "link")
     return w.size() == 2 && (w[1] == "on" || w[1] == "off") ?
                DevCommand{DevCommand::Link, 0, 0, std::string(w[1])} :

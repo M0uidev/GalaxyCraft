@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..f611a71
+index 0000000..d096888
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,275 @@
+@@ -0,0 +1,284 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -71,6 +71,7 @@ index 0000000..f611a71
 +#include "Common/HookableEvent.h"
 +#include "Common/Logging/Log.h"
 +#include "Core/Core.h"
++#include "Core/Host.h"
 +#include "Core/HW/Memmap.h"
 +#include "Core/State.h"
 +#include "Core/System.h"
@@ -149,7 +150,7 @@ index 0000000..f611a71
 +
 +// CPU thread. Memory commands run right away; screenshots and savestates go to the host thread,
 +// which is where Dolphin expects them to be started.
-+void RunControlFile(gxc::GuestMemory& mem, gxc::HostBridge& bridge)
++void RunControlFile(gxc::GuestMemory& mem, gxc::HostBridge& bridge, bool mod_alive)
 +{
 +  std::error_code ec;
 +  if (!std::filesystem::exists(CTL_PATH, ec))
@@ -190,6 +191,14 @@ index 0000000..f611a71
 +    case gxc::DevCommand::Link:
 +      bridge.SetLinkEnabled(cmd.arg == "on");
 +      AppendCtlOut("ok link " + cmd.arg + "\n");
++      break;
++    case gxc::DevCommand::Status:
++      // Dolphin only reads controllers and hotkeys while these let it (Core::UpdateInputGate).
++      AppendCtlOut(fmt::format("render_focus={} full_focus={} ui_blocks_input={} link={} mod_alive={} "
++                               "driving={}\n",
++                               Host_RendererHasFocus(), Host_RendererHasFullFocus(),
++                               Host_UIBlocksControllerState(), bridge.LinkEnabled(),
++                               mod_alive, bridge.Driving()));
 +      break;
 +    case gxc::DevCommand::Undrive:
 +      bridge.SetDevDrive(std::nullopt);
@@ -250,7 +259,7 @@ index 0000000..f611a71
 +    if (!s_state)
 +      return;
 +    s_state->bridge->Tick(*s_state->memory);
-+    RunControlFile(*s_state->memory, *s_state->bridge);
++    RunControlFile(*s_state->memory, *s_state->bridge, ModAlive(*s_state->shm));
 +  });
 +
 +  std::lock_guard lock(s_mutex);
