@@ -1,0 +1,16 @@
+<wiidisc version="1">
+	<id game="SB4E" />
+	<options>
+		<section name="GalaxyCraft">
+			<option name="GalaxyCraft">
+				<choice name="Enabled">
+					<patch id="galaxycraft" />
+				</choice>
+			</option>
+		</section>
+	</options>
+	<patch id="galaxycraft">
+		<folder external="/CustomCode" disc="/CustomCode" create="true" />
+		@LOADER_PATCHES@
+	</patch>
+</wiidisc>
