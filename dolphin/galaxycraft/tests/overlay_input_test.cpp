@@ -133,3 +133,67 @@ TEST(input_writer_release_all_lets_go_of_keys_and_buttons)
   CHECK(s.buttons == 0);
   CHECK(s.mouse_x == 3 && s.mouse_y == -2);  // accumulated motion is not a held state
 }
+
+TEST(evdev_keys_map_to_sdl_scancodes)
+{
+  CHECK(EvdevToScancode(17) == 26);   // KEY_W
+  CHECK(EvdevToScancode(30) == 4);    // KEY_A
+  CHECK(EvdevToScancode(50) == 16);   // KEY_M
+  CHECK(EvdevToScancode(2) == 30);    // KEY_1
+  CHECK(EvdevToScancode(11) == 39);   // KEY_0
+  CHECK(EvdevToScancode(57) == 44);   // KEY_SPACE
+  CHECK(EvdevToScancode(28) == 40);   // KEY_ENTER
+  CHECK(EvdevToScancode(42) == 225);  // KEY_LEFTSHIFT
+  CHECK(EvdevToScancode(29) == 224);  // KEY_LEFTCTRL
+  CHECK(EvdevToScancode(56) == 226);  // KEY_LEFTALT
+  CHECK(EvdevToScancode(59) == 58);   // KEY_F1
+  CHECK(EvdevToScancode(88) == 69);   // KEY_F12
+  CHECK(EvdevToScancode(103) == 82);  // KEY_UP
+  CHECK(EvdevToScancode(1) == 41);    // KEY_ESC
+  CHECK(EvdevToScancode(240) == -1);
+  CHECK(EvdevToScancode(-3) == -1);
+}
+
+TEST(x11_keymap_becomes_sdl_bitmap_without_escape)
+{
+  char keymap[32] = {};
+  for (int keycode : {25, 65, 9})  // X keycode = evdev + 8: w, space, Escape
+    keymap[keycode / 8] |= static_cast<char>(1 << (keycode % 8));
+  u8 keys[64];
+  X11KeymapToScancodes(keymap, keys);
+  auto bit = [&](int sc) { return (keys[sc / 8] >> (sc % 8)) & 1; };
+  CHECK(bit(26) && bit(44));
+  CHECK(!bit(41));  // Escape belongs to Dolphin
+  int set = 0;
+  for (u8 b : keys)
+    set += __builtin_popcount(b);
+  CHECK(set == 2);
+}
+
+TEST(x11_buttons_map_to_sdl_buttons)
+{
+  CHECK(X11ButtonsToSdl(0) == 0);
+  CHECK(X11ButtonsToSdl(1) == 2);       // left
+  CHECK(X11ButtonsToSdl(2) == 4);       // middle
+  CHECK(X11ButtonsToSdl(4) == 8);       // right
+  CHECK(X11ButtonsToSdl(0x1F) == 0x0E); // wheel "buttons" 4/5 are not buttons
+}
+
+TEST(input_writer_set_keys_publishes_only_changes)
+{
+  ShmFixture f;
+  InputWriter in(*f.shm);
+  u8 keys[64] = {};
+  keys[26 / 8] = 1 << (26 % 8);
+  in.SetKeys(keys);
+  CHECK(KeyBit(*f.shm, 26));
+  GxcInputState s;
+  std::memcpy(&s, f.shm->Data() + GXC_OFF_INPUT, sizeof(s));
+  const u32 seq = s.seq;
+  in.SetKeys(keys);
+  std::memcpy(&s, f.shm->Data() + GXC_OFF_INPUT, sizeof(s));
+  CHECK(s.seq == seq);
+  keys[26 / 8] = 0;
+  in.SetKeys(keys);
+  CHECK(!KeyBit(*f.shm, 26));
+}

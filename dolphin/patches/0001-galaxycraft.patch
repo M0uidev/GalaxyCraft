@@ -49,7 +49,7 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..b77962e
+index 0000000..21a61b2
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
 @@ -0,0 +1,300 @@
@@ -144,6 +144,8 @@ index 0000000..b77962e
 +std::atomic<int> s_focus_gained{0};
 +std::atomic<int> s_focus_lost{0};
 +std::atomic<int> s_link_toggles{0};
++std::atomic<int> s_xinput_updates{0};
++u32 s_xinput_buttons = 0;  // under s_mutex
 +
 +// Development control channel (tools/gxdev.py): commands in, results appended out.
 +constexpr const char* CTL_PATH = "/dev/shm/galaxycraft_ctl";
@@ -201,11 +203,13 @@ index 0000000..b77962e
 +    case gxc::DevCommand::Status:
 +      // Dolphin only reads controllers and hotkeys while these let it (Core::UpdateInputGate).
 +      AppendCtlOut(fmt::format("render_focus={} full_focus={} ui_blocks_input={} link={} mod_alive={} "
-+                               "driving={} focus_gained={} focus_lost={} link_toggles={}\n",
++                               "driving={} focus_gained={} focus_lost={} link_toggles={} "
++                               "xinput_updates={}\n",
 +                               Host_RendererHasFocus(), Host_RendererHasFullFocus(),
 +                               Host_UIBlocksControllerState(), bridge.LinkEnabled(),
 +                               mod_alive, bridge.Driving(), s_focus_gained.load(),
-+                               s_focus_lost.load(), s_link_toggles.load()));
++                               s_focus_lost.load(), s_link_toggles.load(),
++                               s_xinput_updates.load()));
 +      break;
 +    case gxc::DevCommand::Undrive:
 +      bridge.SetDevDrive(std::nullopt);
@@ -295,6 +299,29 @@ index 0000000..b77962e
 +  return s_state && s_state->bridge->LinkEnabled() && ModAlive(*s_state->shm);
 +}
 +
++bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32])
++{
++  std::lock_guard lock(s_mutex);
++  const bool active = s_state && s_state->bridge->LinkEnabled() && ModAlive(*s_state->shm);
++  if (!active)
++    return false;
++  s_xinput_updates++;
++  if (dx != 0 || dy != 0)
++    s_state->input->MouseDelta(dx, dy);
++  if (dz != 0)
++    s_state->input->Wheel(-dz / 8.0);  // notches, up positive (as Minecraft's scroll)
++  u8 keys[64];
++  gxc::X11KeymapToScancodes(keymap, keys);
++  s_state->input->SetKeys(keys);
++  const u32 buttons = gxc::X11ButtonsToSdl(x_buttons);
++  if (buttons != s_xinput_buttons)
++  {
++    s_xinput_buttons = buttons;
++    s_state->input->Buttons(buttons);
++  }
++  return true;
++}
++
 +void NoteRenderFocus(bool focus)
 +{
 +  (focus ? s_focus_gained : s_focus_lost)++;
@@ -310,38 +337,11 @@ index 0000000..b77962e
 +  s_state->bridge->SetLinkEnabled(on);
 +  if (!on)
 +    s_state->input->ReleaseAll();  // keys held now would otherwise stay down in Minecraft
++  s_xinput_buttons = 0;
 +  NOTICE_LOG_FMT(CORE, "GalaxyCraft: link {}", on ? "on" : "off");
 +  OSD::AddMessage(on ? "GalaxyCraft: Minecraft has the controls" :
 +                       "GalaxyCraft: Wii Remote has the controls (Minecraft paused)",
 +                  3000);
-+}
-+
-+void OnKey(int qt_key, bool down)
-+{
-+  std::lock_guard lock(s_mutex);
-+  if (s_state)
-+    s_state->input->Key(gxc::QtKeyToScancode(qt_key), down);
-+}
-+
-+void OnMouseDelta(double dx, double dy)
-+{
-+  std::lock_guard lock(s_mutex);
-+  if (s_state)
-+    s_state->input->MouseDelta(dx, dy);
-+}
-+
-+void OnMouseButtons(u32 mask)
-+{
-+  std::lock_guard lock(s_mutex);
-+  if (s_state)
-+    s_state->input->Buttons(gxc::QtButtonsToSdl(mask));
-+}
-+
-+void OnWheel(double delta)
-+{
-+  std::lock_guard lock(s_mutex);
-+  if (s_state)
-+    s_state->input->Wheel(delta);
 +}
 +
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn)
@@ -355,7 +355,7 @@ index 0000000..b77962e
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..2dc14e7
+index 0000000..11be8c4
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
 @@ -0,0 +1,41 @@
@@ -384,6 +384,11 @@ index 0000000..2dc14e7
 +// True while Minecraft is connected and the link is on, so keyboard and mouse belong to it.
 +bool InputActive();
 +
++// XInput2 backend, after every input update (any thread): raw mouse motion since the previous
++// update, X button bits, wheel motion (8 per notch, down positive) and the X keymap. Feeds them to
++// Minecraft and returns true while it owns keyboard and mouse.
++bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32]);
++
 +// Diagnostics for ctl status: Host::SetRenderFocus reports every focus change here.
 +void NoteRenderFocus(bool focus);
 +
@@ -391,11 +396,6 @@ index 0000000..2dc14e7
 +// hand the game to Minecraft or take it back (to use SMG2's menus with the Wii Remote).
 +void ToggleLink();
 +
-+// Qt thread.
-+void OnKey(int qt_key, bool down);
-+void OnMouseDelta(double dx, double dy);
-+void OnMouseButtons(u32 qt_buttons);
-+void OnWheel(double delta);
 +
 +// Video thread: calls fn(width, height, frame_id, rgba) with the newest overlay frame, if any.
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn);
@@ -484,7 +484,7 @@ index 478454e..3a85248 100644
  
        if (IsHotkey(HK_PREV_WIIMOTE_PROFILE_1))
 diff --git a/Source/Core/DolphinQt/RenderWidget.cpp b/Source/Core/DolphinQt/RenderWidget.cpp
-index 49680b8..69f93d9 100644
+index 49680b8..728024d 100644
 --- a/Source/Core/DolphinQt/RenderWidget.cpp
 +++ b/Source/Core/DolphinQt/RenderWidget.cpp
 @@ -12,6 +12,8 @@
@@ -514,7 +514,7 @@ index 49680b8..69f93d9 100644
    PassEventToPresenter(event);
  
    switch (event->type())
-@@ -511,6 +517,62 @@ bool RenderWidget::event(QEvent* event)
+@@ -511,6 +517,42 @@ bool RenderWidget::event(QEvent* event)
    return QWidget::event(event);
  }
  
@@ -528,6 +528,8 @@ index 49680b8..69f93d9 100644
 +  if (event->type() == QEvent::MouseButtonPress && !isActiveWindow())
 +    activateWindow();
 +
++  // While Minecraft owns keyboard and mouse, the XInput2 backend feeds it (GalaxyCraft::OnXInput2)
++  // and keeps the pointer centred; here the events only need to stay away from Dolphin's UI.
 +  const bool active = GalaxyCraft::InputActive();
 +  if (active != m_galaxycraft_input)
 +  {
@@ -541,33 +543,11 @@ index 49680b8..69f93d9 100644
 +  {
 +  case QEvent::KeyPress:
 +  case QEvent::KeyRelease:
-+  {
-+    const auto* key_event = static_cast<const QKeyEvent*>(event);
-+    if (key_event->key() == Qt::Key_Escape)
-+      return false;
-+    if (!key_event->isAutoRepeat())
-+      GalaxyCraft::OnKey(key_event->key(), event->type() == QEvent::KeyPress);
-+    return true;
-+  }
++    return static_cast<const QKeyEvent*>(event)->key() != Qt::Key_Escape;
 +  case QEvent::MouseMove:
-+  {
-+    const QPoint center(width() / 2, height() / 2);
-+    const QPoint delta = static_cast<const QMouseEvent*>(event)->pos() - center;
-+    if (!delta.isNull())
-+    {
-+      const float scale = devicePixelRatio();
-+      GalaxyCraft::OnMouseDelta(delta.x() * scale, delta.y() * scale);
-+      QCursor::setPos(mapToGlobal(center));  // the resulting move event has a zero delta
-+    }
-+    return true;
-+  }
 +  case QEvent::MouseButtonPress:
 +  case QEvent::MouseButtonRelease:
-+    setFocus();
-+    GalaxyCraft::OnMouseButtons(static_cast<u32>(static_cast<const QMouseEvent*>(event)->buttons()));
-+    return true;
 +  case QEvent::Wheel:
-+    GalaxyCraft::OnWheel(static_cast<const QWheelEvent*>(event)->angleDelta().y() / 120.0);
 +    return true;
 +  default:
 +    return false;
@@ -590,6 +570,98 @@ index d828bf3..7240b1a 100644
    void SetPresenterKeyMap();
    void dragEnterEvent(QDragEnterEvent* event) override;
    void dropEvent(QDropEvent* event) override;
+diff --git a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
+index 309ed70..7b96436 100644
+--- a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
++++ b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
+@@ -15,6 +15,7 @@
+ 
+ #include "Common/Logging/Log.h"
+ 
++#include "Core/GalaxyCraft.h"
+ #include "Core/Host.h"
+ 
+ // This is an input plugin using the XInput 2.0 extension to the X11 protocol,
+@@ -262,6 +263,8 @@ KeyboardMouse::KeyboardMouse(Window window, int opcode, int pointer, int keyboar
+ 
+ KeyboardMouse::~KeyboardMouse()
+ {
++  if (m_blank_cursor)
++    XFreeCursor(m_display, m_blank_cursor);
+   XCloseDisplay(m_display);
+ }
+ 
+@@ -414,9 +417,48 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+   if (update_keyboard)
+     XQueryKeymap(m_display, m_state.keyboard.data());
+ 
++  // GalaxyCraft: Minecraft reads keyboard and mouse from here rather than from Qt, which may
++  // never see the render window as focused (e.g. XWayland under Hyprland).
++  CaptureForGalaxyCraft(GalaxyCraft::OnXInput2(delta_x, delta_y, delta_z, m_state.buttons,
++                                               m_state.keyboard.data()));
++
+   return Core::DeviceRemoval::Keep;
+ }
+ 
++void KeyboardMouse::CaptureForGalaxyCraft(bool capture)
++{
++  if (capture != m_galaxycraft_capture)
++  {
++    m_galaxycraft_capture = capture;
++    if (capture)
++    {
++      if (!m_blank_cursor)
++      {
++        // An all-transparent cursor: with the cursor hidden, Xwayland turns the warps below into
++        // pointer locking, so motion keeps coming at the screen edges.
++        char none = 0;
++        XColor black{};
++        const Pixmap pixmap = XCreateBitmapFromData(m_display, m_window, &none, 1, 1);
++        m_blank_cursor = XCreatePixmapCursor(m_display, pixmap, pixmap, &black, &black, 0, 0);
++        XFreePixmap(m_display, pixmap);
++      }
++      XDefineCursor(m_display, m_window, m_blank_cursor);
++    }
++    else
++    {
++      XUndefineCursor(m_display, m_window);
++    }
++    XFlush(m_display);
++  }
++  if (capture)
++  {
++    XWindowAttributes attribs;
++    XGetWindowAttributes(m_display, m_window, &attribs);
++    XWarpPointer(m_display, None, m_window, 0, 0, 0, 0, attribs.width / 2, attribs.height / 2);
++    XFlush(m_display);
++  }
++}
++
+ std::string KeyboardMouse::GetName() const
+ {
+   // This is the name string we got from the X server for this master
+diff --git a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
+index 4144805..d5dad50 100644
+--- a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
++++ b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
+@@ -117,6 +117,7 @@ private:
+ 
+ private:
+   void UpdateCursor(bool should_center_mouse);
++  void CaptureForGalaxyCraft(bool capture);
+ 
+ public:
+   Core::DeviceRemoval UpdateInput() override;
+@@ -133,6 +134,9 @@ private:
+   Window m_window;
+   Display* m_display;
+   State m_state{};
++  // GalaxyCraft: Minecraft owns keyboard and mouse; the pointer is hidden and kept centred.
++  bool m_galaxycraft_capture = false;
++  ::Cursor m_blank_cursor = 0;
+   const int xi_opcode;
+   const int pointer_deviceid;
+   const int keyboard_deviceid;
 diff --git a/Source/Core/VideoCommon/OnScreenUI.cpp b/Source/Core/VideoCommon/OnScreenUI.cpp
 index 209e96c..9c2c18f 100644
 --- a/Source/Core/VideoCommon/OnScreenUI.cpp

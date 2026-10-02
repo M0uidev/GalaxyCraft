@@ -55,6 +55,49 @@ int QtKeyToScancode(int k)
   }
 }
 
+int EvdevToScancode(int evdev)
+{
+  // Linux input-event-codes.h -> USB HID usage (SDL_Scancode), for the keys a keyboard game uses.
+  static constexpr int LETTERS[26] = {30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38, 50,
+                                      49, 24, 25, 16, 19, 31, 20, 22, 47, 17, 45, 21, 44};
+  for (int i = 0; i < 26; i++)
+    if (LETTERS[i] == evdev)
+      return 4 + i;  // SDL_SCANCODE_A..Z
+  if (evdev >= 2 && evdev <= 11)
+    return 30 + (evdev - 2);  // 1..9, 0
+  if (evdev >= 59 && evdev <= 68)
+    return 58 + (evdev - 59);  // F1..F10
+  static constexpr std::pair<int, int> OTHERS[] = {
+      {1, 41},    {12, 45},  {13, 46},  {14, 42},  {15, 43},  {26, 47},  {27, 48},
+      {28, 40},   {29, 224}, {39, 51},  {40, 52},  {41, 53},  {42, 225}, {43, 49},
+      {51, 54},   {52, 55},  {53, 56},  {54, 229}, {56, 226}, {57, 44},  {58, 57},
+      {87, 68},   {88, 69},  {97, 228}, {100, 230}, {102, 74}, {103, 82}, {104, 75},
+      {105, 80},  {106, 79}, {107, 77}, {108, 81}, {109, 78}, {110, 73}, {111, 76}};
+  for (const auto& [code, scancode] : OTHERS)
+    if (code == evdev)
+      return scancode;
+  return -1;
+}
+
+void X11KeymapToScancodes(const char keymap[32], u8 keys[64])
+{
+  std::fill(keys, keys + 64, u8{0});
+  for (int keycode = 8; keycode < 256; keycode++)
+  {
+    if (!((static_cast<u8>(keymap[keycode / 8]) >> (keycode % 8)) & 1))
+      continue;
+    const int scancode = EvdevToScancode(keycode - 8);
+    if (scancode < 0 || scancode == 41)  // 41: Escape stays Dolphin's
+      continue;
+    keys[scancode / 8] |= static_cast<u8>(1 << (scancode % 8));
+  }
+}
+
+u32 X11ButtonsToSdl(u32 x_buttons)
+{
+  return (x_buttons & 0x7u) << 1;  // left, middle, right; 4 and up are wheel steps
+}
+
 u32 QtButtonsToSdl(u32 qt)
 {
   return ((qt & 0x1) ? 1u << 1 : 0) | ((qt & 0x4) ? 1u << 2 : 0) | ((qt & 0x2) ? 1u << 3 : 0);
@@ -79,6 +122,14 @@ void InputWriter::MouseDelta(double dx, double dy)
 void InputWriter::Buttons(u32 mask)
 {
   m_buttons = mask;
+  Publish();
+}
+
+void InputWriter::SetKeys(const u8 keys[64])
+{
+  if (std::equal(keys, keys + 64, m_keys))
+    return;
+  std::copy(keys, keys + 64, m_keys);
   Publish();
 }
 
