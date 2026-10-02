@@ -4,6 +4,7 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
 
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.bridge.BridgeClient;
+import dev.moui.galaxycraft.gravity.Follow;
 import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.gravity.LookMath;
 import dev.moui.galaxycraft.proto.Layout;
@@ -147,11 +148,23 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             // (parallel transport): walking keeps hugging the planet, as Mario's momentum does.
             frame.update(gravity, pos);
         }
+        if (world.get().follow()) {
+            // Mario mode: SMG2 moves Mario (played on the emulated Wii Remote); the player is
+            // carried along at his feet, never walking or falling by Minecraft's physics.
+            Vector3d target = Follow.target(frame, world.get().queryPos());
+            player.setPos(target.x, target.y, target.z);
+            player.setOldPosAndRot();
+        }
         frame.rebase(vec(player.position())).ifPresent(np -> {
             player.setPos(np.x, np.y, np.z);
             player.setOldPosAndRot();
         });
         GalaxyCraft.FIELD.setFrame(frame);
+        if (world.get().follow()) {
+            settleTicks = 0;
+            hold(player, true);
+            return;
+        }
 
         // A new link resends the scene's collision, which can take a few ticks: hold the player
         // until there is ground under them, or they fall through it before it exists.
