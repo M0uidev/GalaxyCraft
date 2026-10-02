@@ -122,4 +122,24 @@ class GravityFrameTest {
     @Test void rebaseNotNeededInRange() {
         assertTrue(start().rebase(v(0, 120, 0)).isEmpty());
     }
+
+    @Test void dirToGalInterpolatesTheLastTurn() {
+        var f = new GravityFrame(new Vector3d(), new Vector3d(0, 100, 0), new Vector3d(0, -1, 0));
+        f.update(new Vector3d(-1, 0, 0), new Vector3d(0, 100, 0)); // up turns 90° to +x
+        Vector3d mcUp = new Vector3d(0, 1, 0);
+        assertTrue(f.dirToGal(mcUp, 0).distance(0, 1, 0) < 1e-9);
+        assertTrue(f.dirToGal(mcUp, 1).distance(1, 0, 0) < 1e-9);
+        Vector3d half = f.dirToGal(mcUp, 0.5);
+        assertEquals(45, Math.toDegrees(half.angle(new Vector3d(0, 1, 0))), 1e-6);
+        f.update(new Vector3d(-1, 0, 0), new Vector3d(0, 100, 0)); // no turn this tick
+        assertTrue(f.dirToGal(mcUp, 0).distance(1, 0, 0) < 1e-9);
+    }
+
+    @Test void limitTurnCapsTheAngle() {
+        Vector3d from = new Vector3d(0, 1, 0), to = new Vector3d(1, 0, 0);
+        Vector3d step = GravityFrame.limitTurn(from, to, Math.toRadians(10));
+        assertEquals(10, Math.toDegrees(from.angle(step)), 1e-6);
+        assertEquals(80, Math.toDegrees(step.angle(to)), 1e-6);
+        assertTrue(GravityFrame.limitTurn(from, new Vector3d(0.1, 1, 0).normalize(), 1).distance(new Vector3d(0.1, 1, 0).normalize()) < 1e-12);
+    }
 }

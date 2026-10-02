@@ -58,7 +58,8 @@ abstract class CameraMixin {
             xRot = (float) LookMath.pitch(cam.forward());
             matrixPropertiesDirty |= 3;
         });
-        GalaxyCraftClient.onCameraAligned(new Vector3d(position.x, position.y, position.z), vec(forwards), vec(up), feet);
+        GalaxyCraftClient.onCameraAligned(new Vector3d(position.x, position.y, position.z), vec(forwards), vec(up), feet,
+                partialTicks);
     }
 
     @Inject(method = "calculateFov", at = @At("RETURN"), cancellable = true)

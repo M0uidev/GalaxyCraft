@@ -43,6 +43,8 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     /** Ticks left to wait for the ground under a freshly linked player (then let go anyway). */
     private static final int SETTLE_TICKS = 60;
     private static final double SETTLE_DEPTH_BLOCKS = 6;
+    /** Mario mode: the frame turns at most this much per tick (a box planet's edge in ~0.5 s). */
+    private static final double MAX_TURN_PER_TICK = Math.toRadians(9);
     private static int settleTicks;
     private static boolean holding;
     /** Mario mode this tick: the player is carried to Mario, SMG2 owns the movement. */
@@ -167,7 +169,15 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         } else {
             // Look and velocity are left alone in Minecraft space, so they turn with the frame
             // (parallel transport): walking keeps hugging the planet, as Mario's momentum does.
-            frame.update(gravity, pos);
+            if (world.get().follow() && world.get().hasGravity()) {
+                // Nobody walks by Minecraft's physics here, so the frame may lag the gravity a
+                // little: the camera's up turns smoothly instead of snapping at planet edges.
+                Vector3d up = GravityFrame.limitTurn(frame.upGal(), new Vector3d(gravity).normalize().negate(),
+                        MAX_TURN_PER_TICK);
+                frame.update(up.negate(), pos);
+            } else {
+                frame.update(gravity, pos);
+            }
         }
         following = world.get().follow();
         if (following) {
@@ -273,12 +283,13 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     }
 
     /** Render thread, the camera placed: SMG2 copies it (outside the Galaxy view), sent right away. */
-    public static void onCameraAligned(Vector3d cameraMc, Vector3d forwardMc, Vector3d upMc, Vector3d feetMc) {
+    public static void onCameraAligned(Vector3d cameraMc, Vector3d forwardMc, Vector3d upMc, Vector3d feetMc,
+            float partialTicks) {
         if (frame == null || !bridge.linked()) return;
         if (view() != View.GALAXY) {
-            camOffsetGal = CameraMath.offsetGal(frame, cameraMc, feetMc);
-            camLookGal = frame.dirToGal(forwardMc);
-            camUpGal = frame.dirToGal(upMc);
+            camOffsetGal = CameraMath.offsetGal(frame, cameraMc, feetMc, partialTicks);
+            camLookGal = frame.dirToGal(forwardMc, partialTicks);
+            camUpGal = frame.dirToGal(upMc, partialTicks);
         }
         sendPose(Minecraft.getInstance());
     }

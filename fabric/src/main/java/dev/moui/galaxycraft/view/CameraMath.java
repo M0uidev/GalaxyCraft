@@ -25,8 +25,11 @@ public final class CameraMath {
                 new Vector3f((float) up.x, (float) up.y, (float) up.z)).conjugate();
     }
 
-    /** Minecraft's camera minus the player's feet, in galaxy units: where SMG2 puts its camera from Mario. */
-    public static Vector3d offsetGal(GravityFrame frame, Vector3d cameraMc, Vector3d feetMc) {
-        return frame.toGal(cameraMc).sub(frame.toGal(feetMc));
+    /**
+     * Minecraft's camera minus the player's feet, in galaxy units: where SMG2 puts its camera from
+     * Mario. partial: how far into the tick it is drawn (see GravityFrame.dirToGal).
+     */
+    public static Vector3d offsetGal(GravityFrame frame, Vector3d cameraMc, Vector3d feetMc, double partial) {
+        return frame.dirToGal(new Vector3d(cameraMc).sub(feetMc), partial).div(GravityFrame.SCALE);
     }
 }

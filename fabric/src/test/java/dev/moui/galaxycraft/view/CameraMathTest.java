@@ -34,7 +34,7 @@ class CameraMathTest {
     @Test void cameraOffsetInGalaxyUnits() {
         var frame = new GravityFrame(new Vector3d(0, 0, 0), new Vector3d(0, 100, 0), new Vector3d(0, -1, 0));
         near(new Vector3d(0, 162, -400),
-                CameraMath.offsetGal(frame, new Vector3d(5, 101.62, 6), new Vector3d(5, 100, 10)));
+                CameraMath.offsetGal(frame, new Vector3d(5, 101.62, 6), new Vector3d(5, 100, 10), 1));
     }
 
     @Test void yawPitchInvertDirection() {

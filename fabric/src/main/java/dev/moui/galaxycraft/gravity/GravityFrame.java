@@ -27,6 +27,8 @@ public final class GravityFrame {
     public record Update(boolean rotated, Quaterniond deltaMc) {}
 
     private final Quaterniond r = new Quaterniond();
+    /** r as it was before this tick's update: drawing between ticks turns smoothly from it. */
+    private final Quaterniond rPrev = new Quaterniond();
     private final Vector3d t = new Vector3d();
 
     public GravityFrame(Vector3d galStart, Vector3d mcStart, Vector3d gStart) {
@@ -34,6 +36,7 @@ public final class GravityFrame {
             r.set(minimalRotation(new Vector3d(gStart).normalize().negate(), UP));
         }
         t.set(mcStart).sub(r.transform(new Vector3d(galStart).mul(SCALE)));
+        rPrev.set(r);
     }
 
     /** Parses a units-per-block setting; anything missing or absurd gives the default. */
@@ -49,6 +52,7 @@ public final class GravityFrame {
 
     private GravityFrame(GravityFrame o) {
         r.set(o.r);
+        rPrev.set(o.rPrev);
         t.set(o.t);
     }
 
@@ -72,12 +76,32 @@ public final class GravityFrame {
         return r.transformInverse(new Vector3d(d));
     }
 
+    /**
+     * dirToGal between the previous tick's frame (partial 0) and this one (1): what the renderer
+     * reports, so a frame turning once per tick reads as a smooth turn at the display rate.
+     */
+    public Vector3d dirToGal(Vector3d d, double partial) {
+        return new Quaterniond(rPrev).slerp(r, partial).transformInverse(new Vector3d(d));
+    }
+
+    /**
+     * fromUp turned towards toUp by at most maxRad (both unit): sudden gravity changes (the edge
+     * of a box planet) become a short turn, as SMG2's own camera does.
+     */
+    public static Vector3d limitTurn(Vector3d fromUp, Vector3d toUp, double maxRad) {
+        double angle = fromUp.angle(toUp);
+        if (angle <= maxRad) return new Vector3d(toUp);
+        return minimalRotation(fromUp, toUp).slerp(new Quaterniond(), 1 - maxRad / angle)
+                .transform(new Vector3d(fromUp)).normalize();
+    }
+
     /** Galaxy-space "up" (opposite the gravity the frame is currently aimed at). */
     public Vector3d upGal() {
         return dirToGal(UP);
     }
 
     public Update update(Vector3d gravityGal, Vector3d playerMc) {
+        rPrev.set(r);
         if (gravityGal.lengthSquared() < 1e-12) return new Update(false, new Quaterniond());
         Vector3d uNew = new Vector3d(gravityGal).normalize().negate();
         Vector3d uOld = upGal();
