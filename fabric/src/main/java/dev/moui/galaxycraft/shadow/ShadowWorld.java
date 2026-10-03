@@ -37,8 +37,9 @@ import net.minecraft.world.phys.Vec3;
  * and ticking, so doors, redstone, pistons, crops, fire and every other block behave as
  * Minecraft's own code says. What changes there comes back to the planet; the planet's changes
  * (the player's, the fluids') go there. Fluids stay the planet's ({@link dev.moui.galaxycraft.voxel.Fluids},
- * which flow across the cube's edges): in the shadow they do not flow, and items and experience
- * dropped there vanish.
+ * which flow across the cube's edges): in the shadow they do not flow. Items dropped there, and
+ * those the player throws while on a planet, become the planet's drops ({@link Drop}); experience
+ * goes straight to the player.
  *
  * The planet lives on the client thread and the shadow on the server's: they talk through queues.
  * Each change the client sends carries a number; a change coming back is dropped if the client
@@ -55,11 +56,21 @@ public final class ShadowWorld {
     /** A change Minecraft made: cell to id, made when the server had applied the client's change seq. */
     public record Change(VoxelPlanet planet, int cell, int id, int seq) {}
 
+    /**
+     * An item dropped: with a planet, at pos and moving by vel (blocks per tick) in its space; with
+     * none, in the player's Minecraft space (thrown by the player). Picked up after delay ticks.
+     */
+    public record Drop(VoxelPlanet planet, org.joml.Vector3d pos, org.joml.Vector3d vel, ItemStack stack, int delay) {}
+
+    /** Ticks before a block's drops or a thrown item can be picked up (Minecraft's). */
+    static final int BLOCK_DROP_DELAY = 10, THROWN_DELAY = 40;
+
     private static final ConcurrentLinkedQueue<Consumer<ServerLevel>> ops = new ConcurrentLinkedQueue<>();
     private static final ConcurrentLinkedQueue<Change> changes = new ConcurrentLinkedQueue<>();
     private static final ConcurrentLinkedQueue<Runnable> toClient = new ConcurrentLinkedQueue<>();
+    private static final ConcurrentLinkedQueue<Drop> drops = new ConcurrentLinkedQueue<>();
     private static volatile int applied;
-    private static volatile boolean available;
+    private static volatile boolean available, catchThrown;
 
     // Server thread only.
     private static MinecraftServer server;
@@ -92,6 +103,58 @@ public final class ShadowWorld {
     /** What the server hands back to the client thread (a click that used nothing places a block). */
     public static Runnable pollClient() {
         return toClient.poll();
+    }
+
+    public static Drop pollDrop() {
+        return drops.poll();
+    }
+
+    /** Whether items the player throws (Q, out of the inventory) land on the planet instead of in Minecraft. */
+    public static void catchThrown(boolean on) {
+        catchThrown = on;
+    }
+
+    /**
+     * The player breaks cell, as ServerPlayerGameMode.destroyBlock does: the block's own breaking
+     * (a door's other half, ice to water), the tool worn, and outside creative its drops.
+     */
+    public static void destroy(VoxelPlanet p, int cell, UUID player) {
+        ops.add(level -> {
+            ServerPlayer sp = server.getPlayerList().getPlayer(player);
+            if (p != planet || map == null || sp == null) return;
+            BlockPos pos = new BlockPos(map.x(cell), map.y(cell), map.z(cell));
+            mirrorNow(level, pos);
+            BlockState state = level.getBlockState(pos);
+            if (state.isAir() || !sp.getMainHandItem().canDestroyBlock(state, level, pos, sp)) return;
+            var blockEntity = level.getBlockEntity(pos);
+            Block block = state.getBlock();
+            BlockState adjusted = block.playerWillDestroy(level, pos, state, sp);
+            boolean removed = level.removeBlock(pos, false);
+            if (removed) block.destroy(level, pos, adjusted);
+            if (sp.preventsBlockDrops()) return;
+            ItemStack tool = sp.getMainHandItem(), with = tool.copy();
+            boolean harvest = sp.hasCorrectToolForDrops(adjusted);
+            tool.mineBlock(level, adjusted, pos, sp);
+            if (removed && harvest) block.playerDestroy(level, sp, pos, adjusted, blockEntity, with);
+        });
+    }
+
+    /** A drop picked up: into the player's inventory; what does not fit comes back through left. */
+    public static void give(UUID player, ItemStack stack, Consumer<ItemStack> left) {
+        ops.add(level -> {
+            ServerPlayer sp = server.getPlayerList().getPlayer(player);
+            if (sp == null) {
+                toClient.add(() -> left.accept(stack));
+                return;
+            }
+            int before = stack.getCount();
+            sp.getInventory().add(stack);
+            if (stack.getCount() < before)
+                sp.level().playSound(null, sp.getX(), sp.getY(), sp.getZ(), net.minecraft.sounds.SoundEvents.ITEM_PICKUP,
+                        net.minecraft.sounds.SoundSource.PLAYERS, 0.2f,
+                        ((sp.getRandom().nextFloat() - sp.getRandom().nextFloat()) * 0.7f + 1) * 2);
+            if (!stack.isEmpty()) toClient.add(() -> left.accept(stack));
+        });
     }
 
     /** This planet, of this stage, is the one to run (null: none). */
@@ -283,6 +346,38 @@ public final class ShadowWorld {
         if (cell < 0) return;
         changes.add(new Change(planet, cell, Block.getId(now), applied));
         if (map.onEdge(cell)) edgeChanged.add(cell);
+    }
+
+    /**
+     * An item entity about to join a level: true if it becomes a planet drop instead (every one
+     * dropped in the shadow; one thrown near a player while catchThrown).
+     */
+    public static boolean catchItem(ServerLevel level, net.minecraft.world.entity.item.ItemEntity e) {
+        Vec3 v = e.getDeltaMovement();
+        if (isShadow(level)) {
+            if (map == null) return true;
+            int bx = (int) Math.floor(e.getX()), by = (int) Math.floor(e.getY()), bz = (int) Math.floor(e.getZ());
+            int cell = map.cell(bx, by, bz);
+            if (cell >= 0) {
+                double fx = e.getX() - bx, fy = e.getY() - by, fz = e.getZ() - bz;
+                org.joml.Vector3d at = CellSpace.point(map.grid, cell, fx, fy, fz);
+                org.joml.Vector3d vel = CellSpace.point(map.grid, cell, fx + v.x, fy + v.y, fz + v.z).sub(at);
+                drops.add(new Drop(planet, at, vel, e.getItem().copy(), BLOCK_DROP_DELAY));
+            }
+            return true;
+        }
+        if (!catchThrown || level.getNearestPlayer(e, 8) == null) return false;
+        drops.add(new Drop(null, new org.joml.Vector3d(e.getX(), e.getY(), e.getZ()), new org.joml.Vector3d(v.x, v.y, v.z),
+                e.getItem().copy(), e.hasPickUpDelay() ? THROWN_DELAY : 0));
+        return true;
+    }
+
+    /** Experience from the shadow (ores, furnaces): to the player. */
+    public static void giveExperience(ServerLevel level, int value) {
+        for (ServerPlayer sp : level.getServer().getPlayerList().getPlayers()) {
+            sp.giveExperiencePoints(value);
+            return;
+        }
     }
 
     /** Where Mario is in the shadow: sounds made there are heard from this far away. */

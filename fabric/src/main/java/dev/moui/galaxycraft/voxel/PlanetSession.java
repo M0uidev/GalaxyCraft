@@ -297,6 +297,16 @@ public final class PlanetSession {
         unsaved = true;
     }
 
+    /** A point of the galaxy in the planet's space (blocks from its center). */
+    public Vector3d localOf(Vector3d gal) {
+        return local(gal);
+    }
+
+    /** A point of the planet's space in the galaxy. */
+    public Vector3d galOf(Vector3d local) {
+        return new Vector3d(local).mul(unitsPerBlock).add(center);
+    }
+
     /** The cell a point of the galaxy is in; -1 outside the planet. */
     public int cellAt(Vector3d gal) {
         return planet == null ? -1 : planet.grid.cellAt(local(gal));

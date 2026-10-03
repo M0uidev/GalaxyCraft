@@ -19,14 +19,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * The shadow dimension has no players: its sounds are played to the players where they are,
- * quieter the farther from Mario they were made, and what it drops vanishes.
+ * quieter the farther from Mario they were made. Items dropped there, or thrown by the player
+ * on a planet, become the planet's drops; experience goes to the player.
  */
 @Mixin(ServerLevel.class)
 abstract class ShadowLevelMixin {
     @Inject(method = "addFreshEntity", at = @At("HEAD"), cancellable = true)
-    private void galaxycraft$noDrops(Entity entity, CallbackInfoReturnable<Boolean> cir) {
-        if (ShadowWorld.isShadow((ServerLevel) (Object) this) && (entity instanceof ItemEntity || entity instanceof ExperienceOrb))
+    private void galaxycraft$dropsOnThePlanet(Entity entity, CallbackInfoReturnable<Boolean> cir) {
+        ServerLevel self = (ServerLevel) (Object) this;
+        if (entity instanceof ItemEntity item && ShadowWorld.catchItem(self, item)) cir.setReturnValue(false);
+        else if (entity instanceof ExperienceOrb orb && ShadowWorld.isShadow(self)) {
+            ShadowWorld.giveExperience(self, orb.getValue());
             cir.setReturnValue(false);
+        }
     }
 
     @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/Entity;DDDLnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V",

@@ -1,6 +1,8 @@
 package dev.moui.galaxycraft.gametest;
 
+import dev.moui.galaxycraft.client.DropsClient;
 import dev.moui.galaxycraft.client.McBlocks;
+import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.client.ShadowLink;
 import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.voxel.CubeSphere;
@@ -13,7 +15,10 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 
@@ -26,7 +31,9 @@ public final class ShadowProbe implements FabricClientGameTest {
     private PlanetSession s;
     private McBlocks blocks;
     private ShadowLink link;
-    private Vector3d mario;
+    private Vector3d mario, feet;
+    private DropsClient drops;
+    private GravityFrame frame;
     private final List<String> fails = new ArrayList<>();
 
     @Override
@@ -40,7 +47,11 @@ public final class ShadowProbe implements FabricClientGameTest {
                 s.setBlocks(blocks);
                 s.spawn(32, new Vector3d(), new Vector3d(0, 1, 0));
                 link = new ShadowLink(s);
+                drops = new DropsClient(s);
                 mario = new Vector3d(0, s.planet().surface() + 0.5, 0).add(s.center());
+                feet = mario;
+                frame = new GravityFrame(mario, new Vector3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()),
+                        new Vector3d(0, -1, 0));
                 return new int[] {place("lever", 2), place("redstone_lamp", 3), place("oak_door", 5), place("piston", 8), place("lever", 9)};
             });
             run(ctx, 60); // the shadow takes the planet in
@@ -59,6 +70,7 @@ public final class ShadowProbe implements FabricClientGameTest {
             check(ctx, cells[3], "extended=true");
             check(ctx, s.planet().grid.neighbor(cells[3], CubeSphere.TOP), "piston_head");
             use(ctx, s.planet().grid.neighbor(cells[1], CubeSphere.BOTTOM), false); // grass: nothing to use
+            survival(ctx, cells[1]);
             System.out.println("[GalaxyCraft shadow] " + (fails.isEmpty() ? "PASS" : "FAIL " + fails));
         }
     }
@@ -88,9 +100,54 @@ public final class ShadowProbe implements FabricClientGameTest {
 
     private void run(ClientGameTestContext ctx, int ticks) {
         for (int t = 0; t < ticks; t++) {
-            ctx.runOnClient(mc -> link.tick("probe", mario));
+            ctx.runOnClient(mc -> {
+                link.tick("probe", mario);
+                drops.tick(mc, frame, feet);
+            });
             ctx.waitTick();
         }
+    }
+
+    /**
+     * In survival, breaking the lamp drops it on the planet; walking over it puts it in the
+     * inventory; an item thrown with Q lands on the planet too.
+     */
+    private void survival(ClientGameTestContext ctx, int lamp) {
+        ctx.runOnClient(mc -> {
+            var server = mc.getSingleplayerServer();
+            server.execute(() -> {
+                ServerPlayer sp = server.getPlayerList().getPlayers().get(0);
+                sp.setGameMode(GameType.SURVIVAL);
+                sp.getInventory().clearContent();
+            });
+        });
+        run(ctx, 5);
+        ctx.runOnClient(mc -> ShadowWorld.destroy(s.planet(), lamp, mc.player.getUUID()));
+        run(ctx, 40);
+        check(ctx, lamp, "air");
+        String dropped = ctx.computeOnClient(mc -> drops.all().isEmpty() ? "none" : drops.all().get(0).item + " on ground "
+                + drops.all().get(0).onGround);
+        System.out.println("[GalaxyCraft shadow] dropped " + dropped);
+        if (!dropped.contains("redstone_lamp") || !dropped.contains("true")) fails.add("lamp drop: " + dropped);
+        ctx.runOnClient(mc -> feet = s.galOf(new Vector3d(drops.all().get(0).pos)));
+        run(ctx, 10);
+        int lamps = ctx.computeOnClient(mc -> mc.player.getInventory().countItem(Items.REDSTONE_LAMP));
+        System.out.println("[GalaxyCraft shadow] lamps in inventory " + lamps);
+        if (lamps != 1 || !drops.all().isEmpty()) fails.add("lamp not picked up");
+        ctx.runOnClient(mc -> {
+            feet = mario;
+            var server = mc.getSingleplayerServer();
+            server.execute(() -> server.getPlayerList().getPlayers().get(0).getInventory().setItem(0, new ItemStack(Items.STONE, 5)));
+        });
+        run(ctx, 5);
+        ctx.runOnClient(mc -> {
+            mc.player.getInventory().setSelectedSlot(0);
+            mc.gameMode.dropItem(mc.player, false);
+        });
+        run(ctx, 20);
+        String thrown = ctx.computeOnClient(mc -> drops.all().isEmpty() ? "none" : drops.all().get(0).item.toString());
+        System.out.println("[GalaxyCraft shadow] thrown " + thrown);
+        if (!thrown.contains("stone")) fails.add("Q drop: " + thrown);
     }
 
     private void check(ClientGameTestContext ctx, int cell, String want) {

@@ -59,6 +59,7 @@ public final class PlanetClient {
     private static int sinceSave;
     private static final ShadowLink shadow = new ShadowLink(session);
     private static boolean aimUsable; // an empty hand aims at a block a click uses
+    private static final DropsClient drops = new DropsClient(session);
     private static McBlocks blocks;
     private static AtlasLink atlasLink;
 
@@ -150,11 +151,12 @@ public final class PlanetClient {
             session.setOutline(item ? session.target(eye, look, player.getMainHandItem().is(Items.BUCKET)) : -1);
             if (item) {
                 // Minecraft gets the same clicks and swings the arm by itself.
-                if (pressed(buttons, MOUSE_LEFT)) session.breakBlock(eye, look, player.getAbilities().instabuild);
+                if (pressed(buttons, MOUSE_LEFT)) breakBlock(player, eye, look, aim);
                 if (pressed(buttons, MOUSE_RIGHT)) use(player, eye, look, world.queryPos(), aim);
             }
         }
         shadow.tick(stage == null ? "" : stage, world.queryPos());
+        drops.tick(Minecraft.getInstance(), frame, frame == null ? null : world.queryPos());
         lastButtons = buttons;
         lastP = p;
         session.update(world.sceneId(), bridge.hostPid(), world.queryPos());
@@ -253,11 +255,34 @@ public final class PlanetClient {
                 setMainHand(player, Items.BUCKET);
         } else {
             ItemStack held = stack.copy();
-            Runnable place = () -> session.placeBlock(eye, look, blocks.placer(held), feet);
+            Runnable place = () -> {
+                if (session.placeBlock(eye, look, blocks.placer(held), feet) && !creative) useUp(player, held);
+            };
             if (aim == null || !shadow.available()) place.run();
             else ShadowWorld.use(session.planet(), aim.cell(), aim.face(),
                     new net.minecraft.world.phys.Vec3(aim.hit().x, aim.hit().y, aim.hit().z), player.getUUID(), place);
         }
+    }
+
+    /**
+     * Left click: with Minecraft running the planet, its own breaking (drops outside creative, the
+     * tool worn); otherwise the block just goes.
+     */
+    private static void breakBlock(LocalPlayer player, Vector3d eye, Vector3d look, PlanetSession.Aim aim) {
+        if (!shadow.available()) session.breakBlock(eye, look, player.getAbilities().instabuild);
+        else if (aim != null && session.planet().info(aim.cell()).breakable())
+            ShadowWorld.destroy(session.planet(), aim.cell(), player.getUUID());
+    }
+
+    /** A block placed outside creative: one fewer of it in the main hand (on the server, which syncs back). */
+    private static void useUp(LocalPlayer player, ItemStack placed) {
+        MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
+        if (server == null) return;
+        java.util.UUID id = player.getUUID();
+        server.execute(() -> {
+            ServerPlayer sp = server.getPlayerList().getPlayer(id);
+            if (sp != null && sp.getMainHandItem().is(placed.getItem())) sp.getMainHandItem().shrink(1);
+        });
     }
 
     /** The inventory is the integrated server's: the item changes there and syncs back. */

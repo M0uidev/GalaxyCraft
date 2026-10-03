@@ -222,4 +222,16 @@ bioma por defecto, losas que no se juntan en dobles.
 Limitaciones: sólo corre lo que está cerca de Mario; los bloques en movimiento (pistones, arena que
 cae) no se ven mientras se mueven; un repetidor u observador que apunta a través de una arista no
 gira con ella; las entidades que crean los objetos (barcos, vagonetas, mobs de huevos) quedan en la
-sombra, invisibles; romper un cofre pierde lo que tenía.
+sombra, invisibles; 
+## Objetos que caen y supervivencia (2026-10-03)
+
+- Romper (fuera de creativo) corre en la sombra como `ServerPlayerGameMode.destroyBlock`: la
+  herramienta se gasta y el botín es el de Minecraft. Los `ItemEntity` que nacen en la sombra, y los
+  que tira el jugador cerca de sí mientras está en un planeta (**Q**, fuera del inventario), pasan a
+  ser objetos del planeta (`voxel/PlanetDrops`): caen hacia el centro, se paran en las cajas de
+  colisión reales, se juntan, desaparecen a los 5 minutos y Mario los recoge al pasar (alcance de
+  Minecraft). Se dibujan como `ItemEntity` sólo del cliente (`client/DropsClient`, ids negativos)
+  puestos cada tick donde los tiene el planeta. La experiencia va directa al jugador.
+- Colocar fuera de creativo gasta uno del objeto en la mano.
+
+Limitaciones: los objetos tirados no se guardan con el planeta; no flotan en el agua ni se queman.

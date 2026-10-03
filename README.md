@@ -37,6 +37,9 @@ Three programs share one world:
   crops grow, chests and furnaces open their menus. Right click uses a block (or the held item on
   it, like flint and steel or bone meal) before placing anything, as in Minecraft, and aiming at
   such a block works with an empty hand too.
+- **Survival items.** Outside creative, broken blocks drop what Minecraft's loot says (right tool,
+  silk touch, fortune), drops fall onto the planet and go into your inventory when Mario walks over
+  them, placing a block uses one from your hand, and **Q** throws the held item onto the planet.
 - **Fluids.** Water and lava buckets, ice that melts into water, and obsidian and cobblestone
   where water and lava meet. A classic cobblestone generator works.
 - **Collision that feels like Minecraft.** Mario shrinks to Steve's width on planets, so he
