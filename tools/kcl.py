@@ -2,7 +2,8 @@
 
 Layout: 0x38-byte header, positions (f32[3]), normals (f32[3]), prisms (0x10 each,
 1-based: the header's prism offset points 0x10 before the first one), octree.
-The octree written here is a single leaf listing every prism; readers in this
+The octree written here is a single leaf listing every prism. A leaf's list starts 2 bytes
+after the offset it stores (checked on SMG2's own KCL), so the game can walk it; readers in this
 project ignore the octree and build their own spatial index.
 """
 import math
@@ -65,7 +66,7 @@ def write(tris, attribute=0):
     shift = max(0, math.ceil(math.log2(extent)))
     mask = (~((1 << shift) - 1)) & 0xFFFFFFFF
 
-    out = bytearray(_HEADER.pack(pos_off, nrm_off, prism_data - 0x10, oct_off, 1.0,
+    out = bytearray(_HEADER.pack(pos_off, nrm_off, prism_data - 0x10, oct_off, 40.0,
                                  *area_min, mask, mask, mask, shift, 0, 0))
     for v in positions:
         out += _VEC.pack(*v)
@@ -73,7 +74,7 @@ def write(tris, attribute=0):
         out += _VEC.pack(*n)
     for p in prisms:
         out += _PRISM.pack(*p)
-    out += struct.pack(">I", 0x80000000 | 4)  # root: leaf, list right after the node
+    out += struct.pack(">I", 0x80000000 | 2)  # root: leaf, list right after the node
     out += struct.pack(f">{len(prisms) + 1}H", *range(1, len(prisms) + 1), 0)
     while len(out) % 4:
         out += b"\0"

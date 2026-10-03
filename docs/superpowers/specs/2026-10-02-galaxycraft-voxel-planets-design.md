@@ -158,3 +158,30 @@ Van antes del hito 1. Si alguno falla, se para y se revisa este diseño.
 | RAM libre del juego para el pool | Medirla en el spike; el hito 1 cabe en pocos cientos de KB |
 | Distorsión de celdas en un planeta chico | Aceptada en el hito 1; la etapa 4 la reduce |
 | La zona "vacía" de Sky Station tiene gravedad o cámaras de zona | Elegir las coordenadas en el spike 0a con `mbx` (gravedad nula alrededor) |
+
+## 13. Resultado de los spikes (2026-10-02) y ajustes
+
+Probados en el prólogo (el libro), porque `tools/gxroute.py sky` ya no llega a Sky Station: se
+queda en el libro, también sin el spike.
+
+- **0a, render: pasa.** Un `LiveActor` propio registrado con `MR::connectToScene(this, 0x21, -1, -1, 0x0E)`
+  (MapObj, DrawType_ElectricRail) dibuja con GX inmediato y `MR::getCameraViewMtx()`; la profundidad
+  con Steve es correcta. Hace falta `MR::invalidateClipping`, si no deja de dibujarse.
+- **0b, colisión: pasa.** `new CollisionParts` + `init(mtx, sensor "body", kcl, pa, 0, false)` +
+  `MR::validateCollisionParts`: Mario se para encima; con otro KCL sigue encima; con
+  `MR::invalidateCollisionParts` cae. Un `.pa` BCSV con 0 campos y 1 entrada basta.
+- **Gravedad:** `new PointGravity` + `updateIdentityMtx` + `MR::registerGravity` en `init`; cambiar
+  `mRange` después la enciende y la apaga.
+- **KCL:** la lista de una hoja del octree empieza 2 bytes después del offset (comprobado en un KCL
+  del disco); `tools/kcl.py` estaba corrido y se corrigió. Grosor de prisma 40, como el juego.
+
+Ajustes al diseño:
+
+- **Luz:** sombreado por cara de Minecraft (arriba 100 %, laterales 80 %/60 %, abajo 50 %) horneado
+  en el color de vértice, en vez de las luces del escenario. Sin RE de `LightCtrl` y es más Minecraft.
+- **Dónde aparece el planeta:** `/galaxycraft planet spawn` lo crea encima del jugador (fuera del
+  alcance de su gravedad) en cualquier nivel, también Sky Station. Así se prueba sin la ruta rota.
+- **Transporte:** el módulo publica en el buzón un *inbox* (256 KiB en su heap). Dolphin le copia los
+  mensajes `PLANET`, `CHUNK` y `PLANET_TP` cuando está vacío; el módulo copia cada chunk a memoria
+  propia (display list alineada a 32) y vacía el inbox. Así nadie libera datos que el otro usa.
+- Los `CollisionParts` viejos no se liberan (unos cientos de bytes por edición): aceptable en el hito 1.
