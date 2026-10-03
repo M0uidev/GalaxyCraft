@@ -139,6 +139,23 @@ public final class VoxelPlanetTest implements FabricClientGameTest {
                 gxdev("ctl", "shot voxel-7-horizon-" + yaw);
             }
             log("collision chunks: " + ctx.computeOnClient(mc -> s.collisionChunks()));
+
+            // /fly: up turns to the galaxy's +Y (here the opposite of Mario's: he is under the
+            // planet), the player rises on its own, Mario stays where he is.
+            Vector3d marioBefore = ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyPos().orElseThrow());
+            ctx.runOnClient(mc -> mc.player.connection.sendCommand("fly"));
+            ctx.waitTicks(40);
+            check(ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyUp().orElseThrow().y) > 0.999, "flying: up is the galaxy's +Y");
+            ctx.getInput().holdKeyFor(o -> o.keyJump, 60);
+            ctx.waitTicks(5);
+            Vector3d flown = ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyPos().orElseThrow());
+            log("flew from " + marioBefore + " to " + flown);
+            check(flown.y - marioBefore.y > 3 * UNITS, "space flies up the galaxy's +Y");
+            gxdev("ctl", "mbx; shot voxel-8-flying");
+            ctx.runOnClient(mc -> mc.player.connection.sendCommand("fly"));
+            ctx.waitTicks(60);
+            double back = ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyPos().orElseThrow().distance(marioBefore)) / UNITS;
+            check(back < 1, "/fly again: back at Mario's feet, " + back + " blocks off");
             ctx.runOnClient(mc -> PlanetClient.remove());
 
             log("PASS");

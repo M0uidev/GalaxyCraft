@@ -37,12 +37,16 @@ public final class Seqlock {
     public record InputState(int buttons, double mouseX, double mouseY, double wheel, byte[] keys) {}
 
     /** look/up are the camera's; camOffset is the camera minus pos (galaxy units); view is Layout.VIEW_*. */
-    /** itemActive: the clicks break and place blocks; screenOpen: the keyboard types in Minecraft. */
+    /**
+     * itemActive: the clicks break and place blocks; screenOpen: the keyboard types in Minecraft;
+     * flying: /fly, the player flies off on its own (camOffset is then from Mario's feet).
+     */
     public record PlayerOut(long frameId, Vector3d pos, Vector3d look, Vector3d up, float fovY, float eye,
-            boolean onGround, Vector3d camOffset, int view, int sceneId, boolean itemActive, boolean screenOpen) {
+            boolean onGround, Vector3d camOffset, int view, int sceneId, boolean itemActive, boolean screenOpen,
+            boolean flying) {
         public PlayerOut(long frameId, Vector3d pos, Vector3d look, Vector3d up, float fovY, float eye,
                 boolean onGround, Vector3d camOffset, int view, int sceneId) {
-            this(frameId, pos, look, up, fovY, eye, onGround, camOffset, view, sceneId, false, false);
+            this(frameId, pos, look, up, fovY, eye, onGround, camOffset, view, sceneId, false, false, false);
         }
     }
 
@@ -135,7 +139,7 @@ public final class Seqlock {
         s.set(INT, o, seq + 1);
         VarHandle.releaseFence();
         s.set(INT, o + 4, (p.onGround() ? Layout.PLAYER_ON_GROUND : 0) | (p.itemActive() ? Layout.PLAYER_ITEM_ACTIVE : 0)
-                | (p.screenOpen() ? Layout.PLAYER_SCREEN : 0));
+                | (p.screenOpen() ? Layout.PLAYER_SCREEN : 0) | (p.flying() ? Layout.PLAYER_FLYING : 0));
         s.set(LONG, o + 8, p.frameId());
         putVec(s, o + 16, p.pos());
         putVec(s, o + 28, p.look());

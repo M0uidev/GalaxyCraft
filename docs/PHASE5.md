@@ -24,6 +24,10 @@ tools/gxplay.sh
   overlay: Dolphin traduce cada tecla con tu distribución de teclado (XKB: Shift, AltGr, ñ) y se la
   da a Minecraft como texto (protocolo v6, `GxcTextState`). Con el chat abierto Mario no se mueve,
   Esc lo cierra y Enter envía. Las teclas muertas (tildes) no componen todavía.
+- **`/fly`** alterna el vuelo libre: vuelas como en creativo (Espacio sube, Shift baja, Ctrl
+  acelera), el "arriba" pasa a ser el +Y de la galaxia (horizonte horizontal, sin gravedad de
+  planetas) y la cámara del juego te sigue. Mario se queda quieto y se ve. `/fly` otra vez te
+  devuelve a sus ojos.
 - **Persistencia:** un archivo por galaxia en `~/.local/share/galaxycraft/planets/<Stage>.gxplanet`
   (gzip; `-Dgalaxycraft.planetDir` lo cambia, y `gxvoxel.sh` usa `fabric/build/test-planets`). No
   en el directorio del juego: los client game tests con que `gxplay.sh` lanza Minecraft lo borran

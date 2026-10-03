@@ -568,3 +568,15 @@ TEST(open_screen_and_item_flags_from_the_mod)
   f.Tick();
   CHECK(!f.bridge.ScreenOpen() && f.bridge.ItemActive());
 }
+
+TEST(flying_draws_mario)
+{
+  Fixture f;
+  f.Tick();
+  f.shm->SetU64(offsetof(GxcHeader, mod_heartbeat_ms), f.now);
+  WritePlayer(*f.shm, {GXC_PLAYER_FLYING, 1, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {0, 900, 0}, GXC_VIEW_FIRST, 3});
+  f.Tick();
+  CHECK(f.bridge.Flying());
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_THIRD_PERSON) != 0);
+  CHECK(f.mem.GetF32(MBX + offsetof(GxcMailbox, cam_offset) + 4) == 900.f);  // the camera, far off
+}

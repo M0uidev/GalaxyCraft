@@ -45,6 +45,8 @@ public final class Layout {
     public static final int PLAYER_ITEM_ACTIVE = 2;
     /** PlayerState.flags: a Minecraft screen is open (chat...): the keyboard is not Mario's. */
     public static final int PLAYER_SCREEN = 4;
+    /** PlayerState.flags: /fly, the player flies on its own with the galaxy's +Y up. */
+    public static final int PLAYER_FLYING = 8;
     /** WorldState.flags: queryPos is the host's anchor (where the player is). */
     public static final int WORLD_ANCHOR = 1;
     public static final int WORLD_FOLLOW = 2;

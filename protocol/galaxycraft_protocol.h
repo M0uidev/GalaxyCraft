@@ -77,6 +77,8 @@ typedef struct { /* S -> M */
 #define GXC_PLAYER_ITEM_ACTIVE 2u
 /* A Minecraft screen is open (chat, inventory...): the keyboard is Minecraft's, not Mario's. */
 #define GXC_PLAYER_SCREEN 4u
+/* /fly: the player flies on its own, up is the galaxy's +Y; Mario stays put (and is drawn). */
+#define GXC_PLAYER_FLYING 8u
 
 typedef struct { /* M -> S */
   uint32_t seq;

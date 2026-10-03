@@ -391,7 +391,8 @@ void HostBridge::WriteFollow(GuestMemory& mem, const PlayerState* player)
   constexpr size_t LAST = offsetof(GxcMailbox, cam_offset) + 12;
   std::array<u8, LAST - FIRST> b{};
   const bool galaxy = player && player->view == GXC_VIEW_GALAXY;
-  const bool third = player && player->view != GXC_VIEW_FIRST;
+  // Mario is drawn outside first person, and while the player flies off on its own (/fly).
+  const bool third = player && (player->view != GXC_VIEW_FIRST || (player->flags & GXC_PLAYER_FLYING));
   PutBE32(b.data(), player ? GXC_MBX_FOLLOW | (galaxy ? GXC_MBX_GALAXY_VIEW : 0u) |
                                  (third ? GXC_MBX_THIRD_PERSON : 0u) :
                              0u);

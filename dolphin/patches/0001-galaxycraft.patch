@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..34d5b6a
+index 0000000..ddf73db
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,461 @@
+@@ -0,0 +1,462 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -248,9 +248,10 @@ index 0000000..34d5b6a
 +  gxc::WiimoteState pad;
 +  if (following)
 +  {
-+    // With a Minecraft screen open (the chat) the keyboard and mouse type there: Mario stays put.
++    // With a Minecraft screen open (the chat) the keyboard and mouse type there, and while the
++    // player flies (/fly) they move it: Mario stays put.
 +    static const u8 none[64] = {};
-+    const bool screen = state.bridge->ScreenOpen();
++    const bool screen = state.bridge->ScreenOpen() || state.bridge->Flying();
 +    const u8* keys = state.dev_keys ? state.dev_keys->first.data() : screen ? none : state.keys;
 +    const u32 buttons = state.dev_keys ? state.dev_keys->second : screen ? 0u : state.buttons;
 +    pad = state.mario.Update(keys, buttons, state.bridge->InGame(), state.bridge->GalaxyView(),

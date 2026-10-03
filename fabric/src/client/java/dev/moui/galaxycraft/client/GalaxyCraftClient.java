@@ -56,6 +56,9 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static Vector3d followTarget;
     /** F5 went past THIRD_PERSON_FRONT: SMG2's own camera (Minecraft only draws the HUD). */
     private static boolean galaxyView;
+    /** /fly: the player flies on its own like in creative, with the galaxy's +Y as up; Mario waits. */
+    private static boolean flying;
+    private static final Vector3d GALAXY_UP = new Vector3d(0, 1, 0);
     /** The camera as last drawn, galaxy space: what SMG2's camera copies outside the Galaxy view. */
     private static Vector3d camOffsetGal, camLookGal, camUpGal;
 
@@ -91,6 +94,12 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 SDLVideo.SDL_HideWindow(client.getWindow().handle());
             }
         });
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("fly").executes(c -> {
+            flying = !flying;
+            c.getSource().sendFeedback(Component.literal(flying ? "GalaxyCraft: flying (/fly again to go back to Mario)"
+                    : "GalaxyCraft: back with Mario"));
+            return 1;
+        })));
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(
                 literal("galaxycraft").then(literal("status").executes(c -> {
                     c.getSource().sendFeedback(Component.literal(status(c.getSource().getPlayer())));
@@ -178,7 +187,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         } else {
             // Look and velocity are left alone in Minecraft space, so they turn with the frame
             // (parallel transport): walking keeps hugging the planet, as Mario's momentum does.
-            if (world.get().follow() && world.get().hasGravity()) {
+            if (flying) {
+                // Flying: up turns (smoothly) to the galaxy's +Y and stays there, whatever pulls.
+                Vector3d up = GravityFrame.limitTurn(frame.upGal(), GALAXY_UP, MAX_TURN_PER_TICK);
+                frame.update(up.negate(), pos);
+            } else if (world.get().follow() && world.get().hasGravity()) {
                 // Nobody walks by Minecraft's physics here, so the frame may lag the gravity a
                 // little: the camera's up turns smoothly instead of snapping at planet edges.
                 Vector3d up = GravityFrame.limitTurn(frame.upGal(), new Vector3d(gravity).normalize().negate(),
@@ -188,7 +201,8 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 frame.update(gravity, pos);
             }
         }
-        following = world.get().follow();
+        following = world.get().follow() && !flying;
+        fly(player);
         if (following) {
             // Mario mode: SMG2 moves Mario (played on the emulated Wii Remote); the player is
             // carried along at his feet, never walking or falling by Minecraft's physics. The move
@@ -225,6 +239,19 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                     SETTLE_DEPTH_BLOCKS) ? 0 : settleTicks - 1;
         }
         hold(player, settleTicks > 0);
+    }
+
+    /** Creative flight while /fly is on (set every tick: the server may resend the abilities). */
+    private static void fly(LocalPlayer player) {
+        var abilities = player.getAbilities();
+        if (flying) {
+            abilities.mayfly = true;
+            abilities.flying = true;
+            player.resetFallDistance();
+        } else if (abilities.flying || abilities.mayfly) {
+            abilities.flying = false;
+            abilities.mayfly = false;
+        }
     }
 
     /** Freezes the player in place (no gravity, no momentum, no fall damage pending) or lets go. */
@@ -267,7 +294,13 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     public static void onCameraAligned(Vector3d cameraMc, Vector3d forwardMc, Vector3d upMc, Vector3d feetMc,
             float partialTicks) {
         if (frame == null || !bridge.linked()) return;
-        if (view() != View.GALAXY) {
+        if (flying) {
+            // SMG2 places its camera from Mario's feet: the offset is from him, however far.
+            Optional<Seqlock.WorldState> w = bridge.world();
+            camOffsetGal = w.isPresent() ? frame.toGal(cameraMc).sub(w.get().queryPos()) : null;
+            camLookGal = frame.dirToGal(forwardMc, partialTicks);
+            camUpGal = frame.dirToGal(upMc, partialTicks);
+        } else if (view() != View.GALAXY) {
             camOffsetGal = CameraMath.offsetGal(frame, cameraMc, feetMc, partialTicks);
             camLookGal = frame.dirToGal(forwardMc, partialTicks);
             camUpGal = frame.dirToGal(upMc, partialTicks);
@@ -285,7 +318,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         Vector3d offset = camOffsetGal != null ? camOffsetGal : frame.upGal().mul(eye);
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
                 client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene,
-                PlanetClient.itemActive(player), client.gui.screen() != null));
+                PlanetClient.itemActive(player), client.gui.screen() != null, flying));
     }
 
     private static int planetCommand(net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource source,
