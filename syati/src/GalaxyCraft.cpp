@@ -7,6 +7,7 @@
 #include "Kcl.h"
 #include "Parts.h"
 #include "ViewMath.h"
+#include "VoxelPlanet.h"
 #include "galaxycraft_protocol.h"
 
 // Originals, by their mangled names in symbols/SB4E.txt.
@@ -209,6 +210,7 @@ void MarioInit(void* self, const void* iter)
 {
   init__10MarioActorFRC12JMapInfoIter(self, iter);
   gOut.mbx.scene_id++;  // a new Mario means a new stage: the host republishes everything
+  VoxelPlanetCreate();
 }
 
 void MarioMovement(void* self)
@@ -252,6 +254,7 @@ void MarioMovement(void* self)
 
   PublishParts(query);
   gOut.mbx.game_flags = (gFollowing ? GXC_MBX_GAME_FOLLOWING : 0u) | (gDemo ? GXC_MBX_GAME_DEMO : 0u);
+  VoxelPlanetFrame(gOut.mbx.scene_id, &gOut.mbx.inbox_addr, &gOut.mbx.inbox_size);
   gOut.mbx.game_seq++;  // last: the host reads a consistent frame when this moves
 }
 

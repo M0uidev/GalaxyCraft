@@ -2,6 +2,10 @@
 #include <cmath>
 #include <cstdio>
 
+#include <cstring>
+#include <vector>
+
+#include "Inbox.h"
 #include "Kcl.h"
 #include "Parts.h"
 #include "ViewMath.h"
@@ -181,8 +185,81 @@ static void TestKclSize()
   CHECK(KclSizeFromHeader(huge, base) == 0);
 }
 
+static void Put32(std::vector<u8>& b, u32 v)
+{
+  for (int k = 3; k >= 0; k--)
+    b.push_back(static_cast<u8>(v >> (8 * k)));
+}
+
+static void PutF(std::vector<u8>& b, float f)
+{
+  u32 v;
+  std::memcpy(&v, &f, 4);
+  Put32(b, v);
+}
+
+static void TestInboxRecords()
+{
+  std::vector<u8> b;
+  Put32(b, 102u << 16), Put32(b, 24), Put32(b, 7), PutF(b, 1.f), PutF(b, 2.f), PutF(b, 3.f), PutF(b, 1280.f),
+      PutF(b, 4480.f);
+  Put32(b, 103u << 16), Put32(b, 16 + 32 + 8), Put32(b, 5), Put32(b, 2), Put32(b, 32), Put32(b, 8);
+  for (int k = 0; k < 40; k++)
+    b.push_back(static_cast<u8>(k));
+  Put32(b, 104u << 16), Put32(b, 0);
+  InboxRecord r;
+  u32 off = 0;
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::PLANET);
+  CHECK(r.planet.id == 7 && r.planet.center[2] == 3.f && r.planet.surface == 1280.f && r.planet.gravity_range == 4480.f);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::CHUNK);
+  CHECK(r.chunk.slot == 5 && r.chunk.version == 2 && r.chunk.dl[0] == 0 && r.chunk.kcl[0] == 32);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::TELEPORT);
+  CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
+  CHECK(off == b.size());
+}
+
+static void TestInboxRejectsBadChunks()
+{
+  InboxRecord r;
+  std::vector<u8> b;
+  Put32(b, 103u << 16), Put32(b, 16 + 40), Put32(b, 600), Put32(b, 1), Put32(b, 32), Put32(b, 8);
+  b.resize(b.size() + 40);
+  u32 off = 0;
+  CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));  // slot out of range
+  CHECK(off == 0);
+  std::vector<u8> c;
+  Put32(c, 103u << 16), Put32(c, 16 + 40), Put32(c, 1), Put32(c, 1), Put32(c, 33), Put32(c, 7);
+  c.resize(c.size() + 40);
+  CHECK(!NextInboxRecord(c.data(), c.size(), &off, 512, &r));  // display list not 32-aligned
+  std::vector<u8> d;
+  Put32(d, 103u << 16), Put32(d, 16), Put32(d, 1), Put32(d, 1), Put32(d, 0), Put32(d, 0);
+  CHECK(NextInboxRecord(d.data(), d.size(), &off, 512, &r) && r.chunk.dl_size == 0);  // empty chunk
+  std::vector<u8> e;
+  Put32(e, 103u << 16), Put32(e, 1000), Put32(e, 1);
+  off = 0;
+  CHECK(!NextInboxRecord(e.data(), e.size(), &off, 512, &r));  // longer than the inbox
+}
+
+static void TestPlanetDropAndViewTranslate()
+{
+  const f32 c[3] = {100.f, 0.f, 0.f}, mario[3] = {100.f, 0.f, 50.f}, at_center[3] = {100.f, 0.f, 0.f};
+  f32 out[3];
+  PlanetDrop(c, 1280.f, 40.f, mario, out);
+  CHECK(Near(out[0], 100.f, 0.05f) && Near(out[1], 0.f, 0.05f) && Near(out[2], 1320.f, 0.05f));
+  PlanetDrop(c, 1280.f, 40.f, at_center, out);
+  CHECK(Near(out[1], 1320.f, 0.05f));
+  const f32 view[12] = {1, 0, 0, 5, 0, 0, 1, 6, 0, -1, 0, 7};
+  const f32 t[3] = {1.f, 2.f, 3.f};
+  f32 m[12];
+  ViewTranslate(view, t, m);
+  CHECK(Near(m[3], 6.f) && Near(m[7], 9.f) && Near(m[11], 5.f) && m[6] == 1.f);
+}
+
 int main()
 {
+  TestInboxRecords();
+  TestInboxRejectsBadChunks();
+  TestPlanetDropAndViewTranslate();
   TestSelectNearest64();
   TestBigRadiusWinsOrder();
   TestNoneInRange();

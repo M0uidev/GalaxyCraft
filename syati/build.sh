@@ -28,11 +28,13 @@ FLAGS="-c -Cpp_exceptions off -nodefaults -proc gekko -fp hard -lang=c++ -O4,s -
 mkdir -p build/obj build/CustomCode
 export WINEDEBUG=-all
 
+# Block atlas for the voxel planet, from the local Minecraft jar.
+python3 ../tools/voxel_atlas.py build/gen/atlas.h
 # Module: core/ (also tested with g++) plus the game glue.
 OBJS=""
-for src in src/core/*.cpp src/GalaxyCraft.cpp; do
+for src in src/core/*.cpp src/GalaxyCraft.cpp src/VoxelPlanet.cpp; do
   obj="build/obj/$(basename "$src" .cpp).o"
-  "$CC" $FLAGS -i src/core -i ../protocol -i "$SYATI/include" -I- -i src/shim "$src" -o "$obj"
+  "$CC" $FLAGS -i src -i src/core -i build/gen -i ../protocol -i "$SYATI/include" -I- -i src/shim "$src" -o "$obj"
   OBJS="$OBJS $obj"
 done
 "$KAMEK" $OBJS -dynamic -externals="$SYATI/symbols/SB4E.txt" -externals=symbols_extra.txt -quiet \
