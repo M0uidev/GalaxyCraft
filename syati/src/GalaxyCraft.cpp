@@ -38,6 +38,7 @@ struct Debug
   u32 game_near_z_x100;  // 100 * the game's camera near plane, before the override
   u32 star_pointer_valid;  // MR::isStarPointerValid(0): the game still takes the pointer
   u32 galaxy_view;         // the host asked for the game's own camera
+  u32 voxel_stats;         // &gVoxelStats (VoxelPlanet.h)
 };
 
 struct Published
@@ -211,6 +212,7 @@ void MarioInit(void* self, const void* iter)
   init__10MarioActorFRC12JMapInfoIter(self, iter);
   gOut.mbx.scene_id++;  // a new Mario means a new stage: the host republishes everything
   VoxelPlanetCreate();
+  gOut.dbg.voxel_stats = reinterpret_cast<u32>(&gVoxelStats);
 }
 
 void MarioMovement(void* self)

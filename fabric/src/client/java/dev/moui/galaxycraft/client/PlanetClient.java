@@ -30,6 +30,11 @@ public final class PlanetClient {
 
     private PlanetClient() {}
 
+    /** The planet itself (end-to-end tests edit it directly). */
+    public static PlanetSession session() {
+        return session;
+    }
+
     public static boolean itemActive(LocalPlayer player) {
         return player != null && !player.getMainHandItem().isEmpty();
     }

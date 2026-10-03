@@ -79,7 +79,15 @@ void TickGraves()
 class VoxelPlanetActor;
 VoxelPlanetActor* gActor = 0;
 u8* gInbox = 0;
-bool gAtlasFlushed = false;
+// The atlas copied to 32-byte aligned memory: the GPU drops an address's low 5 bits, and Kamek
+// does not keep the array's own alignment.
+u8* gAtlas = 0;
+
+u8* Aligned32(u32 size, u8** raw)
+{
+  *raw = static_cast<u8*>(operator new(size + 32));
+  return reinterpret_cast<u8*>((reinterpret_cast<u32>(*raw) + 31) & ~31u);
+}
 
 void Identity(TPos3f* m, const f32 t[3])
 {
@@ -114,6 +122,7 @@ public:
 
   void Apply(const gxc::InboxRecord& r)
   {
+    gVoxelStats.records++;
     if (r.type == gxc::InboxRecord::PLANET)
     {
       if (r.planet.id != mPlanet)
@@ -144,14 +153,15 @@ public:
   void Replace(const gxc::InboxChunk& c)
   {
     Slot& s = gSlots[c.slot];
+    gVoxelStats.last_slot = c.slot;
+    gVoxelStats.last_version = c.version;
     if (s.dl && c.version <= s.version)
       return;
     Free(s);
     s.version = c.version;
     if (c.dl_size == 0)
       return;
-    s.dl_raw = static_cast<u8*>(operator new(c.dl_size + 32));
-    s.dl = reinterpret_cast<u8*>((reinterpret_cast<u32>(s.dl_raw) + 31) & ~31u);
+    s.dl = Aligned32(c.dl_size, &s.dl_raw);
     memcpy(s.dl, c.dl, c.dl_size);
     DCFlushRange(s.dl, c.dl_size);
     s.dl_size = c.dl_size;
@@ -163,6 +173,8 @@ public:
     s.parts->init(m, getSensor("body"), s.kcl, gPa, 0, false);
     validateCollisionParts__2MRFP14CollisionParts(s.parts);
     mChunks++;
+    gVoxelStats.parts_made++;
+    gVoxelStats.chunks = mChunks;
   }
 
   // The old collision part leaves every zone and stays allocated (a few hundred bytes); its KCL
@@ -193,24 +205,19 @@ public:
   {
     if (!mPlanet || mChunks == 0)
       return;
-    if (!gAtlasFlushed)
-    {
-      DCFlushRange(gVoxelAtlas, sizeof(gVoxelAtlas));
-      gAtlasFlushed = true;
-    }
     GXClearVtxDesc();
     GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
     GXSetVtxDesc(GX_VA_CLR0, GX_DIRECT);
     GXSetVtxDesc(GX_VA_TEX0, GX_DIRECT);
     GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
     GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
-    GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_TEX0, GX_TEX_ST, GX_U8, 2);
+    GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_TEX0, GX_TEX_ST, GX_U16, 10);
     GXSetNumChans(1);
     GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_VTX, 0, GX_DF_NONE, GX_AF_NONE);
     GXSetNumTexGens(1);
     GXSetTexCoordGen2(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY, GX_FALSE, GX_PTIDENTITY);
     GXTexObj tex;
-    GXInitTexObj(&tex, gVoxelAtlas, GXC_ATLAS_SIZE, GXC_ATLAS_SIZE, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);
+    GXInitTexObj(&tex, gAtlas, GXC_ATLAS_SIZE, GXC_ATLAS_SIZE, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);
     GXInitTexObjLOD(&tex, GX_NEAR, GX_NEAR, 0.f, 0.f, 0.f, GX_FALSE, GX_FALSE, GX_ANISO_1);
     GXLoadTexObj(&tex, GX_TEXMAP0);
     GXSetNumIndStages(0);
@@ -256,12 +263,18 @@ public:
 };
 }  // namespace
 
+VoxelStats gVoxelStats = {0, 0, 0, 0, 0, 0};
+
 void VoxelPlanetCreate()
 {
   // A new scene: the old one's heap (chunks, parts, inbox) is gone, so forget it, don't free it.
   memset(gSlots, 0, sizeof(gSlots));
   memset(gGraves, 0, sizeof(gGraves));
   gInbox = static_cast<u8*>(operator new(INBOX_BYTES));
+  u8* raw;
+  gAtlas = Aligned32(sizeof(gVoxelAtlas), &raw);
+  memcpy(gAtlas, gVoxelAtlas, sizeof(gVoxelAtlas));
+  DCFlushRange(gAtlas, sizeof(gVoxelAtlas));
   memset(gInbox, 0, sizeof(GxcInboxHeader));
   gActor = new VoxelPlanetActor();
   gActor->initWithoutIter();
@@ -277,6 +290,7 @@ void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_s
   GxcInboxHeader* h = reinterpret_cast<GxcInboxHeader*>(gInbox);
   if (h->state != 1)
     return;
+  gVoxelStats.batches++;
   if (h->scene_id == scene_id && h->bytes <= INBOX_BYTES - sizeof(GxcInboxHeader))
   {
     const u8* rec = gInbox + sizeof(GxcInboxHeader);

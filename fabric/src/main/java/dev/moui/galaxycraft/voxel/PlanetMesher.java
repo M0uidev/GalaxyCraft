@@ -10,13 +10,15 @@ import org.joml.Vector3d;
 
 /**
  * Turns a chunk into what SMG2 needs: a GX display list (quads in vertex format 7: position f32,
- * color RGBA8, texture coordinate u8 with 2 fraction bits) and a KCL. Only sides facing air are
+ * color RGBA8, texture coordinate u16 with 10 fraction bits) and a KCL. Only sides facing air are
  * kept. Positions are in galaxy units relative to the planet's center.
  */
 public final class PlanetMesher {
     /** GX_QUADS | GX_VTXFMT7. */
     public static final int GX_QUADS_FMT7 = 0x80 | 7;
-    public static final int VERTEX_BYTES = 12 + 4 + 2;
+    public static final int VERTEX_BYTES = 12 + 4 + 4;
+    /** Texture coordinates: 1.0 = 1024; a tile is 256, a texel of the 64×64 atlas 16. */
+    private static final int TILE_ST = 256, HALF_TEXEL = 8;
     /** Minecraft's face shading: top, bottom, then the two pairs of sides. */
     private static final int[] SHADE = {255, 128, 204, 204, 153, 153};
     private static final int ATLAS_TILES = 4;
@@ -61,11 +63,13 @@ public final class PlanetMesher {
             for (int k = 0; k < 4; k++) v[k] = new Vector3d(q.corners()[k]).mul(unitsPerBlock);
             int tx = q.tile() % ATLAS_TILES, ty = q.tile() / ATLAS_TILES, shade = SHADE[q.side()];
             // q[0], q[1] bottom edge (v = 1), q[2], q[3] top edge (v = 0), left to right then back.
-            int[][] st = {{tx, ty + 1}, {tx + 1, ty + 1}, {tx + 1, ty}, {tx, ty}};
+            int s0 = tx * TILE_ST + HALF_TEXEL, s1 = (tx + 1) * TILE_ST - HALF_TEXEL;
+            int t0 = ty * TILE_ST + HALF_TEXEL, t1 = (ty + 1) * TILE_ST - HALF_TEXEL;
+            int[][] st = {{s0, t1}, {s1, t1}, {s1, t0}, {s0, t0}};
             for (int k = 0; k < 4; k++) {
                 dl.putFloat((float) v[k].x).putFloat((float) v[k].y).putFloat((float) v[k].z);
                 dl.put((byte) shade).put((byte) shade).put((byte) shade).put((byte) 255);
-                dl.put((byte) st[k][0]).put((byte) st[k][1]);
+                dl.putShort((short) st[k][0]).putShort((short) st[k][1]);
             }
             tris.add(Tri.of(v[0], v[1], v[2]));
             tris.add(Tri.of(v[0], v[2], v[3]));

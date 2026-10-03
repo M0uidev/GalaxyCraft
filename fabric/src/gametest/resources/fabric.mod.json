@@ -6,6 +6,7 @@
 	"environment": "client",
 	"entrypoints": {
 		"fabric-client-gametest": [
+			"dev.moui.galaxycraft.gametest.VoxelPlanetTest",
 			"dev.moui.galaxycraft.gametest.WalkOnStubPlanetTest",
 			"dev.moui.galaxycraft.gametest.DolphinOverlayDemo",
 			"dev.moui.galaxycraft.gametest.MarioPerspectivesTest"

@@ -13,6 +13,12 @@ loom {
 			if (project.hasProperty("galaxycraftDemoTicks")) { // tools/gxplay.sh: play for that long
 				vmArg "-Dgalaxycraft.demoTicks=${project.property("galaxycraftDemoTicks")}"
 			}
+			if (project.hasProperty("galaxycraftVoxel")) { // tools/gxvoxel.sh: VoxelPlanetTest in the dev Dolphin
+				vmArg "-Dgalaxycraft.voxel=true"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftPlanet")) { // a voxel planet once linked (PlanetClient)
 				vmArg "-Dgalaxycraft.planet=true"
 			}
