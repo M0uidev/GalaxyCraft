@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.ChatScreen;
 import org.joml.Vector3d;
 
 /**
@@ -29,6 +31,16 @@ public final class VoxelPlanetTest implements FabricClientGameTest {
             sp.getServer().runCommand("tp @a 0 100 0 0 0");
             ctx.waitFor(mc -> GalaxyCraftClient.galaxyPos().isPresent(), 1200);
             ctx.waitTicks(40);
+            // The chat: T opens it and what is typed in Dolphin's window (here the harness, through
+            // the same text slot as the keyboard) goes into it, '/' included.
+            ctx.getInput().pressKey(o -> o.keyChat);
+            ctx.waitTicks(10);
+            check(ctx.computeOnClient(mc -> mc.gui.screen() instanceof ChatScreen), "T opens the chat");
+            gxdev("ctl", "text /galaxycraft planet");
+            ctx.waitTicks(10);
+            String typed = ctx.computeOnClient(mc -> chatText(mc.gui.screen()));
+            check("/galaxycraft planet".equals(typed), "the chat gets the typed text: '" + typed + "'");
+            ctx.runOnClient(mc -> mc.gui.setScreen(null));
             PlanetSession s = PlanetClient.session();
             ctx.runOnClient(mc -> PlanetClient.remove()); // none saved from an earlier run
             ctx.runOnClient(mc -> PlanetClient.requestSpawn(PlanetClient.DEFAULT_RADIUS));
@@ -118,7 +130,18 @@ public final class VoxelPlanetTest implements FabricClientGameTest {
             gxdev("ctl", "shot voxel-6-big-landed");
             log("collision chunks: " + ctx.computeOnClient(mc -> s.collisionChunks()));
             ctx.runOnClient(mc -> PlanetClient.remove());
+
             log("PASS");
+        }
+    }
+
+    private static String chatText(Object screen) {
+        try {
+            var f = ChatScreen.class.getDeclaredField("input");
+            f.setAccessible(true);
+            return ((EditBox) f.get(screen)).getValue();
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
         }
     }
 

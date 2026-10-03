@@ -19,6 +19,10 @@ void X11KeymapToScancodes(const char keymap[32], u8 keys[64]);
 // XInput2 button bits (bit n = X button n+1: left, middle, right, wheel...) -> protocol mask.
 u32 X11ButtonsToSdl(u32 x_buttons);
 
+// The character an X11 keysym types (the layout already applied), or 0 if it types none
+// (modifiers, arrows, Return, dead keys...).
+u32 KeysymToCodepoint(u32 keysym);
+
 // Publishes the whole InputState (keys as SDL scancodes, accumulated mouse deltas) on every change.
 class InputWriter
 {
@@ -32,6 +36,8 @@ public:
   void ReleaseAll();
   // Replaces the whole key bitmap (SDL scancodes); publishes only if something changed.
   void SetKeys(const u8 keys[64]);
+  // A character typed (GxcTextState), for Minecraft's text fields.
+  void Text(u32 codepoint);
 
 private:
   void Publish();
@@ -40,5 +46,6 @@ private:
   u8 m_keys[64] = {};
   double m_mouse_x = 0, m_mouse_y = 0, m_wheel = 0;
   u32 m_buttons = 0;
+  u32 m_text_count = 0;
 };
 }  // namespace gxc

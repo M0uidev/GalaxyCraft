@@ -1,5 +1,5 @@
 /*
- * GalaxyCraft shared-memory protocol, version 5.
+ * GalaxyCraft shared-memory protocol, version 6.
  *
  * Source of truth for the layout of /dev/shm/galaxycraft_v1. Mirrors:
  *   tools/gxproto.py
@@ -16,7 +16,7 @@
 
 #define GXC_SHM_NAME "/galaxycraft_v1"
 #define GXC_MAGIC 0x52435847u /* "GXCR" */
-#define GXC_VERSION 5u
+#define GXC_VERSION 6u
 
 /* Regions (byte offsets from the start of the mapping). */
 #define GXC_OFF_HEADER 0
@@ -24,6 +24,7 @@
 #define GXC_OFF_PLAYER 128
 #define GXC_OFF_INPUT 224
 #define GXC_OFF_GAMECAM 320
+#define GXC_OFF_TEXT 512
 #define GXC_OFF_RING_S2M 4096
 #define GXC_RING_S2M_CAP (4u * 1024u * 1024u)
 #define GXC_OFF_RING_M2S (GXC_OFF_RING_S2M + 16 + GXC_RING_S2M_CAP)
@@ -74,6 +75,8 @@ typedef struct { /* S -> M */
 #define GXC_PLAYER_ON_GROUND 1u
 /* Something in the main hand: the clicks break and place blocks instead of spinning (B). */
 #define GXC_PLAYER_ITEM_ACTIVE 2u
+/* A Minecraft screen is open (chat, inventory...): the keyboard is Minecraft's, not Mario's. */
+#define GXC_PLAYER_SCREEN 4u
 
 typedef struct { /* M -> S */
   uint32_t seq;
@@ -121,6 +124,18 @@ typedef struct { /* S -> M */
   double wheel;
   uint8_t keys[64]; /* bitmap indexed by SDL scancode (USB HID usage), as Minecraft 26.x uses */
 } GxcInputState;
+
+/*
+ * Text typed in the host's window (S -> M), as characters after the keyboard layout: what GLFW's
+ * char callback gives, for Minecraft's text fields. count only grows; character i is
+ * codepoints[i % GXC_TEXT_RING]. A reader more than GXC_TEXT_RING behind lost the oldest ones.
+ */
+#define GXC_TEXT_RING 64
+typedef struct {
+  uint32_t seq;
+  uint32_t count;
+  uint32_t codepoints[GXC_TEXT_RING];
+} GxcTextState;
 
 /*
  * SPSC ring: head and tail are monotonically increasing byte counters

@@ -93,6 +93,14 @@ DevCommand ParseLine(std::string_view line)
     return w.size() == 2 && (w[1] == "on" || w[1] == "off") ?
                DevCommand{DevCommand::Link, 0, 0, std::string(w[1])} :
                bad;
+  if (w[0] == "text")
+  {
+    const size_t at = line.find("text") + 4;
+    std::string_view rest = line.substr(at);
+    if (!rest.empty() && rest.front() == ' ')
+      rest.remove_prefix(1);
+    return rest.empty() ? bad : DevCommand{DevCommand::Text, 0, 0, std::string(rest)};
+  }
   if (w[0] == "keys")
   {
     std::string names;

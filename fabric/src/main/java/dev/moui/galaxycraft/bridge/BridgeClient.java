@@ -111,6 +111,11 @@ public final class BridgeClient {
         return linked() ? Optional.of(shm.seg()) : Optional.empty();
     }
 
+    /** Characters typed in the host's window (Dolphin's), after its keyboard layout. */
+    public Optional<Seqlock.TextState> text() {
+        return linked() ? Seqlock.readText(shm.seg()) : Optional.empty();
+    }
+
     /** The host's keyboard and mouse state, if it publishes any (Dolphin does, the stub does not). */
     public Optional<Seqlock.InputState> input() {
         return linked() ? Seqlock.readInput(shm.seg()) : Optional.empty();

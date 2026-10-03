@@ -555,3 +555,16 @@ TEST(scene_change_carries_the_stage_name)
   CHECK(!msgs.empty() && msgs[0].type == GXC_MSG_SCENE_CHANGE && msgs[0].payload.size() == 36);
   CHECK(std::string(reinterpret_cast<const char*>(msgs[0].payload.data() + 4)) == "SkyStationGalaxy");
 }
+
+TEST(open_screen_and_item_flags_from_the_mod)
+{
+  Fixture f;
+  f.Tick();
+  f.shm->SetU64(offsetof(GxcHeader, mod_heartbeat_ms), f.now);
+  WritePlayer(*f.shm, {GXC_PLAYER_SCREEN, 1, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {}, GXC_VIEW_FIRST, 3});
+  f.Tick();
+  CHECK(f.bridge.ScreenOpen() && !f.bridge.ItemActive());
+  WritePlayer(*f.shm, {GXC_PLAYER_ITEM_ACTIVE, 2, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {}, GXC_VIEW_FIRST, 3});
+  f.Tick();
+  CHECK(!f.bridge.ScreenOpen() && f.bridge.ItemActive());
+}

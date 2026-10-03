@@ -44,7 +44,20 @@ class ProtoTest {
         var g = new Vector3d(0, -1, 0);
         assertTrue(new Seqlock.WorldState(1, 1, g, new Vector3d(), Layout.WORLD_FOLLOW).follow());
         assertFalse(new Seqlock.WorldState(1, 1, g, new Vector3d(), Layout.WORLD_ANCHOR).follow());
-        assertEquals(5, Layout.VERSION);
+        assertEquals(6, Layout.VERSION);
+    }
+
+    @Test void readTextFromTheRing() {
+        MemorySegment s = java.lang.foreign.Arena.ofAuto().allocate(1024, 8);
+        var le = java.lang.foreign.ValueLayout.JAVA_INT_UNALIGNED.withOrder(java.nio.ByteOrder.LITTLE_ENDIAN);
+        s.set(le, Layout.OFF_TEXT, 6);       // seq
+        s.set(le, Layout.OFF_TEXT + 4, 3);   // count
+        s.set(le, Layout.OFF_TEXT + 8, 'a');
+        s.set(le, Layout.OFF_TEXT + 16, 'c');
+        var t = Seqlock.readText(s).orElseThrow();
+        assertEquals(3, t.count());
+        assertEquals('a', t.codepoints()[0]);
+        assertEquals('c', t.codepoints()[2]);
     }
 
     @Test void openMissingFileIsEmpty() {

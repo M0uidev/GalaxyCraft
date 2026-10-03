@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstring>
 
 #include "galaxycraft_protocol.h"
@@ -144,6 +145,41 @@ void InputWriter::Wheel(double delta)
 {
   m_wheel += delta;
   Publish();
+}
+
+u32 KeysymToCodepoint(u32 keysym)
+{
+  if ((keysym >= 0x20 && keysym <= 0x7E) || (keysym >= 0xA0 && keysym <= 0xFF))
+    return keysym;  // Latin-1 keysyms are their own code points
+  if (keysym >= 0x01000100 && keysym <= 0x0110FFFF)
+    return keysym - 0x01000000;  // the rest of Unicode
+  if (keysym >= 0xFFB0 && keysym <= 0xFFB9)
+    return '0' + (keysym - 0xFFB0);  // keypad digits
+  switch (keysym)
+  {
+  case 0xFF80: return ' ';  // KP_Space
+  case 0xFFAA: return '*';
+  case 0xFFAB: return '+';
+  case 0xFFAC: return ',';
+  case 0xFFAD: return '-';
+  case 0xFFAE: return '.';
+  case 0xFFAF: return '/';
+  case 0xFFBD: return '=';
+  default: return 0;
+  }
+}
+
+void InputWriter::Text(u32 codepoint)
+{
+  if (codepoint == 0)
+    return;
+  const u32 seq = m_shm.GetU32(GXC_OFF_TEXT);
+  m_shm.StoreRelease(GXC_OFF_TEXT, seq + 1);
+  std::atomic_thread_fence(std::memory_order_release);
+  m_shm.SetU32(GXC_OFF_TEXT + offsetof(GxcTextState, codepoints) + 4 * (m_text_count % GXC_TEXT_RING), codepoint);
+  m_text_count++;
+  m_shm.SetU32(GXC_OFF_TEXT + offsetof(GxcTextState, count), m_text_count);
+  m_shm.StoreRelease(GXC_OFF_TEXT, seq + 2);
 }
 
 void InputWriter::Publish()

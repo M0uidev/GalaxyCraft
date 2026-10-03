@@ -1,8 +1,10 @@
 package dev.moui.galaxycraft.client;
 
 import dev.moui.galaxycraft.input.InputDiff;
+import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Seqlock;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonInfo;
 
@@ -10,6 +12,7 @@ import net.minecraft.client.input.MouseButtonInfo;
 final class InputInjector {
     private static final int PRESS = 1, RELEASE = 0;
     private Seqlock.InputState prev;
+    private int textSeen = -1;
 
     void apply(Minecraft mc, Seqlock.InputState cur) {
         if (prev == null) { // first snapshot is the baseline: nothing has changed yet
@@ -32,7 +35,27 @@ final class InputInjector {
         prev = cur;
     }
 
+    /** Characters typed since last time, after the keys (as GLFW's char callback follows its key one). */
+    void applyText(Minecraft mc, Seqlock.TextState text) {
+        if (textSeen < 0) { // baseline, as for the keys
+            textSeen = text.count();
+            return;
+        }
+        int from = Math.max(textSeen, text.count() - Layout.TEXT_RING);
+        for (int i = from; i - text.count() < 0; i++) {
+            int cp = text.codepoints()[Integer.remainderUnsigned(i, Layout.TEXT_RING)];
+            mc.keyboardHandler.charTyped(mc.getWindow().handle(), new CharacterEvent(cp));
+        }
+        textSeen = text.count();
+    }
+
+    /** No key state from the host (it publishes none until a key or the mouse moves). */
     void reset() {
         prev = null;
+    }
+
+    /** No text from the host: the next text seen is the baseline. */
+    void resetText() {
+        textSeen = -1;
     }
 }

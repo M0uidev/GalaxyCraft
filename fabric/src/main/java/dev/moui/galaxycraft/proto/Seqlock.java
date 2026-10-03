@@ -37,13 +37,17 @@ public final class Seqlock {
     public record InputState(int buttons, double mouseX, double mouseY, double wheel, byte[] keys) {}
 
     /** look/up are the camera's; camOffset is the camera minus pos (galaxy units); view is Layout.VIEW_*. */
+    /** itemActive: the clicks break and place blocks; screenOpen: the keyboard types in Minecraft. */
     public record PlayerOut(long frameId, Vector3d pos, Vector3d look, Vector3d up, float fovY, float eye,
-            boolean onGround, Vector3d camOffset, int view, int sceneId, boolean itemActive) {
+            boolean onGround, Vector3d camOffset, int view, int sceneId, boolean itemActive, boolean screenOpen) {
         public PlayerOut(long frameId, Vector3d pos, Vector3d look, Vector3d up, float fovY, float eye,
                 boolean onGround, Vector3d camOffset, int view, int sceneId) {
-            this(frameId, pos, look, up, fovY, eye, onGround, camOffset, view, sceneId, false);
+            this(frameId, pos, look, up, fovY, eye, onGround, camOffset, view, sceneId, false, false);
         }
     }
+
+    /** count of characters ever typed; character i is codepoints[i % TEXT_RING]. */
+    public record TextState(int count, int[] codepoints) {}
 
     /** SMG2's camera and Mario from one game frame (galaxy space). */
     public record GameCamera(int flags, long frameId, Vector3d camPos, Vector3d camDir, Vector3d camUp, float fovY,
@@ -111,12 +115,27 @@ public final class Seqlock {
         return Optional.empty();
     }
 
+    public static Optional<TextState> readText(MemorySegment s) {
+        long o = Layout.OFF_TEXT;
+        for (int attempt = 0; attempt < 100; attempt++) {
+            int s1 = getAcquire(s, o);
+            if ((s1 & 1) != 0) continue;
+            int[] cps = new int[Layout.TEXT_RING];
+            for (int i = 0; i < cps.length; i++) cps[i] = s.get(INT_U, o + 8 + 4L * i);
+            var t = new TextState(s.get(INT_U, o + 4), cps);
+            VarHandle.acquireFence();
+            if (getAcquire(s, o) == s1) return Optional.of(t);
+        }
+        return Optional.empty();
+    }
+
     public static void writePlayer(MemorySegment s, PlayerOut p) {
         long o = Layout.OFF_PLAYER;
         int seq = s.get(INT, o);
         s.set(INT, o, seq + 1);
         VarHandle.releaseFence();
-        s.set(INT, o + 4, (p.onGround() ? Layout.PLAYER_ON_GROUND : 0) | (p.itemActive() ? Layout.PLAYER_ITEM_ACTIVE : 0));
+        s.set(INT, o + 4, (p.onGround() ? Layout.PLAYER_ON_GROUND : 0) | (p.itemActive() ? Layout.PLAYER_ITEM_ACTIVE : 0)
+                | (p.screenOpen() ? Layout.PLAYER_SCREEN : 0));
         s.set(LONG, o + 8, p.frameId());
         putVec(s, o + 16, p.pos());
         putVec(s, o + 28, p.look());

@@ -75,6 +75,9 @@ _Static_assert(offsetof(GxcMailbox, parts) == 168, "mbx.parts");
 _Static_assert(GXC_MBX_GAME_FOLLOWING == 1u && GXC_MBX_GAME_DEMO == 2u, "mbx flags");
 _Static_assert(GXC_MBX_FOLLOW == 2u && GXC_WORLD_FOLLOW == 2u && GXC_MBX_GALAXY_VIEW == 4u &&
                GXC_MBX_THIRD_PERSON == 8u, "flags");
-_Static_assert(GXC_VERSION == 5u && GXC_MBX_VERSION == 4u, "v5");
+_Static_assert(GXC_VERSION == 6u && GXC_MBX_VERSION == 4u, "v6");
+_Static_assert(sizeof(GxcTextState) == 264 && GXC_OFF_TEXT >= GXC_OFF_GAMECAM + sizeof(GxcGameCamera) &&
+               GXC_OFF_TEXT + sizeof(GxcTextState) <= GXC_OFF_RING_S2M, "text");
+_Static_assert(GXC_PLAYER_SCREEN == 4u, "screen");
 
 int main(void) { puts("OK"); return 0; }

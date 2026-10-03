@@ -197,3 +197,28 @@ TEST(input_writer_set_keys_publishes_only_changes)
   in.SetKeys(keys);
   CHECK(!KeyBit(*f.shm, 26));
 }
+
+TEST(typed_text_goes_round_the_ring)
+{
+  ShmFixture f;
+  InputWriter w(*f.shm);
+  for (u32 i = 0; i < GXC_TEXT_RING + 2; i++)
+    w.Text('a' + i);
+  w.Text(0);  // types nothing
+  CHECK(f.shm->GetU32(GXC_OFF_TEXT + offsetof(GxcTextState, count)) == GXC_TEXT_RING + 2);
+  const u32 base = GXC_OFF_TEXT + offsetof(GxcTextState, codepoints);
+  CHECK(f.shm->GetU32(base) == 'a' + GXC_TEXT_RING);  // the 17th overwrote the 1st
+  CHECK(f.shm->GetU32(base + 4 * 2) == 'c');
+  CHECK(f.shm->GetU32(GXC_OFF_TEXT) % 2 == 0);
+}
+
+TEST(keysyms_to_characters)
+{
+  CHECK(KeysymToCodepoint('/') == '/');
+  CHECK(KeysymToCodepoint(0xF1) == 0xF1);              // ntilde, on a Spanish keyboard
+  CHECK(KeysymToCodepoint(0x010020AC) == 0x20AC);      // EuroSign
+  CHECK(KeysymToCodepoint(0xFFB7) == '7');             // KP_7
+  CHECK(KeysymToCodepoint(0xFF0D) == 0);               // Return
+  CHECK(KeysymToCodepoint(0xFFE1) == 0);               // Shift_L
+  CHECK(KeysymToCodepoint(0xFE51) == 0);               // dead_acute
+}

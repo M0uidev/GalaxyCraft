@@ -20,8 +20,10 @@ tools/gxplay.sh
   pico, pasto, tierra y piedra: con ellos en la mano, **clic izquierdo rompe** y **clic derecho
   pone** el bloque de la mano. **F** gira siempre.
 - `/galaxycraft planet spawn [radio]` crea uno nuevo (10–256, por defecto 16) que reemplaza al
-  de la galaxia; `tp` y `remove` (borra también el guardado). Minecraft está oculto: el chat se
-  abre con T en el overlay.
+  de la galaxia; `tp` y `remove` (borra también el guardado). El chat se abre con **T** en el
+  overlay: Dolphin traduce cada tecla con tu distribución de teclado (XKB: Shift, AltGr, ñ) y se la
+  da a Minecraft como texto (protocolo v6, `GxcTextState`). Con el chat abierto Mario no se mueve,
+  Esc lo cierra y Enter envía. Las teclas muertas (tildes) no componen todavía.
 - **Persistencia:** un archivo por galaxia en `.minecraft/galaxycraft/planets/<Stage>.gxplanet`
   (gzip; el del test vive en `fabric/build/run/...`). Se guarda cada 10 s si cambió y al salir de
   la galaxia; al entrar a una galaxia con planeta guardado, se carga y se manda solo. Si Mario muere

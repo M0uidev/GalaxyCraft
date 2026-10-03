@@ -18,6 +18,7 @@ namespace gxc
 //                                back: third person, 4 blocks behind (addr = 1)
 //                                (no up: opposite of the game's gravity)
 //   unfollow                     back to whatever the mod says
+//   text STRING                  type these characters (ASCII) into Minecraft, as the keyboard would
 //   status                       focus/input gates, mode and mod state (Dolphin side)
 //   link on|off                  same as the Ctrl+G hotkey: Minecraft mode or Wiimote mode
 //   keys [w a s d space shift ctrl esc tab lmb rmb]...   hold these until the next keys, as if
@@ -37,6 +38,7 @@ struct DevCommand
     Link,
     Status,
     Keys,
+    Text,
     Bad
   } kind;
   u32 addr = 0, len = 0;

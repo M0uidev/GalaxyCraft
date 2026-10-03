@@ -151,3 +151,10 @@ TEST(parses_status)
   auto c = ParseDevCommands("status\nstatus now");
   CHECK(c.size() == 2 && c[0].kind == DevCommand::Status && c[1].kind == DevCommand::Bad);
 }
+
+TEST(text_keeps_its_spaces)
+{
+  const auto c = ParseDevCommands("text /galaxycraft planet tp\n");
+  CHECK(c.size() == 1 && c[0].kind == DevCommand::Text && c[0].arg == "/galaxycraft planet tp");
+  CHECK(ParseDevCommands("text\n")[0].kind == DevCommand::Bad);
+}

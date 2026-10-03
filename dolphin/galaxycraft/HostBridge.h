@@ -44,6 +44,11 @@ public:
   {
     return m_following && m_player && (m_player->flags & GXC_PLAYER_ITEM_ACTIVE) != 0;
   }
+  // A Minecraft screen is open (chat...): the keyboard belongs to Minecraft, not to Mario.
+  bool ScreenOpen() const
+  {
+    return m_following && m_player && (m_player->flags & GXC_PLAYER_SCREEN) != 0;
+  }
   // Voxel planet records waiting for the module's inbox.
   size_t PendingInbox() const { return m_inbox.size(); }
 

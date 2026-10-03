@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..af365af
+index 0000000..34d5b6a
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,440 @@
+@@ -0,0 +1,461 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -248,8 +248,11 @@ index 0000000..af365af
 +  gxc::WiimoteState pad;
 +  if (following)
 +  {
-+    const u8* keys = state.dev_keys ? state.dev_keys->first.data() : state.keys;
-+    const u32 buttons = state.dev_keys ? state.dev_keys->second : state.buttons;
++    // With a Minecraft screen open (the chat) the keyboard and mouse type there: Mario stays put.
++    static const u8 none[64] = {};
++    const bool screen = state.bridge->ScreenOpen();
++    const u8* keys = state.dev_keys ? state.dev_keys->first.data() : screen ? none : state.keys;
++    const u32 buttons = state.dev_keys ? state.dev_keys->second : screen ? 0u : state.buttons;
 +    pad = state.mario.Update(keys, buttons, state.bridge->InGame(), state.bridge->GalaxyView(),
 +                             state.bridge->ItemActive());
 +  }
@@ -329,6 +332,11 @@ index 0000000..af365af
 +    case gxc::DevCommand::Keys:
 +      SetDevKeys(state, cmd.arg);
 +      AppendCtlOut("ok keys " + cmd.arg + "\n");
++      break;
++    case gxc::DevCommand::Text:
++      for (const char c : cmd.arg)
++        state.input->Text(static_cast<u8>(c));
++      AppendCtlOut("ok text\n");
 +      break;
 +    case gxc::DevCommand::Unfollow:
 +      bridge.SetDevFollow(std::nullopt);
@@ -430,7 +438,14 @@ index 0000000..af365af
 +    s_state->input->Wheel(-dz / 8.0);  // notches, up positive (as Minecraft's scroll)
 +  u8 keys[64];
 +  gxc::X11KeymapToScancodes(keymap, keys);
-+  s_state->input->SetKeys(keys);
++  constexpr int X_ESCAPE = 9;  // X keycode (evdev 1 + 8)
++  const bool escape = (keymap[X_ESCAPE / 8] >> (X_ESCAPE % 8)) & 1;
++  // With a Minecraft screen open (the chat) Escape closes it; otherwise it is Mario's + button.
++  u8 mc_keys[64];
++  std::memcpy(mc_keys, keys, sizeof(keys));
++  if (escape && s_state->bridge->ScreenOpen())
++    mc_keys[gxc::SC_ESCAPE / 8] |= 1u << (gxc::SC_ESCAPE % 8);
++  s_state->input->SetKeys(mc_keys);
 +  const u32 buttons = gxc::X11ButtonsToSdl(x_buttons);
 +  if (buttons != s_xinput_buttons)
 +  {
@@ -439,11 +454,17 @@ index 0000000..af365af
 +  }
 +  // Mario mode also reads Escape (the + button), which Minecraft never gets.
 +  std::memcpy(s_state->keys, keys, sizeof(keys));
-+  constexpr int X_ESCAPE = 9;  // X keycode (evdev 1 + 8)
-+  if ((keymap[X_ESCAPE / 8] >> (X_ESCAPE % 8)) & 1)
++  if (escape)
 +    s_state->keys[gxc::SC_ESCAPE / 8] |= 1u << (gxc::SC_ESCAPE % 8);
 +  s_state->buttons = buttons;
 +  return capture;
++}
++
++void OnText(u32 keysym)
++{
++  std::lock_guard lock(s_mutex);
++  if (s_state && s_state->bridge->MinecraftMode() && ModAlive(*s_state->shm))
++    s_state->input->Text(gxc::KeysymToCodepoint(keysym));
 +}
 +
 +bool MouseCaptured()
@@ -495,10 +516,10 @@ index 0000000..af365af
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..d404613
+index 0000000..0af6ebe
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,50 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -530,6 +551,8 @@ index 0000000..d404613
 +// and recentred (playing, not in SMG2's menus, where the mouse is the Wii Remote pointer).
 +bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32]);
 +
++// XInput2 backend: a key typed this X11 keysym (layout applied); Minecraft gets its character.
++void OnText(u32 keysym);
 +// Same as OnXInput2's result: the mouse turns Minecraft's view (cursor hidden).
 +bool MouseCaptured();
 +
@@ -812,7 +835,7 @@ index d828bf3..89bda3b 100644
    void dragEnterEvent(QDragEnterEvent* event) override;
    void dropEvent(QDropEvent* event) override;
 diff --git a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
-index 309ed70..7b96436 100644
+index 309ed70..1add7f4 100644
 --- a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
 +++ b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
 @@ -15,6 +15,7 @@
@@ -832,7 +855,31 @@ index 309ed70..7b96436 100644
    XCloseDisplay(m_display);
  }
  
-@@ -414,9 +417,48 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+@@ -342,6 +345,23 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+       update_mouse = true;
+       break;
+     case XI_RawKeyPress:
++    {
++      update_keyboard = true;
++      // GalaxyCraft: the character this key types with the current layout and modifiers, for
++      // Minecraft's text fields (the chat). Not with Ctrl or Alt held.
++      const XIRawEvent* raw_event = static_cast<const XIRawEvent*>(event.xcookie.data);
++      XkbStateRec xkb{};
++      KeySym keysym = NoSymbol;
++      unsigned int consumed = 0;
++      if (XkbGetState(m_display, XkbUseCoreKbd, &xkb) == Success &&
++          (xkb.mods & (ControlMask | Mod1Mask)) == 0 &&
++          XkbLookupKeySym(m_display, static_cast<KeyCode>(raw_event->detail),
++                          XkbBuildCoreState(xkb.mods, xkb.group), &consumed, &keysym))
++      {
++        GalaxyCraft::OnText(static_cast<u32>(keysym));
++      }
++      break;
++    }
+     case XI_RawKeyRelease:
+       update_keyboard = true;
+       break;
+@@ -414,9 +434,48 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
    if (update_keyboard)
      XQueryKeymap(m_display, m_state.keyboard.data());
  

@@ -115,6 +115,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     public static void onFrameStart() {
         if (bridge == null) return;
         bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
+        bridge.text().ifPresentOrElse(t -> input.applyText(Minecraft.getInstance(), t), input::resetText);
     }
 
     /** Render thread, after the GUI: publish the frame for Dolphin to composite. */
@@ -284,7 +285,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         Vector3d offset = camOffsetGal != null ? camOffsetGal : frame.upGal().mul(eye);
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
                 client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene,
-                PlanetClient.itemActive(player)));
+                PlanetClient.itemActive(player), client.gui.screen() != null));
     }
 
     private static int planetCommand(net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource source,
