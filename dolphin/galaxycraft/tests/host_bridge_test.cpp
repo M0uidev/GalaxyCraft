@@ -432,6 +432,33 @@ TEST(minecraft_mode_on_republishes_and_reanchors)
   CHECK(w && (w->flags & GXC_WORLD_ANCHOR) == 0 && f.bridge.Following());
 }
 
+TEST(link_on_save_waits_for_a_stage_past_the_title)
+{
+  Fixture f;
+  auto stage = [&](const char* name) {
+    char buf[32] = {};
+    std::strncpy(buf, name, sizeof(buf) - 1);
+    f.mem.PutBytes(MBX + offsetof(GxcMailbox, stage_name), buf, sizeof(buf));
+    f.Tick();
+  };
+  f.bridge.SetLinkOnSave(true);
+  CHECK(!f.bridge.MinecraftMode());
+  stage("");  // booting: no Mario yet
+  CHECK(!f.bridge.MinecraftMode());
+  stage("FileSelect");  // title and file select
+  CHECK(!f.bridge.MinecraftMode());
+  stage("PeachCastleGalaxy");  // a save was picked
+  CHECK(f.bridge.MinecraftMode());
+  f.bridge.SetMinecraftMode(false);  // Ctrl+G is the player's from here on
+  stage("PeachCastleGalaxy");
+  CHECK(!f.bridge.MinecraftMode());
+  f.bridge.SetMinecraftMode(true);
+  stage("FileSelect");  // back to the title: the Wii Remote again
+  CHECK(!f.bridge.MinecraftMode());
+  stage("MarioFaceShipGalaxy");
+  CHECK(f.bridge.MinecraftMode());
+}
+
 TEST(in_game_rule)
 {
   Fixture f;

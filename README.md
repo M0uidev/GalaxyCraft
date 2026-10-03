@@ -53,7 +53,9 @@ syati/build.sh       # the module, its Riivolution patch and Steve's model for S
 tools/gxplay.sh      # starts the patched Dolphin and Minecraft together
 ```
 
-Once you are in a level, a planet appears above Mario. **P** lands you on it.
+Use your Wii Remote mapping on the title screen and file select. Once you pick a save, keyboard
+and mouse take over (Ctrl+G switches back and forth by hand). Once you are in a level, a planet
+appears above Mario. **P** lands you on it.
 
 | Input | Action |
 |---|---|

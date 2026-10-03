@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..e74159b
+index 0000000..45865ee
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,465 @@
+@@ -0,0 +1,480 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -218,6 +218,7 @@ index 0000000..e74159b
 +  Common::EventHook field_hook;
 +  gxc::MarioInput mario;
 +  bool override_on = false;
++  bool link_shown = true;  // the bridge's Minecraft mode as last announced
 +  u8 keys[64] = {};  // keyboard and mouse as of the last XInput2 update (Escape included)
 +  u32 buttons = 0;
 +  std::optional<std::pair<std::array<u8, 64>, u32>> dev_keys;  // ctl keys, while set
@@ -366,6 +367,25 @@ index 0000000..e74159b
 +  const u64 hb = shm.GetU64(offsetof(GxcHeader, mod_heartbeat_ms));
 +  return hb != 0 && NowMs() - hb < GXC_HEARTBEAT_TIMEOUT_MS;
 +}
++
++// After the mode changes (hotkey, ctl link or a save picked): nothing held across the switch,
++// neither in Minecraft nor on the Wii Remote, and a message on screen. Under s_mutex.
++void AnnounceLink(State& state)
++{
++  const bool on = state.bridge->MinecraftMode();
++  if (on == state.link_shown)
++    return;
++  state.link_shown = on;
++  state.input->ReleaseAll();
++  state.mario.Reset();
++  std::memset(state.keys, 0, sizeof(state.keys));
++  state.buttons = 0;
++  s_xinput_buttons = 0;
++  NOTICE_LOG_FMT(CORE, "GalaxyCraft: link {}", on ? "on" : "off");
++  OSD::AddMessage(on ? "GalaxyCraft: Minecraft has the controls" :
++                       "GalaxyCraft: Wii Remote has the controls (Minecraft paused)",
++                  3000);
++}
 +}  // namespace
 +
 +void Start(Core::System& system)
@@ -382,9 +402,13 @@ index 0000000..e74159b
 +    return;
 +  }
 +  state->bridge = std::make_unique<gxc::HostBridge>(*state->shm, NowMs);
-+  // tools/gxplay.sh: start on the Wii Remote (menus), the player links with the hotkey in a level.
++  // Start on the Wii Remote (menus), the player links with the hotkey in a level.
 +  if (const char* unlinked = std::getenv("GALAXYCRAFT_START_UNLINKED"); unlinked && *unlinked == '1')
 +    state->bridge->SetMinecraftMode(false);
++  // tools/gxplay.sh: the Wii Remote on the title and file select, Minecraft once a save is picked.
++  if (const char* on_save = std::getenv("GALAXYCRAFT_LINK_ON_SAVE"); on_save && *on_save == '1')
++    state->bridge->SetLinkOnSave(true);
++  state->link_shown = state->bridge->MinecraftMode();
 +  state->input = std::make_unique<gxc::InputWriter>(*state->shm);
 +  state->memory = std::make_unique<DolphinGuestMemory>(system.GetMemory());
 +  // Runs on the CPU thread at the end of every video field: emulated RAM is safe to touch.
@@ -394,6 +418,7 @@ index 0000000..e74159b
 +      return;
 +    s_state->bridge->Tick(*s_state->memory);
 +    RunControlFile(*s_state->memory, *s_state->bridge, ModAlive(*s_state->shm), *s_state);
++    AnnounceLink(*s_state);
 +    UpdateMarioInput(*s_state);
 +  });
 +
@@ -492,18 +517,8 @@ index 0000000..e74159b
 +  std::lock_guard lock(s_mutex);
 +  if (!s_state)
 +    return;
-+  const bool on = !s_state->bridge->MinecraftMode();
-+  s_state->bridge->SetMinecraftMode(on);
-+  // Nothing held across the switch, neither in Minecraft nor on the Wii Remote.
-+  s_state->input->ReleaseAll();
-+  s_state->mario.Reset();
-+  std::memset(s_state->keys, 0, sizeof(s_state->keys));
-+  s_state->buttons = 0;
-+  s_xinput_buttons = 0;
-+  NOTICE_LOG_FMT(CORE, "GalaxyCraft: link {}", on ? "on" : "off");
-+  OSD::AddMessage(on ? "GalaxyCraft: Minecraft has the controls" :
-+                       "GalaxyCraft: Wii Remote has the controls (Minecraft paused)",
-+                  3000);
++  s_state->bridge->SetMinecraftMode(!s_state->bridge->MinecraftMode());
++  AnnounceLink(*s_state);
 +}
 +
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn)

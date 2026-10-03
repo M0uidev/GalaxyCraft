@@ -19,7 +19,9 @@ tools/gxplay.sh
 
 En la ventana de Dolphin:
 
-- Arranca con el enlace **inactivo** (Wiimote) para los menús.
+- Arranca con el enlace **inactivo** (Wiimote) en el título y la selección de partida (escena
+  `FileSelect`). Al elegir una partida y cargarse otra escena, el enlace se activa solo; al volver
+  al título, se desactiva solo (`GALAXYCRAFT_LINK_ON_SAVE=1`, que pone `gxplay.sh`).
 - **Ctrl+G** alterna el enlace (hotkey de Dolphin «GalaxyCraft: Toggle Minecraft Link», en
   Hotkey Settings → Wii; se puede cambiar). Al pulsarlo aparece un mensaje en pantalla.
   - *Activo*: teclado y ratón van a Minecraft, Mario es la marioneta y la cámara es la de

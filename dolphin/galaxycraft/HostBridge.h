@@ -33,6 +33,10 @@ public:
   // host_flags 0). Back to Minecraft: the scene is republished and the mod re-anchored on Mario.
   void SetMinecraftMode(bool on) { m_minecraft_mode = on; }
   bool MinecraftMode() const { return m_minecraft_mode; }
+  // tools/gxplay.sh: Wiimote mode on SMG2's title and file select (stage FileSelect), Minecraft
+  // mode once a save is picked and another stage loads. Each crossing sets the mode once; in
+  // between, SetMinecraftMode (Ctrl+G) has the last word.
+  void SetLinkOnSave(bool on);
   // Minecraft mode with a live mod (or a dev follow): the Wii Remote override belongs to us.
   bool Following() const { return m_following; }
   // Mario is playable: game frames within the last 30 ticks, gravity, no cutscene. Else a menu.
@@ -93,6 +97,8 @@ private:
   std::optional<PlayerState> m_dev_follow;
   bool m_minecraft_mode = true;
   bool m_relink = false;
+  bool m_link_on_save = false;
+  bool m_on_title = true;
   u32 m_host_seq = 0;
   std::deque<std::vector<u8>> m_inbox;  // big-endian records, ready for the guest
   std::optional<u32> m_inbox_scene;

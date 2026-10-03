@@ -16,6 +16,7 @@ constexpr int SCAN_INTERVAL_TICKS = 60;
 constexpr float MATRIX_EPSILON = 1e-4f;
 constexpr size_t MBX_SIZE = sizeof(GxcMailbox);
 constexpr int IN_GAME_TICKS = 30;
+constexpr const char* TITLE_STAGE = "FileSelect";  // SMG2's title screen and file select
 
 u32 BE32(const u8* p)
 {
@@ -99,6 +100,14 @@ HostBridge::HostBridge(Shm& shm, std::function<u64()> clock_ms)
     m_seen_player_frame = p->frame_id;  // stale pose from a previous session is not fresh
 }
 
+void HostBridge::SetLinkOnSave(bool on)
+{
+  m_link_on_save = on;
+  m_on_title = true;
+  if (on)
+    m_minecraft_mode = false;
+}
+
 void HostBridge::Tick(GuestMemory& mem)
 {
   const u64 now = m_clock();
@@ -149,6 +158,17 @@ void HostBridge::Tick(GuestMemory& mem)
   const bool demo = (mbx.game_flags & GXC_MBX_GAME_DEMO) != 0;
   m_in_game = m_ticks_since_game_frame <= IN_GAME_TICKS && !no_gravity && !demo;
   m_cutscene = m_ticks_since_game_frame <= IN_GAME_TICKS && demo;
+
+  // The stage name is set when a Mario spawns: empty while booting, FileSelect on the title.
+  if (m_link_on_save && mbx.stage_name[0])
+  {
+    const bool title = std::strcmp(mbx.stage_name.data(), TITLE_STAGE) == 0;
+    if (title != m_on_title)
+    {
+      m_on_title = title;
+      m_minecraft_mode = !title;
+    }
+  }
 
   if (!m_minecraft_mode)
   {
