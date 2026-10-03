@@ -144,7 +144,8 @@ public final class PlanetClient {
                 session.load(saved.get());
                 GalaxyCraft.LOG.info("Voxel planet of {} loaded", next);
             } else {
-                autoSpawn = autoRadius > 0;
+                // Levels only: not the title, the file select or the world map.
+                autoSpawn = autoRadius > 0 && next.endsWith("Galaxy");
             }
         } catch (IOException e) {
             GalaxyCraft.LOG.warn("Could not load the planet of {}: {}", next, e.toString());

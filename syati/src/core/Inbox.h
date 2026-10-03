@@ -46,6 +46,10 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
 // (straight up if he is at the center).
 void PlanetDrop(const f32 center[3], f32 surface, f32 above, const f32 mario[3], f32 out[3]);
 
+// The camera of a view matrix (3x4 row-major, world -> view): its position and the unit direction
+// it looks along (-z).
+void ViewEye(const f32 view[12], f32 eye[3], f32 fwd[3]);
+
 // view (3x4 row-major) times a translation by t: the position matrix of something placed at t.
 void ViewTranslate(const f32 view[12], const f32 t[3], f32 out[12]);
 

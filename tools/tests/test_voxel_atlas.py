@@ -24,6 +24,15 @@ class AtlasTest(unittest.TestCase):
         self.assertEqual(img.getpixel((16 * 4 % 64, 16 * (4 // 4)))[0], 160)  # bedrock: tile 4 -> (0, 16)
         self.assertEqual(img.getpixel((17, 0))[0], 40)
 
+    def test_mipmaps_halve_and_keep_tiles_apart(self):
+        tiles = [Image.new("RGBA", (16, 16), (200 if n == 0 else 0, 0, 0, 255)) for n in range(5)]
+        levels = voxel_atlas.mipmaps(voxel_atlas.atlas(tiles))
+        self.assertEqual([l.width for l in levels], [64, 32, 16, 8])
+        last = levels[-1]
+        self.assertEqual(last.getpixel((1, 1))[0], 200)  # tile 0 is 2x2 now, still pure
+        self.assertEqual(last.getpixel((2, 0))[0], 0)    # tile 1 untouched by it
+        self.assertEqual(sum(len(voxel_atlas.rgb565_tiled(l)) for l in levels), 2 * (64 * 64 + 32 * 32 + 16 * 16 + 8 * 8))
+
     def test_tint_multiplies(self):
         t = voxel_atlas.tinted(Image.new("RGBA", (1, 1), (255, 128, 0, 255)), (0x91, 0xBD, 0x59))
         self.assertEqual(t.getpixel((0, 0)), (0x91, 0xBD * 128 // 255, 0, 255))

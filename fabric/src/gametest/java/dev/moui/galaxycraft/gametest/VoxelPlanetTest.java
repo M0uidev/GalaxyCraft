@@ -128,6 +128,16 @@ public final class VoxelPlanetTest implements FabricClientGameTest {
             log("on the big planet: " + rb);
             check(Math.abs(rb - 128) < 0.3, "Mario stands on the big planet's grass, radius " + rb);
             gxdev("ctl", "shot voxel-6-big-landed");
+            // Toward the horizon, turning around: every way there is ground to it (nothing culled).
+            for (int yaw = 0; yaw < 360; yaw += 90) {
+                int y = yaw;
+                ctx.runOnClient(mc -> {
+                    mc.player.setXRot(8);
+                    mc.player.setYRot(y);
+                });
+                ctx.waitTicks(15);
+                gxdev("ctl", "shot voxel-7-horizon-" + yaw);
+            }
             log("collision chunks: " + ctx.computeOnClient(mc -> s.collisionChunks()));
             ctx.runOnClient(mc -> PlanetClient.remove());
 

@@ -58,6 +58,26 @@ class PlanetMesherTest {
         assertEquals(4, q.stream().filter(x -> x.tile() == Material.GRASS.side).count());
     }
 
+    @Test void sunlitSideIsBrighterAndHolesAreShaded() {
+        VoxelPlanet p = VoxelPlanet.standard();
+        CubeSphere g = p.grid;
+        // The grass facing the sun and the grass on the far side.
+        int day = g.cellAt(new Vector3d(PlanetMesher.SUN).mul(15.5)), night = g.cellAt(new Vector3d(PlanetMesher.SUN).mul(-15.5));
+        double dayLight = PlanetMesher.quads(p, p.chunkOf(day)).stream().filter(q -> q.side() == CubeSphere.TOP)
+                .mapToDouble(q -> q.light()[0]).max().orElseThrow();
+        double nightLight = PlanetMesher.quads(p, p.chunkOf(night)).stream().filter(q -> q.side() == CubeSphere.TOP)
+                .mapToDouble(q -> q.light()[0]).max().orElseThrow();
+        assertTrue(dayLight > 0.95 && nightLight <= PlanetMesher.AMBIENT + 1e-9, dayLight + " / " + nightLight);
+        // A hole: the dirt at its bottom is darker at the corners than an open field.
+        int cell = g.index(2, 12, 12, 8);
+        p.set(cell, Material.AIR);
+        int below = g.neighbor(cell, CubeSphere.BOTTOM);
+        var floor = PlanetMesher.quads(p, p.chunkOf(below)).stream()
+                .filter(q -> q.side() == CubeSphere.TOP && q.corners()[0].distance(g.corner(below, 0, 0, 1)) < 2).findFirst().orElseThrow();
+        double sun = PlanetMesher.AMBIENT + (1 - PlanetMesher.AMBIENT) * Math.max(0, g.center(below).normalize().dot(PlanetMesher.SUN));
+        for (double l : floor.light()) assertTrue(l < sun * 0.7, "corner " + l + " vs open " + sun);
+    }
+
     @Test void meshBytesMatchTheQuads() {
         VoxelPlanet p = VoxelPlanet.standard();
         int chunk = p.chunkOf(p.grid.index(2, 12, 12, 8));

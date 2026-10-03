@@ -309,8 +309,10 @@ public:
     GXSetNumTexGens(1);
     GXSetTexCoordGen2(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY, GX_FALSE, GX_PTIDENTITY);
     GXTexObj tex;
-    GXInitTexObj(&tex, gAtlas, GXC_ATLAS_SIZE, GXC_ATLAS_SIZE, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);
-    GXInitTexObjLOD(&tex, GX_NEAR, GX_NEAR, 0.f, 0.f, 0.f, GX_FALSE, GX_FALSE, GX_ANISO_1);
+    // Crisp texels up close (nearest), mipmaps blended far away: no shimmering grass in the distance.
+    GXInitTexObj(&tex, gAtlas, GXC_ATLAS_SIZE, GXC_ATLAS_SIZE, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_TRUE);
+    GXInitTexObjLOD(&tex, GX_NEAR_MIP_LIN, GX_NEAR, 0.f, static_cast<f32>(GXC_ATLAS_LEVELS - 1), 0.f, GX_FALSE,
+                    GX_TRUE, GX_ANISO_1);
     GXLoadTexObj(&tex, GX_TEXMAP0);
     GXSetNumIndStages(0);
     GXSetTevDirect(GX_TEVSTAGE0);
@@ -339,10 +341,11 @@ public:
 
     // The camera in the planet's frame: chunks behind it or past the horizon are skipped. The
     // bedrock shell (unbreakable) is the ball that hides them.
-    const TVec3f cp = MR::getCamPos();
-    const TVec3f cz = MR::getCamZdir();  // GX cameras look down -z
-    const f32 eye[3] = {cp.x - mCenter[0], cp.y - mCenter[1], cp.z - mCenter[2]};
-    const f32 fwd[3] = {-cz.x, -cz.y, -cz.z};
+    // From the view matrix this frame draws with (in first person GalaxyCraft's, not the game
+    // camera's): position -Rᵀt, forward -(third row), as GX cameras look down -z.
+    f32 eye[3], fwd[3];
+    gxc::ViewEye(view, eye, fwd);
+    eye[0] -= mCenter[0], eye[1] -= mCenter[1], eye[2] -= mCenter[2];
     const f32 origin[3] = {0.f, 0.f, 0.f};
     u32 drawn = 0;
     for (u32 i = 0; i < gDrawnCount; i++)

@@ -266,6 +266,15 @@ static void TestPlanetDropAndViewTranslate()
   const f32 t[3] = {1.f, 2.f, 3.f};
   f32 m[12];
   ViewTranslate(view, t, m);
+  // A camera at (1, 2, 3) looking down -x (its z axis is +x): LookAt-built views give it back.
+  {
+    const f32 at[3] = {1, 2, 3}, look[3] = {-1, 0, 0}, up[3] = {0, 1, 0};
+    f32 v[12], e[3], f[3];
+    LookAtView(at, look, up, v);
+    ViewEye(v, e, f);
+    CHECK(Near(e[0], 1.f) && Near(e[1], 2.f) && Near(e[2], 3.f));
+    CHECK(Near(f[0], -1.f) && Near(f[1], 0.f) && Near(f[2], 0.f));
+  }
   // A ball of radius 100 at the origin, the camera at (0, 0, 300) looking at it (-z).
   const f32 cam[3] = {0, 0, 300}, fwd[3] = {0, 0, -1}, o[3] = {0, 0, 0};
   const f32 front[3] = {0, 0, 110}, back[3] = {0, 0, -110}, side[3] = {110, 0, 0}, behind[3] = {0, 0, 400};

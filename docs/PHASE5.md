@@ -37,6 +37,13 @@ de `gxplay.sh`) SMG2 arranca igual y su heap MEM2 de escena crece: ~200 MiB libr
 piden ahí, alineados a 32, dejando 2 MiB de reserva para el juego. Los savestates de un Dolphin
 con otra cantidad de RAM no sirven.
 
+## Aspecto
+
+- **Luz:** un sol fijo (dirección `PlanetMesher.SUN`) más luz ambiental de 0,5: el planeta tiene
+  lado de día y de noche. **Oclusión ambiental** de Minecraft en cada esquina (hoyos y bordes).
+- **Mipmaps** del atlas (64→8 texels, cada tesela por separado): de cerca, texels nítidos; lejos,
+  sin parpadeo.
+
 ## Planetas grandes
 
 - **Tamaño:** celdas de ~1 bloque en la superficie (`n = π·r/2` por cara), corteza de hasta 24
@@ -44,7 +51,9 @@ con otra cantidad de RAM no sirven.
 - **Dibujo:** cada chunk con caras visibles se manda (nunca los vacíos ni los enterrados), el más
   cercano a Mario primero. Vértices de 12 bytes (posición s16 relativa al centro del chunk, color
   RGB565, UV u16): radio 256 ≈ 15.600 chunks, 47 MB, 2,4 s del lado del mod. El módulo se salta
-  los chunks detrás de la cámara o tras el horizonte (la bola de bedrock tapa).
+  los chunks detrás de la cámara o tras el horizonte (la bola de bedrock tapa). La cámara para eso
+sale de la matriz de vista con que se dibuja: la del juego (`MR::getCamPos`) no es la de primera
+persona, y por eso desaparecían trozos enteros del planeta.
 - **Colisión:** solo los chunks a menos de 24 bloques de Mario, 160 como mucho: las zonas de
   colisión del juego aguantan 512 partes, las del nivel incluidas. El teletransporte manda primero
   la colisión de donde aterriza y un chunk recién cavado bajo Mario sale con colisión al instante.

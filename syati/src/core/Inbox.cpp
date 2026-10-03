@@ -119,6 +119,15 @@ bool SphereHidden(const f32 cam[3], const f32 fwd[3], const f32 center[3], f32 o
   return cos_t * cos_dl - sin_t * sin_dl > cos_a;
 }
 
+void ViewEye(const f32 view[12], f32 eye[3], f32 fwd[3])
+{
+  for (int k = 0; k < 3; k++)
+  {
+    eye[k] = -(view[k] * view[3] + view[4 + k] * view[7] + view[8 + k] * view[11]);
+    fwd[k] = -view[8 + k];
+  }
+}
+
 void ViewTranslate(const f32 view[12], const f32 t[3], f32 out[12])
 {
   for (int r = 0; r < 3; r++)
