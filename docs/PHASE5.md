@@ -222,7 +222,8 @@ bioma por defecto, losas que no se juntan en dobles.
 Limitaciones: sólo corre lo que está cerca de Mario; los bloques en movimiento (pistones, arena que
 cae) no se ven mientras se mueven; un repetidor u observador que apunta a través de una arista no
 gira con ella; las entidades que crean los objetos (barcos, vagonetas, mobs de huevos) quedan en la
-sombra, invisibles; 
+sombra, invisibles.
+
 ## Objetos que caen y supervivencia (2026-10-03)
 
 - Romper (fuera de creativo) corre en la sombra como `ServerPlayerGameMode.destroyBlock`: la
