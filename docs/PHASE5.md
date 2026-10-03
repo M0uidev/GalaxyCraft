@@ -24,8 +24,10 @@ tools/gxplay.sh
   overlay: Dolphin traduce cada tecla con tu distribución de teclado (XKB: Shift, AltGr, ñ) y se la
   da a Minecraft como texto (protocolo v6, `GxcTextState`). Con el chat abierto Mario no se mueve,
   Esc lo cierra y Enter envía. Las teclas muertas (tildes) no componen todavía.
-- **Persistencia:** un archivo por galaxia en `.minecraft/galaxycraft/planets/<Stage>.gxplanet`
-  (gzip; el del test vive en `fabric/build/run/...`). Se guarda cada 10 s si cambió y al salir de
+- **Persistencia:** un archivo por galaxia en `~/.local/share/galaxycraft/planets/<Stage>.gxplanet`
+  (gzip; `-Dgalaxycraft.planetDir` lo cambia, y `gxvoxel.sh` usa `fabric/build/test-planets`). No
+  en el directorio del juego: los client game tests con que `gxplay.sh` lanza Minecraft lo borran
+  en cada arranque. Se guarda cada 10 s si cambió y al salir de
   la galaxia; al entrar a una galaxia con planeta guardado, se carga y se manda solo. Si Mario muere
   o cambia de escena dentro de la misma galaxia, se manda de nuevo.
 

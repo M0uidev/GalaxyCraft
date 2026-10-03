@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
@@ -22,7 +21,7 @@ import org.joml.Vector3d;
  * The voxel planet in Minecraft's hands: /galaxycraft planet, the clicks that break and place
  * blocks while something is in the main hand (Dolphin then keeps them from Mario), P to land on
  * the planet, and the messages that carry it to the game. One planet per stage (galaxy), saved in
- * .minecraft/galaxycraft/planets and loaded again when the stage is. -Dgalaxycraft.planet=true
+ * ~/.local/share/galaxycraft/planets (see planetDir) and loaded again when the stage is. -Dgalaxycraft.planet=true
  * (or a radius) spawns one in a stage that has none as soon as the player follows Mario.
  */
 public final class PlanetClient {
@@ -32,8 +31,7 @@ public final class PlanetClient {
     /** Ticks between saves of an edited planet. */
     private static final int SAVE_TICKS = 200;
     private static final PlanetSession session = new PlanetSession(1 / GravityFrame.SCALE);
-    private static final PlanetStore store =
-            new PlanetStore(FabricLoader.getInstance().getGameDir().resolve("galaxycraft/planets"));
+    private static final PlanetStore store = new PlanetStore(planetDir());
     private static final ExecutorService saver = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "GalaxyCraft planet saver");
         t.setDaemon(true);
@@ -163,6 +161,20 @@ public final class PlanetClient {
                 GalaxyCraft.LOG.warn("Could not save the planet of {}: {}", where, e.toString());
             }
         });
+    }
+
+    /**
+     * Where planets are saved: -Dgalaxycraft.planetDir, else $XDG_DATA_HOME/galaxycraft/planets
+     * (~/.local/share/...). Not the game directory: the client game tests that tools/gxplay.sh
+     * runs Minecraft through start from a clean one every time.
+     */
+    static java.nio.file.Path planetDir() {
+        String prop = System.getProperty("galaxycraft.planetDir");
+        if (prop != null && !prop.isEmpty()) return java.nio.file.Path.of(prop);
+        String xdg = System.getenv("XDG_DATA_HOME");
+        java.nio.file.Path data = xdg != null && !xdg.isEmpty() ? java.nio.file.Path.of(xdg)
+                : java.nio.file.Path.of(System.getProperty("user.home"), ".local", "share");
+        return data.resolve("galaxycraft").resolve("planets");
     }
 
     private static int autoRadius(String prop) {

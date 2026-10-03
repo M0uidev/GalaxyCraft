@@ -15,6 +15,7 @@ loom {
 			}
 			if (project.hasProperty("galaxycraftVoxel")) { // tools/gxvoxel.sh: VoxelPlanetTest in the dev Dolphin
 				vmArg "-Dgalaxycraft.voxel=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets" // never the player's planets
 				vmArg "-Dgalaxycraft.galaxy=true"
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
