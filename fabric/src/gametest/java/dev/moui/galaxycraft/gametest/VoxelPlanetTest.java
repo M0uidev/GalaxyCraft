@@ -30,7 +30,8 @@ public final class VoxelPlanetTest implements FabricClientGameTest {
             ctx.waitFor(mc -> GalaxyCraftClient.galaxyPos().isPresent(), 1200);
             ctx.waitTicks(40);
             PlanetSession s = PlanetClient.session();
-            ctx.runOnClient(mc -> PlanetClient.requestSpawn());
+            ctx.runOnClient(mc -> PlanetClient.remove()); // none saved from an earlier run
+            ctx.runOnClient(mc -> PlanetClient.requestSpawn(PlanetClient.DEFAULT_RADIUS));
             ctx.waitFor(mc -> s.active() && s.queued() == 0, 400);
             ctx.waitTicks(60); // Dolphin hands it to the module a few hundred KiB a frame
             gxdev("ctl", "shot voxel-1-spawned");
@@ -43,17 +44,25 @@ public final class VoxelPlanetTest implements FabricClientGameTest {
             check(Math.abs(r1 - s.planet().surface()) < 0.3, "Mario stands on the grass, radius " + r1);
             gxdev("ctl", "shot voxel-2-landed");
 
-            // Mario may stand where cells meet (the teleport lands him on a cube face's center, a
-            // corner of four cells): dig everything under his feet, a 2×2 hole.
+            // Mario is wider than a block (a 1×1 hole holds him up, like a 2-wide gap would in
+            // Minecraft): open the grass cells around his feet, 3×3 or 2×2, each
+            // broken from right above it.
             int broke = ctx.computeOnClient(mc -> {
                 Vector3d feet = GalaxyCraftClient.galaxyPos().orElseThrow();
                 Vector3d up = new Vector3d(feet).sub(s.center()).normalize();
                 Vector3d a = tangent(up), b = new Vector3d(up).cross(a);
+                var grid = s.planet().grid;
+                java.util.Set<Integer> cells = new java.util.TreeSet<>();
+                for (double[] o : new double[][] {{0, 0}, {-.6, -.6}, {-.6, .6}, {.6, -.6}, {.6, .6}, {-.6, 0}, {.6, 0}, {0, -.6}, {0, .6}}) {
+                    Vector3d p = new Vector3d(up).mul(-0.5).add(new Vector3d(a).mul(o[0])).add(new Vector3d(b).mul(o[1]))
+                            .mul(UNITS).add(feet).sub(s.center()).div(UNITS);
+                    cells.add(grid.cellAt(p));
+                }
                 int n = 0;
-                for (double[] o : new double[][] {{-.4, -.4}, {-.4, .4}, {.4, -.4}, {.4, .4}}) {
-                    Vector3d eye = new Vector3d(up).mul(0.5).add(new Vector3d(a).mul(o[0])).add(new Vector3d(b).mul(o[1]))
-                            .mul(UNITS).add(feet);
-                    if (s.breakBlock(eye, new Vector3d(up).negate())) n++;
+                for (int cell : cells) {
+                    Vector3d top = grid.center(cell).mul(UNITS).add(s.center());
+                    Vector3d cellUp = grid.center(cell).normalize();
+                    if (s.breakBlock(new Vector3d(cellUp).mul(1.2 * UNITS).add(top), new Vector3d(cellUp).negate())) n++;
                 }
                 return n;
             });
@@ -81,6 +90,34 @@ public final class VoxelPlanetTest implements FabricClientGameTest {
             check(placed, "a stone block goes on the grass beside the hole, none inside Mario");
             ctx.waitTicks(30);
             gxdev("ctl", "shot voxel-4-placed");
+
+            // Saved and loaded back from disk: the hole is still there, Mario still in it.
+            ctx.runOnClient(mc -> {
+                try {
+                    PlanetClient.reloadFromDisk();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            check(ctx.computeOnClient(mc -> s.active()), "the planet comes back from disk");
+            ctx.waitFor(mc -> s.queued() == 0, 400);
+            ctx.waitTicks(60);
+            double r3 = radius(ctx, s);
+            check(Math.abs(r3 - r2) < 0.2, "after the reload Mario is still in the hole: " + r3);
+
+            // A big one: radius 128, its grass 1 block from where the teleport lands Mario.
+            ctx.runOnClient(mc -> PlanetClient.requestSpawn(128));
+            ctx.waitFor(mc -> s.active() && s.planet().surface() == 128 && s.queued() == 0, 2400);
+            ctx.waitTicks(200);
+            gxdev("ctl", "shot voxel-5-big");
+            ctx.runOnClient(mc -> PlanetClient.teleport());
+            ctx.waitTicks(200);
+            double rb = radius(ctx, s);
+            log("on the big planet: " + rb);
+            check(Math.abs(rb - 128) < 0.3, "Mario stands on the big planet's grass, radius " + rb);
+            gxdev("ctl", "shot voxel-6-big-landed");
+            log("collision chunks: " + ctx.computeOnClient(mc -> s.collisionChunks()));
+            ctx.runOnClient(mc -> PlanetClient.remove());
             log("PASS");
         }
     }

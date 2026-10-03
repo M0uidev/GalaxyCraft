@@ -5,8 +5,11 @@
 # Ctrl C, Esc +, Tab -, right click B, left click spin) while the camera sits in his eyes; in SMG2's
 # menus the mouse is the pointer and left click is A. Ctrl+G (hotkey "GalaxyCraft: Toggle
 # Minecraft Link") hands the game back to your Wii Remote mapping and Esc stops Dolphin again.
-# A voxel planet appears above Mario once linked in a level: P lands on it; with a block or the
-# pickaxe in hand (slots 2-5) left click breaks and right click places, F spins.
+# A voxel planet appears above Mario once linked in a level (one per galaxy, saved and loaded
+# again; /galaxycraft planet spawn <radius> makes a new one, up to 256): P lands on it; with a
+# block or the pickaxe in hand (slots 2-5) left click breaks and right click places, F spins.
+# Dolphin runs with 256 MiB of MEM2 (RAM override): big planets live in the extra memory, and
+# savestates of a normal Dolphin do not load in it (nor the other way around).
 # Closing either side closes the other.
 #   tools/gxplay.sh            (build first: dolphin/build.sh, syati/build.sh)
 set -u
@@ -21,7 +24,8 @@ export JAVA_HOME
 # ignore the Wii Remote and the link hotkey. XWayland only shows keys to a focused X window, so
 # typing in other programs still does not reach the game.
 GALAXYCRAFT=1 dolphin/build/Binaries/dolphin-emu -e syati/build/galaxycraft.json \
-  -C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False &
+  -C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False \
+  -C Dolphin.Core.RAMOverrideEnable=True -C Dolphin.Core.MEM2Size=268435456 &
 DOLPHIN=$!
 # The overlay demo joins a peaceful adventure world and stays there; ~14 h of ticks.
 (cd fabric && exec ./gradlew runClientGameTest -PgalaxycraftDemo -PgalaxycraftHidden -PgalaxycraftPlanet \

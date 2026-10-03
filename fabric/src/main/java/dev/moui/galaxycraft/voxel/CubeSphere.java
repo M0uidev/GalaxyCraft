@@ -21,11 +21,23 @@ public final class CubeSphere {
     public final int n;
     public final double core;
     public final int layers;
+    /** Unit directions of every face's (n+1)² grid vertices, x y z each. */
+    private final float[] dirs;
 
     public CubeSphere(int n, double core, int layers) {
         this.n = n;
         this.core = core;
         this.layers = layers;
+        dirs = new float[6 * (n + 1) * (n + 1) * 3];
+        for (int f = 0; f < 6; f++)
+            for (int i = 0; i <= n; i++)
+                for (int j = 0; j <= n; j++) {
+                    Vector3d d = computeDir(f, i, j);
+                    int o = ((f * (n + 1) + i) * (n + 1) + j) * 3;
+                    dirs[o] = (float) d.x;
+                    dirs[o + 1] = (float) d.y;
+                    dirs[o + 2] = (float) d.z;
+                }
     }
 
     public int cellCount() {
@@ -59,6 +71,11 @@ public final class CubeSphere {
 
     /** Unit direction of grid vertex (i, j) of a face, i and j in [0, n]. */
     public Vector3d dir(int face, int i, int j) {
+        int o = ((face * (n + 1) + i) * (n + 1) + j) * 3;
+        return new Vector3d(dirs[o], dirs[o + 1], dirs[o + 2]);
+    }
+
+    private Vector3d computeDir(int face, int i, int j) {
         double x = Math.tan((-1 + 2.0 * i / n) * Math.PI / 4), y = Math.tan((-1 + 2.0 * j / n) * Math.PI / 4);
         double[][] b = BASIS[face];
         return new Vector3d(b[0][0] + x * b[1][0] + y * b[2][0], b[0][1] + x * b[1][1] + y * b[2][1],
@@ -99,6 +116,14 @@ public final class CubeSphere {
         int k = k(cell);
         if (side == TOP) return k + 1 < layers ? cell + 1 : -1;
         if (side == BOTTOM) return k > 0 ? cell - 1 : -1;
+        // Inside a face the grid is plain; only across a cube edge does geometry decide.
+        int i = i(cell), j = j(cell);
+        switch (side) {
+            case I_MINUS -> { if (i > 0) return cell - n * layers; }
+            case I_PLUS -> { if (i + 1 < n) return cell + n * layers; }
+            case J_MINUS -> { if (j > 0) return cell - layers; }
+            default -> { if (j + 1 < n) return cell + layers; }
+        }
         Vector3d[] q = side(cell, side);
         Vector3d mid = new Vector3d(q[0]).add(q[1]).add(q[2]).add(q[3]).mul(0.25);
         Vector3d out = new Vector3d(mid).sub(center(cell)).mul(0.05).add(mid);

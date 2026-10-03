@@ -36,28 +36,35 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   out->type = type;
   if (type == InboxRecord::PLANET)
   {
-    if (len != 24)
+    if (len != 32)
       return false;
     out->planet.id = ReadBE32(p);
     for (int k = 0; k < 3; k++)
       out->planet.center[k] = ReadF32(p + 4 + 4 * k);
     out->planet.surface = ReadF32(p + 16);
     out->planet.gravity_range = ReadF32(p + 20);
+    out->planet.chunk_count = ReadBE32(p + 24);
+    out->planet.occluder = ReadF32(p + 28);
+    if (out->planet.chunk_count > max_slots)
+      return false;
   }
   else if (type == InboxRecord::CHUNK)
   {
-    if (len < 16)
+    const u32 HEAD = 32;
+    if (len < HEAD)
       return false;
     InboxChunk& c = out->chunk;
     c.slot = ReadBE32(p);
     c.version = ReadBE32(p + 4);
     c.dl_size = ReadBE32(p + 8);
     c.kcl_size = ReadBE32(p + 12);
-    if (c.slot >= max_slots || c.dl_size % 32 != 0 || c.kcl_size % 4 != 0 || c.dl_size > len - 16 ||
-        c.kcl_size != len - 16 - c.dl_size || (c.dl_size == 0) != (c.kcl_size == 0))
+    for (int k = 0; k < 4; k++)
+      c.sphere[k] = ReadF32(p + 16 + 4 * k);
+    if (c.slot >= max_slots || c.dl_size % 32 != 0 || c.kcl_size % 4 != 0 || c.dl_size > len - HEAD ||
+        c.kcl_size != len - HEAD - c.dl_size || (c.dl_size == 0 && c.kcl_size != 0))
       return false;
-    c.dl = p + 16;
-    c.kcl = p + 16 + c.dl_size;
+    c.dl = p + HEAD;
+    c.kcl = p + HEAD + c.dl_size;
   }
   else if (type == InboxRecord::TELEPORT)
   {
@@ -82,6 +89,34 @@ void PlanetDrop(const f32 center[3], f32 surface, f32 above, const f32 mario[3],
     d[0] /= len, d[1] /= len, d[2] /= len;
   for (int k = 0; k < 3; k++)
     out[k] = center[k] + d[k] * (surface + above);
+}
+
+bool SphereHidden(const f32 cam[3], const f32 fwd[3], const f32 center[3], f32 occluder, const f32 c[3], f32 r)
+{
+  const f32 v[3] = {c[0] - cam[0], c[1] - cam[1], c[2] - cam[2]};
+  if (v[0] * fwd[0] + v[1] * fwd[1] + v[2] * fwd[2] < -r)
+    return true;  // behind the camera
+  const f32 p[3] = {center[0] - cam[0], center[1] - cam[1], center[2] - cam[2]};
+  const f32 d2 = p[0] * p[0] + p[1] * p[1] + p[2] * p[2];
+  const f32 R2 = occluder * occluder;
+  if (d2 <= R2)
+    return false;
+  const f32 x2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+  const f32 x = Sqrt(x2), d = Sqrt(d2);
+  // Nearer than the horizon (where the view grazes the ball): in front of it.
+  if (x - r <= Sqrt(d2 - R2))
+    return false;
+  if (r >= x)
+    return false;
+  // Angle between the sphere and the ball's center, widened by the sphere's own angular size,
+  // must stay inside the ball's angular radius a: cos(theta + delta) > cos(a).
+  const f32 cos_t = (v[0] * p[0] + v[1] * p[1] + v[2] * p[2]) / (x * d);
+  if (cos_t <= 0.f)
+    return false;
+  const f32 sin_t = Sqrt(1.f - cos_t * cos_t);
+  const f32 sin_dl = r / x, cos_dl = Sqrt(1.f - sin_dl * sin_dl);
+  const f32 cos_a = Sqrt(1.f - R2 / d2);
+  return cos_t * cos_dl - sin_t * sin_dl > cos_a;
 }
 
 void ViewTranslate(const f32 view[12], const f32 t[3], f32 out[12])

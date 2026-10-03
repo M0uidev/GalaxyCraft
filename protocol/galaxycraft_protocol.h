@@ -1,5 +1,5 @@
 /*
- * GalaxyCraft shared-memory protocol, version 4.
+ * GalaxyCraft shared-memory protocol, version 5.
  *
  * Source of truth for the layout of /dev/shm/galaxycraft_v1. Mirrors:
  *   tools/gxproto.py
@@ -16,7 +16,7 @@
 
 #define GXC_SHM_NAME "/galaxycraft_v1"
 #define GXC_MAGIC 0x52435847u /* "GXCR" */
-#define GXC_VERSION 4u
+#define GXC_VERSION 5u
 
 /* Regions (byte offsets from the start of the mapping). */
 #define GXC_OFF_HEADER 0
@@ -142,7 +142,7 @@ typedef struct {
 } GxcMsgHeader;
 
 enum {
-  GXC_MSG_SCENE_CHANGE = 1, /* uint32_t scene_id */
+  GXC_MSG_SCENE_CHANGE = 1, /* uint32_t scene_id, then char stage_name[32] (NUL-padded) */
   GXC_MSG_PART_UPSERT = 2,  /* GxcPartUpsert */
   GXC_MSG_PART_REMOVE = 3,  /* uint32_t part_id */
   GXC_MSG_KCL_CHUNK = 4,    /* GxcKclChunk + data */
@@ -174,17 +174,23 @@ typedef struct {
   float center[3];    /* galaxy units */
   float surface;      /* radius of the surface, galaxy units */
   float gravity_range; /* radius of its point gravity, galaxy units */
+  uint32_t chunk_count; /* slots: GxcChunk.slot < chunk_count <= GXC_PLANET_MAX_CHUNKS */
+  float occluder;       /* radius of the opaque ball under the crust (bedrock), galaxy units */
 } GxcPlanet;
 
-/* Positions in the display list and the KCL are relative to the planet's center. */
+/*
+ * Positions in the display list and the KCL are relative to the planet's center. A chunk far from
+ * Mario comes without KCL (drawn only): the game's collision zones hold 512 parts at most.
+ */
 typedef struct {
-  uint32_t slot;    /* chunk index, < GXC_PLANET_MAX_CHUNKS */
+  uint32_t slot;    /* chunk index */
   uint32_t version; /* newer replaces older */
-  uint32_t dl_size; /* bytes, multiple of 32; 0 with kcl_size 0: the chunk is empty */
-  uint32_t kcl_size;
+  uint32_t dl_size; /* bytes, multiple of 32; 0: the chunk is empty (no KCL either) */
+  uint32_t kcl_size; /* 0: no collision */
+  float sphere[4];  /* bounding sphere: center relative to the planet's, radius (galaxy units) */
 } GxcChunk;
 
-#define GXC_PLANET_MAX_CHUNKS 512
+#define GXC_PLANET_MAX_CHUNKS 131072
 
 typedef struct {
   uint32_t latest; /* index 0..2 of the newest complete frame, 0xFFFFFFFF none */
@@ -200,7 +206,7 @@ typedef struct {
  * Dolphin finds it by scanning MEM1/MEM2 for the magic.
  */
 #define GXC_MBX_MAGIC "GXCRMBX1"
-#define GXC_MBX_VERSION 3u
+#define GXC_MBX_VERSION 4u
 #define GXC_MBX_MAX_PARTS 64
 #define GXC_MBX_FOLLOW 2u /* host_flags: Minecraft mode, the camera sits in Mario's eyes */
 #define GXC_MBX_GALAXY_VIEW 4u /* host_flags: keep the game's camera */
@@ -240,6 +246,7 @@ typedef struct {
   GxcMbxPart parts[GXC_MBX_MAX_PARTS];
   uint32_t inbox_addr; /* game: GxcInbox for the voxel planet, 0 none */
   uint32_t inbox_size; /* game: bytes, header included */
+  char stage_name[32]; /* game: the stage (galaxy) loaded, NUL-padded */
 } GxcMailbox;
 
 /*

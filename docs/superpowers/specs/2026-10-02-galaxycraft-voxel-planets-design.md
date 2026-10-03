@@ -185,3 +185,9 @@ Ajustes al diseño:
   mensajes `PLANET`, `CHUNK` y `PLANET_TP` cuando está vacío; el módulo copia cada chunk a memoria
   propia (display list alineada a 32) y vacía el inbox. Así nadie libera datos que el otro usa.
 - Los `CollisionParts` viejos no se liberan (unos cientos de bytes por edición): aceptable en el hito 1.
+
+## 14. Etapa 2 y parte de la 4 (2026-10-02)
+
+Hechas a pedido del usuario: persistencia (un planeta por galaxia, `PlanetStore`) y tamaño
+elegible hasta radio 256 con colisión por cercanía, Dolphin con 256 MiB de MEM2 y vértices
+compactos. Detalle en `docs/PHASE5.md`. Pendiente de la etapa 4: LOD a distancia.

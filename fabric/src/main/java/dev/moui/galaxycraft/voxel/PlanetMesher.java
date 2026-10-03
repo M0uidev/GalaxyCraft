@@ -9,14 +9,17 @@ import java.util.List;
 import org.joml.Vector3d;
 
 /**
- * Turns a chunk into what SMG2 needs: a GX display list (quads in vertex format 7: position f32,
- * color RGBA8, texture coordinate u16 with 10 fraction bits) and a KCL. Only sides facing air are
- * kept. Positions are in galaxy units relative to the planet's center.
+ * Turns a chunk into what SMG2 needs: a GX display list (quads in vertex format 7: position s16
+ * with 3 fraction bits, relative to the chunk's bounding sphere center; color RGB565; texture
+ * coordinate u16 with 10 fraction bits) and a KCL relative to the planet's center. Only sides
+ * facing air are kept. Galaxy units.
  */
 public final class PlanetMesher {
     /** GX_QUADS | GX_VTXFMT7. */
     public static final int GX_QUADS_FMT7 = 0x80 | 7;
-    public static final int VERTEX_BYTES = 12 + 4 + 4;
+    public static final int VERTEX_BYTES = 6 + 2 + 4;
+    /** Position fraction bits: 1/8 unit steps, ±4095 units around the chunk's center. */
+    public static final int POS_FRAC = 3;
     /** Texture coordinates: 1.0 = 1024; a tile is 256, a texel of the 64×64 atlas 16. */
     private static final int TILE_ST = 256, HALF_TEXEL = 8;
     /** Minecraft's face shading: top, bottom, then the two pairs of sides. */
@@ -25,7 +28,8 @@ public final class PlanetMesher {
 
     public record Quad(Vector3d[] corners, int tile, int side) {}
 
-    public record ChunkMesh(byte[] displayList, byte[] kcl) {
+    /** sphere: the chunk's bounding sphere (center from the planet's center, radius), galaxy units. */
+    public record ChunkMesh(byte[] displayList, byte[] kcl, float[] sphere) {
         public boolean empty() {
             return displayList.length == 0;
         }
@@ -51,8 +55,18 @@ public final class PlanetMesher {
     }
 
     public static ChunkMesh mesh(VoxelPlanet p, int chunk, double unitsPerBlock) {
+        return mesh(p, chunk, unitsPerBlock, true);
+    }
+
+    /** withKcl false: drawn only (far from Mario, no collision part). */
+    public static ChunkMesh mesh(VoxelPlanet p, int chunk, double unitsPerBlock, boolean withKcl) {
+        Vector3d origin = new Vector3d();
+        double[] radius = new double[1];
+        p.sphere(chunk, origin, radius);
+        origin.mul(unitsPerBlock);
+        float[] sphere = {(float) origin.x, (float) origin.y, (float) origin.z, (float) (radius[0] * unitsPerBlock)};
         List<Quad> quads = quads(p, chunk);
-        if (quads.isEmpty()) return new ChunkMesh(new byte[0], new byte[0]);
+        if (quads.isEmpty()) return new ChunkMesh(new byte[0], new byte[0], sphere);
         if (quads.size() * 4 > 0xFFFF) throw new IllegalStateException("chunk too detailed for one draw");
         int size = 3 + quads.size() * 4 * VERTEX_BYTES;
         ByteBuffer dl = ByteBuffer.allocate((size + 31) & ~31).order(ByteOrder.BIG_ENDIAN);
@@ -66,14 +80,23 @@ public final class PlanetMesher {
             int s0 = tx * TILE_ST + HALF_TEXEL, s1 = (tx + 1) * TILE_ST - HALF_TEXEL;
             int t0 = ty * TILE_ST + HALF_TEXEL, t1 = (ty + 1) * TILE_ST - HALF_TEXEL;
             int[][] st = {{s0, t1}, {s1, t1}, {s1, t0}, {s0, t0}};
+            short rgb565 = (short) ((shade >> 3) << 11 | (shade >> 2) << 5 | shade >> 3);
             for (int k = 0; k < 4; k++) {
-                dl.putFloat((float) v[k].x).putFloat((float) v[k].y).putFloat((float) v[k].z);
-                dl.put((byte) shade).put((byte) shade).put((byte) shade).put((byte) 255);
+                dl.putShort(fixed(v[k].x - origin.x)).putShort(fixed(v[k].y - origin.y)).putShort(fixed(v[k].z - origin.z));
+                dl.putShort(rgb565);
                 dl.putShort((short) st[k][0]).putShort((short) st[k][1]);
             }
-            tris.add(Tri.of(v[0], v[1], v[2]));
-            tris.add(Tri.of(v[0], v[2], v[3]));
+            if (withKcl) {
+                tris.add(Tri.of(v[0], v[1], v[2]));
+                tris.add(Tri.of(v[0], v[2], v[3]));
+            }
         }
-        return new ChunkMesh(dl.array(), KclWriter.write(tris));
+        return new ChunkMesh(dl.array(), withKcl ? KclWriter.write(tris) : new byte[0], sphere);
+    }
+
+    private static short fixed(double units) {
+        long v = Math.round(units * (1 << POS_FRAC));
+        if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) throw new IllegalStateException("chunk too wide: " + units);
+        return (short) v;
     }
 }

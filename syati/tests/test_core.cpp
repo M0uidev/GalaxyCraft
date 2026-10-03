@@ -201,18 +201,21 @@ static void PutF(std::vector<u8>& b, float f)
 static void TestInboxRecords()
 {
   std::vector<u8> b;
-  Put32(b, 102u << 16), Put32(b, 24), Put32(b, 7), PutF(b, 1.f), PutF(b, 2.f), PutF(b, 3.f), PutF(b, 1280.f),
-      PutF(b, 4480.f);
-  Put32(b, 103u << 16), Put32(b, 16 + 32 + 8), Put32(b, 5), Put32(b, 2), Put32(b, 32), Put32(b, 8);
+  Put32(b, 102u << 16), Put32(b, 32), Put32(b, 7), PutF(b, 1.f), PutF(b, 2.f), PutF(b, 3.f), PutF(b, 1280.f),
+      PutF(b, 4480.f), Put32(b, 162), PutF(b, 640.f);
+  Put32(b, 103u << 16), Put32(b, 32 + 32 + 8), Put32(b, 5), Put32(b, 2), Put32(b, 32), Put32(b, 8);
+  PutF(b, 10.f), PutF(b, 20.f), PutF(b, 30.f), PutF(b, 99.f);
   for (int k = 0; k < 40; k++)
     b.push_back(static_cast<u8>(k));
   Put32(b, 104u << 16), Put32(b, 0);
   InboxRecord r;
   u32 off = 0;
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::PLANET);
-  CHECK(r.planet.id == 7 && r.planet.center[2] == 3.f && r.planet.surface == 1280.f && r.planet.gravity_range == 4480.f);
+  CHECK(r.planet.id == 7 && r.planet.center[2] == 3.f && r.planet.surface == 1280.f && r.planet.gravity_range == 4480.f &&
+        r.planet.chunk_count == 162 && r.planet.occluder == 640.f);
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::CHUNK);
-  CHECK(r.chunk.slot == 5 && r.chunk.version == 2 && r.chunk.dl[0] == 0 && r.chunk.kcl[0] == 32);
+  CHECK(r.chunk.slot == 5 && r.chunk.version == 2 && r.chunk.dl[0] == 0 && r.chunk.kcl[0] == 32 &&
+        r.chunk.sphere[1] == 20.f && r.chunk.sphere[3] == 99.f);
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::TELEPORT);
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
   CHECK(off == b.size());
@@ -222,18 +225,29 @@ static void TestInboxRejectsBadChunks()
 {
   InboxRecord r;
   std::vector<u8> b;
-  Put32(b, 103u << 16), Put32(b, 16 + 40), Put32(b, 600), Put32(b, 1), Put32(b, 32), Put32(b, 8);
-  b.resize(b.size() + 40);
+  Put32(b, 103u << 16), Put32(b, 32 + 40), Put32(b, 600), Put32(b, 1), Put32(b, 32), Put32(b, 8);
+  b.resize(b.size() + 16 + 40);
   u32 off = 0;
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));  // slot out of range
   CHECK(off == 0);
   std::vector<u8> c;
-  Put32(c, 103u << 16), Put32(c, 16 + 40), Put32(c, 1), Put32(c, 1), Put32(c, 33), Put32(c, 7);
-  c.resize(c.size() + 40);
+  Put32(c, 103u << 16), Put32(c, 32 + 40), Put32(c, 1), Put32(c, 1), Put32(c, 33), Put32(c, 7);
+  c.resize(c.size() + 16 + 40);
   CHECK(!NextInboxRecord(c.data(), c.size(), &off, 512, &r));  // display list not 32-aligned
   std::vector<u8> d;
-  Put32(d, 103u << 16), Put32(d, 16), Put32(d, 1), Put32(d, 1), Put32(d, 0), Put32(d, 0);
+  Put32(d, 103u << 16), Put32(d, 32), Put32(d, 1), Put32(d, 1), Put32(d, 0), Put32(d, 0);
+  d.resize(d.size() + 16);
   CHECK(NextInboxRecord(d.data(), d.size(), &off, 512, &r) && r.chunk.dl_size == 0);  // empty chunk
+  std::vector<u8> g;
+  Put32(g, 103u << 16), Put32(g, 32 + 32), Put32(g, 1), Put32(g, 1), Put32(g, 32), Put32(g, 0);
+  g.resize(g.size() + 16 + 32);
+  off = 0;
+  CHECK(NextInboxRecord(g.data(), g.size(), &off, 512, &r) && r.chunk.kcl_size == 0);  // drawn only
+  std::vector<u8> k;
+  Put32(k, 103u << 16), Put32(k, 32 + 8), Put32(k, 1), Put32(k, 1), Put32(k, 0), Put32(k, 8);
+  k.resize(k.size() + 16 + 8);
+  off = 0;
+  CHECK(!NextInboxRecord(k.data(), k.size(), &off, 512, &r));  // collision without anything drawn
   std::vector<u8> e;
   Put32(e, 103u << 16), Put32(e, 1000), Put32(e, 1);
   off = 0;
@@ -252,6 +266,15 @@ static void TestPlanetDropAndViewTranslate()
   const f32 t[3] = {1.f, 2.f, 3.f};
   f32 m[12];
   ViewTranslate(view, t, m);
+  // A ball of radius 100 at the origin, the camera at (0, 0, 300) looking at it (-z).
+  const f32 cam[3] = {0, 0, 300}, fwd[3] = {0, 0, -1}, o[3] = {0, 0, 0};
+  const f32 front[3] = {0, 0, 110}, back[3] = {0, 0, -110}, side[3] = {110, 0, 0}, behind[3] = {0, 0, 400};
+  CHECK(!SphereHidden(cam, fwd, o, 100.f, front, 5.f));
+  CHECK(SphereHidden(cam, fwd, o, 100.f, back, 5.f));
+  CHECK(!SphereHidden(cam, fwd, o, 100.f, side, 5.f));  // on the rim: seen
+  CHECK(SphereHidden(cam, fwd, o, 100.f, behind, 5.f));
+  const f32 tall[3] = {0, 0, -400};  // far behind the ball but huge: sticks out
+  CHECK(!SphereHidden(cam, fwd, o, 100.f, tall, 300.f));
   CHECK(Near(m[3], 6.f) && Near(m[7], 9.f) && Near(m[11], 5.f) && m[6] == 1.f);
 }
 

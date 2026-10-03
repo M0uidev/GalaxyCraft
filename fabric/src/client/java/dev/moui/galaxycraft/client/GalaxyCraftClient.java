@@ -1,6 +1,9 @@
 package dev.moui.galaxycraft.client;
 
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
+
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.bridge.BridgeClient;
@@ -11,6 +14,7 @@ import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Seqlock;
 import dev.moui.galaxycraft.view.CameraMath;
 import dev.moui.galaxycraft.view.View;
+import dev.moui.galaxycraft.voxel.VoxelPlanet;
 import java.nio.file.Path;
 import java.util.Optional;
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -92,7 +96,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                     c.getSource().sendFeedback(Component.literal(status(c.getSource().getPlayer())));
                     return 1;
                 })).then(literal("planet")
-                        .then(literal("spawn").executes(c -> planetCommand(c.getSource(), PlanetClient::requestSpawn)))
+                        .then(literal("spawn")
+                                .executes(c -> planetCommand(c.getSource(), () -> PlanetClient.requestSpawn(PlanetClient.DEFAULT_RADIUS)))
+                                .then(argument("radius", IntegerArgumentType.integer(VoxelPlanet.MIN_RADIUS, VoxelPlanet.MAX_RADIUS))
+                                        .executes(c -> planetCommand(c.getSource(),
+                                                () -> PlanetClient.requestSpawn(IntegerArgumentType.getInteger(c, "radius"))))))
                         .then(literal("tp").executes(c -> planetCommand(c.getSource(), PlanetClient::teleport)))
                         .then(literal("remove").executes(c -> planetCommand(c.getSource(), PlanetClient::remove)))
                         .executes(c -> planetCommand(c.getSource(), () -> {})))));

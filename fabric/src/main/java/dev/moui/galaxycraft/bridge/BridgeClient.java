@@ -58,6 +58,7 @@ public final class BridgeClient {
     private int hostPid;
     private long now;
     private Optional<Seqlock.WorldState> world = Optional.empty();
+    private String stage = "";
 
     public BridgeClient(Path path, LongSupplier clockMs, PartListener listener) {
         this.path = path;
@@ -120,6 +121,11 @@ public final class BridgeClient {
         return linked() && m2s.push(type, payload);
     }
 
+    /** The stage (galaxy) the game has loaded, "" if the host did not say. */
+    public String stage() {
+        return stage;
+    }
+
     /** The host process: a new one has lost everything the mod sent before. */
     public int hostPid() {
         return hostPid;
@@ -146,7 +152,15 @@ public final class BridgeClient {
         switch (m.type()) {
             case Layout.MSG_SCENE_CHANGE -> {
                 parts.clear();
-                listener.onScene(b.getInt());
+                int scene = b.getInt();
+                if (b.remaining() >= 32) { // v5: the stage's name follows (the stub sends none)
+                    byte[] name = new byte[32];
+                    b.get(name);
+                    int len = 0;
+                    while (len < name.length && name[len] != 0) len++;
+                    stage = new String(name, 0, len, java.nio.charset.StandardCharsets.US_ASCII);
+                }
+                listener.onScene(scene);
             }
             case Layout.MSG_PART_UPSERT -> {
                 int id = b.getInt();

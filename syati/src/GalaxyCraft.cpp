@@ -89,9 +89,13 @@ const u32 PART_BASE_MTX = 0x34;
 const u32 PART_SERVER = 0xC4;
 const u32 PART_RADIUS = 0xD8;
 
+// MEM2 ends at 64 MiB on a Wii; GalaxyCraft's Dolphin gives it more (voxel planets live there).
+// The OS keeps the end of MEM2 at 0x80003120.
 bool IsRam(u32 addr)
 {
-  return (addr >= 0x80000000u && addr < 0x81800000u) || (addr >= 0x90000000u && addr < 0x94000000u);
+  const u32 mem2_end = *reinterpret_cast<const u32*>(0x80003120);
+  return (addr >= 0x80000000u && addr < 0x81800000u) ||
+         (addr >= 0x90000000u && addr < (mem2_end > 0x94000000u ? mem2_end : 0x94000000u));
 }
 
 u32 Word(u32 addr)
@@ -212,6 +216,12 @@ void MarioInit(void* self, const void* iter)
   init__10MarioActorFRC12JMapInfoIter(self, iter);
   gOut.mbx.scene_id++;  // a new Mario means a new stage: the host republishes everything
   VoxelPlanetCreate();
+  // The stage's name, so the mod keeps one planet per galaxy.
+  const char* stage = MR::getCurrentStageName();
+  for (u32 i = 0; i < sizeof(gOut.mbx.stage_name); i++)
+    gOut.mbx.stage_name[i] = 0;
+  for (u32 i = 0; stage && stage[i] && i + 1 < sizeof(gOut.mbx.stage_name); i++)
+    gOut.mbx.stage_name[i] = stage[i];
   gOut.dbg.voxel_stats = reinterpret_cast<u32>(&gVoxelStats);
 }
 

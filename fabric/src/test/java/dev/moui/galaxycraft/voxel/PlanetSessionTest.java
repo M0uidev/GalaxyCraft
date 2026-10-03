@@ -5,78 +5,180 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.moui.galaxycraft.proto.Layout;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.joml.Vector3d;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class PlanetSessionTest {
+    static final Vector3d MARIO = new Vector3d(0, 0, 0);
+
     static List<PlanetSession.Msg> drain(PlanetSession s) {
         List<PlanetSession.Msg> out = new ArrayList<>();
         for (PlanetSession.Msg m; (m = s.peek()) != null; s.sent()) out.add(m);
         return out;
     }
 
-    static PlanetSession spawned() {
+    static ByteBuffer le(PlanetSession.Msg m) {
+        return ByteBuffer.wrap(m.payload()).order(ByteOrder.LITTLE_ENDIAN);
+    }
+
+    static PlanetSession spawned(int radius) {
         PlanetSession s = new PlanetSession(80);
-        s.spawn(new Vector3d(0, 0, 0), new Vector3d(0, 1, 0));
-        s.update(3, 100);
+        s.spawn(radius, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, MARIO);
         return s;
     }
 
-    @Test void spawnSendsPlanetThenEveryChunkAboveThePlayer() {
-        PlanetSession s = spawned();
-        assertEquals(new Vector3d(0, 80 * (16 + 64), 0), s.center());
+    @Test void spawnSendsPlanetThenTheChunksThatShow() {
+        PlanetSession s = spawned(16);
+        assertEquals(new Vector3d(0, 80 * (16 + 40 + 24), 0), s.center());
         List<PlanetSession.Msg> msgs = drain(s);
         assertEquals(Layout.MSG_PLANET, msgs.get(0).type());
-        ByteBuffer p = ByteBuffer.wrap(msgs.get(0).payload()).order(ByteOrder.LITTLE_ENDIAN);
-        assertEquals(1, p.getInt());
+        ByteBuffer p = le(msgs.get(0));
+        assertEquals(32, p.capacity());
+        assertEquals(1, p.getInt(0));
         assertEquals(6400f, p.getFloat(8));
         assertEquals(1280f, p.getFloat(16));
         assertEquals(4480f, p.getFloat(20));
-        assertEquals(1 + 162, msgs.size());
+        assertEquals(s.planet().chunkCount(), p.getInt(24));
+        assertEquals(80f * 7, p.getFloat(28));
         assertTrue(msgs.stream().skip(1).allMatch(m -> m.type() == Layout.MSG_CHUNK));
+        assertTrue(msgs.stream().skip(1).allMatch(m -> le(m).getInt(8) > 0), "nothing empty is sent");
+        // Every grass chunk, nearest to Mario (under the planet) first.
+        int grass = (int) java.util.stream.IntStream.range(0, s.planet().chunkCount())
+                .filter(ch -> !PlanetMesher.quads(s.planet(), ch).isEmpty()).count();
+        assertEquals(1 + grass, msgs.size());
+        float first = le(msgs.get(1)).getFloat(20), last = le(msgs.get(msgs.size() - 1)).getFloat(20);
+        assertTrue(first < last, "nearest first: y " + first + " then " + last);
+    }
+
+    @Test void collisionOnlyNearMario() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        Vector3d onTop = new Vector3d(s.center()).add(0, -64 * 80, 0); // the face toward Mario
+        s.update(3, 100, onTop);
+        List<PlanetSession.Msg> msgs = drain(s);
+        long withKcl = msgs.stream().filter(m -> m.type() == Layout.MSG_CHUNK && le(m).getInt(12) > 0).count();
+        assertTrue(withKcl > 0 && withKcl <= PlanetSession.MAX_PARTS, withKcl + " chunks with collision");
+        assertTrue(msgs.size() - 1 > 4 * withKcl, "the rest is drawn only");
+        assertEquals(withKcl, s.collisionChunks());
+        // Mario moves to the other side: collision follows him there.
+        Vector3d other = new Vector3d(s.center()).add(0, 64 * 80, 0);
+        for (int i = 0; i < PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, other);
+        List<PlanetSession.Msg> moved = drain(s);
+        assertFalse(moved.isEmpty());
+        assertTrue(s.collisionChunks() > 0 && s.collisionChunks() <= PlanetSession.MAX_PARTS);
+    }
+
+    @Test void biggestPlanetFitsTheGameAndSendsInSeconds() {
+        long t0 = System.nanoTime();
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(VoxelPlanet.MAX_RADIUS, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, MARIO);
+        long dl = 0, kcl = 0, chunks = 0;
+        for (PlanetSession.Msg m; (m = s.peek()) != null; s.sent()) {
+            if (m.type() != Layout.MSG_CHUNK) continue;
+            dl += le(m).getInt(8);
+            kcl += le(m).getInt(12);
+            chunks++;
+        }
+        double secs = (System.nanoTime() - t0) / 1e9;
+        System.out.printf("radius 256: %d chunks, %.1f MB drawn, %.1f MB collision, %.1f s%n", chunks, dl / 1e6, kcl / 1e6, secs);
+        assertTrue(dl + kcl < 64_000_000, "fits the game's memory: " + (dl + kcl));
+        assertTrue(secs < 60, secs + " s");
+    }
+
+    @Test void teleportWaitsForTheGroundWhereMarioLands() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0)); // Mario far below it: no collision anywhere
+        s.update(3, 100, MARIO);
+        s.peek(); // the planet message
+        s.sent();
+        s.teleport();
+        List<PlanetSession.Msg> msgs = drain(s);
+        int tp = -1;
+        for (int i = 0; i < msgs.size(); i++) if (msgs.get(i).type() == Layout.MSG_PLANET_TP) tp = i;
+        assertTrue(tp > 0, "teleport sent");
+        long kclBefore = msgs.subList(0, tp).stream().filter(m -> le(m).getInt(12) > 0).count();
+        assertTrue(kclBefore > 4, kclBefore + " chunks with collision before the teleport");
+        // They are where he lands: under the planet, the side facing his old position.
+        assertTrue(msgs.subList(0, tp).stream().allMatch(m -> le(m).getFloat(20) < 0));
     }
 
     @Test void newSceneResendsEverything() {
-        PlanetSession s = spawned();
-        drain(s);
-        s.update(3, 100);
+        PlanetSession s = spawned(16);
+        int all = drain(s).size();
+        s.update(3, 100, MARIO);
         assertEquals(0, s.queued());
-        s.update(4, 100);
-        assertEquals(163, drain(s).size());
-        s.update(4, 101); // Dolphin restarted
-        assertEquals(163, drain(s).size());
+        s.update(4, 100, MARIO);
+        assertEquals(all, drain(s).size());
+        s.update(4, 101, MARIO); // Dolphin restarted
+        assertEquals(all, drain(s).size());
     }
 
     @Test void breakingFromAboveSendsTheChangedChunks() {
-        PlanetSession s = spawned();
+        PlanetSession s = spawned(16);
         drain(s);
         Vector3d top = new Vector3d(s.center()).add(0, 17.5 * 80, 0);
         assertTrue(s.breakBlock(top, new Vector3d(0, -1, 0)));
-        s.update(3, 100);
+        assertTrue(s.unsaved());
+        s.update(3, 100, MARIO);
         List<PlanetSession.Msg> msgs = drain(s);
         assertFalse(msgs.isEmpty());
-        ByteBuffer c = ByteBuffer.wrap(msgs.get(0).payload()).order(ByteOrder.LITTLE_ENDIAN);
-        assertTrue(c.getInt(4) >= 2, "version bumped");
+        int grassChunk = s.planet().chunkOf(s.planet().grid.cellAt(new Vector3d(0, 15.5, 0)));
+        ByteBuffer c = msgs.stream().map(PlanetSessionTest::le).filter(b -> b.getInt(0) == grassChunk).findFirst().orElseThrow();
+        assertEquals(2, c.getInt(4), "the grass chunk again, next version");
         assertEquals(0, c.getInt(8) % 32);
-        assertEquals(c.capacity(), 16 + c.getInt(8) + c.getInt(12));
-        // The grass is gone: the next thing below is dirt.
+        assertEquals(c.capacity(), 32 + c.getInt(8) + c.getInt(12));
         int hit = PlanetRaycast.cast(s.planet(), new Vector3d(0, 17.5, 0), new Vector3d(0, -1, 0), 4.5).hit();
         assertEquals(Material.DIRT, s.planet().get(hit));
     }
 
+    @Test void dugIntoChunkUnderMarioComesWithCollision() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(16, MARIO, new Vector3d(0, 1, 0));
+        Vector3d feet = new Vector3d(s.center()).add(0, 16 * 80, 0);
+        s.update(3, 100, feet);
+        drain(s);
+        // Down to the dirt: its chunk (all solid until now) was never near, nor on the game.
+        assertTrue(s.breakBlock(new Vector3d(feet).add(0, 80, 0), new Vector3d(0, -1, 0)));
+        assertTrue(s.breakBlock(new Vector3d(feet).add(0, 80, 0), new Vector3d(0, -1, 0)));
+        int dirtChunk = s.planet().chunkOf(s.planet().grid.cellAt(new Vector3d(0, 13.5, 0)));
+        s.update(3, 100, feet);
+        List<PlanetSession.Msg> msgs = drain(s);
+        ByteBuffer m = msgs.stream().map(PlanetSessionTest::le).filter(b -> b.getInt(0) == dirtChunk).findFirst().orElseThrow();
+        assertTrue(m.getInt(12) > 0, "with collision right away");
+    }
+
+    @Test void anEditWhileItsChunkWaitsIsNotLost() {
+        PlanetSession s = spawned(16);
+        drain(s);
+        Vector3d top = new Vector3d(s.center()).add(0, 17.5 * 80, 0);
+        s.breakBlock(top, new Vector3d(0, -1, 0));
+        s.update(3, 100, MARIO);
+        PlanetSession.Msg waiting = s.peek(); // built, the ring is full
+        s.breakBlock(top, new Vector3d(0, -1, 0)); // the dirt below too
+        s.update(3, 100, MARIO);
+        s.sent();
+        List<PlanetSession.Msg> rest = drain(s);
+        int chunk = le(waiting).getInt(0);
+        assertTrue(rest.stream().anyMatch(m -> le(m).getInt(0) == chunk && le(m).getInt(4) > le(waiting).getInt(4)));
+    }
+
     @Test void bedrockStaysAndNothingOutOfReach() {
-        PlanetSession s = spawned();
+        PlanetSession s = spawned(16);
         assertFalse(s.breakBlock(new Vector3d(s.center()).add(0, 30 * 80, 0), new Vector3d(0, -1, 0)));
-        // Dig down to the bedrock, then it refuses.
         Vector3d eye = new Vector3d(s.center()).add(0, 8.5 * 80, 0); // inside the last stone layer
         assertTrue(s.breakBlock(eye, new Vector3d(0, -1, 0)));
         assertFalse(s.breakBlock(eye, new Vector3d(0, -1, 0)), "bedrock right under");
     }
 
     @Test void placingNeverBuriesMario() {
-        PlanetSession s = spawned();
+        PlanetSession s = spawned(16);
         Vector3d feet = new Vector3d(s.center()).add(0, 16.0 * 80, 0);
         Vector3d eye = new Vector3d(feet).add(0, 1.6 * 80, 0);
         assertFalse(s.placeBlock(eye, new Vector3d(0, -1, 0), Material.DIRT, feet), "his own cell");
@@ -86,11 +188,32 @@ class PlanetSessionTest {
     }
 
     @Test void removeSendsPlanetZero() {
-        PlanetSession s = spawned();
+        PlanetSession s = spawned(16);
         s.remove();
         List<PlanetSession.Msg> msgs = drain(s);
         assertEquals(1, msgs.size());
-        assertEquals(0, ByteBuffer.wrap(msgs.get(0).payload()).order(ByteOrder.LITTLE_ENDIAN).getInt());
+        assertEquals(0, le(msgs.get(0)).getInt(0));
         assertFalse(s.active());
+    }
+
+    @Test void savedPlanetComesBackAsItWas(@TempDir Path dir) throws Exception {
+        PlanetSession s = spawned(32);
+        Vector3d top = new Vector3d(s.center()).add(0, 33.5 * 80, 0);
+        s.breakBlock(top, new Vector3d(0, -1, 0));
+        PlanetStore store = new PlanetStore(dir);
+        store.write("SkyStationGalaxy", s.save());
+        assertFalse(s.unsaved());
+        assertTrue(Files.size(store.file("SkyStationGalaxy")) < 200_000, "compressed");
+
+        PlanetSession t = new PlanetSession(80);
+        t.load(store.read("SkyStationGalaxy").orElseThrow());
+        assertEquals(s.center(), t.center());
+        assertEquals(s.planet().surface(), t.planet().surface());
+        assertArrayEquals(s.planet().cells(), t.planet().cells());
+        t.update(9, 100, MARIO);
+        assertEquals(Layout.MSG_PLANET, t.peek().type());
+        assertTrue(store.read("BossGalaxy").isEmpty());
+        store.delete("SkyStationGalaxy");
+        assertTrue(store.read("SkyStationGalaxy").isEmpty());
     }
 }

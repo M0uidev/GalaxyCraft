@@ -35,5 +35,5 @@ echo "gxvoxel: running VoxelPlanetTest (log: $LOG)"
 (cd fabric && ./gradlew runClientGameTest -PgalaxycraftVoxel --console=plain) > "$LOG" 2>&1
 grep "\[GalaxyCraft voxel\]" "$LOG"
 grep -q "\[GalaxyCraft voxel\] PASS" "$LOG" || fail "VoxelPlanetTest (see $LOG)"
-$G stop > /dev/null
+[ -n "${GXC_KEEP:-}" ] || $G stop > /dev/null
 echo "gxvoxel: PASS"

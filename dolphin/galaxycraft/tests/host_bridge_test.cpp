@@ -482,7 +482,7 @@ void InboxInMailbox(Fixture& f, u32 size)
 
 void SendPlanet(Fixture& f, u32 id)
 {
-  GxcPlanet p{id, {1.f, 2.f, 3.f}, 1280.f, 4480.f};
+  GxcPlanet p{id, {1.f, 2.f, 3.f}, 1280.f, 4480.f, 162, 640.f};
   Ring(*f.shm, GXC_OFF_RING_M2S).Push(GXC_MSG_PLANET, &p, sizeof(p));
 }
 }  // namespace
@@ -493,7 +493,7 @@ TEST(inbox_gets_planet_and_chunk_big_endian)
   InboxInMailbox(f, 1024);
   SendPlanet(f, 7);
   std::vector<u8> chunk(sizeof(GxcChunk) + 32 + 8);
-  GxcChunk c{5, 2, 32, 8};
+  GxcChunk c{5, 2, 32, 8, {1.f, 2.f, 3.f, 4.f}};
   std::memcpy(chunk.data(), &c, sizeof(c));
   for (int k = 0; k < 40; k++)
     chunk[sizeof(c) + k] = static_cast<u8>(0xA0 + k);
@@ -501,22 +501,23 @@ TEST(inbox_gets_planet_and_chunk_big_endian)
   f.Tick();
   CHECK(f.mem.GetU32(INBOX) == 1);
   CHECK(f.mem.GetU32(INBOX + 4) == 2);
-  CHECK(f.mem.GetU32(INBOX + 8) == 8 + 24 + 8 + 56);
+  CHECK(f.mem.GetU32(INBOX + 8) == 8 + 32 + 8 + 72);
   CHECK(f.mem.GetU32(INBOX + 12) == 3);
   const u32 r = INBOX + sizeof(GxcInboxHeader);
-  CHECK(f.mem.GetU32(r) == (u32(GXC_MSG_PLANET) << 16) && f.mem.GetU32(r + 4) == 24);
+  CHECK(f.mem.GetU32(r) == (u32(GXC_MSG_PLANET) << 16) && f.mem.GetU32(r + 4) == 32);
   CHECK(f.mem.GetU32(r + 8) == 7 && f.mem.GetF32(r + 12) == 1.f && f.mem.GetF32(r + 24) == 1280.f);
-  const u32 r2 = r + 8 + 24;
-  CHECK(f.mem.GetU32(r2) == (u32(GXC_MSG_CHUNK) << 16) && f.mem.GetU32(r2 + 4) == 56);
+  const u32 r2 = r + 8 + 32;
+  CHECK(f.mem.GetU32(r2) == (u32(GXC_MSG_CHUNK) << 16) && f.mem.GetU32(r2 + 4) == 72);
   CHECK(f.mem.GetU32(r2 + 8) == 5 && f.mem.GetU32(r2 + 12) == 2 && f.mem.GetU32(r2 + 16) == 32);
-  CHECK(f.mem.GetU32(r2 + 24) == 0xA0A1A2A3u);  // display list bytes untouched
+  CHECK(f.mem.GetF32(r2 + 8 + 16 + 12) == 4.f);  // sphere swapped too
+  CHECK(f.mem.GetU32(r2 + 8 + 32) == 0xA0A1A2A3u);  // display list bytes untouched
   CHECK(f.bridge.PendingInbox() == 0);
 }
 
 TEST(inbox_waits_for_the_module_and_splits_batches)
 {
   Fixture f;
-  InboxInMailbox(f, sizeof(GxcInboxHeader) + 40);  // room for one planet record (32 bytes)
+  InboxInMailbox(f, sizeof(GxcInboxHeader) + 48);  // room for one planet record (40 bytes)
   f.mem.PutU32(INBOX, 1);                           // the module has not emptied it yet
   SendPlanet(f, 1);
   SendPlanet(f, 2);
@@ -543,4 +544,14 @@ TEST(inbox_dropped_on_scene_change)
   f.mem.PutU32(MBX + offsetof(GxcMailbox, scene_id), 4);
   f.Tick();
   CHECK(f.bridge.PendingInbox() == 0);
+}
+
+TEST(scene_change_carries_the_stage_name)
+{
+  Fixture f;
+  f.mem.PutBytes(MBX + offsetof(GxcMailbox, stage_name), "SkyStationGalaxy", 17);
+  f.Tick();
+  const std::vector<Msg> msgs = f.Drain();
+  CHECK(!msgs.empty() && msgs[0].type == GXC_MSG_SCENE_CHANGE && msgs[0].payload.size() == 36);
+  CHECK(std::string(reinterpret_cast<const char*>(msgs[0].payload.data() + 4)) == "SkyStationGalaxy");
 }

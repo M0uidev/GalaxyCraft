@@ -55,6 +55,7 @@ struct HostBridge::Mailbox
   std::vector<std::pair<u32, PartState>> parts;
   u32 inbox_addr = 0;
   u32 inbox_size = 0;
+  std::array<char, 32> stage_name{};
 
   static Mailbox Parse(const u8* b)
   {
@@ -81,6 +82,8 @@ struct HostBridge::Mailbox
     }
     m.inbox_addr = BE32(b + offsetof(GxcMailbox, inbox_addr));
     m.inbox_size = BE32(b + offsetof(GxcMailbox, inbox_size));
+    std::memcpy(m.stage_name.data(), b + offsetof(GxcMailbox, stage_name), m.stage_name.size());
+    m.stage_name.back() = 0;
     return m;
   }
 };
@@ -294,9 +297,13 @@ void HostBridge::PublishParts(GuestMemory& mem, const Mailbox& mbx, bool republi
 {
   if (republish)
   {
-    if (m_s2m.Free() < Ring::Cost(4))
+    // scene_id, then the stage's name (the mod keeps a planet per galaxy).
+    std::array<u8, 4 + 32> scene{};
+    std::memcpy(scene.data(), &mbx.scene_id, 4);
+    std::memcpy(scene.data() + 4, mbx.stage_name.data(), 32);
+    if (m_s2m.Free() < Ring::Cost(scene.size()))
       return;
-    m_s2m.Push(GXC_MSG_SCENE_CHANGE, &mbx.scene_id, 4);
+    m_s2m.Push(GXC_MSG_SCENE_CHANGE, scene.data(), scene.size());
     m_scene = mbx.scene_id;
     m_parts.clear();
   }

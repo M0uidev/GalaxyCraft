@@ -11,13 +11,16 @@ struct InboxPlanet
   f32 center[3];
   f32 surface;
   f32 gravity_range;
+  u32 chunk_count;
+  f32 occluder;
 };
 
 struct InboxChunk
 {
   u32 slot, version, dl_size, kcl_size;
+  f32 sphere[4];  // bounding sphere, center relative to the planet's
   const u8* dl;   // dl_size bytes
-  const u8* kcl;  // kcl_size bytes
+  const u8* kcl;  // kcl_size bytes (0: drawn only)
 };
 
 struct InboxRecord
@@ -45,4 +48,8 @@ void PlanetDrop(const f32 center[3], f32 surface, f32 above, const f32 mario[3],
 
 // view (3x4 row-major) times a translation by t: the position matrix of something placed at t.
 void ViewTranslate(const f32 view[12], const f32 t[3], f32 out[12]);
+
+// Whether a sphere (c, r) cannot be seen from cam: wholly behind the camera (fwd: unit view
+// direction), or in the shadow of the opaque ball (center, occluder radius) seen from cam.
+bool SphereHidden(const f32 cam[3], const f32 fwd[3], const f32 center[3], f32 occluder, const f32 c[3], f32 r);
 }  // namespace gxc

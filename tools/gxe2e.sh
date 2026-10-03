@@ -35,8 +35,8 @@ MBX=$($G ctl mbx)
 echo "gxe2e: after Minecraft: $MBX"
 echo "$MBX" | grep -Eq 'flags=[02]/0 ' || fail "host still follows Mario"
 AT=$(echo "$MBX" | sed -n 's/^at=\([0-9a-f]*\).*/\1/p')
-# Debug.following, right after the mailbox (sizeof(GxcMailbox) = 0xFB0).
-FOLLOWING=$($G ctl "peek 0x$(printf '%x' $((0x$AT + 0xFB0 + 0x1C))) 4" | cut -d' ' -f2-5)
+# Debug.following, right after the mailbox (sizeof(GxcMailbox) = 0xFD0).
+FOLLOWING=$($G ctl "peek 0x$(printf '%x' $((0x$AT + 0xFD0 + 0x1C))) 4" | cut -d' ' -f2-5)
 [ "$FOLLOWING" = "00 00 00 00" ] || fail "module still hides Mario ($FOLLOWING)"
 $G ctl "shot e2e-after" | tail -1
 $G stop > /dev/null

@@ -53,9 +53,10 @@ _Static_assert(GXC_TOTAL_SIZE == 30134304, "total");
 
 _Static_assert(sizeof(GxcMbxPart) == 60, "mbx part");
 _Static_assert(offsetof(GxcMbxPart, mtx) == 12, "mbx part.mtx");
-_Static_assert(sizeof(GxcMailbox) == 4016, "mailbox");
+_Static_assert(sizeof(GxcMailbox) == 4048, "mailbox");
+_Static_assert(offsetof(GxcMailbox, stage_name) == 4016, "mbx.stage");
 _Static_assert(offsetof(GxcMailbox, inbox_addr) == 4008, "mbx.inbox");
-_Static_assert(sizeof(GxcPlanet) == 24 && sizeof(GxcChunk) == 16 && sizeof(GxcInboxHeader) == 16, "voxel");
+_Static_assert(sizeof(GxcPlanet) == 32 && sizeof(GxcChunk) == 32 && sizeof(GxcInboxHeader) == 16, "voxel");
 _Static_assert(GXC_MSG_PLANET == 102 && GXC_MSG_CHUNK == 103 && GXC_MSG_PLANET_TP == 104, "voxel msgs");
 _Static_assert(GXC_PLAYER_ITEM_ACTIVE == 2u, "item active");
 _Static_assert(offsetof(GxcMailbox, game_seq) == 12, "mbx.game_seq");
@@ -74,6 +75,6 @@ _Static_assert(offsetof(GxcMailbox, parts) == 168, "mbx.parts");
 _Static_assert(GXC_MBX_GAME_FOLLOWING == 1u && GXC_MBX_GAME_DEMO == 2u, "mbx flags");
 _Static_assert(GXC_MBX_FOLLOW == 2u && GXC_WORLD_FOLLOW == 2u && GXC_MBX_GALAXY_VIEW == 4u &&
                GXC_MBX_THIRD_PERSON == 8u, "flags");
-_Static_assert(GXC_VERSION == 4u && GXC_MBX_VERSION == 3u, "v4");
+_Static_assert(GXC_VERSION == 5u && GXC_MBX_VERSION == 4u, "v5");
 
 int main(void) { puts("OK"); return 0; }

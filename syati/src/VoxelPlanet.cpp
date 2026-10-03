@@ -13,6 +13,14 @@
 
 extern "C" void validateCollisionParts__2MRFP14CollisionParts(CollisionParts*);
 extern "C" void invalidateCollisionParts__2MRFP14CollisionParts(CollisionParts*);
+extern "C" void* getCollisionDirector__2MRFv();
+extern "C" long getCurrentPlacementZoneId__2MRFv();
+extern "C" void setCurrentPlacementZoneId__2MRFl(long);
+extern "C" void* getSceneHeapGDDR3__2MRFv();
+extern "C" void* getSceneHeapNapa__2MRFv();
+extern "C" u32 getFreeSize__7JKRHeapFv(void*);
+// operator new(size, JKRHeap*, alignment)
+extern "C" void* __nw__FUlP7JKRHeapi(u32 size, void* heap, int align);
 
 namespace
 {
@@ -23,17 +31,23 @@ const f32 DROP_ABOVE = 40.f;
 struct Slot
 {
   u32 version;
-  u8* dl_raw;  // allocation; dl is it rounded up to 32
-  u8* dl;
+  u8* dl;  // 32-byte aligned, from the scene's MEM2 heap
   u32 dl_size;
   u8* kcl;
   CollisionParts* parts;
+  f32 sphere[4];  // bounding sphere, center relative to the planet's
+  u32 drawn;      // index in gDrawn while dl is set
 };
 
 // .pa with no fields and one entry: every triangle gets attribute 0 (plain ground).
 __attribute__((aligned(32))) u8 gPa[20] = {0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 4, 0, 0, 0, 0};
 
-Slot gSlots[GXC_PLANET_MAX_CHUNKS];
+// One slot per chunk of the planet (GxcPlanet.chunk_count), and the slots that have something to
+// draw, so drawing does not walk a big planet's empty chunks.
+Slot* gSlots = 0;
+u32 gSlotCount = 0;
+u32* gDrawn = 0;
+u32 gDrawnCount = 0;
 
 // Replaced chunks' memory is freed a few frames later: Mario's binder may still read the last
 // triangle it stood on.
@@ -83,10 +97,31 @@ u8* gInbox = 0;
 // does not keep the array's own alignment.
 u8* gAtlas = 0;
 
-u8* Aligned32(u32 size, u8** raw)
+// Chunk memory comes from the scene's MEM2 heap (the larger one), 32-byte aligned for the GPU.
+// A failed JKRHeap allocation can stop the game, so this leaves the game a reserve instead.
+const u32 HEAP_RESERVE = 2 * 1024 * 1024;
+
+u8* Alloc32(u32 size)
 {
-  *raw = static_cast<u8*>(operator new(size + 32));
-  return reinterpret_cast<u8*>((reinterpret_cast<u32>(*raw) + 31) & ~31u);
+  void* heap = getSceneHeapGDDR3__2MRFv();
+  return getFreeSize__7JKRHeapFv(heap) > size + HEAP_RESERVE ?
+             static_cast<u8*>(__nw__FUlP7JKRHeapi(size, heap, 32)) :
+             0;
+}
+
+// The Map keeper's zone 0, where the planet's collision goes (see GalaxyCraft.cpp for the layout:
+// director +0x14 keepers, keeper +0x20 zones). Null if the stage has none: then no collision,
+// as CollisionParts::init would read through it.
+bool MainZoneReady()
+{
+  const u32 director = reinterpret_cast<u32>(getCollisionDirector__2MRFv());
+  if (!director)
+    return false;
+  const u32 keepers = *reinterpret_cast<const u32*>(director + 0x14);
+  if (!keepers)
+    return false;
+  const u32 keeper = *reinterpret_cast<const u32*>(keepers);
+  return keeper && *reinterpret_cast<const u32*>(keeper + 0x20) != 0;
 }
 
 void Identity(TPos3f* m, const f32 t[3])
@@ -100,10 +135,10 @@ void Identity(TPos3f* m, const f32 t[3])
 class VoxelPlanetActor : public LiveActor
 {
 public:
-  VoxelPlanetActor() : LiveActor("GxcVoxelPlanet"), mGravity(0), mPlanet(0), mChunks(0)
+  VoxelPlanetActor() : LiveActor("GxcVoxelPlanet"), mGravity(0), mPlanet(0), mParts(0)
   {
     mCenter[0] = mCenter[1] = mCenter[2] = 0.f;
-    mSurface = 0.f;
+    mSurface = mOccluder = 0.f;
   }
 
   virtual void init(const JMapInfoIter&)
@@ -125,18 +160,19 @@ public:
     gVoxelStats.records++;
     if (r.type == gxc::InboxRecord::PLANET)
     {
-      if (r.planet.id != mPlanet)
-        DropChunks();
+      if (r.planet.id != mPlanet || r.planet.chunk_count != gSlotCount)
+        NewSlots(r.planet.id ? r.planet.chunk_count : 0);
       mPlanet = r.planet.id;
       for (int k = 0; k < 3; k++)
         mCenter[k] = r.planet.center[k];
       mSurface = r.planet.surface;
+      mOccluder = r.planet.occluder;
       mGravity->mLocalPos = TVec3f(mCenter[0], mCenter[1], mCenter[2]);
       mGravity->mRange = mPlanet ? r.planet.gravity_range : 1.f;
       mGravity->updateIdentityMtx();
       mTranslation = mGravity->mLocalPos;
     }
-    else if (r.type == gxc::InboxRecord::CHUNK && mPlanet)
+    else if (r.type == gxc::InboxRecord::CHUNK && mPlanet && r.chunk.slot < gSlotCount)
     {
       Replace(r.chunk);
     }
@@ -155,26 +191,55 @@ public:
     Slot& s = gSlots[c.slot];
     gVoxelStats.last_slot = c.slot;
     gVoxelStats.last_version = c.version;
-    if (s.dl && c.version <= s.version)
+    if (c.version <= s.version)
       return;
     Free(s);
     s.version = c.version;
+    for (int k = 0; k < 4; k++)
+      s.sphere[k] = c.sphere[k];
     if (c.dl_size == 0)
       return;
-    s.dl = Aligned32(c.dl_size, &s.dl_raw);
-    memcpy(s.dl, c.dl, c.dl_size);
-    DCFlushRange(s.dl, c.dl_size);
+    u8* kcl = 0;
+    u8* dl = Alloc32(c.dl_size);
+    if (dl && c.kcl_size)
+      kcl = Alloc32(c.kcl_size);
+    if (!dl || (c.kcl_size && !kcl))
+    {
+      gVoxelStats.alloc_failed++;
+      Bury(dl);
+      return;
+    }
+    memcpy(dl, c.dl, c.dl_size);
+    DCFlushRange(dl, c.dl_size);
+    s.dl = dl;
     s.dl_size = c.dl_size;
-    s.kcl = static_cast<u8*>(operator new(c.kcl_size));
-    memcpy(s.kcl, c.kcl, c.kcl_size);
-    TPos3f m;
-    Identity(&m, mCenter);
-    s.parts = new CollisionParts();
-    s.parts->init(m, getSensor("body"), s.kcl, gPa, 0, false);
-    validateCollisionParts__2MRFP14CollisionParts(s.parts);
-    mChunks++;
-    gVoxelStats.parts_made++;
-    gVoxelStats.chunks = mChunks;
+    s.drawn = gDrawnCount;
+    gDrawn[gDrawnCount++] = c.slot;
+    if (kcl && !MainZoneReady())
+    {
+      gVoxelStats.no_zone++;
+      Bury(kcl);
+      kcl = 0;
+    }
+    if (kcl)
+    {
+      memcpy(kcl, c.kcl, c.kcl_size);
+      s.kcl = kcl;
+      TPos3f m;
+      Identity(&m, mCenter);
+      s.parts = new CollisionParts();
+      // init files the part under the zone being placed, which outside of a stage's placement is
+      // stale (a zone with no collision: null); the planet belongs to the main zone.
+      const long zone = getCurrentPlacementZoneId__2MRFv();
+      setCurrentPlacementZoneId__2MRFl(0);
+      s.parts->init(m, getSensor("body"), s.kcl, gPa, 0, false);
+      setCurrentPlacementZoneId__2MRFl(zone);
+      validateCollisionParts__2MRFP14CollisionParts(s.parts);
+      gVoxelStats.parts_made++;
+      mParts++;
+    }
+    gVoxelStats.chunks = gDrawnCount;
+    gVoxelStats.parts_live = mParts;
   }
 
   // The old collision part leaves every zone and stays allocated (a few hundred bytes); its KCL
@@ -182,35 +247,62 @@ public:
   void Free(Slot& s)
   {
     if (s.parts)
+    {
       invalidateCollisionParts__2MRFP14CollisionParts(s.parts);
-    Bury(s.dl_raw);
-    Bury(s.kcl);
+      mParts--;
+    }
     if (s.dl)
-      mChunks--;
-    s.dl_raw = s.dl = s.kcl = 0;
+    {
+      const u32 last = gDrawn[--gDrawnCount];
+      gDrawn[s.drawn] = last;
+      gSlots[last].drawn = s.drawn;
+    }
+    Bury(s.dl);
+    Bury(s.kcl);
+    s.dl = s.kcl = 0;
     s.parts = 0;
     s.dl_size = 0;
   }
 
-  void DropChunks()
+  void NewSlots(u32 count)
   {
-    for (u32 i = 0; i < GXC_PLANET_MAX_CHUNKS; i++)
-    {
+    for (u32 i = 0; i < gSlotCount; i++)
       Free(gSlots[i]);
-      gSlots[i].version = 0;
+    if (gSlots)
+      operator delete(gSlots);
+    if (gDrawn)
+      operator delete(gDrawn);
+    gSlots = 0;
+    gDrawn = 0;
+    gSlotCount = gDrawnCount = 0;
+    if (count == 0)
+      return;
+    gSlots = reinterpret_cast<Slot*>(Alloc32(count * sizeof(Slot)));
+    gDrawn = reinterpret_cast<u32*>(Alloc32(count * sizeof(u32)));
+    if (!gSlots || !gDrawn)
+    {
+      gVoxelStats.alloc_failed++;
+      Bury(gSlots);
+      Bury(gDrawn);
+      gSlots = 0;
+      gDrawn = 0;
+      return;
     }
+    memset(gSlots, 0, count * sizeof(Slot));
+    gSlotCount = count;
   }
 
   virtual void draw() const
   {
-    if (!mPlanet || mChunks == 0)
+    if (!mPlanet || gDrawnCount == 0)
       return;
     GXClearVtxDesc();
     GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
     GXSetVtxDesc(GX_VA_CLR0, GX_DIRECT);
     GXSetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-    GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
-    GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
+    // Positions: s16 with 3 fraction bits from the chunk's center (PlanetMesher), color RGB565.
+    GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_POS, GX_POS_XYZ, GX_S16, 3);
+    GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
     GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_TEX0, GX_TEX_ST, GX_U16, 10);
     GXSetNumChans(1);
     GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_VTX, 0, GX_DF_NONE, GX_AF_NONE);
@@ -238,41 +330,57 @@ public:
     GXSetAlphaUpdate(GX_FALSE);
     GXSetDstAlpha(GX_FALSE, 0);
 
-    f32 view[12], pos[12];
+    f32 view[12];
     const MtxPtr cam = MR::getCameraViewMtx();
     for (int r = 0; r < 3; r++)
       for (int c = 0; c < 4; c++)
         view[4 * r + c] = cam[r][c];
-    gxc::ViewTranslate(view, mCenter, pos);
-    f32 m[3][4];
-    for (int r = 0; r < 3; r++)
-      for (int c = 0; c < 4; c++)
-        m[r][c] = pos[4 * r + c];
-    GXLoadPosMtxImm(m, GX_PNMTX0);
     GXSetCurrentMtx(GX_PNMTX0);
-    for (u32 i = 0; i < GXC_PLANET_MAX_CHUNKS; i++)
-      if (gSlots[i].dl)
-        GXCallDisplayList(gSlots[i].dl, gSlots[i].dl_size);
+
+    // The camera in the planet's frame: chunks behind it or past the horizon are skipped. The
+    // bedrock shell (unbreakable) is the ball that hides them.
+    const TVec3f cp = MR::getCamPos();
+    const TVec3f cz = MR::getCamZdir();  // GX cameras look down -z
+    const f32 eye[3] = {cp.x - mCenter[0], cp.y - mCenter[1], cp.z - mCenter[2]};
+    const f32 fwd[3] = {-cz.x, -cz.y, -cz.z};
+    const f32 origin[3] = {0.f, 0.f, 0.f};
+    u32 drawn = 0;
+    for (u32 i = 0; i < gDrawnCount; i++)
+    {
+      const Slot& s = gSlots[gDrawn[i]];
+      if (gxc::SphereHidden(eye, fwd, origin, mOccluder, s.sphere, s.sphere[3]))
+        continue;
+      // Each chunk's vertices are relative to its own center.
+      const f32 at[3] = {mCenter[0] + s.sphere[0], mCenter[1] + s.sphere[1], mCenter[2] + s.sphere[2]};
+      f32 pos[12];
+      gxc::ViewTranslate(view, at, pos);
+      GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(pos), GX_PNMTX0);
+      GXCallDisplayList(s.dl, s.dl_size);
+      drawn++;
+    }
+    gVoxelStats.drawn_last = drawn;
   }
 
   PointGravity* mGravity;
   u32 mPlanet;
-  u32 mChunks;
+  u32 mParts;
   f32 mCenter[3];
   f32 mSurface;
+  f32 mOccluder;
 };
 }  // namespace
 
-VoxelStats gVoxelStats = {0, 0, 0, 0, 0, 0};
+VoxelStats gVoxelStats;
 
 void VoxelPlanetCreate()
 {
   // A new scene: the old one's heap (chunks, parts, inbox) is gone, so forget it, don't free it.
-  memset(gSlots, 0, sizeof(gSlots));
+  gSlots = 0;
+  gDrawn = 0;
+  gSlotCount = gDrawnCount = 0;
   memset(gGraves, 0, sizeof(gGraves));
   gInbox = static_cast<u8*>(operator new(INBOX_BYTES));
-  u8* raw;
-  gAtlas = Aligned32(sizeof(gVoxelAtlas), &raw);
+  gAtlas = Alloc32(sizeof(gVoxelAtlas));
   memcpy(gAtlas, gVoxelAtlas, sizeof(gVoxelAtlas));
   DCFlushRange(gAtlas, sizeof(gVoxelAtlas));
   memset(gInbox, 0, sizeof(GxcInboxHeader));
@@ -291,6 +399,8 @@ void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_s
   if (h->state != 1)
     return;
   gVoxelStats.batches++;
+  gVoxelStats.free_mem2 = getFreeSize__7JKRHeapFv(getSceneHeapGDDR3__2MRFv());
+  gVoxelStats.free_mem1 = getFreeSize__7JKRHeapFv(getSceneHeapNapa__2MRFv());
   if (h->scene_id == scene_id && h->bytes <= INBOX_BYTES - sizeof(GxcInboxHeader))
   {
     const u8* rec = gInbox + sizeof(GxcInboxHeader);
