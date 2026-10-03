@@ -6,6 +6,7 @@ import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.gravity.LookMath;
 import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Seqlock;
+import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.voxel.AtlasLink;
 import dev.moui.galaxycraft.voxel.Material;
 import dev.moui.galaxycraft.voxel.PlanetSession;
@@ -31,6 +32,10 @@ import org.joml.Vector3d;
  * to land on the planet, and the messages that carry it to the game, the block atlas first. One planet per stage (galaxy), saved in
  * ~/.local/share/galaxycraft/planets (see planetDir) and loaded again when the stage is. -Dgalaxycraft.planet=true
  * (or a radius) spawns one in a stage that has none as soon as the player follows Mario.
+ *
+ * Minecraft runs the blocks around Mario ({@link ShadowLink}): a right click uses the block it is
+ * on (doors, levers, chests) or the held item on it before placing anything, and aiming at such a
+ * block makes the clicks Minecraft's even with an empty hand.
  */
 public final class PlanetClient {
     /** SDL scancode of P; protocol mouse mask bits (bit n = SDL button n). */
@@ -52,6 +57,8 @@ public final class PlanetClient {
     private static int lastButtons;
     private static boolean lastP;
     private static int sinceSave;
+    private static final ShadowLink shadow = new ShadowLink(session);
+    private static boolean aimUsable; // an empty hand aims at a block a click uses
     private static McBlocks blocks;
     private static AtlasLink atlasLink;
 
@@ -78,7 +85,7 @@ public final class PlanetClient {
     }
 
     public static boolean itemActive(LocalPlayer player) {
-        return player != null && !player.getMainHandItem().isEmpty();
+        return player != null && (!player.getMainHandItem().isEmpty() || aimUsable);
     }
 
     /** /galaxycraft planet spawn [radius]: next tick, above the player, replacing this stage's. */
@@ -134,17 +141,20 @@ public final class PlanetClient {
         boolean screen = Minecraft.getInstance().gui.screen() != null; // the clicks are the screen's
         if (session.active() && frame != null && player != null) {
             if (p && !lastP && !screen) session.teleport();
-            boolean item = itemActive(player) && !screen;
             Vector3d eye = frame.toGal(vec(player.getEyePosition()));
             Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
+            PlanetSession.Aim aim = screen ? null : session.aim(eye, look);
+            aimUsable = aim != null && shadow.available() && blocks.usable(session.planet().get(aim.cell()));
+            boolean item = itemActive(player) && !screen;
             // Minecraft's outline on the block the clicks would act on, only with something in hand.
             session.setOutline(item ? session.target(eye, look, player.getMainHandItem().is(Items.BUCKET)) : -1);
             if (item) {
                 // Minecraft gets the same clicks and swings the arm by itself.
                 if (pressed(buttons, MOUSE_LEFT)) session.breakBlock(eye, look, player.getAbilities().instabuild);
-                if (pressed(buttons, MOUSE_RIGHT)) use(player, eye, look, world.queryPos());
+                if (pressed(buttons, MOUSE_RIGHT)) use(player, eye, look, world.queryPos(), aim);
             }
         }
+        shadow.tick(stage == null ? "" : stage, world.queryPos());
         lastButtons = buttons;
         lastP = p;
         session.update(world.sceneId(), bridge.hostPid(), world.queryPos());
@@ -229,9 +239,10 @@ public final class PlanetClient {
 
     /**
      * Right click: a bucket pours or fills (and turns into the other one, outside creative mode, as
-     * in Minecraft); a block item is placed.
+     * in Minecraft); otherwise, as in Minecraft, the block aimed at is used, or the held item on it,
+     * and if neither does anything a block item is placed.
      */
-    private static void use(LocalPlayer player, Vector3d eye, Vector3d look, Vector3d feet) {
+    private static void use(LocalPlayer player, Vector3d eye, Vector3d look, Vector3d feet, PlanetSession.Aim aim) {
         ItemStack stack = player.getMainHandItem();
         boolean creative = player.getAbilities().instabuild;
         if (stack.is(Items.BUCKET)) {
@@ -241,7 +252,11 @@ public final class PlanetClient {
             if (session.pour(eye, look, stack.is(Items.WATER_BUCKET) ? Material.WATER : Material.LAVA) && !creative)
                 setMainHand(player, Items.BUCKET);
         } else {
-            session.placeBlock(eye, look, blocks.placer(stack), feet);
+            ItemStack held = stack.copy();
+            Runnable place = () -> session.placeBlock(eye, look, blocks.placer(held), feet);
+            if (aim == null || !shadow.available()) place.run();
+            else ShadowWorld.use(session.planet(), aim.cell(), aim.face(),
+                    new net.minecraft.world.phys.Vec3(aim.hit().x, aim.hit().y, aim.hit().z), player.getUUID(), place);
         }
     }
 

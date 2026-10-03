@@ -32,6 +32,11 @@ Three programs share one world:
   local up, and Mario collides with their real shapes. `/gamemode creative` and **E** open the
   creative inventory; while a Minecraft screen is open the mouse is a normal pointer, so you can
   click, drag and scroll in it.
+- **Blocks that work.** Minecraft itself runs the blocks around Mario: doors, trapdoors and gates
+  open, levers and buttons power redstone, pistons push, repeaters, comparators and observers tick,
+  crops grow, chests and furnaces open their menus. Right click uses a block (or the held item on
+  it, like flint and steel or bone meal) before placing anything, as in Minecraft, and aiming at
+  such a block works with an empty hand too.
 - **Fluids.** Water and lava buckets, ice that melts into water, and obsidian and cobblestone
   where water and lava meet. A classic cobblestone generator works.
 - **Collision that feels like Minecraft.** Mario shrinks to Steve's width on planets, so he

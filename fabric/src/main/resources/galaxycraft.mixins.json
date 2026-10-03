@@ -4,7 +4,11 @@
 	"compatibilityLevel": "JAVA_25",
 	"mixins": [
 		"EntityCollideMixin",
-		"ServerGamePacketListenerMixin"
+		"ServerGamePacketListenerMixin",
+		"ShadowChunkMixin",
+		"ShadowFluidMixin",
+		"ShadowLevelMixin",
+		"ShadowReachMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

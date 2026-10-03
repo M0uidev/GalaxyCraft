@@ -24,6 +24,7 @@ public final class VoxelPlanet {
     private final BitSet dirty = new BitSet();
     private final int chunksPerEdge, chunkLayers;
     private float[] spheres; // per chunk: center x y z (blocks), radius; computed on first use
+    private Listener listener; // told of every change but those set quietly
 
     public VoxelPlanet(CubeSphere grid, int depth) {
         this(grid, depth, new char[grid.cellCount()], CubeBlocks.INSTANCE);
@@ -202,6 +203,27 @@ public final class VoxelPlanet {
             if (nb >= 0) dirty.set(chunkOf(nb));
         }
         fluids.touched(cell);
+        if (listener != null) listener.changed(cell, b);
+    }
+
+    public interface Listener {
+        void changed(int cell, int id);
+    }
+
+    /** Told (cell, id) of every change to a cell except those made by {@link #setQuietly}. */
+    public void setListener(Listener listener) {
+        this.listener = listener;
+    }
+
+    /** Sets a cell without telling the listener (the change came from where it listens for). */
+    public void setQuietly(int cell, int id) {
+        var l = listener;
+        listener = null;
+        try {
+            set(cell, id);
+        } finally {
+            listener = l;
+        }
     }
 
     /**

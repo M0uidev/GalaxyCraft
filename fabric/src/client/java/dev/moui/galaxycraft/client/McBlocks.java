@@ -85,6 +85,7 @@ public final class McBlocks implements Blocks {
     private final Map<Identifier, Integer> tileOf;
     private final List<int[]> tiles;
     private final int[] materialIds = new int[Material.values().length];
+    private final Map<Block, Boolean> usable = new HashMap<>();
     final Atlas atlas;
 
     private McBlocks(Minecraft mc) {
@@ -232,6 +233,18 @@ public final class McBlocks implements Blocks {
             if (source != null) tint = source.color(state) & 0xFFFFFF;
         }
         return new ModelQuad(pos, uv, tileOf.getOrDefault(sprite.contents().name(), 0), tint, cull);
+    }
+
+    /** Whether a right click can do something to the block itself (its class has a use): doors, levers, chests. */
+    public boolean usable(int id) {
+        return usable.computeIfAbsent(state(id).getBlock(), McBlocks::hasUse);
+    }
+
+    private static boolean hasUse(Block b) {
+        for (Class<?> c = b.getClass(); c != Block.class; c = c.getSuperclass())
+            for (java.lang.reflect.Method m : c.getDeclaredMethods())
+                if (m.getName().equals("useWithoutItem") || m.getName().equals("useItemOn")) return true;
+        return false;
     }
 
     @Override public int id(Material m) {

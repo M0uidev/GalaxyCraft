@@ -278,6 +278,40 @@ public final class PlanetSession {
         return true;
     }
 
+    /** What the eye points at: the cell, the side of it facing the eye and the point, in its model space. */
+    public record Aim(int cell, int face, Vector3d hit) {}
+
+    /** Null if no block in reach. */
+    public Aim aim(Vector3d eyeGal, Vector3d lookGal) {
+        PlanetRaycast.Hit h = cast(eyeGal, lookGal);
+        if (h == null) return null;
+        Vector3d hit = CellSpace.local(planet.grid, h.hit(), h.point());
+        hit.set(clamp01(hit.x), clamp01(hit.y), clamp01(hit.z));
+        return new Aim(h.hit(), faceAt(h.hit(), h.point()), hit);
+    }
+
+    /** A change Minecraft made to the planet (redstone, a door opened): kept, and saved. */
+    public void applyExternal(int cell, int id) {
+        if (planet == null) return;
+        planet.setQuietly(cell, id);
+        unsaved = true;
+    }
+
+    /** The cell a point of the galaxy is in; -1 outside the planet. */
+    public int cellAt(Vector3d gal) {
+        return planet == null ? -1 : planet.grid.cellAt(local(gal));
+    }
+
+    /** Chunks of the planet within range blocks of a point in the galaxy. */
+    public List<Integer> chunksNear(Vector3d gal, double range) {
+        List<Integer> out = new ArrayList<>();
+        if (planet == null) return out;
+        Vector3d at = local(gal);
+        for (int ch = 0; ch < planet.chunkCount(); ch++)
+            if (distance(ch, at) < range) out.add(ch);
+        return out;
+    }
+
     /** The side of cell nearest a point on (or just inside) it: the face a ray entered through. */
     private int faceAt(int cell, Vector3d point) {
         Vector3d m = CellSpace.local(planet.grid, cell, point);

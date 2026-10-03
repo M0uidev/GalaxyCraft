@@ -199,4 +199,27 @@ Diseño: `docs/superpowers/specs/2026-10-03-galaxycraft-all-blocks-design.md`.
 
 Limitaciones: sin translucidez real (cristal tintado, hielo y agua se ven opacos o recortados),
 cofres, carteles y camas son cajas con su textura de partícula, texturas sin animar, tintes de
-bioma por defecto, sin redstone que funcione, losas que no se juntan en dobles.
+bioma por defecto, losas que no se juntan en dobles.
+
+## Bloques que funcionan (2026-10-03)
+
+- Minecraft corre los bloques cerca de Mario (`shadow/ShadowWorld`): las celdas a 48 bloques se
+  copian a una dimensión del servidor integrado, `galaxycraft:shadow` (vacía, 128 de alto), cuyos
+  chunks quedan cargados a la fuerza. Cada cara del cubo es una caja (x = j, y = capa, z = i;
+  `shadow/ShadowMap`) con un halo de un bloque que copia las celdas del otro lado de la arista, así
+  la redstone cruza las aristas. Sólo GalaxyCraft escribe en el halo y fuera del planeta.
+- Ida y vuelta por colas entre hilos: los cambios del planeta (jugador, fluidos) van a la sombra con
+  actualizaciones de vecinos; lo que cambia allí vuelve al planeta (`LevelChunk.setBlockState`). Un
+  cambio que vuelve se descarta si el cliente cambió esa celda después.
+- Clic derecho como `ServerPlayerGameMode.useItemOn`: el uso del bloque, después el del objeto
+  sobre él; si nada lo usa, se coloca el bloque. Con la mano vacía, apuntar a un bloque que tiene uso
+  hace los clics de Minecraft.
+- En la sombra el agua y la lava no corren (las lleva `voxel/Fluids`), lo que cae se pierde y los
+  sonidos se oyen donde está el jugador, más bajos según la distancia a Mario.
+- Probar: `./gradlew runClientGameTest -PgalaxycraftBlocks` (`ShadowProbe`: palanca y lámpara,
+  puerta, pistón; ~25 s, sin Dolphin).
+
+Limitaciones: sólo corre lo que está cerca de Mario; los bloques en movimiento (pistones, arena que
+cae) no se ven mientras se mueven; un repetidor u observador que apunta a través de una arista no
+gira con ella; las entidades que crean los objetos (barcos, vagonetas, mobs de huevos) quedan en la
+sombra, invisibles; romper un cofre pierde lo que tenía.

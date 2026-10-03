@@ -1,7 +1,10 @@
 package dev.moui.galaxycraft;
 
 import dev.moui.galaxycraft.collision.CollisionField;
+import dev.moui.galaxycraft.shadow.ShadowWorld;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,5 +17,7 @@ public final class GalaxyCraft implements ModInitializer {
     @Override
     public void onInitialize() {
         LOG.info("GalaxyCraft loaded; waiting for a galaxy on /dev/shm/galaxycraft_v1");
+        ServerTickEvents.END_SERVER_TICK.register(ShadowWorld::tick);
+        ServerLifecycleEvents.SERVER_STOPPING.register(ShadowWorld::stop);
     }
 }
