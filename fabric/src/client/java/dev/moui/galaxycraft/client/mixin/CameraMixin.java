@@ -46,6 +46,7 @@ abstract class CameraMixin {
         Vector3d back = vec(forwards).negate();
         double hit = GalaxyCraft.FIELD.clipDistance(new Vector3d(position.x, position.y, position.z), back, dist);
         if (hit < dist) cir.setReturnValue((float) Math.max(0, hit - WALL_MARGIN));
+        if (Boolean.getBoolean("galaxycraft.camlog")) GalaxyCraftClient.camLog(new Vector3d(position.x, position.y, position.z), back, dist, hit);
     }
 
     private static Vector3d vec(Vector3f v) {

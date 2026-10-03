@@ -2,7 +2,8 @@
 """Block atlas for the voxel planet, built from the local Minecraft jar (nothing of Mojang's in the repo).
 
 64x64, 4x4 tiles of 16x16, in the order of fabric voxel/Material: 0 grass top, 1 grass side,
-2 dirt, 3 stone, 4 bedrock. Grass is tinted with the plains color, as Minecraft does at runtime.
+2 dirt, 3 stone, 4 bedrock, 5 ice, 6 water, 7 lava, 8 cobblestone, 9 obsidian. Grass and water are
+tinted with the plains colors, as Minecraft does at runtime; fluids use their first animation frame.
 Written as a GX RGB565 texture (4x4 texel blocks, big-endian) with its mipmaps (64, 32, 16 and
 8 texels wide: tiles of 16, 8, 4 and 2, each averaged within its own tile) in a C header:
 
@@ -18,6 +19,7 @@ from PIL import Image
 MC_JAR = os.path.expanduser("~/.gradle/caches/fabric-loom/26.3/minecraft-client.jar")
 BLOCKS = "assets/minecraft/textures/block/"
 PLAINS = (0x91, 0xBD, 0x59)
+WATER = (0x3F, 0x76, 0xE4)
 SIZE, TILE = 64, 16
 LEVELS = 4
 
@@ -37,7 +39,9 @@ def tiles(jar):
     read = lambda name: Image.open(io.BytesIO(jar.read(BLOCKS + name))).convert("RGBA").crop((0, 0, TILE, TILE))
     side = read("grass_block_side.png")
     side.alpha_composite(tinted(read("grass_block_side_overlay.png"), PLAINS))
-    return [tinted(read("grass_block_top.png"), PLAINS), side, read("dirt.png"), read("stone.png"), read("bedrock.png")]
+    return [tinted(read("grass_block_top.png"), PLAINS), side, read("dirt.png"), read("stone.png"), read("bedrock.png"),
+            read("ice.png"), tinted(read("water_still.png"), WATER), read("lava_still.png"), read("cobblestone.png"),
+            read("obsidian.png")]
 
 
 def atlas(tile_list):

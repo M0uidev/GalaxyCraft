@@ -18,8 +18,17 @@ tools/gxplay.sh
   fuera del alcance de su gravedad. **P** te deja en su superficie.
 - La barra: el slot 1 está vacío (los clics son de Mario: girar y B). En los slots 2–5 hay un
   pico, pasto, tierra y piedra: con ellos en la mano, **clic izquierdo rompe** y **clic derecho
-  pone** el bloque de la mano. **F** gira siempre.
-- `/galaxycraft planet spawn [radio]` crea uno nuevo (10–256, por defecto 16) que reemplaza al
+  pone** el bloque de la mano. **F** gira siempre. En el demo, los slots 6–9: cobblestone, hielo,
+  balde de agua y balde de lava.
+- **Agua, lava y hielo** (`voxel/Fluids.java`, como `FlowingFluid` de Minecraft con "abajo" hacia
+  el centro): el balde lleno pone una fuente y queda vacío; el vacío recoge una fuente. El agua
+  avanza 7 bloques cada 5 ticks, la lava 3 cada 30, y van hacia el desnivel más cercano (4 y 2
+  bloques), así que el **generador de cobblestone** clásico funciona. Lava tocada por agua (no
+  desde abajo): fuente → **obsidiana**, corriente → cobblestone; lava que cae sobre agua → piedra.
+  Dos fuentes de agua crean otra. El hielo roto deja agua. El nivel del fluido va en el nibble alto
+  de la celda (los guardados viejos siguen valiendo). Los fluidos se dibujan opacos, a la altura de
+  su nivel, y Mario los atraviesa: no hay nado ni daño de lava todavía.
+- `/galaxycraft planet spawn [radio]` crea uno nuevo (10–256, por defecto 32) que reemplaza al
   de la galaxia; `tp` y `remove` (borra también el guardado). El chat se abre con **T** en el
   overlay: Dolphin traduce cada tecla con tu distribución de teclado (XKB: Shift, AltGr, ñ) y se la
   da a Minecraft como texto (protocolo v6, `GxcTextState`). Con el chat abierto Mario no se mueve,
@@ -52,8 +61,9 @@ con otra cantidad de RAM no sirven.
 
 ## Planetas grandes
 
-- **Tamaño:** celdas de ~1 bloque en la superficie (`n = π·r/2` por cara), corteza de hasta 24
-  bloques y aire construible de r/4 (8–32).
+- **Tamaño:** celdas de ~1 bloque en la superficie (`n = π·r/2` por cara), corteza de r/4 bloques
+  (3–24) y aire construible de r/4 (8–32). Las celdas se estrechan hacia el centro: con esa corteza
+  ninguna celda que se pueda cavar baja de 3/4 de bloque, donde Mario todavía cabe.
 - **Dibujo:** cada chunk con caras visibles se manda (nunca los vacíos ni los enterrados), el más
   cercano a Mario primero. Vértices de 12 bytes (posición s16 relativa al centro del chunk, color
   RGB565, UV u16): radio 256 ≈ 15.600 chunks, 47 MB, 2,4 s del lado del mod. El módulo se salta
@@ -63,6 +73,57 @@ persona, y por eso desaparecían trozos enteros del planeta.
 - **Colisión:** solo los chunks a menos de 24 bloques de Mario, 160 como mucho: las zonas de
   colisión del juego aguantan 512 partes, las del nivel incluidas. El teletransporte manda primero
   la colisión de donde aterriza y un chunk recién cavado bajo Mario sale con colisión al instante.
+
+## Mario cabe donde cabría Steve
+
+El movimiento de Mario está hecho para los niveles de SMG2, no para bloques de 80 u: mantiene las
+paredes a 80 u (`Mario::checkAllWall`), siente el suelo con tres sondas a 50 u (`checkGround`) y lo
+empujan fuera del mapa bolas de 50 y 40 u (`checkBaseTransBall`, `createAtField`, `checkStep`) y su
+binder de 60 u. Así un hoyo de 1×1 lo sostenía (hacía falta 3×3) y no entraba en un túnel de 1.
+
+- Esos radios están escritos en su código (`lfs fN, d(r2)`). En la gravedad de un planeta de
+  bloques el módulo cambia cada una de esas cargas por un salto a un trampolín que carga el radio
+  del planeta (`GxcPlanet.mario_radius`: 0,3 bloques en la superficie como Steve,
+  `-Dgalaxycraft.marioRadius`) y encoge el binder a lo mismo; fuera, deja el código del juego como
+  estaba (`gRadiusPatches` en `syati/src/GalaxyCraft.cpp`; solo parchea si la palabra es la
+  esperada). Tres eran fáciles de pasar por alto: el mínimo de 40 de la bola de `createAtField`
+  cuando lo empujan (`tryPushToVelocity`), su ancho de 150 en otro estado (`update`) y la bola de
+  80 con que `checkVerticalPress` decide si lo aplastan. Con esas sin parchear un hoyo de menos de
+  ~90 u de ancho lo sostenía por delgado que fuera.
+- Bajo la superficie el radio se achica con la distancia al centro, como las celdas (a 3/4 del
+  radio miden 3/4). Las celdas cerca de las esquinas del cubo-esfera son además más angostas (0,72
+  bloques en la superficie, 0,56 en el fondo de la corteza): 0,3 cabe en todas.
+- Algo de su colisión no escala con el radio (de su tabla de constantes, no es una carga de
+  `r2`): en una celda de menos de ~35 u de ancho (0,43 bloques) queda acuñado entre las paredes,
+  que se juntan hacia el centro, y tirita. Las celdas cavables de hoy miden al menos 0,56 bloques;
+  los planetas guardados con la corteza de antes (medio radio) se sellan con bedrock bajo la de
+  hoy al cargarlos (`VoxelPlanet.sealBelowCrust`). `gxfit.sh` mide también que se quede quieto
+  (en la superficie, en los hoyos y en el fondo de un pozo de un planeta de radio 16, empujando
+  sus paredes); `GXC_CRUST` da cortezas más hondas para reproducirlo.
+- Con paredes a menos de ~35 u por varios lados (un hoyo 1×1) Mario rebotaba de lado un cuadro de
+  cada tres, algo de su propio movimiento que ningún radio parcheado alcanza (y no es el mod: pasa
+  sin que Minecraft mande nada). Las paredes chocan 0,1 bloques dentro de su bloque
+  (`PlanetMesher.WALL_INSET`) y los suelos y techos llegan 0,12 por debajo de cada pared que se
+  alza de su borde (`FLOOR_GROW`), así no queda ranura al pie; hacia el aire quedan como se ven.
+  `tools/gxshake.py` mide cada cuadro desde la memoria compartida (un tick de Minecraft ve uno de
+  cada tres y no veía el rebote); empujando una pared, con el enlace apagado, se mide con el
+  historial de cuadros del módulo (`Debug.history`).
+- `tools/gxfit.sh` (`MarioFitTest`) lo mide en el prólogo: hoyos 1×1, cruz, 2×2 y 3×3 de dos de
+  hondo (cae los dos bloques), un pozo de tres tapado (se queda en el piso de una celda 1×1×2 y el
+  techo lo para al saltar) y, al quitar el planeta, el Mario del juego otra vez. Como Steve, en un
+  1×1 cae solo si está a menos de ~0,2 bloques del centro. El prólogo es un libro en 2D: el stick
+  solo lo mueve por un eje, así que los túneles horizontales se prueban jugando.
+- `GXC_RADIUS` y `GXC_INSET` cambian los dos valores en `gxfit.sh` sin recompilar el módulo.
+- **F3+B** (las hitboxes de Minecraft) dibuja la colisión de Mario sobre todo: en azul las tres
+  bolas que lo sacan de los bloques (`checkBaseTransBall`), en rojo un cilindro de su radio hasta la
+  de arriba y en amarillo sus tres sondas de suelo (`GXC_PLAYER_HITBOXES` → `GXC_MBX_HITBOXES`).
+
+## Contorno del bloque
+
+Con algo en la mano, el bloque al que apuntas (el que rompería o contra el que pondría; con el balde
+vacío, la fuente que recogería) tiene el contorno de Minecraft: el mod manda sus 8 esquinas
+(`GXC_MSG_OUTLINE`, protocolo v7) solo cuando cambia, antes que los chunks, y el módulo dibuja las 12
+aristas en negro translúcido, con test de profundidad.
 
 ## Cómo viaja
 
@@ -113,9 +174,7 @@ Medido el 2026-10-02 con radio 128: 4.056 chunks, 876 dibujados, 46 partes, ~200
 
 ## Limitaciones conocidas
 
-- Romper es instantáneo, no hay drops ni inventario survival (etapa 3), ni contorno del bloque.
+- Romper es instantáneo, no hay drops ni inventario survival (etapa 3).
 - Las partes de colisión reemplazadas no se liberan (unos cientos de bytes por edición).
-- Como a Steve en Minecraft, a Mario parado donde se juntan cuatro celdas lo sostienen las otras
-  tres si se rompe solo una.
 - Un planeta por galaxia; no se puede elegir dónde aparece (siempre encima del jugador).
 - Lejos no hay LOD: un planeta de radio 256 visto entero dibuja cientos de miles de quads.

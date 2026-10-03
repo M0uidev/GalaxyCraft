@@ -25,6 +25,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
@@ -52,6 +53,9 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static boolean holding;
     /** Mario mode this tick: the player is carried to Mario, SMG2 owns the movement. */
     private static boolean following;
+    /** The host's last emulated frame this mod rendered after; waits stop short of a stalled host. */
+    private static long hostFrame = -1;
+    private static final long FRAME_WAIT_MS = 25;
     /** Where the player goes at the start of its own tick (after its old position is saved). */
     private static Vector3d followTarget;
     /** F5 went past THIRD_PERSON_FRONT: SMG2's own camera (Minecraft only draws the HUD). */
@@ -123,6 +127,9 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     /** Render thread, before each frame: apply the host's keyboard and mouse. */
     public static void onFrameStart() {
         if (bridge == null) return;
+        // One frame per emulated frame, right after it: SMG2 takes a new look every frame, not two
+        // in one and none in the next as two free-running 60 Hz clocks drift past each other.
+        if (following) hostFrame = bridge.awaitFrame(hostFrame, FRAME_WAIT_MS);
         bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
         bridge.text().ifPresentOrElse(t -> input.applyText(Minecraft.getInstance(), t), input::resetText);
     }
@@ -147,6 +154,12 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     public static Optional<Vector3d> galaxyUp() {
         if (Minecraft.getInstance().player == null || frame == null || !bridge.linked()) return Optional.empty();
         return Optional.of(frame.upGal());
+    }
+
+    /** Where a look of this yaw and pitch points in the galaxy, if linked. */
+    public static Optional<Vector3d> galaxyLook(float yaw, float pitch) {
+        if (frame == null || !bridge.linked()) return Optional.empty();
+        return Optional.of(frame.dirToGal(LookMath.direction(yaw, pitch)));
     }
 
     public static boolean linked() {
@@ -318,7 +331,20 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         Vector3d offset = camOffsetGal != null ? camOffsetGal : frame.upGal().mul(eye);
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
                 client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene,
-                PlanetClient.itemActive(player), client.gui.screen() != null, flying));
+                PlanetClient.itemActive(player), client.gui.screen() != null, flying,
+                client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES)));
+    }
+
+    public static void camLog(Vector3d eyeMc, Vector3d backMc, double dist, double hit) {
+        LocalPlayer p = Minecraft.getInstance().player;
+        String mario = bridge.world().map(w -> {
+            Vector3d eyeGal = frame == null ? new Vector3d() : frame.toGal(eyeMc);
+            Vector3d feetGal = frame == null ? new Vector3d() : frame.toGal(vec(p.position()));
+            return String.format("marioToSteveFeet=%.1f eyeAboveMario=%.1f mario=%.0f,%.0f,%.0f", feetGal.distance(w.queryPos()),
+                    new Vector3d(eyeGal).sub(w.queryPos()).dot(frame.upGal()), w.queryPos().x, w.queryPos().y, w.queryPos().z);
+        }).orElse("-");
+        System.out.printf("[camlog] t=%d dist=%.2f hit=%.3f yaw=%.1f pitch=%.1f %s%n", System.nanoTime() / 1000000,
+                dist, hit, p.getYRot(), p.getXRot(), mario);
     }
 
     private static int planetCommand(net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource source,

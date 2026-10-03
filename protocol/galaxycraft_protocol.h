@@ -16,7 +16,7 @@
 
 #define GXC_SHM_NAME "/galaxycraft_v1"
 #define GXC_MAGIC 0x52435847u /* "GXCR" */
-#define GXC_VERSION 6u
+#define GXC_VERSION 7u
 
 /* Regions (byte offsets from the start of the mapping). */
 #define GXC_OFF_HEADER 0
@@ -79,6 +79,8 @@ typedef struct { /* S -> M */
 #define GXC_PLAYER_SCREEN 4u
 /* /fly: the player flies on its own, up is the galaxy's +Y; Mario stays put (and is drawn). */
 #define GXC_PLAYER_FLYING 8u
+/* F3+B: Mario's collision (radius, ground probes, binder) is drawn over everything. */
+#define GXC_PLAYER_HITBOXES 16u
 
 typedef struct { /* M -> S */
   uint32_t seq;
@@ -168,6 +170,7 @@ enum {
   GXC_MSG_PLANET = 102,    /* GxcPlanet */
   GXC_MSG_CHUNK = 103,     /* GxcChunk + display list + KCL (both big-endian already) */
   GXC_MSG_PLANET_TP = 104, /* no payload: Mario onto the planet's surface */
+  GXC_MSG_OUTLINE = 105,   /* GxcOutline: the block the player can act on */
   GXC_MSG_PAD = 0xFFFF,
 };
 
@@ -193,6 +196,7 @@ typedef struct {
   float gravity_range; /* radius of its point gravity, galaxy units */
   uint32_t chunk_count; /* slots: GxcChunk.slot < chunk_count <= GXC_PLANET_MAX_CHUNKS */
   float occluder;       /* radius of the opaque ball under the crust (bedrock), galaxy units */
+  float mario_radius;   /* Mario's collision sphere while in its gravity (galaxy units), 0 his own */
 } GxcPlanet;
 
 /*
@@ -209,6 +213,14 @@ typedef struct {
 
 #define GXC_PLANET_MAX_CHUNKS 131072
 
+/* The edges of the cell the player points at (and can break, place against or scoop), drawn as
+ * Minecraft's block outline. Corners relative to the planet's center, galaxy units, in the order
+ * (di, dj, dk) = (m & 1, m >> 1 & 1, m >> 2) for m = 0..7. */
+typedef struct {
+  uint32_t visible; /* 0: none */
+  float corners[8][3];
+} GxcOutline;
+
 typedef struct {
   uint32_t latest; /* index 0..2 of the newest complete frame, 0xFFFFFFFF none */
   uint32_t width;
@@ -223,11 +235,14 @@ typedef struct {
  * Dolphin finds it by scanning MEM1/MEM2 for the magic.
  */
 #define GXC_MBX_MAGIC "GXCRMBX1"
-#define GXC_MBX_VERSION 4u
+#define GXC_MBX_VERSION 5u
 #define GXC_MBX_MAX_PARTS 64
 #define GXC_MBX_FOLLOW 2u /* host_flags: Minecraft mode, the camera sits in Mario's eyes */
 #define GXC_MBX_GALAXY_VIEW 4u /* host_flags: keep the game's camera */
 #define GXC_MBX_THIRD_PERSON 8u /* host_flags: not first person, the model (Steve) is drawn */
+#define GXC_MBX_HIDE_POINTER 16u /* host_flags: playing in Minecraft's view, the IR sits under its
+                                   crosshair: the star pointer is not drawn */
+#define GXC_MBX_HITBOXES 32u /* host_flags: draw Mario's collision (GXC_PLAYER_HITBOXES) */
 #define GXC_MBX_GAME_FOLLOWING 1u /* game_flags: Mario hidden, first-person camera this frame */
 #define GXC_MBX_GAME_DEMO 2u   /* game_flags: a cutscene owns Mario and the camera */
 

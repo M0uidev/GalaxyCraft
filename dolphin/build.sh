@@ -18,4 +18,4 @@ if [ ! -f build/build.ninja ]; then
     -DENABLE_ANALYTICS=OFF -DUSE_DISCORD_PRESENCE=OFF -DUSE_RETRO_ACHIEVEMENTS=OFF \
     -DENABLE_AUTOUPDATE=OFF -DUSE_UPNP=OFF
 fi
-ninja -C build dolphin-emu
+ninja -C build dolphin-emu dolphin-emu-nogui  # the dev harness (tools/gxdev.py) runs nogui

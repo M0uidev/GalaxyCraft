@@ -22,11 +22,11 @@ import org.joml.Vector3d;
 public final class MarioPerspectivesTest implements FabricClientGameTest {
     private static final Pattern MBX = Pattern.compile("^at=([0-9a-f]+).* flags=(\\d+)/(\\d+) ", Pattern.MULTILINE);
     private static final int MBX_HOST_FLAGS = 52, MBX_LOOK = 68, MBX_CAM_OFFSET = 100;
-    private static final int FOLLOW = 2, GALAXY_VIEW = 4, THIRD_PERSON = 8;
+    private static final int FOLLOW = 2, GALAXY_VIEW = 4, THIRD_PERSON = 8, HIDE_POINTER = 16;
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
-        if (!Boolean.getBoolean("galaxycraft.galaxy")) return;
+        if (!Boolean.getBoolean("galaxycraft.galaxy") || System.getenv("GXC_CAMPROBE") != null) return;
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
             sp.getServer().runCommand("gamemode adventure @a");
             sp.getServer().runCommand("difficulty peaceful");
@@ -35,14 +35,14 @@ public final class MarioPerspectivesTest implements FabricClientGameTest {
             ctx.waitFor(mc -> GalaxyCraftClient.galaxyPos().isPresent(), 600);
             ctx.waitTicks(40);
             check(view(ctx) == View.FIRST, "starts in first person");
-            check(hostFlags() == FOLLOW, "first person: FOLLOW without the Galaxy view");
+            check(hostFlags() == (FOLLOW | HIDE_POINTER), "first person: FOLLOW without the Galaxy view, no star pointer");
             double eye = peekVec(MBX_CAM_OFFSET).length();
             check(eye > 100 && eye < 200, "first person: camera at the eyes, " + eye + " units");
             gxdev("ctl", "shot e2e-view-first");
 
             f5(ctx);
             check(view(ctx) == View.BACK, "F5: third person behind");
-            check(hostFlags() == (FOLLOW | THIRD_PERSON), "behind: SMG2 draws Steve");
+            check(hostFlags() == (FOLLOW | THIRD_PERSON | HIDE_POINTER), "behind: SMG2 draws Steve");
             Vector3d back = peekVec(MBX_CAM_OFFSET);
             check(back.length() > 250, "behind: camera " + back.length() + " units from the feet");
             Vector3d lookBack = peekVec(MBX_LOOK);
@@ -65,7 +65,7 @@ public final class MarioPerspectivesTest implements FabricClientGameTest {
 
             f5(ctx);
             check(view(ctx) == View.FIRST, "F5: back to first person");
-            check(hostFlags() == FOLLOW, "first person again: no Galaxy view flag");
+            check(hostFlags() == (FOLLOW | HIDE_POINTER), "first person again: no Galaxy view flag");
             log("PASS");
         }
     }

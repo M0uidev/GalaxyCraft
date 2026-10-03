@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..ddf73db
+index 0000000..e74159b
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,462 @@
+@@ -0,0 +1,465 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -183,7 +183,7 @@ index 0000000..ddf73db
 +  if (group == "Stick" && (control == "X" || control == "Y"))
 +    return control == "X" ? pad.stick_x : pad.stick_y;
 +  if (group == "IR" && (control == "X" || control == "Y") && pad.center_ir)
-+    return 0.0;
++    return control == "X" ? 0.0 : gxc::MarioInput::CENTER_IR_Y;
 +  if (group == "Shake")
 +    return pad.shake ? 1.0 : 0.0;
 +  return std::nullopt;
@@ -511,16 +511,19 @@ index 0000000..ddf73db
 +  std::lock_guard lock(s_mutex);
 +  if (!s_state || !s_state->bridge->MinecraftMode() || !ModAlive(*s_state->shm))
 +    return;
++  // Cutscenes are the game's alone: no hand, hotbar or crosshair until they end.
++  if (s_state->bridge->Cutscene())
++    return;
 +  if (auto frame = gxc::LatestOverlay(*s_state->shm))
 +    fn(frame->width, frame->height, frame->frame_id, frame->rgba);
 +}
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..0af6ebe
+index 0000000..a94a357
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,51 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -568,7 +571,8 @@ index 0000000..0af6ebe
 +void ToggleLink();
 +
 +
-+// Video thread: calls fn(width, height, frame_id, rgba) with the newest overlay frame, if any.
++// Video thread: calls fn(width, height, frame_id, rgba) with the newest overlay frame, if any
++// (none during cutscenes).
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn);
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp b/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp

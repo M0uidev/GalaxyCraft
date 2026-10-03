@@ -13,6 +13,7 @@ struct InboxPlanet
   f32 gravity_range;
   u32 chunk_count;
   f32 occluder;
+  f32 mario_radius;  // 0: Mario keeps his own collision sphere
 };
 
 struct InboxChunk
@@ -23,6 +24,12 @@ struct InboxChunk
   const u8* kcl;  // kcl_size bytes (0: drawn only)
 };
 
+struct InboxOutline
+{
+  u32 visible;
+  f32 corners[8][3];  // relative to the planet's center
+};
+
 struct InboxRecord
 {
   enum Type
@@ -30,10 +37,12 @@ struct InboxRecord
     PLANET = 102,
     CHUNK = 103,
     TELEPORT = 104,
+    OUTLINE = 105,
   };
   u32 type;
   InboxPlanet planet;
   InboxChunk chunk;
+  InboxOutline outline;
 };
 
 u32 ReadBE32(const u8* p);

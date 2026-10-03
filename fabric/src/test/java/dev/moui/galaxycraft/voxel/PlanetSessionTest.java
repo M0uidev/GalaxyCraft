@@ -39,13 +39,14 @@ class PlanetSessionTest {
         List<PlanetSession.Msg> msgs = drain(s);
         assertEquals(Layout.MSG_PLANET, msgs.get(0).type());
         ByteBuffer p = le(msgs.get(0));
-        assertEquals(32, p.capacity());
+        assertEquals(36, p.capacity());
         assertEquals(1, p.getInt(0));
         assertEquals(6400f, p.getFloat(8));
         assertEquals(1280f, p.getFloat(16));
         assertEquals(4480f, p.getFloat(20));
         assertEquals(s.planet().chunkCount(), p.getInt(24));
-        assertEquals(80f * 7, p.getFloat(28));
+        assertEquals(80f * 12, p.getFloat(28)); // the bedrock under a crust 4 deep
+        assertEquals(80f * (float) PlanetSession.DEFAULT_MARIO_RADIUS, p.getFloat(32), 1e-3);
         assertTrue(msgs.stream().skip(1).allMatch(m -> m.type() == Layout.MSG_CHUNK));
         assertTrue(msgs.stream().skip(1).allMatch(m -> le(m).getInt(8) > 0), "nothing empty is sent");
         // Every grass chunk, nearest to Mario (under the planet) first.
@@ -169,10 +170,37 @@ class PlanetSessionTest {
         assertTrue(rest.stream().anyMatch(m -> le(m).getInt(0) == chunk && le(m).getInt(4) > le(waiting).getInt(4)));
     }
 
+    @Test void outlineGoesOutOnlyWhenItChanges() {
+        PlanetSession s = spawned(16);
+        drain(s);
+        Vector3d eye = new Vector3d(s.center()).add(0, 17.6 * 80, 0); // over the grass, looking down
+        int cell = s.target(eye, new Vector3d(0, -1, 0), false);
+        assertEquals(Material.GRASS, s.planet().get(cell));
+        s.setOutline(cell);
+        s.planet().set(s.planet().grid.neighbor(cell, CubeSphere.I_PLUS), Material.AIR); // a chunk to send too
+        s.update(3, 100, MARIO); // same scene and host
+        List<PlanetSession.Msg> msgs = drain(s);
+        assertEquals(Layout.MSG_OUTLINE, msgs.get(0).type(), "before the chunks");
+        ByteBuffer o = le(msgs.get(0));
+        assertEquals(1, o.getInt(0));
+        Vector3d mid = s.planet().grid.center(cell).mul(80);
+        for (int m = 0; m < 8; m++) {
+            Vector3d c = new Vector3d(o.getFloat(4 + 12 * m), o.getFloat(8 + 12 * m), o.getFloat(12 + 12 * m));
+            assertTrue(c.distance(mid) > 40 && c.distance(mid) < 80, "corner " + m + " " + c.distance(mid));
+        }
+        s.setOutline(cell);
+        assertTrue(drain(s).isEmpty(), "same cell: nothing");
+        s.setOutline(-1);
+        List<PlanetSession.Msg> off = drain(s);
+        assertEquals(1, off.size());
+        assertEquals(0, le(off.get(0)).getInt(0));
+        assertEquals(-1, s.target(eye, new Vector3d(0, 1, 0), false), "sky: nothing in reach");
+    }
+
     @Test void bedrockStaysAndNothingOutOfReach() {
         PlanetSession s = spawned(16);
         assertFalse(s.breakBlock(new Vector3d(s.center()).add(0, 30 * 80, 0), new Vector3d(0, -1, 0)));
-        Vector3d eye = new Vector3d(s.center()).add(0, 8.5 * 80, 0); // inside the last stone layer
+        Vector3d eye = new Vector3d(s.center()).add(0, 13.5 * 80, 0); // inside the last stone layer
         assertTrue(s.breakBlock(eye, new Vector3d(0, -1, 0)));
         assertFalse(s.breakBlock(eye, new Vector3d(0, -1, 0)), "bedrock right under");
     }

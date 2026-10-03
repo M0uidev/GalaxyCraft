@@ -20,6 +20,25 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftFit")) { // tools/gxfit.sh: MarioFitTest in the dev Dolphin
+				vmArg "-Dgalaxycraft.fit=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
+			if (project.hasProperty("galaxycraftFloorGrow")) { // floors' collision wider, blocks
+				vmArg "-Dgalaxycraft.floorGrow=${project.property("galaxycraftFloorGrow")}"
+			}
+			if (project.hasProperty("galaxycraftCrust")) { // crust depth of new planets, blocks
+				vmArg "-Dgalaxycraft.crustDepth=${project.property("galaxycraftCrust")}"
+			}
+			if (project.hasProperty("galaxycraftWallInset")) { // walls collide inside their block, blocks
+				vmArg "-Dgalaxycraft.wallInset=${project.property("galaxycraftWallInset")}"
+			}
+			if (project.hasProperty("galaxycraftMarioRadius")) { // Mario's collision on planets, blocks
+				vmArg "-Dgalaxycraft.marioRadius=${project.property("galaxycraftMarioRadius")}"
+			}
 			if (project.hasProperty("galaxycraftPlanet")) { // a voxel planet once linked (PlanetClient)
 				vmArg "-Dgalaxycraft.planet=true"
 			}

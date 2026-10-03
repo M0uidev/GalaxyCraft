@@ -4,6 +4,7 @@
 // Minecraft looks. Mario still moves by his own physics, played through the emulated Wii Remote.
 #include "syati.h"
 
+#include "CodePatch.h"
 #include "Kcl.h"
 #include "Parts.h"
 #include "ViewMath.h"
@@ -16,6 +17,8 @@ extern "C" void init__10MarioActorFRC12JMapInfoIter(void* self, const void* iter
 extern "C" void movement__10MarioActorFv(void* self);
 extern "C" void movement__14CameraDirectorFv(void* self);
 extern "C" void draw__10MarioActorCFv(const void* self);
+extern "C" void draw__17StarPointerLayoutCFv(const void* self);
+extern "C" void draw__15StarPointerBlurCFv(const void* self);
 // Syati's StarPointerUtil.h declares it without the port argument the game takes.
 extern "C" bool isStarPointerValid__2MRFl(long port);
 
@@ -39,6 +42,16 @@ struct Debug
   u32 star_pointer_valid;  // MR::isStarPointerValid(0): the game still takes the pointer
   u32 galaxy_view;         // the host asked for the game's own camera
   u32 voxel_stats;         // &gVoxelStats (VoxelPlanet.h)
+  u32 radius_patch[3];     // Mario on a voxel planet: radius patches on, 100 * radius, 100 * binder
+  u32 mario_state[4];      // Mario::getCurrentStatus, then the words at Mario + 8, + 0xC, + 0x10
+  // Mario's last frames (history_next is the next slot): position before and after his movement,
+  // his velocity (Mario + 0x1D8), status, flags (Mario + 0xC, + 0x10) and ground triangle.
+  u32 history_next;
+  struct
+  {
+    f32 before[3], after[3], velocity[3];
+    u32 status, flags_c, flags_10, ground;
+  } history[6];
 };
 
 struct Published
@@ -61,6 +74,70 @@ const u32 HOST_TIMEOUT_FRAMES = 60;
 
 gxc::PartCandidate gCandidates[MAX_CANDIDATES];
 bool gFollowing = false;
+// Mario's movement is sized for SMG2's levels, not for 80-unit blocks, with radii loaded from the
+// small-data constants: walls stay 80 units away (Mario::checkAllWall, on foot: not swimming,
+// Yoshi or the special modes), the ground is felt by three probes 50 units around him
+// (Mario::checkGround) and balls of 50 and 40 around his feet push him out of the map
+// (Mario::checkBaseTransBall, Mario::createAtField, one of 50 in Mario::checkStep). So a 1-block hole holds him up and a 1-block tunnel keeps him out.
+// On a voxel planet those loads are pointed at a value of ours (GxcPlanet.mario_radius) so he fits
+// where Steve does; off it, the code is the game's again. Each is patched only if the word there
+// is the one expected; none of them is followed by a read of r12 before the next call. His binder (the sphere that pushes him out
+// of the map, radius 60 around a centre 60 above his feet) shrinks to the same radius.
+struct LoadPatch
+{
+  u32 site;
+  u32 original;
+  u32 stub[3];
+  f32 value;
+  bool on;
+};
+LoadPatch gRadiusPatches[] = {
+    {0x80390dfc, 0xC3C20DE0},  // checkAllWall: lfs f30, 80
+    {0x80391730, 0xC0220DDC},  // checkGround: lfs f1, 50 (the probes' distance)
+    {0x8038e714, 0xC0220DDC},  // checkBaseTransBall: lfs f1, 50 (three ball radii)
+    {0x8038e730, 0xC0220DDC},
+    {0x8038e7e0, 0xC0220DDC},
+    {0x8038e7fc, 0xC0220DDC},
+    {0x8038e87c, 0xC0220D3C},  //   lfs f1, 40
+    {0x8038e898, 0xC0220D3C},
+    {0x803aaeac, 0xC0220DDC},  // checkStep: lfs f1, 50 (the ball ahead of his feet)
+    {0x803aaec4, 0xC0220DDC},
+    {0x8038e95c, 0xC3620DDC},  // createAtField: lfs f27, 50 (the ball that pushes him off walls,
+    {0x8038e99c, 0xC3620D3C},  //   centred as high as it is wide), and 40 in one of his states
+    {0x8038e9b0, 0xC0020D3C},  //   lfs f0, 40: at least that wide when pushed (tryPushToVelocity)
+    {0x80388a48, 0xC0220D38},  // update: lfs f1, 150, that ball's width in one of his states
+    {0x803a6164, 0xC2020DE0},  // checkVerticalPress: lfs f16, 80, the ball that tells he is crushed
+};
+const u32 RADIUS_PATCHES = sizeof(gRadiusPatches) / sizeof(gRadiusPatches[0]);
+f32 gOwnBinderRadius = 0.f;  // while shrunk; 0: his own is on
+
+void FlushCode(void* p, u32 size)
+{
+  DCFlushRange(p, size);
+  ICInvalidateRange(p, size);
+}
+
+void SetLoadPatch(LoadPatch& p, bool on, f32 value)
+{
+  u32* site = reinterpret_cast<u32*>(p.site);
+  p.value = value;
+  if (on == p.on)
+    return;
+  if (on)
+  {
+    if (*site != p.original || !gxc::IsLfsR2(p.original))
+      return;
+    gxc::BuildLoadStub(p.original, p.site, reinterpret_cast<u32>(&p.value), reinterpret_cast<u32>(p.stub), p.stub);
+    FlushCode(p.stub, sizeof(p.stub));
+    *site = gxc::EncodeBranch(p.site, reinterpret_cast<u32>(p.stub));
+  }
+  else
+  {
+    *site = p.original;
+  }
+  FlushCode(site, 4);
+  p.on = on;
+}
 bool gDemo = false;  // a cutscene owns Mario and the camera this frame
 // Mario (Steve) is not drawn (first person, outside cutscenes). MR::hidePlayer is no use: Mario then
 // ignores the stick. Skipping MarioActor::draw leaves him playable, and his shadow stays.
@@ -215,6 +292,7 @@ void MarioInit(void* self, const void* iter)
 {
   init__10MarioActorFRC12JMapInfoIter(self, iter);
   gOut.mbx.scene_id++;  // a new Mario means a new stage: the host republishes everything
+  gOwnBinderRadius = 0.f;
   VoxelPlanetCreate();
   // The stage's name, so the mod keeps one planet per galaxy.
   const char* stage = MR::getCurrentStageName();
@@ -227,7 +305,28 @@ void MarioInit(void* self, const void* iter)
 
 void MarioMovement(void* self)
 {
+  const TVec3f* at = MR::getPlayerPos();
+  const f32 before[3] = {at->x, at->y, at->z};
   movement__10MarioActorFv(self);
+  {
+    const u8* mb = reinterpret_cast<const u8*>(reinterpret_cast<const MarioActor*>(self)->mMario);
+    if (IsRam(reinterpret_cast<u32>(mb)))
+    {
+      u32 n = gOut.dbg.history_next % 6;
+      gOut.dbg.history_next = n + 1;
+      at = MR::getPlayerPos();
+      for (int k = 0; k < 3; k++)
+      {
+        gOut.dbg.history[n].before[k] = before[k];
+        gOut.dbg.history[n].after[k] = (&at->x)[k];
+        gOut.dbg.history[n].velocity[k] = reinterpret_cast<const f32*>(mb + 0x1D8)[k];
+      }
+      gOut.dbg.history[n].status = reinterpret_cast<const Mario*>(mb)->getCurrentStatus();
+      gOut.dbg.history[n].flags_c = *reinterpret_cast<const u32*>(mb + 0xC);
+      gOut.dbg.history[n].flags_10 = *reinterpret_cast<const u32*>(mb + 0x10);
+      gOut.dbg.history[n].ground = *reinterpret_cast<const u32*>(mb + 0x4C4);
+    }
+  }
 
   gFollowing = HostFollows();
   gOut.dbg.following = gFollowing;
@@ -247,6 +346,70 @@ void MarioMovement(void* self)
     const f32 h = (head[0][3] - mario->x) * up[0] + (head[1][3] - mario->y) * up[1] +
                   (head[2][3] - mario->z) * up[2];
     gOut.dbg.head_height_x100 = static_cast<u32>(h * 100.f);
+  }
+  // On a voxel planet Mario's collision shrinks to fit 1-block holes and tunnels (see
+  // gRadiusPatches). Patched after his movement: it counts from the next frame.
+  {
+    const f32 feet[3] = {mario->x, mario->y, mario->z};
+    f32 radius = 0.f;
+    const bool small = VoxelPlanetMarioRadius(feet, &radius);
+    u32 on = 0;
+    for (u32 i = 0; i < RADIUS_PATCHES; i++)
+    {
+      SetLoadPatch(gRadiusPatches[i], small, radius);
+      on += gRadiusPatches[i].on;
+    }
+    LiveActor* actor = static_cast<LiveActor*>(self);
+    if (small && IsRam(reinterpret_cast<u32>(actor->mBinder)))
+    {
+      if (gOwnBinderRadius == 0.f)
+        gOwnBinderRadius = MR::getBinderRadius(actor);
+      MR::setBinderRadius(actor, radius);
+    }
+    else if (gOwnBinderRadius != 0.f)
+    {
+      MR::setBinderRadius(actor, gOwnBinderRadius);
+      gOwnBinderRadius = 0.f;
+    }
+    gOut.dbg.radius_patch[0] = on;
+    gOut.dbg.radius_patch[1] = static_cast<u32>(radius * 100.f);
+    const Mario* m = reinterpret_cast<const MarioActor*>(self)->mMario;
+    if (IsRam(reinterpret_cast<u32>(m)))
+    {
+      gOut.dbg.mario_state[0] = m->getCurrentStatus();
+      for (int k = 0; k < 3; k++)
+        gOut.dbg.mario_state[1 + k] = reinterpret_cast<const u32*>(m)[2 + k];
+    }
+    if (IsRam(reinterpret_cast<u32>(actor->mBinder)))
+      gOut.dbg.radius_patch[2] = static_cast<u32>(MR::getBinderRadius(actor) * 100.f);
+    // F3+B in Minecraft: his collision drawn as his movement sees it (the radius counts from the
+    // next frame, as the patches do).
+    if ((gOut.mbx.host_flags & GXC_MBX_HITBOXES) && small && IsRam(reinterpret_cast<u32>(m)))
+    {
+      // checkBaseTransBall's balls: from Mario's position plus his vector at +0x160, one 50 along
+      // the one at +0x1F0, one 40 against it and one right there (offsets not patched).
+      MarioHitbox box;
+      TVec3f front(0.f, 0.f, 0.f);
+      MR::getPlayerFrontVec(&front);
+      const u8* mb = reinterpret_cast<const u8*>(m);
+      const f32* base = reinterpret_cast<const f32*>(mb + 0x160);
+      const f32* along = reinterpret_cast<const f32*>(mb + 0x1F0);
+      const f32 offsets[3] = {50.f, -40.f, 0.f};
+      for (int k = 0; k < 3; k++)
+      {
+        box.feet[k] = feet[k];
+        box.up[k] = -gOut.mbx.gravity[k];
+        for (int b = 0; b < 3; b++)
+          box.balls[b][k] = feet[k] + base[k] + offsets[b] * along[k];
+      }
+      box.front[0] = front.x, box.front[1] = front.y, box.front[2] = front.z;
+      box.radius = radius;
+      VoxelPlanetHitbox(&box);
+    }
+    else
+    {
+      VoxelPlanetHitbox(0);
+    }
   }
   gOut.dbg.mario_height_x100 =
       static_cast<u32>(200.f * gxc::Sqrt(half[0] * half[0] + half[1] * half[1] + half[2] * half[2]));
@@ -274,6 +437,27 @@ void MarioDraw(const void* self)
 {
   if (!gHidden)
     draw__10MarioActorCFv(self);
+}
+
+// Playing in Minecraft's view the IR sits under its crosshair, which stands in for the star
+// pointer: the pointer and its trail are not drawn, but still aim. The host clears the flag in
+// menus, cutscenes and the Galaxy view, and goes quiet if the bridge stops (checked here, as
+// Mario's movement, which runs the watchdog, stops while the game is paused).
+bool PointerHidden()
+{
+  return (gOut.mbx.host_flags & GXC_MBX_HIDE_POINTER) != 0 && gFramesSinceHost < HOST_TIMEOUT_FRAMES;
+}
+
+void StarPointerLayoutDraw(const void* self)
+{
+  if (!PointerHidden())
+    draw__17StarPointerLayoutCFv(self);
+}
+
+void StarPointerBlurDraw(const void* self)
+{
+  if (!PointerHidden())
+    draw__15StarPointerBlurCFv(self);
 }
 
 // The game's camera this frame, before any override: the mod's Galaxy view follows it.
@@ -328,8 +512,11 @@ void CameraMovement(void* self)
 }  // namespace
 
 // Vtable slots (symbols/SB4E.txt): __vt__10MarioActor + 0xC init, + 0x14 movement, + 0x18 draw;
-// __vt__14CameraDirector + 0x14 movement.
+// __vt__14CameraDirector + 0x14 movement; __vt__17StarPointerLayout and __vt__15StarPointerBlur
+// + 0x18 draw (read live on SB4E).
 kmWritePointer(0x806C7448 + 0xC, MarioInit);
 kmWritePointer(0x806C7448 + 0x14, MarioMovement);
 kmWritePointer(0x806C7448 + 0x18, MarioDraw);
 kmWritePointer(0x8067C4D0 + 0x14, CameraMovement);
+kmWritePointer(0x806F88A0 + 0x18, StarPointerLayoutDraw);
+kmWritePointer(0x806F8300 + 0x18, StarPointerBlurDraw);

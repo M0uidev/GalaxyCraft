@@ -43,10 +43,10 @@ public final class Seqlock {
      */
     public record PlayerOut(long frameId, Vector3d pos, Vector3d look, Vector3d up, float fovY, float eye,
             boolean onGround, Vector3d camOffset, int view, int sceneId, boolean itemActive, boolean screenOpen,
-            boolean flying) {
+            boolean flying, boolean hitboxes) {
         public PlayerOut(long frameId, Vector3d pos, Vector3d look, Vector3d up, float fovY, float eye,
                 boolean onGround, Vector3d camOffset, int view, int sceneId) {
-            this(frameId, pos, look, up, fovY, eye, onGround, camOffset, view, sceneId, false, false, false);
+            this(frameId, pos, look, up, fovY, eye, onGround, camOffset, view, sceneId, false, false, false, false);
         }
     }
 
@@ -139,7 +139,8 @@ public final class Seqlock {
         s.set(INT, o, seq + 1);
         VarHandle.releaseFence();
         s.set(INT, o + 4, (p.onGround() ? Layout.PLAYER_ON_GROUND : 0) | (p.itemActive() ? Layout.PLAYER_ITEM_ACTIVE : 0)
-                | (p.screenOpen() ? Layout.PLAYER_SCREEN : 0) | (p.flying() ? Layout.PLAYER_FLYING : 0));
+                | (p.screenOpen() ? Layout.PLAYER_SCREEN : 0) | (p.flying() ? Layout.PLAYER_FLYING : 0)
+                | (p.hitboxes() ? Layout.PLAYER_HITBOXES : 0));
         s.set(LONG, o + 8, p.frameId());
         putVec(s, o + 16, p.pos());
         putVec(s, o + 28, p.look());

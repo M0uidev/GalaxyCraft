@@ -5,6 +5,7 @@
 #include <cstring>
 #include <vector>
 
+#include "CodePatch.h"
 #include "Inbox.h"
 #include "Kcl.h"
 #include "Parts.h"
@@ -201,8 +202,8 @@ static void PutF(std::vector<u8>& b, float f)
 static void TestInboxRecords()
 {
   std::vector<u8> b;
-  Put32(b, 102u << 16), Put32(b, 32), Put32(b, 7), PutF(b, 1.f), PutF(b, 2.f), PutF(b, 3.f), PutF(b, 1280.f),
-      PutF(b, 4480.f), Put32(b, 162), PutF(b, 640.f);
+  Put32(b, 102u << 16), Put32(b, 36), Put32(b, 7), PutF(b, 1.f), PutF(b, 2.f), PutF(b, 3.f), PutF(b, 1280.f),
+      PutF(b, 4480.f), Put32(b, 162), PutF(b, 640.f), PutF(b, 28.f);
   Put32(b, 103u << 16), Put32(b, 32 + 32 + 8), Put32(b, 5), Put32(b, 2), Put32(b, 32), Put32(b, 8);
   PutF(b, 10.f), PutF(b, 20.f), PutF(b, 30.f), PutF(b, 99.f);
   for (int k = 0; k < 40; k++)
@@ -212,7 +213,8 @@ static void TestInboxRecords()
   u32 off = 0;
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::PLANET);
   CHECK(r.planet.id == 7 && r.planet.center[2] == 3.f && r.planet.surface == 1280.f && r.planet.gravity_range == 4480.f &&
-        r.planet.chunk_count == 162 && r.planet.occluder == 640.f);
+        r.planet.chunk_count == 162 && r.planet.occluder == 640.f &&
+        r.planet.mario_radius == 28.f);
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::CHUNK);
   CHECK(r.chunk.slot == 5 && r.chunk.version == 2 && r.chunk.dl[0] == 0 && r.chunk.kcl[0] == 32 &&
         r.chunk.sphere[1] == 20.f && r.chunk.sphere[3] == 99.f);
@@ -287,11 +289,41 @@ static void TestPlanetDropAndViewTranslate()
   CHECK(Near(m[3], 6.f) && Near(m[7], 9.f) && Near(m[11], 5.f) && m[6] == 1.f);
 }
 
+static void TestInboxOutline()
+{
+  std::vector<u8> b;
+  Put32(b, 105u << 16), Put32(b, 100), Put32(b, 1);
+  for (int k = 0; k < 24; k++)
+    PutF(b, static_cast<float>(k));
+  Put32(b, 105u << 16), Put32(b, 96);  // short: malformed
+  InboxRecord r;
+  u32 off = 0;
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::OUTLINE);
+  CHECK(r.outline.visible == 1 && r.outline.corners[0][0] == 0.f && r.outline.corners[7][2] == 23.f);
+  CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
+}
+
+static void TestCodePatch()
+{
+  // Mario::checkAllWall's wall radius: lfs f30, 3552(r2) at 0x80390dfc.
+  const u32 insn = 0xC3C20DE0u;
+  CHECK(IsLfsR2(insn) && !IsLfsR2(0xC3CC0DE0u) && !IsLfsR2(0x3D808077u));
+  CHECK(EncodeBranch(0x80390dfcu, 0x80391000u) == 0x48000204u);
+  CHECK(EncodeBranch(0x80391000u, 0x80390dfcu) == 0x4BFFFDFCu);  // backwards
+  u32 stub[3];
+  BuildLoadStub(insn, 0x80390dfcu, 0x8076A010u, 0x80700000u, stub);
+  CHECK(stub[0] == 0x3D808077u);  // lis r12, 0x8077 (the low half is negative)
+  CHECK(stub[1] == 0xC3CCA010u);  // lfs f30, -0x5ff0(r12)
+  CHECK(stub[2] == EncodeBranch(0x80700008u, 0x80390e00u));
+}
+
 int main()
 {
   TestInboxRecords();
   TestInboxRejectsBadChunks();
   TestPlanetDropAndViewTranslate();
+  TestCodePatch();
+  TestInboxOutline();
   TestSelectNearest64();
   TestBigRadiusWinsOrder();
   TestNoneInRange();

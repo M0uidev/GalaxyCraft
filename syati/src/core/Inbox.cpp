@@ -36,7 +36,7 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   out->type = type;
   if (type == InboxRecord::PLANET)
   {
-    if (len != 32)
+    if (len != 36)
       return false;
     out->planet.id = ReadBE32(p);
     for (int k = 0; k < 3; k++)
@@ -45,6 +45,7 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
     out->planet.gravity_range = ReadF32(p + 20);
     out->planet.chunk_count = ReadBE32(p + 24);
     out->planet.occluder = ReadF32(p + 28);
+    out->planet.mario_radius = ReadF32(p + 32);
     if (out->planet.chunk_count > max_slots)
       return false;
   }
@@ -65,6 +66,14 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
       return false;
     c.dl = p + HEAD;
     c.kcl = p + HEAD + c.dl_size;
+  }
+  else if (type == InboxRecord::OUTLINE)
+  {
+    if (len != 100)
+      return false;
+    out->outline.visible = ReadBE32(p);
+    for (int k = 0; k < 24; k++)
+      out->outline.corners[k / 3][k % 3] = ReadF32(p + 4 + 4 * k);
   }
   else if (type == InboxRecord::TELEPORT)
   {

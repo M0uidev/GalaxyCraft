@@ -12,7 +12,8 @@ import org.joml.Vector3d;
  * Turns a chunk into what SMG2 needs: a GX display list (quads in vertex format 7: position s16
  * with 3 fraction bits, relative to the chunk's bounding sphere center; color RGB565; texture
  * coordinate u16 with 10 fraction bits) and a KCL relative to the planet's center. Only sides
- * facing air are kept. Galaxy units.
+ * that can be seen are kept: a block's facing air or a fluid, a fluid's facing air (or its own
+ * fluid lower down). Fluids are drawn as high as their level and never collide. Galaxy units.
  */
 public final class PlanetMesher {
     /** GX_QUADS | GX_VTXFMT7. */
@@ -30,9 +31,26 @@ public final class PlanetMesher {
     public static final double AMBIENT = 0.5;
     private static final double[] AO = {0.45, 0.62, 0.8, 1.0};
     private static final int ATLAS_TILES = 4;
+    /**
+     * Walls collide this far inside their block (blocks): with walls closer than ~35 units on
+     * several sides (a 1x1 hole) Mario bounced sideways every third frame, something in his own
+     * movement that no radius patch reaches (tools/gxfit.sh measures it). -Dgalaxycraft.wallInset.
+     */
+    public static final double WALL_INSET = Double.parseDouble(System.getProperty("galaxycraft.wallInset", "0.1"));
+    /**
+     * Floors and ceilings collide this much farther under the walls around them (blocks), so the
+     * inset walls leave no slot at their foot. -Dgalaxycraft.floorGrow.
+     */
+    public static final double FLOOR_GROW = Double.parseDouble(System.getProperty("galaxycraft.floorGrow", "0.12"));
 
-    /** light: brightness 0..1 at each corner (sun and ambient occlusion). */
-    public record Quad(Vector3d[] corners, int tile, int side, double[] light) {}
+    /** light: brightness 0..1 at each corner (sun and ambient occlusion); solid: it collides. */
+    public record Quad(Vector3d[] corners, int tile, int side, double[] light, boolean solid, Vector3d[] collision) {
+        public Quad(Vector3d[] corners, int tile, int side, double[] light, boolean solid) {
+            this(corners, tile, side, light, solid, corners);
+        }
+    }
+
+    private static final int[] LATERAL = {CubeSphere.I_MINUS, CubeSphere.I_PLUS, CubeSphere.J_MINUS, CubeSphere.J_PLUS};
 
     /** sphere: the chunk's bounding sphere (center from the planet's center, radius), galaxy units. */
     public record ChunkMesh(byte[] displayList, byte[] kcl, float[] sphere) {
@@ -48,17 +66,60 @@ public final class PlanetMesher {
         List<Quad> out = new ArrayList<>();
         for (int c : p.cellsOf(chunk)) {
             Material m = p.get(c);
-            if (!m.solid()) continue;
+            if (m == Material.AIR) continue;
+            double top = m.fluid() ? Fluids.height(p, c) : 1;
             for (int s = 0; s < 6; s++) {
                 int nb = p.grid.neighbor(c, s);
                 if (s == CubeSphere.BOTTOM && nb < 0) continue; // faces the sealed center
-                if (p.get(nb).solid()) continue;
+                Material o = p.get(nb);
+                if (o.solid()) continue;
+                double bottom = 0; // of a side: a fluid shows only above its own fluid next to it
+                if (o == m) {
+                    if (s == CubeSphere.TOP || s == CubeSphere.BOTTOM) continue;
+                    bottom = Fluids.height(p, nb);
+                    if (bottom >= top) continue;
+                }
                 int tile = s == CubeSphere.TOP ? m.top : s == CubeSphere.BOTTOM ? m.bottom : m.side;
                 Vector3d[] q = p.grid.side(c, s);
-                out.add(new Quad(q, tile, s, light(p, c, s, nb, q)));
+                if (top < 1 || bottom > 0) lower(q, p.grid.radius(p.grid.k(c)), bottom, top);
+                out.add(new Quad(q, tile, s, light(p, c, s, nb, q), m.solid(), m.solid() ? collision(p, c, s, nb, q) : q));
             }
         }
         return out;
+    }
+
+    /**
+     * Where a solid face collides, blocks: a wall WALL_INSET inside its block; a floor or ceiling
+     * FLOOR_GROW wider along each edge a wall rises from (the cell in front of it, nb, has a solid
+     * neighbor there), so that it reaches under that wall. Toward open space it stays as it looks.
+     */
+    private static Vector3d[] collision(VoxelPlanet p, int c, int s, int nb, Vector3d[] q) {
+        Vector3d[] k = new Vector3d[4];
+        for (int i = 0; i < 4; i++) k[i] = new Vector3d(q[i]);
+        if (s != CubeSphere.TOP && s != CubeSphere.BOTTOM) {
+            if (WALL_INSET <= 0) return k;
+            Vector3d n = new Vector3d(q[1]).sub(q[0]).cross(new Vector3d(q[2]).sub(q[0])).normalize();
+            for (Vector3d v : k) v.sub(new Vector3d(n).mul(WALL_INSET));
+            return k;
+        }
+        if (FLOOR_GROW <= 0) return k;
+        for (int side : LATERAL) {
+            if (!p.get(p.grid.neighbor(nb, side)).solid()) continue;
+            // The edge on that side, and the outward direction across it within the face.
+            Vector3d[] wall = p.grid.side(c, side);
+            Vector3d n = new Vector3d(wall[1]).sub(wall[0]).cross(new Vector3d(wall[2]).sub(wall[0])).normalize();
+            for (int i = 0; i < 4; i++)
+                if (Math.abs(new Vector3d(q[i]).sub(wall[0]).dot(n)) < 1e-4) k[i].add(new Vector3d(n).mul(FLOOR_GROW));
+        }
+        return k;
+    }
+
+    /** Corners on the inner radius r0 go to r0 + bottom, those on the outer one to r0 + top. */
+    private static void lower(Vector3d[] q, double r0, double bottom, double top) {
+        for (Vector3d v : q) {
+            double r = v.length();
+            v.mul((r < r0 + 0.5 ? r0 + bottom : r0 + top) / r);
+        }
     }
 
     public static ChunkMesh mesh(VoxelPlanet p, int chunk, double unitsPerBlock) {
@@ -141,12 +202,14 @@ public final class PlanetMesher {
                 dl.putShort(rgb565);
                 dl.putShort((short) st[k][0]).putShort((short) st[k][1]);
             }
-            if (withKcl) {
-                tris.add(Tri.of(v[0], v[1], v[2]));
-                tris.add(Tri.of(v[0], v[2], v[3]));
+            if (withKcl && q.solid()) {
+                Vector3d[] k = new Vector3d[4];
+                for (int c = 0; c < 4; c++) k[c] = new Vector3d(q.collision()[c]).mul(unitsPerBlock);
+                tris.add(Tri.of(k[0], k[1], k[2]));
+                tris.add(Tri.of(k[0], k[2], k[3]));
             }
         }
-        return new ChunkMesh(dl.array(), withKcl ? KclWriter.write(tris) : new byte[0], sphere);
+        return new ChunkMesh(dl.array(), tris.isEmpty() ? new byte[0] : KclWriter.write(tris), sphere);
     }
 
     private static short fixed(double units) {

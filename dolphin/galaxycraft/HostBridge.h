@@ -37,6 +37,8 @@ public:
   bool Following() const { return m_following; }
   // Mario is playable: game frames within the last 30 ticks, gravity, no cutscene. Else a menu.
   bool InGame() const { return m_in_game; }
+  // A cutscene owns Mario and the camera (game frames within the last 30 ticks, DEMO).
+  bool Cutscene() const { return m_cutscene; }
   // Following with the mod's Galaxy view (F5): SMG2 keeps its camera, the mouse is the pointer.
   bool GalaxyView() const { return m_galaxy_view; }
   // Following with something in Minecraft's main hand: the clicks break and place blocks.
@@ -84,6 +86,7 @@ private:
   std::optional<PlayerState> m_player;
   bool m_following = false;
   bool m_in_game = false;
+  bool m_cutscene = false;
   bool m_galaxy_view = false;
   std::optional<u32> m_game_seq;
   int m_ticks_since_game_frame = 0;

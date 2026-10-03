@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.locks.LockSupport;
 import java.util.function.LongSupplier;
 
 /**
@@ -119,6 +120,21 @@ public final class BridgeClient {
     /** The host's keyboard and mouse state, if it publishes any (Dolphin does, the stub does not). */
     public Optional<Seqlock.InputState> input() {
         return linked() ? Seqlock.readInput(shm.seg()) : Optional.empty();
+    }
+
+    /**
+     * Waits, at most timeoutMs, for a WorldState newer than frame {@code after} (the host writes
+     * one per emulated frame) and returns its frame id, or {@code after} on timeout.
+     */
+    public long awaitFrame(long after, long timeoutMs) {
+        if (shm == null) return after;
+        long deadline = System.nanoTime() + timeoutMs * 1_000_000;
+        do {
+            Optional<Seqlock.WorldState> w = Seqlock.readWorld(shm.seg());
+            if (w.isPresent() && w.get().frameId() != after) return w.get().frameId();
+            LockSupport.parkNanos(100_000);
+        } while (System.nanoTime() < deadline);
+        return after;
     }
 
     /** Queues a message for the host; false while the ring is full (try again next tick). */

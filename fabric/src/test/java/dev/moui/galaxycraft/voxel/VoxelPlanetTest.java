@@ -60,6 +60,17 @@ class VoxelPlanetTest {
         assertThrows(IllegalArgumentException.class, () -> VoxelPlanet.ofRadius(300));
     }
 
+    /** Mario has to fit wherever one can dig: no breakable cell narrower than 3/4 of a block. */
+    @Test void deepestBreakableCellsStayWideEnough() {
+        for (int r = VoxelPlanet.MIN_RADIUS; r <= VoxelPlanet.MAX_RADIUS; r += 3) {
+            VoxelPlanet p = VoxelPlanet.ofRadius(r);
+            int low = p.grid.index(2, p.grid.n / 2, p.grid.n / 2, 1); // the stone on the bedrock
+            assertTrue(p.get(low).breakable(), "radius " + r);
+            double w = p.grid.corner(low, 0, 0, 0).distance(p.grid.corner(low, 1, 0, 0));
+            assertTrue(w >= 0.75, "radius " + r + ": cells " + w + " wide over the bedrock");
+        }
+    }
+
     @Test void onlySurfaceChunksMayShow() {
         VoxelPlanet p = VoxelPlanet.ofRadius(64);
         int shows = 0;
@@ -91,5 +102,16 @@ class VoxelPlanetTest {
         assertEquals(p.grid.neighbor(hit.hit(), CubeSphere.TOP), hit.before());
         assertNull(PlanetRaycast.cast(p, new Vector3d(0, 21, 0), new Vector3d(0, -1, 0), 4.5), "out of reach");
         assertNull(PlanetRaycast.cast(p, new Vector3d(0, 18, 0), new Vector3d(0, 1, 0), 4.5));
+    }
+
+    @Test
+    void oldDeepCrustsAreSealedWithBedrock() {
+        VoxelPlanet p = VoxelPlanet.standard(); // grass at 16, crust 9 deep, as planets used to be
+        int column = p.grid.index(0, 12, 12, 0);
+        p.set(column + 3, Material.AIR); // a hole dug deep
+        assertEquals(6 * 24 * 24 * 4, p.sealBelowCrust(), "k 1..4 of every column, the hole too");
+        for (int k = 0; k < 5; k++) assertEquals(Material.BEDROCK, p.get(column + k), "k " + k);
+        assertEquals(Material.STONE, p.get(column + 5));
+        assertEquals(0, p.sealBelowCrust(), "once");
     }
 }

@@ -16,7 +16,9 @@ public final class VoxelPlanet {
     public final int depth;
     private final byte[] cells;
     private final int[] versions;
-    private final int[] solid; // solid cells per chunk
+    private final int[] filled; // cells per chunk that are not air
+    private final int[] solid;  // solid (block) cells per chunk
+    private final Fluids fluids;
     private final BitSet dirty = new BitSet();
     private final int chunksPerEdge, chunkLayers;
     private float[] spheres; // per chunk: center x y z (blocks), radius; computed on first use
@@ -33,8 +35,15 @@ public final class VoxelPlanet {
         this.chunksPerEdge = (grid.n + CHUNK - 1) / CHUNK;
         this.chunkLayers = (grid.layers + CHUNK - 1) / CHUNK;
         this.versions = new int[chunkCount()];
+        this.filled = new int[chunkCount()];
         this.solid = new int[chunkCount()];
-        for (int c = 0; c < cells.length; c++) if (cells[c] != 0) solid[chunkOf(c)]++;
+        this.fluids = new Fluids(this);
+        for (int c = 0; c < cells.length; c++) {
+            if (cells[c] == 0) continue;
+            filled[chunkOf(c)]++;
+            if (get(c).solid()) solid[chunkOf(c)]++;
+            else fluids.schedule(c); // flowing again where it was saved
+        }
         dirty.set(0, chunkCount());
     }
 
@@ -44,17 +53,43 @@ public final class VoxelPlanet {
     }
 
     /**
-     * A planet whose grass is at radius blocks: cells about a block wide at the surface, a crust
-     * up to 24 blocks deep (bedrock at its bottom seals the hollow center), and room to build a
-     * quarter of the radius high (8 to 32 blocks).
+     * A planet whose grass is at radius blocks: cells about a block wide at the surface, a crust a
+     * quarter of the radius deep (3 to 24 blocks; bedrock at its bottom seals the hollow center),
+     * and room to build a quarter of the radius high (8 to 32 blocks). Cells narrow toward the
+     * center; that depth keeps every one that can be dug at least 3/4 of a block wide, where Mario
+     * still fits.
      */
     public static VoxelPlanet ofRadius(int radius) {
         if (radius < MIN_RADIUS || radius > MAX_RADIUS)
             throw new IllegalArgumentException("radius " + radius + " not in " + MIN_RADIUS + ".." + MAX_RADIUS);
-        int depth = Math.min(radius - 7, 24);
+        // -Dgalaxycraft.crustDepth: deeper crusts, as planets saved before had (tools/gxfit.sh).
+        int depth = Math.min(radius - 2, Integer.getInteger("galaxycraft.crustDepth", crustDepth(radius)));
         int air = Math.max(8, Math.min(32, radius / 4));
         int n = (int) Math.round(Math.PI * radius / 2);
         return generate(new CubeSphere(n, radius - depth, depth + air), depth);
+    }
+
+    /** How deep a planet of that radius can be dug, bedrock included (blocks). */
+    public static int crustDepth(int radius) {
+        return Math.max(3, Math.min(24, Math.round(radius / 4f)));
+    }
+
+    /**
+     * A planet saved when crusts went deeper (half the radius): everything below today's crust
+     * turns to bedrock, holes there included. Down there cells are under 0.45 blocks wide and Mario
+     * gets wedged in them, held up and shaking. Returns how many cells changed.
+     */
+    public int sealBelowCrust() {
+        int keep = crustDepth((int) Math.round(surface()));
+        int changed = 0;
+        for (int c = 0; c < cells.length; c++) {
+            int k = grid.k(c);
+            if (k < depth - keep && get(c) != Material.BEDROCK) {
+                set(c, Material.BEDROCK);
+                changed++;
+            }
+        }
+        return changed;
     }
 
     private static VoxelPlanet generate(CubeSphere grid, int depth) {
@@ -74,7 +109,7 @@ public final class VoxelPlanet {
         return new VoxelPlanet(grid, depth, cells);
     }
 
-    /** The cells as stored (one Material ordinal per cell): what gets saved. */
+    /** The cells as stored (Material ordinal, fluid level in the high nibble): what gets saved. */
     public byte[] cells() {
         return cells;
     }
@@ -89,21 +124,42 @@ public final class VoxelPlanet {
         return grid.core;
     }
 
+    private static final Material[] MATERIALS = Material.values();
+
     public Material get(int cell) {
-        return cell < 0 ? Material.AIR : Material.values()[cells[cell]];
+        return cell < 0 ? Material.AIR : MATERIALS[cells[cell] & 0x0F];
     }
 
-    /** Sets a cell and marks its chunk and its neighbors' chunks (their faces change) dirty. */
+    /** A fluid's level (see {@link Fluids}); 0 for anything else. */
+    public int level(int cell) {
+        return cell < 0 ? 0 : cells[cell] >> 4 & 0x0F;
+    }
+
+    public Fluids fluids() {
+        return fluids;
+    }
+
     public void set(int cell, Material m) {
+        set(cell, m, 0);
+    }
+
+    /**
+     * Sets a cell and marks its chunk and its neighbors' chunks (their faces change) dirty; the
+     * fluids around it flow on their next tick.
+     */
+    public void set(int cell, Material m, int level) {
+        byte b = (byte) (m.ordinal() | level << 4);
+        if (cells[cell] == b) return;
         Material old = get(cell);
-        if (old == m) return;
-        cells[cell] = (byte) m.ordinal();
+        cells[cell] = b;
+        filled[chunkOf(cell)] += (m != Material.AIR ? 1 : 0) - (old != Material.AIR ? 1 : 0);
         solid[chunkOf(cell)] += (m.solid() ? 1 : 0) - (old.solid() ? 1 : 0);
         dirty.set(chunkOf(cell));
         for (int s = 0; s < 6; s++) {
             int nb = grid.neighbor(cell, s);
             if (nb >= 0) dirty.set(chunkOf(nb));
         }
+        fluids.touched(cell);
     }
 
     public int chunkCount() {
@@ -129,11 +185,11 @@ public final class VoxelPlanet {
     }
 
     /**
-     * Whether a chunk can have visible sides: some solid cell, and either some air in it or a
-     * neighbor chunk that is not wholly solid. Cheap; {@link PlanetMesher} gives the exact answer.
+     * Whether a chunk can have visible sides: something in it, and either some cell that is not a
+     * block or a neighbor chunk that is not wholly blocks. Cheap; {@link PlanetMesher} gives the exact answer.
      */
     public boolean mayShow(int chunk) {
-        if (solid[chunk] == 0) return false;
+        if (filled[chunk] == 0) return false;
         int[] cs = cellsOf(chunk);
         if (solid[chunk] < cs.length) return true;
         for (int c : cs) {

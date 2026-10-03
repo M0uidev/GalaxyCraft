@@ -12,14 +12,20 @@ import java.io.IOException;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.joml.Vector3d;
 
 /**
  * The voxel planet in Minecraft's hands: /galaxycraft planet, the clicks that break and place
- * blocks while something is in the main hand (Dolphin then keeps them from Mario), P to land on
+ * blocks (and pour and fill buckets of water and lava) while something is in the main hand (Dolphin then keeps them from Mario), P to land on
  * the planet, and the messages that carry it to the game. One planet per stage (galaxy), saved in
  * ~/.local/share/galaxycraft/planets (see planetDir) and loaded again when the stage is. -Dgalaxycraft.planet=true
  * (or a radius) spawns one in a stage that has none as soon as the player follows Mario.
@@ -27,7 +33,7 @@ import org.joml.Vector3d;
 public final class PlanetClient {
     /** SDL scancode of P; protocol mouse mask bits (bit n = SDL button n). */
     private static final int SC_P = 19, MOUSE_LEFT = 1 << 1, MOUSE_RIGHT = 1 << 3;
-    public static final int DEFAULT_RADIUS = 16;
+    public static final int DEFAULT_RADIUS = 32;
     /** Ticks between saves of an edited planet. */
     private static final int SAVE_TICKS = 200;
     private static final PlanetSession session = new PlanetSession(1 / GravityFrame.SCALE);
@@ -101,13 +107,15 @@ public final class PlanetClient {
         boolean p = in.map(i -> (i.keys()[SC_P / 8] >> (SC_P % 8) & 1) != 0).orElse(false);
         if (session.active() && frame != null && player != null) {
             if (p && !lastP) session.teleport();
-            if (itemActive(player)) {
-                Vector3d eye = frame.toGal(vec(player.getEyePosition()));
-                Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
+            boolean item = itemActive(player);
+            Vector3d eye = frame.toGal(vec(player.getEyePosition()));
+            Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
+            // Minecraft's outline on the block the clicks would act on, only with something in hand.
+            session.setOutline(item ? session.target(eye, look, player.getMainHandItem().is(Items.BUCKET)) : -1);
+            if (item) {
                 // Minecraft gets the same clicks and swings the arm by itself.
                 if (pressed(buttons, MOUSE_LEFT)) session.breakBlock(eye, look);
-                if (pressed(buttons, MOUSE_RIGHT))
-                    session.placeBlock(eye, look, material(player.getMainHandItem()), world.queryPos());
+                if (pressed(buttons, MOUSE_RIGHT)) use(player, eye, look, world.queryPos());
             }
         }
         lastButtons = buttons;
@@ -189,6 +197,31 @@ public final class PlanetClient {
 
     private static boolean pressed(int buttons, int mask) {
         return (buttons & mask) != 0 && (lastButtons & mask) == 0;
+    }
+
+    /** Right click: a bucket pours or fills (and turns into the other one, as in survival); a block is placed. */
+    private static void use(LocalPlayer player, Vector3d eye, Vector3d look, Vector3d feet) {
+        ItemStack stack = player.getMainHandItem();
+        Material m = material(stack);
+        if (stack.is(Items.BUCKET)) {
+            Material got = session.scoop(eye, look);
+            if (got != null) setMainHand(player, got == Material.WATER ? Items.WATER_BUCKET : Items.LAVA_BUCKET);
+        } else if (m != null && m.fluid()) {
+            if (session.pour(eye, look, m)) setMainHand(player, Items.BUCKET);
+        } else {
+            session.placeBlock(eye, look, m, feet);
+        }
+    }
+
+    /** The inventory is the integrated server's: the item changes there and syncs back. */
+    private static void setMainHand(LocalPlayer player, Item item) {
+        MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
+        if (server == null) return;
+        java.util.UUID id = player.getUUID();
+        server.execute(() -> {
+            ServerPlayer sp = server.getPlayerList().getPlayer(id);
+            if (sp != null) sp.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(item));
+        });
     }
 
     private static Material material(ItemStack stack) {

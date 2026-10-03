@@ -7,9 +7,11 @@
 	"entrypoints": {
 		"fabric-client-gametest": [
 			"dev.moui.galaxycraft.gametest.VoxelPlanetTest",
+			"dev.moui.galaxycraft.gametest.MarioFitTest",
 			"dev.moui.galaxycraft.gametest.WalkOnStubPlanetTest",
 			"dev.moui.galaxycraft.gametest.DolphinOverlayDemo",
-			"dev.moui.galaxycraft.gametest.MarioPerspectivesTest"
+			"dev.moui.galaxycraft.gametest.MarioPerspectivesTest",
+			"dev.moui.galaxycraft.gametest.CameraProbe"
 		]
 	},
 	"depends": {"galaxycraft": "*"}

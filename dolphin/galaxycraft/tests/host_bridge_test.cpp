@@ -183,7 +183,7 @@ TEST(follow_writes_flags_and_mario_position)
   f.ModReports(1, {10, 20, 30});
   f.Tick();
   CHECK(f.bridge.Following());
-  CHECK(f.mem.GetU32(MBX + 52) == GXC_MBX_FOLLOW);
+  CHECK(f.mem.GetU32(MBX + 52) == (GXC_MBX_FOLLOW | GXC_MBX_HIDE_POINTER));
   CHECK(f.mem.GetF32(MBX + 56) == 10.f && f.mem.GetF32(MBX + 64) == 30.f);  // echo
   CHECK(f.mem.GetF32(MBX + 68) == 0.f && f.mem.GetF32(MBX + 76) == 1.f);   // look
   CHECK(f.mem.GetF32(MBX + 84) == 1.f);                                     // up
@@ -220,7 +220,7 @@ TEST(follow_writes_camera_offset)
   f.Tick();
   f.ModReports(1, {10, 20, 30}, {0, 130, -320}, GXC_VIEW_BACK);
   f.Tick();
-  CHECK(f.mem.GetU32(MBX + 52) == (GXC_MBX_FOLLOW | GXC_MBX_THIRD_PERSON));
+  CHECK(f.mem.GetU32(MBX + 52) == (GXC_MBX_FOLLOW | GXC_MBX_THIRD_PERSON | GXC_MBX_HIDE_POINTER));
   CHECK(f.mem.GetF32(MBX + offsetof(GxcMailbox, cam_offset) + 4) == 130.f);
   CHECK(f.mem.GetF32(MBX + offsetof(GxcMailbox, cam_offset) + 8) == -320.f);
   CHECK(!f.bridge.GalaxyView());
@@ -380,7 +380,7 @@ TEST(dev_follow_overrides_mod)
   f.bridge.SetDevFollow(PlayerState{0, 0, {}, {0, 0, -1}, {0, 0, 0}, 70.f, 162.f});
   f.Tick();
   CHECK(f.bridge.Following());
-  CHECK(f.mem.GetU32(MBX + 52) == GXC_MBX_FOLLOW);
+  CHECK(f.mem.GetU32(MBX + 52) == (GXC_MBX_FOLLOW | GXC_MBX_HIDE_POINTER));
   CHECK(f.mem.GetF32(MBX + 72) == 0.f && f.mem.GetF32(MBX + 76) == -1.f);
   // No up given: opposite of the mailbox gravity (0, -1, 0).
   CHECK(f.mem.GetF32(MBX + 80) == 0.f && f.mem.GetF32(MBX + 84) == 1.f);
@@ -459,6 +459,51 @@ TEST(in_game_rule)
   CHECK(f.bridge.InGame());
 }
 
+TEST(star_pointer_hidden_only_while_playing_in_the_minecraft_view)
+{
+  // The IR is centred under Minecraft's crosshair exactly then; elsewhere the pointer is the mouse.
+  Fixture f;
+  u32 seq = 0;
+  auto frame = [&] { f.mem.PutU32(MBX + 12, ++seq); f.Tick(); };
+  auto hidden = [&] { return (f.mem.GetU32(MBX + 52) & GXC_MBX_HIDE_POINTER) != 0; };
+  frame();
+  f.ModReports(1, {10, 20, 30});
+  frame();
+  CHECK(hidden());
+  f.mem.PutU32(MBX + 48, GXC_MBX_GAME_DEMO);  // cutscene
+  frame();
+  CHECK(!hidden());
+  f.mem.PutU32(MBX + 48, 0);
+  frame();
+  CHECK(hidden());
+  for (int i = 0; i < 31; i++)  // paused: no game frames, a menu
+    f.Tick();
+  CHECK(!hidden());
+  f.ModReports(2, {10, 20, 30}, {0, 162, 0}, GXC_VIEW_GALAXY);
+  frame();
+  CHECK(!hidden());
+}
+
+TEST(cutscene_rule)
+{
+  Fixture f;
+  u32 seq = 0;
+  auto frame = [&] { f.mem.PutU32(MBX + 12, ++seq); f.Tick(); };
+  frame();
+  CHECK(!f.bridge.Cutscene());
+  f.mem.PutU32(MBX + 48, GXC_MBX_GAME_DEMO);
+  frame();
+  CHECK(f.bridge.Cutscene());
+  for (int i = 0; i < 31; i++)  // no game frames: whatever this is, it is not the cutscene
+    f.Tick();
+  CHECK(!f.bridge.Cutscene());
+  frame();
+  CHECK(f.bridge.Cutscene());
+  f.mem.PutU32(MBX + 48, 0);
+  frame();
+  CHECK(!f.bridge.Cutscene());
+}
+
 TEST(no_mailbox_reports_unlinked)
 {
   Fixture f;
@@ -482,7 +527,7 @@ void InboxInMailbox(Fixture& f, u32 size)
 
 void SendPlanet(Fixture& f, u32 id)
 {
-  GxcPlanet p{id, {1.f, 2.f, 3.f}, 1280.f, 4480.f, 162, 640.f};
+  GxcPlanet p{id, {1.f, 2.f, 3.f}, 1280.f, 4480.f, 162, 640.f, 28.f};
   Ring(*f.shm, GXC_OFF_RING_M2S).Push(GXC_MSG_PLANET, &p, sizeof(p));
 }
 }  // namespace
@@ -501,12 +546,12 @@ TEST(inbox_gets_planet_and_chunk_big_endian)
   f.Tick();
   CHECK(f.mem.GetU32(INBOX) == 1);
   CHECK(f.mem.GetU32(INBOX + 4) == 2);
-  CHECK(f.mem.GetU32(INBOX + 8) == 8 + 32 + 8 + 72);
+  CHECK(f.mem.GetU32(INBOX + 8) == 8 + 36 + 8 + 72);
   CHECK(f.mem.GetU32(INBOX + 12) == 3);
   const u32 r = INBOX + sizeof(GxcInboxHeader);
-  CHECK(f.mem.GetU32(r) == (u32(GXC_MSG_PLANET) << 16) && f.mem.GetU32(r + 4) == 32);
+  CHECK(f.mem.GetU32(r) == (u32(GXC_MSG_PLANET) << 16) && f.mem.GetU32(r + 4) == 36);
   CHECK(f.mem.GetU32(r + 8) == 7 && f.mem.GetF32(r + 12) == 1.f && f.mem.GetF32(r + 24) == 1280.f);
-  const u32 r2 = r + 8 + 32;
+  const u32 r2 = r + 8 + 36;
   CHECK(f.mem.GetU32(r2) == (u32(GXC_MSG_CHUNK) << 16) && f.mem.GetU32(r2 + 4) == 72);
   CHECK(f.mem.GetU32(r2 + 8) == 5 && f.mem.GetU32(r2 + 12) == 2 && f.mem.GetU32(r2 + 16) == 32);
   CHECK(f.mem.GetF32(r2 + 8 + 16 + 12) == 4.f);  // sphere swapped too
@@ -514,10 +559,23 @@ TEST(inbox_gets_planet_and_chunk_big_endian)
   CHECK(f.bridge.PendingInbox() == 0);
 }
 
+TEST(inbox_gets_the_outline_big_endian)
+{
+  Fixture f;
+  InboxInMailbox(f, 1024);
+  GxcOutline o{1, {}};
+  o.corners[7][2] = 5.5f;
+  Ring(*f.shm, GXC_OFF_RING_M2S).Push(GXC_MSG_OUTLINE, &o, sizeof(o));
+  f.Tick();
+  const u32 r = INBOX + sizeof(GxcInboxHeader);
+  CHECK(f.mem.GetU32(r) == (u32(GXC_MSG_OUTLINE) << 16) && f.mem.GetU32(r + 4) == 100);
+  CHECK(f.mem.GetU32(r + 8) == 1 && f.mem.GetF32(r + 8 + 4 + 23 * 4) == 5.5f);
+}
+
 TEST(inbox_waits_for_the_module_and_splits_batches)
 {
   Fixture f;
-  InboxInMailbox(f, sizeof(GxcInboxHeader) + 48);  // room for one planet record (40 bytes)
+  InboxInMailbox(f, sizeof(GxcInboxHeader) + 48);  // room for one planet record (44 bytes)
   f.mem.PutU32(INBOX, 1);                           // the module has not emptied it yet
   SendPlanet(f, 1);
   SendPlanet(f, 2);
@@ -579,4 +637,17 @@ TEST(flying_draws_mario)
   CHECK(f.bridge.Flying());
   CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_THIRD_PERSON) != 0);
   CHECK(f.mem.GetF32(MBX + offsetof(GxcMailbox, cam_offset) + 4) == 900.f);  // the camera, far off
+}
+
+TEST(f3_b_draws_marios_hitbox)
+{
+  Fixture f;
+  f.Tick();
+  f.shm->SetU64(offsetof(GxcHeader, mod_heartbeat_ms), f.now);
+  WritePlayer(*f.shm, {0, 1, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {}, GXC_VIEW_FIRST, 3});
+  f.Tick();
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_HITBOXES) == 0);
+  WritePlayer(*f.shm, {GXC_PLAYER_HITBOXES, 2, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {}, GXC_VIEW_FIRST, 3});
+  f.Tick();
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_HITBOXES) != 0);
 }

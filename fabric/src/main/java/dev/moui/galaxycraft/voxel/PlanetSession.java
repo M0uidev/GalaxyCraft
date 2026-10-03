@@ -23,11 +23,21 @@ public final class PlanetSession {
     public record Msg(int type, byte[] payload) {}
 
     public static final double REACH = 4.5;
+    public static final double DEFAULT_MARIO_RADIUS = 0.3;
+    /** The outline stands this fraction of a cell out of it. */
+    static final double OUTLINE_GROW = 0.02;
     /** Collision reaches this far around Mario, blocks, for at most MAX_PARTS chunks. */
     public static final double NEAR = 24;
     public static final int MAX_PARTS = 160;
     /** Updates between recomputing which chunks are near Mario. */
     public static final int RESIDENCY_UPDATES = 10;
+    /**
+     * Mario's collision radius at the planet's surface, blocks (Steve's): his own is 60 units (1.5
+     * blocks wide), too wide for a 1-block hole or tunnel. Below the surface it shrinks as the
+     * cells narrow toward the center (the module scales it). -Dgalaxycraft.marioRadius changes it
+     * (0: his own).
+     */
+    public static final double MARIO_RADIUS = marioRadius(System.getProperty("galaxycraft.marioRadius"));
     /** In the chunk queue: the teleport, once the chunks before it are out. */
     private static final int TP_MARK = -1;
 
@@ -47,6 +57,7 @@ public final class PlanetSession {
     private int scene = Integer.MIN_VALUE, host = Integer.MIN_VALUE;
     private int sinceResidency;
     private boolean unsaved;
+    private int outline = -1; // the cell outlined in the game, -1 none
     private Vector3d mario;
 
     public PlanetSession(double unitsPerBlock) {
@@ -78,10 +89,12 @@ public final class PlanetSession {
         unsaved = true;
     }
 
-    /** A saved planet, as it was. */
+    /** A saved planet, as it was (but for what lies below today's crust: see sealBelowCrust). */
     public void load(PlanetStore.Saved s) {
-        start(VoxelPlanet.of(new CubeSphere(s.n(), s.core(), s.layers()), s.depth(), s.cells()), s.center());
-        unsaved = false;
+        VoxelPlanet p = VoxelPlanet.of(new CubeSphere(s.n(), s.core(), s.layers()), s.depth(), s.cells());
+        boolean sealed = p.sealBelowCrust() > 0;
+        start(p, s.center());
+        unsaved = sealed;
     }
 
     public PlanetStore.Saved save() {
@@ -138,6 +151,7 @@ public final class PlanetSession {
             host = hostPid;
             sendAll();
         }
+        if (planet.fluids().tick()) unsaved = true;
         for (int c : planet.takeDirty()) queue(c);
         if (++sinceResidency >= RESIDENCY_UPDATES && mario != null) {
             sinceResidency = 0;
@@ -203,7 +217,7 @@ public final class PlanetSession {
     public boolean breakBlock(Vector3d eyeGal, Vector3d lookGal) {
         PlanetRaycast.Hit h = cast(eyeGal, lookGal);
         if (h == null || !planet.get(h.hit()).breakable()) return false;
-        planet.set(h.hit(), Material.AIR);
+        planet.set(h.hit(), planet.get(h.hit()).broken());
         unsaved = true;
         return true;
     }
@@ -221,6 +235,61 @@ public final class PlanetSession {
         return true;
     }
 
+    /**
+     * The cell the eye can act on: the block it points at, or with sources (an empty bucket in
+     * hand) the fluid source. -1 if none in reach.
+     */
+    public int target(Vector3d eyeGal, Vector3d lookGal, boolean sources) {
+        if (planet == null) return -1;
+        PlanetRaycast.Hit h = PlanetRaycast.cast(planet, local(eyeGal), new Vector3d(lookGal).normalize(), REACH, sources);
+        return h == null ? -1 : h.hit();
+    }
+
+    /** Outlines this cell in the game (Minecraft's block outline), -1 for none. Sent if it changed. */
+    public void setOutline(int cell) {
+        if (planet == null || cell == outline) return;
+        outline = cell;
+        queueOutline();
+    }
+
+    private void queueOutline() {
+        control.removeIf(m -> m.type() == Layout.MSG_OUTLINE);
+        control.add(new Msg(Layout.MSG_OUTLINE, outlinePayload(outline)));
+    }
+
+    /** GxcOutline: the cell's 8 corners from the planet's center, a little out of it (no z-fighting). */
+    byte[] outlinePayload(int cell) {
+        ByteBuffer b = ByteBuffer.allocate(100).order(ByteOrder.LITTLE_ENDIAN).putInt(cell >= 0 ? 1 : 0);
+        if (cell < 0) return b.array();
+        Vector3d mid = planet.grid.center(cell);
+        for (int m = 0; m < 8; m++) {
+            Vector3d c = planet.grid.corner(cell, m & 1, m >> 1 & 1, m >> 2);
+            c.sub(mid).mul(1 + OUTLINE_GROW).add(mid).mul(unitsPerBlock);
+            b.putFloat((float) c.x).putFloat((float) c.y).putFloat((float) c.z);
+        }
+        return b.array();
+    }
+
+    /** Empties a bucket of water or lava (a source) against the block the eye looks at. */
+    public boolean pour(Vector3d eyeGal, Vector3d lookGal, Material fluid) {
+        PlanetRaycast.Hit h = cast(eyeGal, lookGal);
+        if (h == null || h.before() < 0 || fluid == null || !fluid.fluid()) return false;
+        planet.set(h.before(), fluid, Fluids.SOURCE);
+        unsaved = true;
+        return true;
+    }
+
+    /** Fills an empty bucket from the fluid source the eye looks at: what it got, or null. */
+    public Material scoop(Vector3d eyeGal, Vector3d lookGal) {
+        if (planet == null) return null;
+        PlanetRaycast.Hit h = PlanetRaycast.cast(planet, local(eyeGal), new Vector3d(lookGal).normalize(), REACH, true);
+        if (h == null || !planet.get(h.hit()).fluid()) return null;
+        Material got = planet.get(h.hit());
+        planet.set(h.hit(), Material.AIR);
+        unsaved = true;
+        return got;
+    }
+
     private void start(VoxelPlanet p, Vector3d c) {
         planet = p;
         center = c;
@@ -230,6 +299,7 @@ public final class PlanetSession {
 
     private void clearQueues() {
         control.clear();
+        outline = -1;
         pending.clear();
         pendingSet.clear();
         built = null;
@@ -317,13 +387,23 @@ public final class PlanetSession {
     }
 
     private byte[] planetPayload(int planetId) {
-        ByteBuffer b = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN).putInt(planetId);
+        ByteBuffer b = ByteBuffer.allocate(36).order(ByteOrder.LITTLE_ENDIAN).putInt(planetId);
         Vector3d c = center == null ? new Vector3d() : center;
         b.putFloat((float) c.x).putFloat((float) c.y).putFloat((float) c.z);
         double surface = planet == null ? 0 : planet.surface();
         b.putFloat((float) (surface * unitsPerBlock)).putFloat((float) (gravityRadius(surface) * unitsPerBlock));
         b.putInt(planet == null ? 0 : planet.chunkCount());
         b.putFloat((float) (planet == null ? 0 : planet.occluder() * unitsPerBlock));
+        b.putFloat((float) (MARIO_RADIUS * unitsPerBlock));
         return b.array();
+    }
+
+    static double marioRadius(String value) {
+        try {
+            double r = value == null ? DEFAULT_MARIO_RADIUS : Double.parseDouble(value);
+            return r >= 0 && r <= 1 ? r : DEFAULT_MARIO_RADIUS;
+        } catch (NumberFormatException e) {
+            return DEFAULT_MARIO_RADIUS;
+        }
     }
 }

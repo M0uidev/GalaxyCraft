@@ -131,6 +131,7 @@ void HostBridge::Tick(GuestMemory& mem)
   {
     m_shm.SetU32(offsetof(GxcHeader, host_flags), 0);
     m_in_game = false;
+    m_cutscene = false;
     return;
   }
 
@@ -145,8 +146,9 @@ void HostBridge::Tick(GuestMemory& mem)
     m_ticks_since_game_frame++;
   m_game_seq = mbx.game_seq;
   const bool no_gravity = mbx.gravity.x == 0 && mbx.gravity.y == 0 && mbx.gravity.z == 0;
-  m_in_game = m_ticks_since_game_frame <= IN_GAME_TICKS && !no_gravity &&
-              (mbx.game_flags & GXC_MBX_GAME_DEMO) == 0;
+  const bool demo = (mbx.game_flags & GXC_MBX_GAME_DEMO) != 0;
+  m_in_game = m_ticks_since_game_frame <= IN_GAME_TICKS && !no_gravity && !demo;
+  m_cutscene = m_ticks_since_game_frame <= IN_GAME_TICKS && demo;
 
   if (!m_minecraft_mode)
   {
@@ -209,11 +211,13 @@ void HostBridge::Tick(GuestMemory& mem)
 // fields swapped, the display list and KCL copied as they are (built big-endian by the mod).
 void HostBridge::QueueInbox(const Msg& msg)
 {
-  if (msg.type != GXC_MSG_PLANET && msg.type != GXC_MSG_CHUNK && msg.type != GXC_MSG_PLANET_TP)
+  if (msg.type != GXC_MSG_PLANET && msg.type != GXC_MSG_CHUNK && msg.type != GXC_MSG_PLANET_TP &&
+      msg.type != GXC_MSG_OUTLINE)
     return;
-  const u32 fixed = msg.type == GXC_MSG_PLANET ? sizeof(GxcPlanet) :
-                    msg.type == GXC_MSG_CHUNK  ? sizeof(GxcChunk) :
-                                                 0;
+  const u32 fixed = msg.type == GXC_MSG_PLANET  ? sizeof(GxcPlanet) :
+                    msg.type == GXC_MSG_CHUNK   ? sizeof(GxcChunk) :
+                    msg.type == GXC_MSG_OUTLINE ? sizeof(GxcOutline) :
+                                                  0;
   if (msg.payload.size() < fixed)
     return;
   const u32 len = static_cast<u32>(msg.payload.size());
@@ -393,8 +397,13 @@ void HostBridge::WriteFollow(GuestMemory& mem, const PlayerState* player)
   const bool galaxy = player && player->view == GXC_VIEW_GALAXY;
   // Mario is drawn outside first person, and while the player flies off on its own (/fly).
   const bool third = player && (player->view != GXC_VIEW_FIRST || (player->flags & GXC_PLAYER_FLYING));
+  // Playing in Minecraft's view the IR sits under its crosshair, which stands in for the pointer.
+  const bool hide_pointer = player && !galaxy && m_in_game;
+  const bool hitboxes = player && (player->flags & GXC_PLAYER_HITBOXES);
   PutBE32(b.data(), player ? GXC_MBX_FOLLOW | (galaxy ? GXC_MBX_GALAXY_VIEW : 0u) |
-                                 (third ? GXC_MBX_THIRD_PERSON : 0u) :
+                                 (third ? GXC_MBX_THIRD_PERSON : 0u) |
+                                 (hide_pointer ? GXC_MBX_HIDE_POINTER : 0u) |
+                                 (hitboxes ? GXC_MBX_HITBOXES : 0u) :
                              0u);
   if (player)
   {
