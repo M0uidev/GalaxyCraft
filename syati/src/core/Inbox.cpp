@@ -75,6 +75,18 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
     for (int k = 0; k < 24; k++)
       out->outline.corners[k / 3][k % 3] = ReadF32(p + 4 + 4 * k);
   }
+  else if (type == InboxRecord::HELD)
+  {
+    // kind, three tiles, the sprite (GxcHeld); tiles of the 4x4 atlas, kinds up to TOOL.
+    if (len != 16 + 512)
+      return false;
+    out->held.kind = ReadBE32(p);
+    for (int k = 0; k < 3; k++)
+      out->held.tiles[k] = ReadBE32(p + 4 + 4 * k);
+    out->held.sprite = p + 16;
+    if (out->held.kind > 4 || out->held.tiles[0] > 15 || out->held.tiles[1] > 15 || out->held.tiles[2] > 15)
+      return false;
+  }
   else if (type == InboxRecord::TELEPORT)
   {
     if (len != 0)

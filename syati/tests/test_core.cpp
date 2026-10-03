@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "CodePatch.h"
+#include "HeldMesh.h"
 #include "Inbox.h"
 #include "Kcl.h"
 #include "Parts.h"
@@ -303,6 +304,126 @@ static void TestInboxOutline()
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
 }
 
+static void TestInboxHeld()
+{
+  std::vector<u8> b;
+  Put32(b, 106u << 16), Put32(b, 528), Put32(b, 1), Put32(b, 0), Put32(b, 1), Put32(b, 2);
+  for (int k = 0; k < 512; k++)
+    b.push_back(static_cast<u8>(k));
+  Put32(b, 106u << 16), Put32(b, 528), Put32(b, 1), Put32(b, 16), Put32(b, 1), Put32(b, 2);  // no tile 16
+  b.resize(b.size() + 512);
+  InboxRecord r;
+  u32 off = 0;
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::HELD);
+  CHECK(r.held.kind == HELD_BLOCK && r.held.tiles[2] == 2 && r.held.sprite == b.data() + 24 && r.held.sprite[511] == 255);
+  CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
+}
+
+// A 16x16 RGB5A3 sprite with the texels for which solid(x, y) holds opaque, the rest holes.
+template <typename F>
+static std::vector<u8> Sprite(F solid)
+{
+  std::vector<u8> s(512, 0);
+  for (int y = 0; y < 16; y++)
+    for (int x = 0; x < 16; x++)
+      if (solid(x, y))
+        s[2 * (16 * ((y / 4) * 4 + x / 4) + 4 * (y % 4) + x % 4)] = 0x80;
+  return s;
+}
+
+// The vertices of a held mesh: position (texels), texture coordinate (64ths).
+struct HeldVertex
+{
+  float x, y, z;
+  int s, t;
+  u8 shade;
+};
+
+static std::vector<HeldVertex> HeldVertices(const std::vector<u8>& dl, u32 size)
+{
+  std::vector<HeldVertex> v;
+  const u32 n = (u32(dl[1]) << 8) | dl[2];
+  for (u32 i = 0; i < n; i++)
+  {
+    const u8* p = dl.data() + 3 + i * HELD_VERTEX_BYTES;
+    v.push_back({p[0] / 2.f, p[1] / 2.f, p[2] / 2.f, p[7], p[8], p[3]});
+  }
+  CHECK(3 + n * HELD_VERTEX_BYTES <= size);
+  return v;
+}
+
+static void TestHeldBlock()
+{
+  std::vector<u8> dl(HELD_DL_MAX);
+  const u32 tiles[3] = {0, 1, 2};  // grass: top, side, bottom
+  const u32 size = HeldMesh(HELD_BLOCK, tiles, 0, 4, dl.data(), dl.size());
+  CHECK(size % 32 == 0 && size >= 3 + 24 * HELD_VERTEX_BYTES && dl[0] == (0x80 | 4));
+  const std::vector<HeldVertex> v = HeldVertices(dl, size);
+  CHECK(v.size() == 24);
+  bool top = false, bottom = false;
+  for (size_t q = 0; q < v.size(); q += 4)
+  {
+    bool up = true, down = true;
+    for (int k = 0; k < 4; k++)
+    {
+      CHECK(v[q + k].x >= 0 && v[q + k].x <= 16 && v[q + k].y >= 0 && v[q + k].y <= 16);
+      up = up && v[q + k].y == 16;
+      down = down && v[q + k].y == 0;
+    }
+    // The top shows tile 0 (s, t in 0..16), the bottom tile 2 (s in 32..48), sides tile 1.
+    const int s = v[q].s < v[q + 2].s ? v[q].s : v[q + 2].s;
+    top = top || up;
+    bottom = bottom || down;
+    CHECK(s == (up ? 0 : down ? 32 : 16));
+    CHECK(v[q].shade == (up ? 255 : down ? 128 : v[q].shade));
+    if (!up && !down)  // sides upright: the bottom edge at the bottom of the tile
+      CHECK(v[q].y == 0 && v[q].t == 16 && v[q + 2].y == 16 && v[q + 2].t == 0);
+  }
+  CHECK(top && bottom);
+}
+
+static void TestHeldFlatItem()
+{
+  std::vector<u8> dl(HELD_DL_MAX);
+  // One texel at (3, 0): both faces and its four sides.
+  std::vector<u8> one = Sprite([](int x, int y) { return x == 3 && y == 0; });
+  CHECK(SpriteSolid(one.data(), 3, 0) && !SpriteSolid(one.data(), 4, 0) && !SpriteSolid(one.data(), 3, 1));
+  u32 size = HeldMesh(HELD_ITEM, 0, one.data(), 4, dl.data(), dl.size());
+  std::vector<HeldVertex> v = HeldVertices(dl, size);
+  CHECK(v.size() == 6 * 4);
+  for (size_t i = 8; i < v.size(); i++)  // the sides: inside the texel's column, its color
+  {
+    CHECK(v[i].x >= 3 && v[i].x <= 4 && v[i].y >= 15 && v[i].y <= 16 && v[i].z >= 7.5f && v[i].z <= 8.5f);
+    CHECK(v[i].s == 14 && v[i].t == 2);
+  }
+  // The front face maps the whole sprite, row 0 at the top.
+  CHECK(v[0].z == 8.5f && v[0].y == 0 && v[0].t == 64 && v[3].y == 16 && v[3].t == 0);
+  // A full sprite: sides only around the edge.
+  std::vector<u8> full = Sprite([](int, int) { return true; });
+  size = HeldMesh(HELD_TOOL, 0, full.data(), 4, dl.data(), dl.size());
+  CHECK(HeldVertices(dl, size).size() == (2 + 4 * 16) * 4);
+  // A checkerboard is the worst case and still fits.
+  std::vector<u8> checker = Sprite([](int x, int y) { return (x + y) % 2 == 0; });
+  size = HeldMesh(HELD_ITEM, 0, checker.data(), 4, dl.data(), dl.size());
+  CHECK(size != 0 && HeldVertices(dl, size).size() == (2 + 4 * 128) * 4);
+  // Nothing held, or nothing in the sprite.
+  std::vector<u8> empty = Sprite([](int, int) { return false; });
+  CHECK(HeldMesh(HELD_NONE, 0, 0, 4, dl.data(), dl.size()) == 0);
+  CHECK(HeldMesh(HELD_ITEM, 0, empty.data(), 4, dl.data(), dl.size()) == 96);  // the two faces, cut out
+  CHECK(HeldMesh(HELD_ITEM, 0, checker.data(), 4, dl.data(), 1000) == 0);       // no room
+}
+
+static void TestMul34()
+{
+  // A turn of 90 degrees about z after a move by (1, 2, 3), applied to the origin and to x.
+  const float turn[12] = {0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0};
+  const float move[12] = {1, 0, 0, 1, 0, 1, 0, 2, 0, 0, 1, 3};
+  float m[12];
+  Mul34(turn, move, m);
+  CHECK(m[3] == -2.f && m[7] == 1.f && m[11] == 3.f);  // the origin goes to turn(1, 2, 3)
+  CHECK(m[0] == 0.f && m[4] == 1.f && m[8] == 0.f);    // x turns into y
+}
+
 static void TestCodePatch()
 {
   // Mario::checkAllWall's wall radius: lfs f30, 3552(r2) at 0x80390dfc.
@@ -324,6 +445,10 @@ int main()
   TestPlanetDropAndViewTranslate();
   TestCodePatch();
   TestInboxOutline();
+  TestInboxHeld();
+  TestMul34();
+  TestHeldBlock();
+  TestHeldFlatItem();
   TestSelectNearest64();
   TestBigRadiusWinsOrder();
   TestNoneInRange();

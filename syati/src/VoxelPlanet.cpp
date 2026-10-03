@@ -6,6 +6,7 @@
 
 #include "Game/Gravity/PointGravity.h"
 #include "Game/Map/CollisionParts.h"
+#include "HeldItem.h"
 #include "Inbox.h"
 #include "VoxelPlanet.h"
 #include "ViewMath.h"
@@ -233,6 +234,10 @@ public:
     else if (r.type == gxc::InboxRecord::OUTLINE)
     {
       SetOutline(r.outline);
+    }
+    else if (r.type == gxc::InboxRecord::HELD)
+    {
+      HeldItemSet(r.held);
     }
     else if (r.type == gxc::InboxRecord::TELEPORT && mPlanet)
     {
@@ -650,6 +655,16 @@ void VoxelPlanetHitbox(const MarioHitbox* box)
   gHitboxOn = box != 0;
   if (box)
     gHitbox = *box;
+}
+
+const uint8_t* VoxelPlanetAtlas()
+{
+  return gAtlas;
+}
+
+uint8_t* VoxelPlanetAlloc32(uint32_t size)
+{
+  return Alloc32(size);
 }
 
 bool VoxelPlanetMarioRadius(const float pos[3], float* radius)

@@ -1,5 +1,5 @@
 /*
- * GalaxyCraft shared-memory protocol, version 6.
+ * GalaxyCraft shared-memory protocol, version 8.
  *
  * Source of truth for the layout of /dev/shm/galaxycraft_v1. Mirrors:
  *   tools/gxproto.py
@@ -16,7 +16,7 @@
 
 #define GXC_SHM_NAME "/galaxycraft_v1"
 #define GXC_MAGIC 0x52435847u /* "GXCR" */
-#define GXC_VERSION 7u
+#define GXC_VERSION 8u
 
 /* Regions (byte offsets from the start of the mapping). */
 #define GXC_OFF_HEADER 0
@@ -171,6 +171,7 @@ enum {
   GXC_MSG_CHUNK = 103,     /* GxcChunk + display list + KCL (both big-endian already) */
   GXC_MSG_PLANET_TP = 104, /* no payload: Mario onto the planet's surface */
   GXC_MSG_OUTLINE = 105,   /* GxcOutline: the block the player can act on */
+  GXC_MSG_HELD = 106,      /* GxcHeld: what the player holds, drawn in Steve's right hand */
   GXC_MSG_PAD = 0xFFFF,
 };
 
@@ -220,6 +221,21 @@ typedef struct {
   uint32_t visible; /* 0: none */
   float corners[8][3];
 } GxcOutline;
+
+/* What the player holds in the main hand, drawn by the game in Steve's right hand as Minecraft
+ * draws it in third person. Sent when it changes and again in every new scene. */
+#define GXC_HELD_NONE 0u
+#define GXC_HELD_BLOCK 1u /* a cube with tiles of the block atlas (top, sides, bottom) */
+#define GXC_HELD_CUBE 2u  /* a cube with the sprite on every face: a block the atlas lacks */
+#define GXC_HELD_ITEM 3u  /* the sprite as a flat item one texel thick (Minecraft's item/generated) */
+#define GXC_HELD_TOOL 4u  /* the same, held as a tool (item/handheld) */
+#define GXC_HELD_SPRITE 16 /* texels a side */
+typedef struct {
+  uint32_t kind;     /* GXC_HELD_* */
+  uint32_t tiles[3]; /* BLOCK: atlas tiles of the top, the sides and the bottom */
+  /* CUBE, ITEM, TOOL: GX RGB5A3 (4x4 texel blocks, big-endian already); alpha 0 is a hole */
+  uint8_t sprite[GXC_HELD_SPRITE * GXC_HELD_SPRITE * 2];
+} GxcHeld;
 
 typedef struct {
   uint32_t latest; /* index 0..2 of the newest complete frame, 0xFFFFFFFF none */

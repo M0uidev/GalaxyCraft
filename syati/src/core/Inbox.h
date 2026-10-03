@@ -30,6 +30,13 @@ struct InboxOutline
   f32 corners[8][3];  // relative to the planet's center
 };
 
+struct InboxHeld
+{
+  u32 kind;  // GXC_HELD_*
+  u32 tiles[3];  // BLOCK: atlas tiles of the top, the sides and the bottom
+  const u8* sprite;  // CUBE, ITEM, TOOL: 16x16 GX RGB5A3 (512 bytes)
+};
+
 struct InboxRecord
 {
   enum Type
@@ -38,11 +45,13 @@ struct InboxRecord
     CHUNK = 103,
     TELEPORT = 104,
     OUTLINE = 105,
+    HELD = 106,
   };
   u32 type;
   InboxPlanet planet;
   InboxChunk chunk;
   InboxOutline outline;
+  InboxHeld held;
 };
 
 u32 ReadBE32(const u8* p);

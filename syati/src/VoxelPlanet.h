@@ -19,6 +19,10 @@ struct MarioHitbox
   float balls[3][3];
 };
 void VoxelPlanetHitbox(const MarioHitbox* box);
+// The block atlas (RGB565, GX ready), and 32-byte aligned memory from the scene's MEM2 heap (null
+// if it would leave the game short), for the held item (HeldItem.cpp).
+const uint8_t* VoxelPlanetAtlas();
+uint8_t* VoxelPlanetAlloc32(uint32_t size);
 
 // Counters for the dev harness (peek): inbox batches, records, chunks with something to draw,
 // collision parts made, last chunk slot and version seen, chunks dropped for lack of memory, free

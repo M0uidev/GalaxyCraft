@@ -238,6 +238,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         }
         GalaxyCraft.FIELD.setFrame(frame);
         PlanetClient.tick(player, bridge, frame, world.get());
+        HeldClient.tick(player, bridge, world.get().sceneId());
         if (following) {
             settleTicks = 0;
             hold(player, true);

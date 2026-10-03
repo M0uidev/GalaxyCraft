@@ -5,6 +5,7 @@
 #include "syati.h"
 
 #include "CodePatch.h"
+#include "HeldItem.h"
 #include "Kcl.h"
 #include "Parts.h"
 #include "ViewMath.h"
@@ -54,6 +55,7 @@ struct Debug
     u32 status, flags_c, flags_10, ground;
   } history[6];
   u32 clip_rescued;  // frustum tests our camera clipped and the game's camera kept (see ClipFrustum)
+  u32 held_kind;     // GXC_HELD_* in Steve's hand (0 also if it could not be built)
 };
 
 struct Published
@@ -311,6 +313,7 @@ void MarioInit(void* self, const void* iter)
   gOut.mbx.scene_id++;  // a new Mario means a new stage: the host republishes everything
   gOwnBinderRadius = 0.f;
   VoxelPlanetCreate();
+  HeldItemCreate();
   // The stage's name, so the mod keeps one planet per galaxy.
   const char* stage = MR::getCurrentStageName();
   for (u32 i = 0; i < sizeof(gOut.mbx.stage_name); i++)
@@ -351,6 +354,9 @@ void MarioMovement(void* self)
   gOut.dbg.demo = gDemo;
   // Steve (Mario's model) is hidden only in first person; cutscenes always show him.
   gHidden = !gxc::MarioVisible(gFollowing, gDemo, (gOut.mbx.host_flags & GXC_MBX_THIRD_PERSON) != 0);
+  // What the player holds in Minecraft, in Steve's hand while the mod plays him.
+  HeldItemFrame(static_cast<const LiveActor*>(self), !gHidden && gFollowing);
+  gOut.dbg.held_kind = HeldItemKind();
   gOut.dbg.star_pointer_valid = isStarPointerValid__2MRFl(0);
 
   const TVec3f* mario = MR::getPlayerPos();

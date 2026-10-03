@@ -3,6 +3,7 @@
   Mario.arc       Mario.bdl replaced by Steve (Minecraft skin boxes on Mario's skeleton)
   MarioHandL.arc  MarioHandR.arc   Mario's gloves, emptied
   MarioFace.arc  MarioHair.arc  MarioCap.arc   his face (nose, eyes, moustache), hair and cap, emptied
+  gen/held.h      where the module draws what Steve holds, relative to his forearm (from Mario's skeleton)
 Inputs come from this machine, never the repo: the game image ($GXC_GAME or the SMG2 .rvz in
 ~/Documents/Games/Dolphin Games), the skin (--skin, or Steve's from the Minecraft client jar), and
 SuperBMD 2.5.0 under wine (downloaded into the toolchain if missing). Skips work if nothing changed.
@@ -116,7 +117,7 @@ def build_arc(exe, arc, model_name, make, skin, workdir):
     os.remove(os.path.join(workdir, model_name))
     run_superbmd(exe, workdir, f"{stem}.dae", model_name, "-b", "-x", "tex.json", "-m", "material.json")
     with open(os.path.join(workdir, model_name), "rb") as f:
-        return rarc.replace(arc, {model_name: f.read()})
+        return rarc.replace(arc, {model_name: f.read()}), skeleton
 
 
 def main():
@@ -131,17 +132,22 @@ def main():
             stamp.update(f.read())
     stamp.update(skin + game.encode() + str(os.path.getmtime(game)).encode())
     out_dir = os.path.join(args.out, "ObjectData")
+    held = os.path.join(args.out, "gen", "held.h")
     stamp_file = os.path.join(out_dir, ".steve-stamp")
-    if os.path.exists(stamp_file) and open(stamp_file).read() == stamp.hexdigest():
+    if os.path.exists(held) and os.path.exists(stamp_file) and open(stamp_file).read() == stamp.hexdigest():
         return
     exe = superbmd()
     os.makedirs(out_dir, exist_ok=True)
     for name, (model_name, make) in MODELS.items():
         with tempfile.TemporaryDirectory() as work:
-            arc = build_arc(exe, extract_arc(game, name, work), model_name, make, skin, work)
+            arc, skeleton = build_arc(exe, extract_arc(game, name, work), model_name, make, skin, work)
         with open(os.path.join(out_dir, f"{name}.arc"), "wb") as f:
             f.write(arc)
         print(f"built {out_dir}/{name}.arc")
+        if name == "Mario":
+            os.makedirs(os.path.dirname(held), exist_ok=True)
+            with open(held, "w") as f:
+                f.write(steve_model.held_header(skeleton))
     with open(stamp_file, "w") as f:
         f.write(stamp.hexdigest())
 

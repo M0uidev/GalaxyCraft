@@ -30,9 +30,12 @@ export WINEDEBUG=-all
 
 # Block atlas for the voxel planet, from the local Minecraft jar.
 python3 ../tools/voxel_atlas.py build/gen/atlas.h
+# Steve: Mario's model (and his gloves) replaced, built from the disc into build/ObjectData, and
+# where what he holds goes on his skeleton (build/gen/held.h).
+GXC_GAME="$GAME" python3 ../tools/steve/build.py --out build
 # Module: core/ (also tested with g++) plus the game glue.
 OBJS=""
-for src in src/core/*.cpp src/GalaxyCraft.cpp src/VoxelPlanet.cpp; do
+for src in src/core/*.cpp src/GalaxyCraft.cpp src/VoxelPlanet.cpp src/HeldItem.cpp; do
   obj="build/obj/$(basename "$src" .cpp).o"
   "$CC" $FLAGS -i src -i src/core -i build/gen -i ../protocol -i "$SYATI/include" -I- -i src/shim "$src" -o "$obj"
   OBJS="$OBJS $obj"
@@ -45,8 +48,6 @@ done
   -o build/obj/loader.o
 "$KAMEK" build/obj/loader.o -static=0x80001800 -externals="$SYATI/symbols/SB4E.txt" -quiet \
   -output-riiv=build/loader_patches.xml
-# Steve: Mario's model (and his gloves) replaced, built from the disc into build/ObjectData.
-GXC_GAME="$GAME" python3 ../tools/steve/build.py --out build
 python3 - "$GAME" <<'PY'
 import json, os, sys
 patches = open("build/loader_patches.xml").read().strip()

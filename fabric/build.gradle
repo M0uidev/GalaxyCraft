@@ -20,6 +20,13 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftHeld")) { // tools/gxvoxel.sh held: HeldItemTest in the dev Dolphin
+				vmArg "-Dgalaxycraft.held=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftFit")) { // tools/gxfit.sh: MarioFitTest in the dev Dolphin
 				vmArg "-Dgalaxycraft.fit=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"

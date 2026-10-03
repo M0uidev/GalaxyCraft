@@ -57,6 +57,7 @@ _Static_assert(sizeof(GxcMailbox) == 4048, "mailbox");
 _Static_assert(offsetof(GxcMailbox, stage_name) == 4016, "mbx.stage");
 _Static_assert(offsetof(GxcMailbox, inbox_addr) == 4008, "mbx.inbox");
 _Static_assert(sizeof(GxcPlanet) == 36 && sizeof(GxcOutline) == 100 && sizeof(GxcChunk) == 32 && sizeof(GxcInboxHeader) == 16, "voxel");
+_Static_assert(sizeof(GxcHeld) == 528 && offsetof(GxcHeld, sprite) == 16 && GXC_MSG_HELD == 106, "held");
 _Static_assert(GXC_MSG_PLANET == 102 && GXC_MSG_CHUNK == 103 && GXC_MSG_PLANET_TP == 104, "voxel msgs");
 _Static_assert(GXC_PLAYER_ITEM_ACTIVE == 2u, "item active");
 _Static_assert(offsetof(GxcMailbox, game_seq) == 12, "mbx.game_seq");
@@ -75,7 +76,7 @@ _Static_assert(offsetof(GxcMailbox, parts) == 168, "mbx.parts");
 _Static_assert(GXC_MBX_GAME_FOLLOWING == 1u && GXC_MBX_GAME_DEMO == 2u, "mbx flags");
 _Static_assert(GXC_MBX_FOLLOW == 2u && GXC_WORLD_FOLLOW == 2u && GXC_MBX_GALAXY_VIEW == 4u &&
                GXC_MBX_THIRD_PERSON == 8u && GXC_MBX_HIDE_POINTER == 16u && GXC_MBX_HITBOXES == 32u, "flags");
-_Static_assert(GXC_VERSION == 7u && GXC_MBX_VERSION == 5u, "v7");
+_Static_assert(GXC_VERSION == 8u && GXC_MBX_VERSION == 5u, "v8");
 _Static_assert(sizeof(GxcTextState) == 264 && GXC_OFF_TEXT >= GXC_OFF_GAMECAM + sizeof(GxcGameCamera) &&
                GXC_OFF_TEXT + sizeof(GxcTextState) <= GXC_OFF_RING_S2M, "text");
 _Static_assert(GXC_PLAYER_SCREEN == 4u && GXC_PLAYER_FLYING == 8u && GXC_PLAYER_HITBOXES == 16u, "player flags");

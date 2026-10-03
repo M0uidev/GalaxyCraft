@@ -92,4 +92,11 @@ void LookAtView(const float eye[3], const float look[3], const float up[3], floa
     out[4 * r + 3] = -Dot(rows[r], eye);
   }
 }
+
+void Mul34(const float a[12], const float b[12], float out[12])
+{
+  for (int r = 0; r < 3; r++)
+    for (int c = 0; c < 4; c++)
+      out[4 * r + c] = a[4 * r] * b[c] + a[4 * r + 1] * b[4 + c] + a[4 * r + 2] * b[8 + c] + (c == 3 ? a[4 * r + 3] : 0.f);
+}
 }  // namespace gxc

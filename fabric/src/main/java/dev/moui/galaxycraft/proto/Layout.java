@@ -4,7 +4,7 @@ package dev.moui.galaxycraft.proto;
 public final class Layout {
     public static final String SHM_PATH = "/dev/shm/galaxycraft_v1";
     public static final int MAGIC = 0x52435847; // "GXCR"
-    public static final int VERSION = 7;
+    public static final int VERSION = 8;
     public static final int MOD_VERSION = 1;
 
     public static final long OFF_HEADER = 0;
@@ -36,7 +36,7 @@ public final class Layout {
     public static final int MSG_KCL_CHUNK = 4;
     public static final int MSG_HELLO = 101;
     /** Voxel planet, M -> S: GxcPlanet, GxcChunk + display list + KCL, teleport. */
-    public static final int MSG_PLANET = 102, MSG_CHUNK = 103, MSG_PLANET_TP = 104, MSG_OUTLINE = 105;
+    public static final int MSG_PLANET = 102, MSG_CHUNK = 103, MSG_PLANET_TP = 104, MSG_OUTLINE = 105, MSG_HELD = 106;
     public static final int PLANET_MAX_CHUNKS = 131072;
     public static final int MSG_PAD = 0xFFFF;
 
