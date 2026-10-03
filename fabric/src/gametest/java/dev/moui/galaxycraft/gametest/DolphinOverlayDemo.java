@@ -18,6 +18,10 @@ public final class DolphinOverlayDemo implements FabricClientGameTest {
             sp.getServer().runCommand("gamemode adventure @a");
             sp.getServer().runCommand("difficulty peaceful");
             sp.getServer().runCommand("gamerule fall_damage false"); // like Mario, no fall damage
+            // Blocks for the voxel planet (slot 1 stays empty: the empty hand spins and presses B).
+            String[] items = {"iron_pickaxe", "grass_block 64", "dirt 64", "stone 64"};
+            for (int i = 0; i < items.length; i++)
+                sp.getServer().runCommand("item replace entity @a hotbar." + (i + 1) + " with " + items[i]);
             // No teleport up: linking can be minutes away (SMG2's menus), and a fall from y=100 to
             // the flat world kills the player first. Linking re-bases them wherever they stand.
             ctx.waitFor(mc -> GalaxyCraftClient.exportingOverlay(), 600);

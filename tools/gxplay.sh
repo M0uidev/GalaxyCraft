@@ -5,6 +5,8 @@
 # Ctrl C, Esc +, Tab -, right click B, left click spin) while the camera sits in his eyes; in SMG2's
 # menus the mouse is the pointer and left click is A. Ctrl+G (hotkey "GalaxyCraft: Toggle
 # Minecraft Link") hands the game back to your Wii Remote mapping and Esc stops Dolphin again.
+# A voxel planet appears above Mario once linked in a level: P lands on it; with a block or the
+# pickaxe in hand (slots 2-5) left click breaks and right click places, F spins.
 # Closing either side closes the other.
 #   tools/gxplay.sh            (build first: dolphin/build.sh, syati/build.sh)
 set -u
@@ -22,7 +24,7 @@ GALAXYCRAFT=1 dolphin/build/Binaries/dolphin-emu -e syati/build/galaxycraft.json
   -C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False &
 DOLPHIN=$!
 # The overlay demo joins a peaceful adventure world and stays there; ~14 h of ticks.
-(cd fabric && exec ./gradlew runClientGameTest -PgalaxycraftDemo -PgalaxycraftHidden \
+(cd fabric && exec ./gradlew runClientGameTest -PgalaxycraftDemo -PgalaxycraftHidden -PgalaxycraftPlanet \
   -PgalaxycraftDemoTicks=1000000 --console=plain -q) &
 MINECRAFT=$!
 trap 'kill $DOLPHIN $MINECRAFT 2> /dev/null' INT TERM

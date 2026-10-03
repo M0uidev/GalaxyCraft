@@ -91,7 +91,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 literal("galaxycraft").then(literal("status").executes(c -> {
                     c.getSource().sendFeedback(Component.literal(status(c.getSource().getPlayer())));
                     return 1;
-                }))));
+                })).then(literal("planet")
+                        .then(literal("spawn").executes(c -> planetCommand(c.getSource(), PlanetClient::requestSpawn)))
+                        .then(literal("tp").executes(c -> planetCommand(c.getSource(), PlanetClient::teleport)))
+                        .then(literal("remove").executes(c -> planetCommand(c.getSource(), PlanetClient::remove)))
+                        .executes(c -> planetCommand(c.getSource(), () -> {})))));
     }
 
     /** While a host is linked, Minecraft renders a transparent overlay and exports it. */
@@ -197,6 +201,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             });
         }
         GalaxyCraft.FIELD.setFrame(frame);
+        PlanetClient.tick(player, bridge, frame, world.get());
         if (following) {
             settleTicks = 0;
             hold(player, true);
@@ -270,7 +275,15 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         Vector3d up = camUpGal != null ? camUpGal : frame.upGal();
         Vector3d offset = camOffsetGal != null ? camOffsetGal : frame.upGal().mul(eye);
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
-                client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene));
+                client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene,
+                PlanetClient.itemActive(player)));
+    }
+
+    private static int planetCommand(net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource source,
+            Runnable action) {
+        action.run();
+        source.sendFeedback(Component.literal("GalaxyCraft: " + PlanetClient.status()));
+        return 1;
     }
 
     private static String status(LocalPlayer player) {

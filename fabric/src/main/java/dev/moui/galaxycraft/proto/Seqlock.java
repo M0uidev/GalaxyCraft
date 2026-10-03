@@ -38,7 +38,12 @@ public final class Seqlock {
 
     /** look/up are the camera's; camOffset is the camera minus pos (galaxy units); view is Layout.VIEW_*. */
     public record PlayerOut(long frameId, Vector3d pos, Vector3d look, Vector3d up, float fovY, float eye,
-            boolean onGround, Vector3d camOffset, int view, int sceneId) {}
+            boolean onGround, Vector3d camOffset, int view, int sceneId, boolean itemActive) {
+        public PlayerOut(long frameId, Vector3d pos, Vector3d look, Vector3d up, float fovY, float eye,
+                boolean onGround, Vector3d camOffset, int view, int sceneId) {
+            this(frameId, pos, look, up, fovY, eye, onGround, camOffset, view, sceneId, false);
+        }
+    }
 
     /** SMG2's camera and Mario from one game frame (galaxy space). */
     public record GameCamera(int flags, long frameId, Vector3d camPos, Vector3d camDir, Vector3d camUp, float fovY,
@@ -111,7 +116,7 @@ public final class Seqlock {
         int seq = s.get(INT, o);
         s.set(INT, o, seq + 1);
         VarHandle.releaseFence();
-        s.set(INT, o + 4, p.onGround() ? Layout.PLAYER_ON_GROUND : 0);
+        s.set(INT, o + 4, (p.onGround() ? Layout.PLAYER_ON_GROUND : 0) | (p.itemActive() ? Layout.PLAYER_ITEM_ACTIVE : 0));
         s.set(LONG, o + 8, p.frameId());
         putVec(s, o + 16, p.pos());
         putVec(s, o + 28, p.look());

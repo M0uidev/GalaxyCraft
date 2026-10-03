@@ -115,6 +115,16 @@ public final class BridgeClient {
         return linked() ? Seqlock.readInput(shm.seg()) : Optional.empty();
     }
 
+    /** Queues a message for the host; false while the ring is full (try again next tick). */
+    public boolean send(int type, byte[] payload) {
+        return linked() && m2s.push(type, payload);
+    }
+
+    /** The host process: a new one has lost everything the mod sent before. */
+    public int hostPid() {
+        return hostPid;
+    }
+
     public void sendPlayer(Seqlock.PlayerOut p) {
         if (shm != null) Seqlock.writePlayer(shm.seg(), p);
     }
