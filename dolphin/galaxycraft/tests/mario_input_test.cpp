@@ -115,3 +115,29 @@ TEST(parses_keys)
   CHECK(buttons == MOUSE_LEFT);
   CHECK(DevKeysToInput("", keys, buttons) && buttons == 0 && keys[SC_W / 8] == 0);
 }
+
+TEST(item_in_hand_takes_the_clicks)
+{
+  MarioInput in;
+  WiimoteState s = in.Update(Keys{}.bits, MOUSE_LEFT | MOUSE_RIGHT, true, false, true);
+  CHECK(!s.shake && !s.b && !s.a);
+  s = in.Update(Keys{}.bits, 0, true, false, true);
+  CHECK(!s.shake);
+  // Empty hand: the same clicks spin and press B.
+  s = in.Update(Keys{}.bits, MOUSE_LEFT | MOUSE_RIGHT, true, false, false);
+  CHECK(s.shake && s.b);
+  // Menus ignore the item: left click is still A.
+  MarioInput menu;
+  s = menu.Update(Keys{}.bits, MOUSE_LEFT, false, false, true);
+  CHECK(s.a);
+}
+
+TEST(f_spins_even_with_an_item)
+{
+  MarioInput in;
+  WiimoteState s = in.Update(Keys{SC_F}.bits, 0, true, false, true);
+  CHECK(s.shake);
+  for (int i = 0; i < MarioInput::SHAKE_MIN_FRAMES; i++)
+    s = in.Update(Keys{}.bits, 0, true, false, true);
+  CHECK(!s.shake);
+}

@@ -52,7 +52,7 @@ new file mode 100644
 index 0000000..af365af
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,439 @@
+@@ -0,0 +1,440 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -250,7 +250,8 @@ index 0000000..af365af
 +  {
 +    const u8* keys = state.dev_keys ? state.dev_keys->first.data() : state.keys;
 +    const u32 buttons = state.dev_keys ? state.dev_keys->second : state.buttons;
-+    pad = state.mario.Update(keys, buttons, state.bridge->InGame(), state.bridge->GalaxyView());
++    pad = state.mario.Update(keys, buttons, state.bridge->InGame(), state.bridge->GalaxyView(),
++                             state.bridge->ItemActive());
 +  }
 +  std::lock_guard lock(s_pad_mutex);
 +  s_pad = pad;

@@ -12,7 +12,8 @@ bool Down(const u8 keys[64], int scancode)
 }
 }  // namespace
 
-WiimoteState MarioInput::Update(const u8 keys[64], u32 buttons, bool in_game, bool free_pointer)
+WiimoteState MarioInput::Update(const u8 keys[64], u32 buttons, bool in_game, bool free_pointer,
+                                bool item_active)
 {
   WiimoteState s;
   float x = static_cast<float>(Down(keys, SC_D)) - static_cast<float>(Down(keys, SC_A));
@@ -24,18 +25,22 @@ WiimoteState MarioInput::Update(const u8 keys[64], u32 buttons, bool in_game, bo
   }
   s.stick_x = x, s.stick_y = y;
 
+  const bool clicks = !in_game || !item_active;
   const bool left = (buttons & MOUSE_LEFT) != 0;
   s.a = Down(keys, SC_SPACE) || (left && !in_game);
-  s.b = (buttons & MOUSE_RIGHT) != 0;
+  s.b = (buttons & MOUSE_RIGHT) != 0 && clicks;
   s.z = Down(keys, SC_LSHIFT) || Down(keys, SC_RSHIFT);
   s.c = Down(keys, SC_LCTRL) || Down(keys, SC_RCTRL);
   s.plus = Down(keys, SC_ESCAPE);
   s.minus = Down(keys, SC_TAB);
 
-  if (left && !m_left_was_down)
+  const bool spin_click = left && clicks;
+  const bool f = Down(keys, SC_F);
+  if ((spin_click && !m_left_was_down) || (f && !m_f_was_down))
     m_shake_frames = SHAKE_MIN_FRAMES;
-  m_left_was_down = left;
-  s.shake = left || m_shake_frames > 0;
+  m_left_was_down = spin_click;
+  m_f_was_down = f;
+  s.shake = spin_click || f || m_shake_frames > 0;
   if (m_shake_frames > 0)
     m_shake_frames--;
 
@@ -47,5 +52,6 @@ void MarioInput::Reset()
 {
   m_shake_frames = 0;
   m_left_was_down = false;
+  m_f_was_down = false;
 }
 }  // namespace gxc

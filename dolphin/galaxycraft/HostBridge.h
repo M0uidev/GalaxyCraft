@@ -1,11 +1,13 @@
 #pragma once
 #include <array>
+#include <deque>
 #include <functional>
 #include <map>
 #include <optional>
 
 #include "GuestMemory.h"
 #include "Shm.h"
+#include "galaxycraft_protocol.h"
 
 namespace gxc
 {
@@ -37,6 +39,13 @@ public:
   bool InGame() const { return m_in_game; }
   // Following with the mod's Galaxy view (F5): SMG2 keeps its camera, the mouse is the pointer.
   bool GalaxyView() const { return m_galaxy_view; }
+  // Following with something in Minecraft's main hand: the clicks break and place blocks.
+  bool ItemActive() const
+  {
+    return m_following && m_player && (m_player->flags & GXC_PLAYER_ITEM_ACTIVE) != 0;
+  }
+  // Voxel planet records waiting for the module's inbox.
+  size_t PendingInbox() const { return m_inbox.size(); }
 
 private:
   struct PartState
@@ -52,6 +61,8 @@ private:
   void PublishParts(GuestMemory& mem, const Mailbox& mbx, bool republish);
   bool SendPart(GuestMemory& mem, u32 id, const PartState& p, bool with_kcl);
   void WriteFollow(GuestMemory& mem, const PlayerState* player);
+  void QueueInbox(const Msg& msg);
+  void FlushInbox(GuestMemory& mem, const Mailbox& mbx);
 
   Shm& m_shm;
   std::function<u64()> m_clock;
@@ -73,6 +84,8 @@ private:
   bool m_minecraft_mode = true;
   bool m_relink = false;
   u32 m_host_seq = 0;
+  std::deque<std::vector<u8>> m_inbox;  // big-endian records, ready for the guest
+  std::optional<u32> m_inbox_scene;
   u64 m_frame = 0;
 };
 }  // namespace gxc

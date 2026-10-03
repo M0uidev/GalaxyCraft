@@ -53,6 +53,8 @@ struct HostBridge::Mailbox
   float cam_fov;
   Vec3 mario_front;
   std::vector<std::pair<u32, PartState>> parts;
+  u32 inbox_addr = 0;
+  u32 inbox_size = 0;
 
   static Mailbox Parse(const u8* b)
   {
@@ -77,6 +79,8 @@ struct HostBridge::Mailbox
         s.mtx[k] = BEF(p + offsetof(GxcMbxPart, mtx) + 4 * k);
       m.parts.emplace_back(BE32(p), s);
     }
+    m.inbox_addr = BE32(b + offsetof(GxcMailbox, inbox_addr));
+    m.inbox_size = BE32(b + offsetof(GxcMailbox, inbox_size));
     return m;
   }
 };
@@ -103,6 +107,8 @@ void HostBridge::Tick(GuestMemory& mem)
   {
     if (msg->type == GXC_MSG_HELLO)
       republish = true;
+    else
+      QueueInbox(*msg);
   }
 
   std::array<u8, MBX_SIZE> raw;
@@ -126,6 +132,10 @@ void HostBridge::Tick(GuestMemory& mem)
   }
 
   const Mailbox mbx = Mailbox::Parse(raw.data());
+  if (m_inbox_scene && *m_inbox_scene != mbx.scene_id)
+    m_inbox.clear();  // meant for the old scene; the mod resends when it sees the new one
+  m_inbox_scene = mbx.scene_id;
+  FlushInbox(mem, mbx);
   if (m_game_seq != mbx.game_seq)
     m_ticks_since_game_frame = 0;
   else
@@ -190,6 +200,69 @@ void HostBridge::Tick(GuestMemory& mem)
   m_following = mod_alive;
   m_galaxy_view = m_following && m_player && m_player->view == GXC_VIEW_GALAXY;
   WriteFollow(mem, m_following && m_player ? &*m_player : nullptr);
+}
+
+// Voxel planet messages from the mod become big-endian inbox records: the header and the fixed
+// fields swapped, the display list and KCL copied as they are (built big-endian by the mod).
+void HostBridge::QueueInbox(const Msg& msg)
+{
+  if (msg.type != GXC_MSG_PLANET && msg.type != GXC_MSG_CHUNK && msg.type != GXC_MSG_PLANET_TP)
+    return;
+  const u32 fixed = msg.type == GXC_MSG_PLANET ? sizeof(GxcPlanet) :
+                    msg.type == GXC_MSG_CHUNK  ? sizeof(GxcChunk) :
+                                                 0;
+  if (msg.payload.size() < fixed)
+    return;
+  const u32 len = static_cast<u32>(msg.payload.size());
+  std::vector<u8> rec(8 + ((len + 3) & ~3u), 0);
+  PutBE32(rec.data(), static_cast<u32>(msg.type) << 16);
+  PutBE32(rec.data() + 4, len);
+  std::memcpy(rec.data() + 8, msg.payload.data(), len);
+  for (u32 k = 0; k < fixed; k += 4)
+  {
+    u32 v;
+    std::memcpy(&v, msg.payload.data() + k, 4);
+    PutBE32(rec.data() + 8 + k, v);
+  }
+  m_inbox.push_back(std::move(rec));
+}
+
+// The module empties its inbox every frame it runs: fill it again only once it is (state 0).
+void HostBridge::FlushInbox(GuestMemory& mem, const Mailbox& mbx)
+{
+  constexpr u32 HEADER = sizeof(GxcInboxHeader);
+  if (m_inbox.empty() || mbx.inbox_addr == 0 || mbx.inbox_size <= HEADER)
+    return;
+  u8 state[4];
+  if (!mem.Read(mbx.inbox_addr, state, 4) || BE32(state) != 0)
+    return;
+  const u32 room = mbx.inbox_size - HEADER;
+  std::vector<u8> out;
+  u32 count = 0;
+  while (!m_inbox.empty())
+  {
+    const std::vector<u8>& rec = m_inbox.front();
+    if (rec.size() > room)
+    {
+      m_inbox.pop_front();  // can never fit
+      continue;
+    }
+    if (out.size() + rec.size() > room)
+      break;
+    out.insert(out.end(), rec.begin(), rec.end());
+    count++;
+    m_inbox.pop_front();
+  }
+  if (count == 0)
+    return;
+  u8 header[HEADER];
+  PutBE32(header, 1);
+  PutBE32(header + 4, count);
+  PutBE32(header + 8, static_cast<u32>(out.size()));
+  PutBE32(header + 12, mbx.scene_id);
+  mem.Write(mbx.inbox_addr + HEADER, out.data(), static_cast<u32>(out.size()));
+  mem.Write(mbx.inbox_addr + 4, header + 4, HEADER - 4);
+  mem.Write(mbx.inbox_addr, header, 4);  // last: the module only reads a full inbox
 }
 
 bool HostBridge::FindMailbox(GuestMemory& mem)
