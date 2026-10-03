@@ -19,6 +19,7 @@ extern "C" void movement__14CameraDirectorFv(void* self);
 extern "C" void draw__10MarioActorCFv(const void* self);
 extern "C" void draw__17StarPointerLayoutCFv(const void* self);
 extern "C" void draw__15StarPointerBlurCFv(const void* self);
+extern "C" void movement__13ClippingJudgeFv(void* self);
 // Syati's StarPointerUtil.h declares it without the port argument the game takes.
 extern "C" bool isStarPointerValid__2MRFl(long port);
 
@@ -52,6 +53,7 @@ struct Debug
     f32 before[3], after[3], velocity[3];
     u32 status, flags_c, flags_10, ground;
   } history[6];
+  u32 clip_rescued;  // frustum tests our camera clipped and the game's camera kept (see ClipFrustum)
 };
 
 struct Published
@@ -147,6 +149,21 @@ bool gHidden = false;
 const f32 EYE_NEAR_Z = 10.f;
 f32 gGameNearZ = 0.f;
 bool gNearOverridden = false;
+// SMG2 clips (freezes, and turns off the hit sensors and often the collision of) every actor
+// outside the camera's viewing volume, which starts 500 units ahead of the camera. That suits its
+// camera metres behind Mario, but from his eyes it clips what is at his feet, beside or behind him,
+// so he walks through it. While our camera is on, an actor is clipped only if it is outside both
+// volumes: ours (what is drawn) and the game's camera's (what it would have kept).
+// ClippingJudge (read live on SB4E): 9 viewing volumes from +0x14, each 6 planes (normal,
+// distance) the actor's ball must not be wholly outside of; far clip level 0 uses the first,
+// level n > 0 the (n + 1)th (the second is never built).
+const u32 CLIP_VOLUMES = 9;
+const u32 CLIP_VOLUME_FLOATS = 6 * 4;
+const u32 JUDGE_VOLUMES = 0x14;
+f32 gGameView[12];  // the game's camera this frame, before our override
+f32 gGameFovy = 0.f;
+f32 gGameVolumes[CLIP_VOLUMES * CLIP_VOLUME_FLOATS];
+bool gGameVolumesOn = false;
 u32 gLastHostSeq = 0;
 u32 gFramesSinceHost = 0;
 
@@ -477,6 +494,11 @@ void CameraMovement(void* self)
 {
   movement__14CameraDirectorFv(self);
   PublishGameCamera();
+  const MtxPtr game = MR::getCameraViewMtx();
+  for (int r = 0; r < 3; r++)
+    for (int c = 0; c < 4; c++)
+      gGameView[4 * r + c] = game[r][c];
+  gGameFovy = MR::getFovy();
   const bool galaxy = GalaxyView();
   gOut.dbg.galaxy_view = galaxy;
   // Cutscenes and the Galaxy view keep the game's camera (Mario stays hidden in the latter).
@@ -509,14 +531,82 @@ void CameraMovement(void* self)
   MR::setFovy(gOut.mbx.fov_y);
   MR::setNearZ(EYE_NEAR_Z);
 }
+
+// The volumes of the camera in place (ours while overridden), then, while our camera is on, the
+// game camera's: built by the game's own code with its view put back for the call.
+void ClippingJudgeMovement(void* self)
+{
+  movement__13ClippingJudgeFv(self);
+  gGameVolumesOn = false;
+  if (!gNearOverridden || gGameFovy <= 0.f)
+    return;
+  f32* volumes = reinterpret_cast<f32*>(reinterpret_cast<u8*>(self) + JUDGE_VOLUMES);
+  f32 ours[CLIP_VOLUMES * CLIP_VOLUME_FLOATS];
+  for (u32 i = 0; i < CLIP_VOLUMES * CLIP_VOLUME_FLOATS; i++)
+    ours[i] = volumes[i];
+  const MtxPtr view = MR::getCameraViewMtx();
+  f32 kept[12];
+  for (int r = 0; r < 3; r++)
+    for (int c = 0; c < 4; c++)
+    {
+      kept[4 * r + c] = view[r][c];
+      view[r][c] = gGameView[4 * r + c];
+    }
+  const f32 fovy = MR::getFovy();
+  MR::setFovy(gGameFovy);
+  movement__13ClippingJudgeFv(self);
+  MR::setFovy(fovy);
+  for (int r = 0; r < 3; r++)
+    for (int c = 0; c < 4; c++)
+      view[r][c] = kept[4 * r + c];
+  for (u32 i = 0; i < CLIP_VOLUMES * CLIP_VOLUME_FLOATS; i++)
+  {
+    gGameVolumes[i] = volumes[i];
+    volumes[i] = ours[i];
+  }
+  gGameVolumesOn = true;
+}
+
+// JGeometry::THexahedron3<f>::mayIntersectBall3: no plane has the ball wholly outside.
+bool MayIntersectBall(const f32* planes, const TVec3f& pos, f32 radius)
+{
+  for (u32 i = 0; i < 6; i++, planes += 4)
+    if (planes[0] * pos.x + planes[1] * pos.y + planes[2] * pos.z - planes[3] < -radius)
+      return false;
+  return true;
+}
+
+// Replaces ClippingJudge::isJudgedToClipFrustum(pos, radius, level) (the 2-argument one is level 0).
+bool ClipFrustum(const void* self, const TVec3f& pos, f32 radius, s32 level)
+{
+  const u32 at = (level == 0 ? 0 : level + 1) * CLIP_VOLUME_FLOATS;
+  const f32* ours = reinterpret_cast<const f32*>(reinterpret_cast<const u8*>(self) + JUDGE_VOLUMES);
+  if (MayIntersectBall(ours + at, pos, radius))
+    return false;
+  if (gGameVolumesOn && MayIntersectBall(gGameVolumes + at, pos, radius))
+  {
+    gOut.dbg.clip_rescued++;
+    return false;
+  }
+  return true;
+}
+
+bool ClipFrustumLevel0(const void* self, const TVec3f& pos, f32 radius)
+{
+  return ClipFrustum(self, pos, radius, 0);
+}
 }  // namespace
 
 // Vtable slots (symbols/SB4E.txt): __vt__10MarioActor + 0xC init, + 0x14 movement, + 0x18 draw;
 // __vt__14CameraDirector + 0x14 movement; __vt__17StarPointerLayout and __vt__15StarPointerBlur
-// + 0x18 draw (read live on SB4E).
+// + 0x18 draw; __vt__13ClippingJudge + 0x14 movement (read live on SB4E).
 kmWritePointer(0x806C7448 + 0xC, MarioInit);
 kmWritePointer(0x806C7448 + 0x14, MarioMovement);
 kmWritePointer(0x806C7448 + 0x18, MarioDraw);
 kmWritePointer(0x8067C4D0 + 0x14, CameraMovement);
 kmWritePointer(0x806F88A0 + 0x18, StarPointerLayoutDraw);
 kmWritePointer(0x806F8300 + 0x18, StarPointerBlurDraw);
+kmWritePointer(0x80694EC8 + 0x14, ClippingJudgeMovement);
+// ClippingJudge::isJudgedToClipFrustum(pos, radius) and (pos, radius, level).
+kmBranch(0x80231100, ClipFrustumLevel0);
+kmBranch(0x802311C0, ClipFrustum);
