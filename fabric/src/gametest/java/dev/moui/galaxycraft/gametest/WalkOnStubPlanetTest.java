@@ -28,7 +28,8 @@ public final class WalkOnStubPlanetTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
         // Dolphin owns the shared memory in the demo and in the real-galaxy test.
-        if (Boolean.getBoolean("galaxycraft.demo") || Boolean.getBoolean("galaxycraft.galaxy")) return;
+        if (Boolean.getBoolean("galaxycraft.demo") || Boolean.getBoolean("galaxycraft.galaxy")
+                || Boolean.getBoolean("galaxycraft.blocks")) return;
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
             sp.getServer().runCommand("gamemode adventure @a");
             sp.getServer().runCommand("difficulty peaceful");

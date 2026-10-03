@@ -13,6 +13,7 @@ final class InputInjector {
     private static final int PRESS = 1, RELEASE = 0;
     private Seqlock.InputState prev;
     private int textSeen = -1;
+    private double pointerX = Double.NaN, pointerY = Double.NaN;
 
     void apply(Minecraft mc, Seqlock.InputState cur) {
         if (prev == null) { // first snapshot is the baseline: nothing has changed yet
@@ -33,6 +34,24 @@ final class InputInjector {
             mc.mouseHandler.onMove(window, mc.mouseHandler.xpos() + dx, mc.mouseHandler.ypos() + dy, dx, dy);
         }
         prev = cur;
+    }
+
+    /**
+     * With a Minecraft screen open (the inventory), the host's pointer over its window is
+     * Minecraft's cursor: the overlay fills that window, so the same fraction of Minecraft's.
+     */
+    void applyPointer(Minecraft mc, Seqlock.PointerState p) {
+        if (mc.gui.screen() == null || !p.inside()) {
+            pointerX = pointerY = Double.NaN;
+            return;
+        }
+        var window = mc.getWindow();
+        double x = p.x() * window.getScreenWidth(), y = p.y() * window.getScreenHeight();
+        if (x == pointerX && y == pointerY) return;
+        double dx = Double.isNaN(pointerX) ? 0 : x - pointerX, dy = Double.isNaN(pointerY) ? 0 : y - pointerY;
+        pointerX = x;
+        pointerY = y;
+        mc.mouseHandler.onMove(window.handle(), x, y, dx, dy);
     }
 
     /** Characters typed since last time, after the keys (as GLFW's char callback follows its key one). */

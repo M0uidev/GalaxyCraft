@@ -4,8 +4,8 @@ import java.util.LinkedHashSet;
 
 /**
  * Water and lava flowing as Minecraft's FlowingFluid does, with "down" toward the planet's center.
- * A fluid cell's level (the high nibble of the cell): 0 a source, 1..7 flowing (amount 8 - level),
- * FALLING fed from above. Each tick a fluid cell recomputes itself from its neighbors, then flows
+ * A fluid cell's level (its block state's): 0 a source, 1..7 flowing (amount 8 - level), FALLING
+ * fed from above. Blocks without collision (flowers, torches) are washed away as if air. Each tick a fluid cell recomputes itself from its neighbors, then flows
  * down into air or, if it cannot, sideways toward the nearest drop (within 4 blocks for water, 2
  * for lava). Water ticks every 5 game ticks, lava every 30.
  *
@@ -32,8 +32,8 @@ public final class Fluids {
     public boolean tick() {
         ticks++;
         boolean changed = false;
-        if (ticks % WATER_TICKS == 0 && !water.isEmpty()) changed |= step(Material.WATER);
-        if (ticks % LAVA_TICKS == 0 && !lava.isEmpty()) changed |= step(Material.LAVA);
+        if (ticks % WATER_TICKS == 0 && !water.isEmpty()) changed |= step(Blocks.WATER);
+        if (ticks % LAVA_TICKS == 0 && !lava.isEmpty()) changed |= step(Blocks.LAVA);
         return changed;
     }
 
@@ -52,15 +52,15 @@ public final class Fluids {
 
     void schedule(int cell) {
         if (cell < 0) return;
-        Material m = p.get(cell);
-        if (m == Material.WATER) water.add(cell);
-        else if (m == Material.LAVA) lava.add(cell);
+        int f = p.fluid(cell);
+        if (f == Blocks.WATER) water.add(cell);
+        else if (f == Blocks.LAVA) lava.add(cell);
     }
 
-    private boolean step(Material f) {
-        LinkedHashSet<Integer> due = f == Material.WATER ? water : lava;
+    private boolean step(int f) {
+        LinkedHashSet<Integer> due = f == Blocks.WATER ? water : lava;
         LinkedHashSet<Integer> next = new LinkedHashSet<>();
-        if (f == Material.WATER) water = next;
+        if (f == Blocks.WATER) water = next;
         else lava = next;
         boolean changed = false;
         int n = 0;
@@ -72,8 +72,8 @@ public final class Fluids {
     }
 
     /** Minecraft's FlowingFluid.tick: the new state of a flowing cell, then its spread. */
-    private boolean tickCell(Material f, int cell) {
-        if (p.get(cell) != f) return false;
+    private boolean tickCell(int f, int cell) {
+        if (p.fluid(cell) != f) return false;
         boolean changed = false;
         if (p.level(cell) != SOURCE) {
             int next = newLevel(f, cell);
@@ -83,40 +83,40 @@ public final class Fluids {
                     p.set(cell, Material.AIR);
                     return true;
                 }
-                p.set(cell, f, next);
-                if (p.get(cell) != f) return true; // reacted with water
+                p.set(cell, p.blocks.fluidState(f, next));
+                if (p.fluid(cell) != f) return true; // reacted with water
             }
         }
         return spread(f, cell) | changed;
     }
 
     /** FlowingFluid.getNewLiquid: a level from the neighbors, or -1 for nothing. */
-    private int newLevel(Material f, int cell) {
+    private int newLevel(int f, int cell) {
         int most = 0, sources = 0;
         for (int s : SIDES) {
             int nb = p.grid.neighbor(cell, s);
-            if (p.get(nb) != f) continue;
+            if (p.fluid(nb) != f) continue;
             if (p.level(nb) == SOURCE) sources++;
             most = Math.max(most, amount(nb));
         }
-        if (f == Material.WATER && sources >= 2) {
+        if (f == Blocks.WATER && sources >= 2) {
             int below = p.grid.neighbor(cell, CubeSphere.BOTTOM);
-            if (p.get(below).solid() || (p.get(below) == f && p.level(below) == SOURCE)) return SOURCE;
+            if (p.info(below).collides() || (p.fluid(below) == f && p.level(below) == SOURCE)) return SOURCE;
         }
-        if (p.get(p.grid.neighbor(cell, CubeSphere.TOP)) == f) return FALLING;
+        if (p.fluid(p.grid.neighbor(cell, CubeSphere.TOP)) == f) return FALLING;
         int a = most - drop(f);
         return a <= 0 ? -1 : 8 - a;
     }
 
     /** FlowingFluid.spread: down if it can; sideways if it cannot, or if it is a source. */
-    private boolean spread(Material f, int cell) {
+    private boolean spread(int f, int cell) {
         int below = p.grid.neighbor(cell, CubeSphere.BOTTOM);
         if (canSpreadInto(f, below, true)) {
             spreadInto(f, below, FALLING, true);
             int sources = 0;
             for (int s : SIDES) {
                 int nb = p.grid.neighbor(cell, s);
-                if (p.get(nb) == f && p.level(nb) == SOURCE) sources++;
+                if (p.fluid(nb) == f && p.level(nb) == SOURCE) sources++;
             }
             if (sources >= 3) spreadToSides(f, cell);
             return true;
@@ -125,7 +125,7 @@ public final class Fluids {
         return false;
     }
 
-    private boolean spreadToSides(Material f, int cell) {
+    private boolean spreadToSides(int f, int cell) {
         int a = p.level(cell) == FALLING ? 7 : amount(cell) - drop(f);
         if (a <= 0) return false;
         int best = Integer.MAX_VALUE;
@@ -150,7 +150,7 @@ public final class Fluids {
     }
 
     /** Steps to the nearest drop from t, coming from prev; 1000 if none within reach. */
-    private int slopeDistance(Material f, int t, int prev, int depth) {
+    private int slopeDistance(int f, int t, int prev, int depth) {
         int best = 1000;
         for (int s : SIDES) {
             int u = p.grid.neighbor(t, s);
@@ -161,39 +161,43 @@ public final class Fluids {
         return best;
     }
 
+    /** Air for a fluid: nothing there, or something without collision that it washes away. */
+    private boolean open(int cell) {
+        if (cell < 0) return false;
+        BlockInfo b = p.info(cell);
+        return !b.collides() && !b.isFluid();
+    }
+
     /** Whether below the cell is somewhere f falls: its own fluid or air. */
-    private boolean hole(Material f, int cell) {
+    private boolean hole(int f, int cell) {
         int below = p.grid.neighbor(cell, CubeSphere.BOTTOM);
         if (below < 0) return false;
-        Material m = p.get(below);
-        return m == f || m == Material.AIR;
+        return p.fluid(below) == f || open(below);
     }
 
     /** Where f can flow through: air, or itself but not a source. */
-    private boolean passable(Material f, int cell) {
+    private boolean passable(int f, int cell) {
         if (cell < 0) return false;
-        Material m = p.get(cell);
-        return m == Material.AIR || (m == f && p.level(cell) != SOURCE);
+        return open(cell) || (p.fluid(cell) == f && p.level(cell) != SOURCE);
     }
 
     /** Fluids push only into air (or lava down into water); existing cells pull on their own tick. */
-    private boolean canSpreadInto(Material f, int cell, boolean down) {
+    private boolean canSpreadInto(int f, int cell, boolean down) {
         if (cell < 0) return false;
-        Material m = p.get(cell);
-        return m == Material.AIR || (down && f == Material.LAVA && m == Material.WATER);
+        return open(cell) || (down && f == Blocks.LAVA && p.fluid(cell) == Blocks.WATER);
     }
 
-    private void spreadInto(Material f, int cell, int level, boolean down) {
-        if (down && f == Material.LAVA && p.get(cell) == Material.WATER) p.set(cell, Material.STONE);
-        else p.set(cell, f, level);
+    private void spreadInto(int f, int cell, int level, boolean down) {
+        if (down && f == Blocks.LAVA && p.fluid(cell) == Blocks.WATER) p.set(cell, Material.STONE);
+        else p.set(cell, p.blocks.fluidState(f, level));
     }
 
     /** LiquidBlock.shouldSpreadLiquid: lava touching water (not below it) hardens. */
     private void react(int cell) {
-        if (cell < 0 || p.get(cell) != Material.LAVA) return;
+        if (cell < 0 || p.fluid(cell) != Blocks.LAVA) return;
         for (int s = 0; s < 6; s++) {
             if (s == CubeSphere.BOTTOM) continue;
-            if (p.get(p.grid.neighbor(cell, s)) == Material.WATER) {
+            if (p.fluid(p.grid.neighbor(cell, s)) == Blocks.WATER) {
                 p.set(cell, p.level(cell) == SOURCE ? Material.OBSIDIAN : Material.COBBLESTONE);
                 return;
             }
@@ -205,19 +209,19 @@ public final class Fluids {
         return l == SOURCE || l == FALLING ? 8 : 8 - l;
     }
 
-    private static int drop(Material f) {
-        return f == Material.LAVA ? 2 : 1;
+    private static int drop(int f) {
+        return f == Blocks.LAVA ? 2 : 1;
     }
 
-    private static int slopeReach(Material f) {
-        return f == Material.LAVA ? 2 : 4;
+    private static int slopeReach(int f) {
+        return f == Blocks.LAVA ? 2 : 4;
     }
 
     /** Height of a fluid cell's surface, blocks (Minecraft's: a source 8/9, full under its own fluid). */
     public static double height(VoxelPlanet p, int cell) {
-        Material m = p.get(cell);
-        if (!m.fluid()) return 0;
-        if (p.get(p.grid.neighbor(cell, CubeSphere.TOP)) == m) return 1;
+        int f = p.fluid(cell);
+        if (f == Blocks.NO_FLUID) return 0;
+        if (p.fluid(p.grid.neighbor(cell, CubeSphere.TOP)) == f) return 1;
         int l = p.level(cell);
         return l == FALLING ? 1 : (l == SOURCE ? 8 : 8 - l) / 9.0;
     }

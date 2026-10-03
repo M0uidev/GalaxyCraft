@@ -117,6 +117,11 @@ public final class BridgeClient {
         return linked() ? Seqlock.readText(shm.seg()) : Optional.empty();
     }
 
+    /** Where the host's pointer is, while a Minecraft screen is open (Dolphin then lets it go). */
+    public Optional<Seqlock.PointerState> pointer() {
+        return linked() ? Seqlock.readPointer(shm.seg()) : Optional.empty();
+    }
+
     /** The host's keyboard and mouse state, if it publishes any (Dolphin does, the stub does not). */
     public Optional<Seqlock.InputState> input() {
         return linked() ? Seqlock.readInput(shm.seg()) : Optional.empty();

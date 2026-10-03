@@ -213,7 +213,7 @@ public final class MarioFitTest implements FabricClientGameTest {
                 Vector3d f = local(s, mario());
                 int c = p.grid.cellAt(new Vector3d(f).sub(new Vector3d(f).normalize().mul(0.5)));
                 int n = 0;
-                for (; p.get(c).breakable(); c = p.grid.neighbor(c, CubeSphere.BOTTOM), n++) p.set(c, Material.AIR);
+                for (; p.info(c).breakable(); c = p.grid.neighbor(c, CubeSphere.BOTTOM), n++) p.set(c, Material.AIR);
                 return n;
             });
             ctx.waitTicks(120);
@@ -313,7 +313,7 @@ public final class MarioFitTest implements FabricClientGameTest {
             Vector3d[] q = p.grid.side(c, sd);
             Vector3d n = new Vector3d(q[1]).sub(q[0]).cross(new Vector3d(q[2]).sub(q[0])).normalize();
             b.append(String.format(java.util.Locale.ROOT, " %.1f%s", Math.abs(new Vector3d(f).sub(q[0]).dot(n)) * UNITS,
-                    p.get(p.grid.neighbor(c, sd)).solid() ? "" : "(open)"));
+                    p.fullCollision(p.grid.neighbor(c, sd)) ? "" : "(open)"));
         }
         return b.toString();
     }

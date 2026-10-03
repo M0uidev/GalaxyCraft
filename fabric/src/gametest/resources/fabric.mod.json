@@ -12,7 +12,8 @@
 			"dev.moui.galaxycraft.gametest.WalkOnStubPlanetTest",
 			"dev.moui.galaxycraft.gametest.DolphinOverlayDemo",
 			"dev.moui.galaxycraft.gametest.MarioPerspectivesTest",
-			"dev.moui.galaxycraft.gametest.CameraProbe"
+			"dev.moui.galaxycraft.gametest.CameraProbe",
+			"dev.moui.galaxycraft.gametest.BlockRulesProbe"
 		]
 	},
 	"depends": {"galaxycraft": "*"}

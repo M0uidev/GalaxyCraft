@@ -1,5 +1,5 @@
 /*
- * GalaxyCraft shared-memory protocol, version 8.
+ * GalaxyCraft shared-memory protocol, version 9.
  *
  * Source of truth for the layout of /dev/shm/galaxycraft_v1. Mirrors:
  *   tools/gxproto.py
@@ -16,7 +16,7 @@
 
 #define GXC_SHM_NAME "/galaxycraft_v1"
 #define GXC_MAGIC 0x52435847u /* "GXCR" */
-#define GXC_VERSION 8u
+#define GXC_VERSION 9u
 
 /* Regions (byte offsets from the start of the mapping). */
 #define GXC_OFF_HEADER 0
@@ -24,6 +24,7 @@
 #define GXC_OFF_PLAYER 128
 #define GXC_OFF_INPUT 224
 #define GXC_OFF_GAMECAM 320
+#define GXC_OFF_POINTER 448
 #define GXC_OFF_TEXT 512
 #define GXC_OFF_RING_S2M 4096
 #define GXC_RING_S2M_CAP (4u * 1024u * 1024u)
@@ -130,6 +131,19 @@ typedef struct { /* S -> M */
 } GxcInputState;
 
 /*
+ * Where the mouse pointer is over the host's render window (S -> M), while it is not captured (a
+ * Minecraft screen is open): x and y from 0 at the left and top to 1 at the right and bottom. The
+ * overlay covers that whole window, so it maps onto Minecraft's window as is.
+ */
+#define GXC_POINTER_INSIDE 1u
+typedef struct {
+  uint32_t seq;
+  uint32_t flags; /* GXC_POINTER_* */
+  float x;
+  float y;
+} GxcPointerState;
+
+/*
  * Text typed in the host's window (S -> M), as characters after the keyboard layout: what GLFW's
  * char callback gives, for Minecraft's text fields. count only grows; character i is
  * codepoints[i % GXC_TEXT_RING]. A reader more than GXC_TEXT_RING behind lost the oldest ones.
@@ -172,6 +186,7 @@ enum {
   GXC_MSG_PLANET_TP = 104, /* no payload: Mario onto the planet's surface */
   GXC_MSG_OUTLINE = 105,   /* GxcOutline: the block the player can act on */
   GXC_MSG_HELD = 106,      /* GxcHeld: what the player holds, drawn in Steve's right hand */
+  GXC_MSG_ATLAS = 107,     /* GxcAtlas + data: a piece of the block atlas */
   GXC_MSG_PAD = 0xFFFF,
 };
 
@@ -225,17 +240,33 @@ typedef struct {
 /* What the player holds in the main hand, drawn by the game in Steve's right hand as Minecraft
  * draws it in third person. Sent when it changes and again in every new scene. */
 #define GXC_HELD_NONE 0u
-#define GXC_HELD_BLOCK 1u /* a cube with tiles of the block atlas (top, sides, bottom) */
-#define GXC_HELD_CUBE 2u  /* a cube with the sprite on every face: a block the atlas lacks */
-#define GXC_HELD_ITEM 3u  /* the sprite as a flat item one texel thick (Minecraft's item/generated) */
+#define GXC_HELD_BLOCK 1u /* a cube: the sprite's first band on top, the second on the sides, the third below */
+#define GXC_HELD_CUBE 2u  /* a cube with the sprite's first band on every face */
+#define GXC_HELD_ITEM 3u  /* the first band as a flat item one texel thick (Minecraft's item/generated) */
 #define GXC_HELD_TOOL 4u  /* the same, held as a tool (item/handheld) */
-#define GXC_HELD_SPRITE 16 /* texels a side */
+#define GXC_HELD_SPRITE 16 /* texels a side of a band */
+#define GXC_HELD_BANDS 4   /* the sprite is 16 wide and 4 bands of 16 tall (the last one unused) */
 typedef struct {
   uint32_t kind;     /* GXC_HELD_* */
-  uint32_t tiles[3]; /* BLOCK: atlas tiles of the top, the sides and the bottom */
-  /* CUBE, ITEM, TOOL: GX RGB5A3 (4x4 texel blocks, big-endian already); alpha 0 is a hole */
-  uint8_t sprite[GXC_HELD_SPRITE * GXC_HELD_SPRITE * 2];
+  uint32_t reserved[3];
+  /* GX RGB5A3, 16x64 texels (4x4 texel blocks, big-endian already); alpha 0 is a hole */
+  uint8_t sprite[GXC_HELD_SPRITE * GXC_HELD_SPRITE * GXC_HELD_BANDS * 2];
 } GxcHeld;
+
+/* A piece of the block atlas the planets are drawn with (GX RGB5A3 with its mipmaps, big-endian
+ * already: offset and data index into that). The module puts the pieces together and draws once
+ * all total bytes of one atlas id are in. Sent again in every new scene. */
+typedef struct {
+  uint32_t atlas_id; /* a new id starts a new atlas */
+  uint32_t width;    /* texels, level 0, a power of two up to 1024 */
+  uint32_t height;
+  uint32_t levels;   /* mipmap levels, the first included */
+  uint32_t total;    /* bytes of all levels */
+  uint32_t offset;   /* of this piece's data */
+  /* uint8_t data[]; */
+} GxcAtlas;
+
+#define GXC_ATLAS_PIECE_MAX 65536
 
 typedef struct {
   uint32_t latest; /* index 0..2 of the newest complete frame, 0xFFFFFFFF none */

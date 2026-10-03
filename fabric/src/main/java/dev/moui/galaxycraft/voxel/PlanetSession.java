@@ -42,6 +42,7 @@ public final class PlanetSession {
     private static final int TP_MARK = -1;
 
     private final double unitsPerBlock;
+    private Blocks blocks = CubeBlocks.INSTANCE;
     private final Deque<Msg> control = new ArrayDeque<>();
     private final Deque<Integer> pending = new ArrayDeque<>();
     private final BitSet pendingSet = new BitSet();
@@ -68,6 +69,15 @@ public final class PlanetSession {
         return planet != null;
     }
 
+    /** What new and loaded planets are made of (before any is). */
+    public void setBlocks(Blocks blocks) {
+        this.blocks = blocks;
+    }
+
+    public Blocks blocks() {
+        return blocks;
+    }
+
     public VoxelPlanet planet() {
         return planet;
     }
@@ -83,7 +93,7 @@ public final class PlanetSession {
 
     /** A new planet of this radius above the player, just out of its gravity's reach. */
     public void spawn(int radius, Vector3d feetGal, Vector3d upGal) {
-        VoxelPlanet p = VoxelPlanet.ofRadius(radius);
+        VoxelPlanet p = VoxelPlanet.ofRadius(radius, blocks);
         double above = (gravityRadius(p.surface()) + 24) * unitsPerBlock;
         start(p, new Vector3d(upGal).normalize().mul(above).add(feetGal));
         unsaved = true;
@@ -91,7 +101,7 @@ public final class PlanetSession {
 
     /** A saved planet, as it was (but for what lies below today's crust: see sealBelowCrust). */
     public void load(PlanetStore.Saved s) {
-        VoxelPlanet p = VoxelPlanet.of(new CubeSphere(s.n(), s.core(), s.layers()), s.depth(), s.cells());
+        VoxelPlanet p = VoxelPlanet.of(new CubeSphere(s.n(), s.core(), s.layers()), s.depth(), s.cells(), blocks);
         boolean sealed = p.sealBelowCrust() > 0;
         start(p, s.center());
         unsaved = sealed;
@@ -213,26 +223,72 @@ public final class PlanetSession {
         return withKcl.cardinality();
     }
 
-    /** Breaks the block the eye looks at. False if none in reach or it is unbreakable. */
+    /** Breaks the block the eye looks at; ice melts into water outside creative mode, as in Minecraft. */
     public boolean breakBlock(Vector3d eyeGal, Vector3d lookGal) {
+        return breakBlock(eyeGal, lookGal, false);
+    }
+
+    /** False if no block in reach or it is unbreakable. Its neighbors then settle (a door's other half goes). */
+    public boolean breakBlock(Vector3d eyeGal, Vector3d lookGal, boolean creative) {
         PlanetRaycast.Hit h = cast(eyeGal, lookGal);
-        if (h == null || !planet.get(h.hit()).breakable()) return false;
-        planet.set(h.hit(), planet.get(h.hit()).broken());
+        if (h == null || !planet.info(h.hit()).breakable()) return false;
+        boolean melts = !creative && planet.material(h.hit()) == Material.ICE;
+        planet.set(h.hit(), melts ? planet.blocks.fluidState(Blocks.WATER, Fluids.SOURCE) : Blocks.AIR);
+        planet.settle(h.hit());
         unsaved = true;
         return true;
     }
 
-    /** Places m against the block the eye looks at, unless Mario stands in that cell. */
+    /** Places one of the planet's own blocks against the one the eye looks at. */
     public boolean placeBlock(Vector3d eyeGal, Vector3d lookGal, Material m, Vector3d marioFeetGal) {
+        return m != null && !m.fluid() && placeBlock(eyeGal, lookGal, Placer.of(planet.blocks.id(m)), marioFeetGal);
+    }
+
+    /**
+     * Places what placer gives against the block the eye looks at (into it if it is replaceable,
+     * like short grass), unless a cell it fills is taken or one that collides is where Mario stands.
+     * Its neighbors then settle (fences join it).
+     */
+    public boolean placeBlock(Vector3d eyeGal, Vector3d lookGal, Placer placer, Vector3d marioFeetGal) {
         PlanetRaycast.Hit h = cast(eyeGal, lookGal);
-        if (h == null || h.before() < 0 || m == null || !m.solid()) return false;
+        if (h == null || placer == null) return false;
+        CubeSphere g = planet.grid;
+        int face = faceAt(h.hit(), h.point());
+        int cell = planet.info(h.hit()).replaceable() ? h.hit() : g.neighbor(h.hit(), face);
+        if (cell < 0 || !planet.info(cell).replaceable()) return false;
+        Vector3d hit = CellSpace.local(g, cell, h.point());
+        hit.set(clamp01(hit.x), clamp01(hit.y), clamp01(hit.z));
+        List<int[]> sets = placer.place(planet, cell, face, hit, CellSpace.direction(g, cell, lookGal));
+        if (sets == null || sets.isEmpty()) return false;
         Vector3d feet = local(marioFeetGal);
         Vector3d up = new Vector3d(feet).normalize();
-        for (double y : new double[] {0.1, 0.9, 1.7})
-            if (planet.grid.cellAt(new Vector3d(up).mul(y).add(feet)) == h.before()) return false;
-        planet.set(h.before(), m);
+        for (int[] set : sets) {
+            if (set[0] < 0 || (set[0] != cell && !planet.info(set[0]).replaceable())) return false;
+            if (!planet.blocks.info(set[1]).collides()) continue;
+            for (double y : new double[] {0.1, 0.9, 1.7})
+                if (g.cellAt(new Vector3d(up).mul(y).add(feet)) == set[0]) return false;
+        }
+        int[] changed = new int[sets.size()];
+        for (int i = 0; i < sets.size(); i++) {
+            planet.set(sets.get(i)[0], sets.get(i)[1]);
+            changed[i] = sets.get(i)[0];
+        }
+        planet.settle(changed);
         unsaved = true;
         return true;
+    }
+
+    /** The side of cell nearest a point on (or just inside) it: the face a ray entered through. */
+    private int faceAt(int cell, Vector3d point) {
+        Vector3d m = CellSpace.local(planet.grid, cell, point);
+        double[] dist = {1 - m.y, m.y, m.z, 1 - m.z, m.x, 1 - m.x}; // by side: TOP, BOTTOM, I-, I+, J-, J+
+        int best = 0;
+        for (int s = 1; s < 6; s++) if (dist[s] < dist[best]) best = s;
+        return best;
+    }
+
+    private static double clamp01(double v) {
+        return Math.max(0, Math.min(1, v));
     }
 
     /**
@@ -257,13 +313,19 @@ public final class PlanetSession {
         control.add(new Msg(Layout.MSG_OUTLINE, outlinePayload(outline)));
     }
 
-    /** GxcOutline: the cell's 8 corners from the planet's center, a little out of it (no z-fighting). */
+    /**
+     * GxcOutline: the corners of the block's outline (its shape's bounds in the cell) from the
+     * planet's center, a little out of it (no z-fighting).
+     */
     byte[] outlinePayload(int cell) {
         ByteBuffer b = ByteBuffer.allocate(100).order(ByteOrder.LITTLE_ENDIAN).putInt(cell >= 0 ? 1 : 0);
         if (cell < 0) return b.array();
-        Vector3d mid = planet.grid.center(cell);
+        double[] o = planet.info(cell).outline();
+        Vector3d mid = CellSpace.point(planet.grid, cell, (o[0] + o[3]) / 2, (o[1] + o[4]) / 2, (o[2] + o[5]) / 2);
         for (int m = 0; m < 8; m++) {
-            Vector3d c = planet.grid.corner(cell, m & 1, m >> 1 & 1, m >> 2);
+            // Corner (di, dj, dk) is model (x, y, z) = (dj, dk, di) picks of the bounds.
+            int di = m & 1, dj = m >> 1 & 1, dk = m >> 2;
+            Vector3d c = CellSpace.point(planet.grid, cell, dj == 0 ? o[0] : o[3], dk == 0 ? o[1] : o[4], di == 0 ? o[2] : o[5]);
             c.sub(mid).mul(1 + OUTLINE_GROW).add(mid).mul(unitsPerBlock);
             b.putFloat((float) c.x).putFloat((float) c.y).putFloat((float) c.z);
         }
@@ -273,7 +335,8 @@ public final class PlanetSession {
     /** Empties a bucket of water or lava (a source) against the block the eye looks at. */
     public boolean pour(Vector3d eyeGal, Vector3d lookGal, Material fluid) {
         PlanetRaycast.Hit h = cast(eyeGal, lookGal);
-        if (h == null || h.before() < 0 || fluid == null || !fluid.fluid()) return false;
+        if (h == null || h.before() < 0 || fluid == null || !fluid.fluid() || !planet.info(h.before()).replaceable())
+            return false;
         planet.set(h.before(), fluid, Fluids.SOURCE);
         unsaved = true;
         return true;
@@ -283,9 +346,9 @@ public final class PlanetSession {
     public Material scoop(Vector3d eyeGal, Vector3d lookGal) {
         if (planet == null) return null;
         PlanetRaycast.Hit h = PlanetRaycast.cast(planet, local(eyeGal), new Vector3d(lookGal).normalize(), REACH, true);
-        if (h == null || !planet.get(h.hit()).fluid()) return null;
-        Material got = planet.get(h.hit());
-        planet.set(h.hit(), Material.AIR);
+        if (h == null || !planet.info(h.hit()).isFluid()) return null;
+        Material got = planet.fluid(h.hit()) == Blocks.WATER ? Material.WATER : Material.LAVA;
+        planet.set(h.hit(), Blocks.AIR);
         unsaved = true;
         return got;
     }

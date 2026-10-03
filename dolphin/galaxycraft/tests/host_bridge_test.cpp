@@ -602,8 +602,8 @@ TEST(inbox_gets_the_outline_big_endian)
 TEST(inbox_gets_the_held_item_with_its_sprite_untouched)
 {
   Fixture f;
-  InboxInMailbox(f, 1024);
-  GxcHeld h{GXC_HELD_BLOCK, {0, 1, 2}, {}};
+  InboxInMailbox(f, 4096);
+  GxcHeld h{GXC_HELD_BLOCK, {0, 0, 2}, {}};
   h.sprite[0] = 0x80, h.sprite[1] = 0x1F;
   Ring(*f.shm, GXC_OFF_RING_M2S).Push(GXC_MSG_HELD, &h, sizeof(h));
   f.Tick();
@@ -611,6 +611,23 @@ TEST(inbox_gets_the_held_item_with_its_sprite_untouched)
   CHECK(f.mem.GetU32(r) == (u32(GXC_MSG_HELD) << 16) && f.mem.GetU32(r + 4) == sizeof(GxcHeld));
   CHECK(f.mem.GetU32(r + 8) == GXC_HELD_BLOCK && f.mem.GetU32(r + 8 + 12) == 2);
   CHECK(f.mem.GetU32(r + 8 + 16) >> 16 == 0x801F);
+}
+
+TEST(inbox_gets_atlas_pieces_with_their_texels_untouched)
+{
+  Fixture f;
+  InboxInMailbox(f, 1024);
+  struct
+  {
+    GxcAtlas a;
+    u8 data[8];
+  } piece{{7, 512, 256, 4, 1000, 64}, {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0}};
+  Ring(*f.shm, GXC_OFF_RING_M2S).Push(GXC_MSG_ATLAS, &piece, sizeof(piece));
+  f.Tick();
+  const u32 r = INBOX + sizeof(GxcInboxHeader);
+  CHECK(f.mem.GetU32(r) == (u32(GXC_MSG_ATLAS) << 16) && f.mem.GetU32(r + 4) == sizeof(piece));
+  CHECK(f.mem.GetU32(r + 8) == 7 && f.mem.GetU32(r + 8 + 4) == 512 && f.mem.GetU32(r + 8 + 20) == 64);
+  CHECK(f.mem.GetU32(r + 8 + 24) == 0x12345678u);
 }
 
 TEST(inbox_waits_for_the_module_and_splits_batches)

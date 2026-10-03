@@ -131,6 +131,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         // in one and none in the next as two free-running 60 Hz clocks drift past each other.
         if (following) hostFrame = bridge.awaitFrame(hostFrame, FRAME_WAIT_MS);
         bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
+        bridge.pointer().ifPresent(p -> input.applyPointer(Minecraft.getInstance(), p));
         bridge.text().ifPresentOrElse(t -> input.applyText(Minecraft.getInstance(), t), input::resetText);
     }
 

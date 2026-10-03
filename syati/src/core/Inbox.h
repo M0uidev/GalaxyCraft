@@ -33,9 +33,19 @@ struct InboxOutline
 struct InboxHeld
 {
   u32 kind;  // GXC_HELD_*
-  u32 tiles[3];  // BLOCK: atlas tiles of the top, the sides and the bottom
-  const u8* sprite;  // CUBE, ITEM, TOOL: 16x16 GX RGB5A3 (512 bytes)
+  const u8* sprite;  // 16x64 GX RGB5A3 (2048 bytes): bands top, sides, bottom (HeldMesh)
 };
+
+// A piece of the block atlas (GxcAtlas): data is size bytes at offset of the atlas' total.
+struct InboxAtlas
+{
+  u32 id, width, height, levels, total, offset, size;
+  const u8* data;
+};
+
+// Bytes of a GX RGB5A3 texture of width x height texels with its mipmaps (each level half the
+// last, down to levels of them), as the mod lays them out.
+u32 AtlasBytes(u32 width, u32 height, u32 levels);
 
 struct InboxRecord
 {
@@ -46,12 +56,14 @@ struct InboxRecord
     TELEPORT = 104,
     OUTLINE = 105,
     HELD = 106,
+    ATLAS = 107,
   };
   u32 type;
   InboxPlanet planet;
   InboxChunk chunk;
   InboxOutline outline;
   InboxHeld held;
+  InboxAtlas atlas;
 };
 
 u32 ReadBE32(const u8* p);

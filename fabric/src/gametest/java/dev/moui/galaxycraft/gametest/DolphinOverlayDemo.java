@@ -14,7 +14,8 @@ public final class DolphinOverlayDemo implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
         if (!Boolean.getBoolean("galaxycraft.demo")) return;
-        try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
+        // Commands allowed: /gamemode creative gives the creative inventory (E), and its blocks go on planets.
+        try (TestSingleplayerContext sp = ctx.worldBuilder().adjustSettings(w -> w.setAllowCommands(true)).create()) {
             sp.getServer().runCommand("gamemode adventure @a");
             sp.getServer().runCommand("difficulty peaceful");
             sp.getServer().runCommand("gamerule fall_damage false"); // like Mario, no fall damage

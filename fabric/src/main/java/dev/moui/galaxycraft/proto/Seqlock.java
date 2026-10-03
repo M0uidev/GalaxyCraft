@@ -36,6 +36,9 @@ public final class Seqlock {
     /** Keys as an SDL-scancode-indexed bitmap; mouse and wheel are accumulated since the host started. */
     public record InputState(int buttons, double mouseX, double mouseY, double wheel, byte[] keys) {}
 
+    /** The host's pointer over its window, 0..1 (GxcPointerState), while a Minecraft screen is open. */
+    public record PointerState(boolean inside, float x, float y) {}
+
     /** look/up are the camera's; camOffset is the camera minus pos (galaxy units); view is Layout.VIEW_*. */
     /**
      * itemActive: the clicks break and place blocks; screenOpen: the keyboard types in Minecraft;
@@ -115,6 +118,20 @@ public final class Seqlock {
                     s.get(DOUBLE, o + 24), keys);
             VarHandle.acquireFence();
             if (getAcquire(s, o) == s1) return Optional.of(in);
+        }
+        return Optional.empty();
+    }
+
+    public static Optional<PointerState> readPointer(MemorySegment s) {
+        long o = Layout.OFF_POINTER;
+        for (int attempt = 0; attempt < 100; attempt++) {
+            int s1 = getAcquire(s, o);
+            if (s1 == 0) return Optional.empty();
+            if ((s1 & 1) != 0) continue;
+            var p = new PointerState((s.get(INT, o + 4) & Layout.POINTER_INSIDE) != 0, s.get(FLOAT, o + 8),
+                    s.get(FLOAT, o + 12));
+            VarHandle.acquireFence();
+            if (getAcquire(s, o) == s1) return Optional.of(p);
         }
         return Optional.empty();
     }

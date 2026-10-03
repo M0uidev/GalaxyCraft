@@ -23,6 +23,22 @@ f32 ReadF32(const u8* p)
 }
 }  // namespace
 
+u32 AtlasBytes(u32 width, u32 height, u32 levels)
+{
+  u32 bytes = 0;
+  for (u32 l = 0; l < levels; l++)
+    bytes += (width >> l) * (height >> l) * 2;
+  return bytes;
+}
+
+namespace
+{
+bool PowerOfTwo(u32 v, u32 lo, u32 hi)
+{
+  return v >= lo && v <= hi && (v & (v - 1)) == 0;
+}
+}  // namespace
+
 bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, InboxRecord* out)
 {
   const u32 at = *offset;
@@ -77,14 +93,33 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   }
   else if (type == InboxRecord::HELD)
   {
-    // kind, three tiles, the sprite (GxcHeld); tiles of the 4x4 atlas, kinds up to TOOL.
-    if (len != 16 + 512)
+    // kind, three reserved words, the sprite (GxcHeld); kinds up to TOOL.
+    if (len != 16 + 2048)
       return false;
     out->held.kind = ReadBE32(p);
-    for (int k = 0; k < 3; k++)
-      out->held.tiles[k] = ReadBE32(p + 4 + 4 * k);
     out->held.sprite = p + 16;
-    if (out->held.kind > 4 || out->held.tiles[0] > 15 || out->held.tiles[1] > 15 || out->held.tiles[2] > 15)
+    if (out->held.kind > 4)
+      return false;
+  }
+  else if (type == InboxRecord::ATLAS)
+  {
+    // GxcAtlas, then its data: a power-of-two texture of 8 to 1024 texels a side, 1 to 4 levels
+    // (each at least 8 texels: GX blocks are 4x4), whose total the header gets right.
+    const u32 HEAD = 24;
+    if (len < HEAD)
+      return false;
+    InboxAtlas& a = out->atlas;
+    a.id = ReadBE32(p);
+    a.width = ReadBE32(p + 4);
+    a.height = ReadBE32(p + 8);
+    a.levels = ReadBE32(p + 12);
+    a.total = ReadBE32(p + 16);
+    a.offset = ReadBE32(p + 20);
+    a.size = len - HEAD;
+    a.data = p + HEAD;
+    if (!PowerOfTwo(a.width, 8, 1024) || !PowerOfTwo(a.height, 8, 1024) || a.levels < 1 || a.levels > 4 ||
+        (a.width >> (a.levels - 1)) < 8 || (a.height >> (a.levels - 1)) < 8 ||
+        a.total != AtlasBytes(a.width, a.height, a.levels) || a.offset > a.total || a.size > a.total - a.offset)
       return false;
   }
   else if (type == InboxRecord::TELEPORT)

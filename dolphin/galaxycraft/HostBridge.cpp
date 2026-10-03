@@ -233,13 +233,15 @@ void HostBridge::Tick(GuestMemory& mem)
 void HostBridge::QueueInbox(const Msg& msg)
 {
   if (msg.type != GXC_MSG_PLANET && msg.type != GXC_MSG_CHUNK && msg.type != GXC_MSG_PLANET_TP &&
-      msg.type != GXC_MSG_OUTLINE && msg.type != GXC_MSG_HELD)
+      msg.type != GXC_MSG_OUTLINE && msg.type != GXC_MSG_HELD && msg.type != GXC_MSG_ATLAS)
     return;
-  // The held item's sprite is a GX texture already: only the words before it are swapped.
+  // The held item's sprite and the atlas' texels are GX textures already: only the words before
+  // them are swapped.
   const u32 fixed = msg.type == GXC_MSG_PLANET  ? sizeof(GxcPlanet) :
                     msg.type == GXC_MSG_CHUNK   ? sizeof(GxcChunk) :
                     msg.type == GXC_MSG_OUTLINE ? sizeof(GxcOutline) :
                     msg.type == GXC_MSG_HELD    ? offsetof(GxcHeld, sprite) :
+                    msg.type == GXC_MSG_ATLAS   ? sizeof(GxcAtlas) :
                                                   0;
   if (msg.payload.size() < fixed)
     return;

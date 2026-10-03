@@ -4,7 +4,9 @@ import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.bridge.BridgeClient;
 import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.gravity.LookMath;
+import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Seqlock;
+import dev.moui.galaxycraft.voxel.AtlasLink;
 import dev.moui.galaxycraft.voxel.Material;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.PlanetStore;
@@ -14,7 +16,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -25,8 +26,9 @@ import org.joml.Vector3d;
 
 /**
  * The voxel planet in Minecraft's hands: /galaxycraft planet, the clicks that break and place
- * blocks (and pour and fill buckets of water and lava) while something is in the main hand (Dolphin then keeps them from Mario), P to land on
- * the planet, and the messages that carry it to the game. One planet per stage (galaxy), saved in
+ * blocks (any of Minecraft's, by its placement rules; and pour and fill buckets of water and lava)
+ * while something is in the main hand and no screen is open (Dolphin then keeps them from Mario), P
+ * to land on the planet, and the messages that carry it to the game, the block atlas first. One planet per stage (galaxy), saved in
  * ~/.local/share/galaxycraft/planets (see planetDir) and loaded again when the stage is. -Dgalaxycraft.planet=true
  * (or a radius) spawns one in a stage that has none as soon as the player follows Mario.
  */
@@ -50,8 +52,25 @@ public final class PlanetClient {
     private static int lastButtons;
     private static boolean lastP;
     private static int sinceSave;
+    private static McBlocks blocks;
+    private static AtlasLink atlasLink;
 
     private PlanetClient() {}
+
+    /** Minecraft's blocks for the planets, once its models are loaded (null before the first tick). */
+    static McBlocks blocks() {
+        return blocks;
+    }
+
+    /** Places a block item as a right click would (end-to-end tests). */
+    public static boolean placeItem(Vector3d eyeGal, Vector3d lookGal, ItemStack stack, Vector3d marioFeetGal) {
+        return blocks != null && session.placeBlock(eyeGal, lookGal, blocks.placer(stack), marioFeetGal);
+    }
+
+    /** Minecraft's text for the block in a cell of the planet (end-to-end tests). */
+    public static String blockName(int cell) {
+        return blocks == null || !session.active() ? "" : blocks.name(session.planet().get(cell));
+    }
 
     /** The planet itself (end-to-end tests edit it directly). */
     public static PlanetSession session() {
@@ -94,6 +113,13 @@ public final class PlanetClient {
 
     /** Client tick, after the gravity frame is up to date. */
     public static void tick(LocalPlayer player, BridgeClient bridge, GravityFrame frame, Seqlock.WorldState world) {
+        if (blocks == null) {
+            blocks = McBlocks.create(Minecraft.getInstance());
+            atlasLink = new AtlasLink(blocks.atlas, 1);
+            session.setBlocks(blocks);
+        }
+        for (byte[] piece; (piece = atlasLink.peek(world.sceneId(), bridge.hostPid())) != null
+                && bridge.send(Layout.MSG_ATLAS, piece); ) atlasLink.sent();
         if (!bridge.stage().equals(stage)) enterStage(bridge.stage());
         if (frame != null && world.hasGravity() && (spawnRadius > 0 || (autoSpawn && world.follow()))) {
             session.spawn(spawnRadius > 0 ? spawnRadius : autoRadius, world.queryPos(), frame.upGal());
@@ -105,16 +131,17 @@ public final class PlanetClient {
         Optional<Seqlock.InputState> in = bridge.input();
         int buttons = in.map(Seqlock.InputState::buttons).orElse(0);
         boolean p = in.map(i -> (i.keys()[SC_P / 8] >> (SC_P % 8) & 1) != 0).orElse(false);
+        boolean screen = Minecraft.getInstance().gui.screen() != null; // the clicks are the screen's
         if (session.active() && frame != null && player != null) {
-            if (p && !lastP) session.teleport();
-            boolean item = itemActive(player);
+            if (p && !lastP && !screen) session.teleport();
+            boolean item = itemActive(player) && !screen;
             Vector3d eye = frame.toGal(vec(player.getEyePosition()));
             Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
             // Minecraft's outline on the block the clicks would act on, only with something in hand.
             session.setOutline(item ? session.target(eye, look, player.getMainHandItem().is(Items.BUCKET)) : -1);
             if (item) {
                 // Minecraft gets the same clicks and swings the arm by itself.
-                if (pressed(buttons, MOUSE_LEFT)) session.breakBlock(eye, look);
+                if (pressed(buttons, MOUSE_LEFT)) session.breakBlock(eye, look, player.getAbilities().instabuild);
                 if (pressed(buttons, MOUSE_RIGHT)) use(player, eye, look, world.queryPos());
             }
         }
@@ -145,7 +172,7 @@ public final class PlanetClient {
         autoSpawn = false;
         if (next.isEmpty()) return;
         try {
-            Optional<PlanetStore.Saved> saved = store.read(next);
+            Optional<PlanetStore.Saved> saved = store.read(next, blocks);
             if (saved.isPresent()) {
                 session.load(saved.get());
                 GalaxyCraft.LOG.info("Voxel planet of {} loaded", next);
@@ -162,9 +189,10 @@ public final class PlanetClient {
         if (!session.unsaved() || stage == null || stage.isEmpty()) return;
         PlanetStore.Saved s = session.save();
         String where = stage;
+        McBlocks b = blocks;
         saver.execute(() -> {
             try {
-                store.write(where, s);
+                store.write(where, s, b);
             } catch (IOException e) {
                 GalaxyCraft.LOG.warn("Could not save the planet of {}: {}", where, e.toString());
             }
@@ -199,17 +227,21 @@ public final class PlanetClient {
         return (buttons & mask) != 0 && (lastButtons & mask) == 0;
     }
 
-    /** Right click: a bucket pours or fills (and turns into the other one, as in survival); a block is placed. */
+    /**
+     * Right click: a bucket pours or fills (and turns into the other one, outside creative mode, as
+     * in Minecraft); a block item is placed.
+     */
     private static void use(LocalPlayer player, Vector3d eye, Vector3d look, Vector3d feet) {
         ItemStack stack = player.getMainHandItem();
-        Material m = material(stack);
+        boolean creative = player.getAbilities().instabuild;
         if (stack.is(Items.BUCKET)) {
             Material got = session.scoop(eye, look);
-            if (got != null) setMainHand(player, got == Material.WATER ? Items.WATER_BUCKET : Items.LAVA_BUCKET);
-        } else if (m != null && m.fluid()) {
-            if (session.pour(eye, look, m)) setMainHand(player, Items.BUCKET);
+            if (got != null && !creative) setMainHand(player, got == Material.WATER ? Items.WATER_BUCKET : Items.LAVA_BUCKET);
+        } else if (stack.is(Items.WATER_BUCKET) || stack.is(Items.LAVA_BUCKET)) {
+            if (session.pour(eye, look, stack.is(Items.WATER_BUCKET) ? Material.WATER : Material.LAVA) && !creative)
+                setMainHand(player, Items.BUCKET);
         } else {
-            session.placeBlock(eye, look, m, feet);
+            session.placeBlock(eye, look, blocks.placer(stack), feet);
         }
     }
 
@@ -222,10 +254,6 @@ public final class PlanetClient {
             ServerPlayer sp = server.getPlayerList().getPlayer(id);
             if (sp != null) sp.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(item));
         });
-    }
-
-    private static Material material(ItemStack stack) {
-        return Material.ofItem(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
     }
 
     private static Vector3d vec(net.minecraft.world.phys.Vec3 v) {

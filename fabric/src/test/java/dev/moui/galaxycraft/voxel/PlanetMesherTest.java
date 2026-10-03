@@ -43,7 +43,7 @@ class PlanetMesherTest {
         assertClosed(p);
         List<PlanetMesher.Quad> q = all(p);
         assertEquals(6 * 24 * 24, q.size());
-        assertTrue(q.stream().allMatch(x -> x.side() == CubeSphere.TOP && x.tile() == Material.GRASS.top));
+        assertTrue(q.stream().allMatch(x -> x.side() == CubeSphere.TOP && x.tile() == 0)); // grass top
     }
 
     @Test void diggingAddsTheFacesAroundTheHole() {
@@ -55,7 +55,7 @@ class PlanetMesherTest {
         List<PlanetMesher.Quad> q = all(p);
         // Grass top gone, dirt top below; a corner cell has 4 side neighbors, all grass.
         assertEquals(before - 1 + 1 + 4, q.size());
-        assertEquals(4, q.stream().filter(x -> x.tile() == Material.GRASS.side).count());
+        assertEquals(4, q.stream().filter(x -> x.tile() == 1).count()); // grass sides
     }
 
     @Test void sunlitSideIsBrighterAndHolesAreShaded() {

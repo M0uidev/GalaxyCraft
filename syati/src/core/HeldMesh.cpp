@@ -7,14 +7,16 @@ namespace
 const u8 GX_QUADS = 0x80;
 // Shades of the faces facing +x, -x, +y, -y, +z, -z.
 const u8 SHADE[6] = {153, 153, 255, 128, 204, 204};
-const int ATLAS_TILES = HELD_ATLAS / HELD_SPRITE;  // a row of the block atlas
+// Texture coordinates in 128ths of the sprite: across a texel is 8, down 2 (it is 4 bands tall).
+const int S_TEXEL = (1 << HELD_TEX_FRAC) / HELD_SPRITE, T_TEXEL = S_TEXEL / HELD_BANDS;
+const int T_BAND = T_TEXEL * HELD_SPRITE;
 
 struct Writer
 {
   u8* p;
   u8* end;
   u32 quads;
-  // A quad of corners c (texels, y up) with texture coordinates t (64ths).
+  // A quad of corners c (texels, y up) with texture coordinates t (128ths).
   bool Quad(const f32 c[4][3], const int t[4][2], int face)
   {
     if (p + 4 * HELD_VERTEX_BYTES > end)
@@ -31,16 +33,9 @@ struct Writer
   }
 };
 
-// Where tile n of the atlas starts, in 64ths (texels of the 64-wide atlas).
-void TileOrigin(u32 n, int* s, int* t)
-{
-  *s = static_cast<int>(n % ATLAS_TILES) * HELD_SPRITE;
-  *t = static_cast<int>(n / ATLAS_TILES) * HELD_SPRITE;
-}
-
-// A cube's six faces. Each face shows its whole texture (the tile at s0, t0 spanning `span`
-// 64ths), upright on the sides.
-bool Cube(Writer& w, const u32 tiles[3], bool atlas)
+// A cube's six faces. Each face shows a whole band of the sprite, upright on the sides: BLOCK
+// bands 0 (top), 1 (sides) and 2 (bottom), CUBE band 0 everywhere.
+bool Cube(Writer& w, bool bands)
 {
   const f32 N = static_cast<f32>(HELD_SPRITE);
   // Corners as unit offsets: per face, bottom-left, bottom-right, top-right, top-left seen from
@@ -53,19 +48,15 @@ bool Cube(Writer& w, const u32 tiles[3], bool atlas)
       {{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}},  // +z
       {{1, 0, 0}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}},  // -z
   };
+  const int S = S_TEXEL * HELD_SPRITE;
   for (int f = 0; f < 6; f++)
   {
-    int s0 = 0, t0 = 0, span = 4 * HELD_SPRITE;
-    if (atlas)
-    {
-      TileOrigin(tiles[f == 2 ? 0 : f == 3 ? 2 : 1], &s0, &t0);
-      span = HELD_SPRITE;
-    }
+    const int t0 = bands ? T_BAND * (f == 2 ? 0 : f == 3 ? 2 : 1) : 0;
     f32 c[4][3];
     for (int v = 0; v < 4; v++)
       for (int k = 0; k < 3; k++)
         c[v][k] = C[f][v][k] * N;
-    const int t[4][2] = {{s0, t0 + span}, {s0 + span, t0 + span}, {s0 + span, t0}, {s0, t0}};
+    const int t[4][2] = {{0, t0 + T_BAND}, {S, t0 + T_BAND}, {S, t0}, {0, t0}};
     if (!w.Quad(c, t, f))
       return false;
   }
@@ -77,12 +68,12 @@ bool Cube(Writer& w, const u32 tiles[3], bool atlas)
 bool Flat(Writer& w, const u8* sprite)
 {
   const f32 N = static_cast<f32>(HELD_SPRITE), Z0 = 7.5f, Z1 = 8.5f;
-  const int W = 4 * HELD_SPRITE;  // the sprite in 64ths
+  const int W = S_TEXEL * HELD_SPRITE, H = T_BAND;  // band 0 in 128ths
   {
     const f32 front[4][3] = {{0, 0, Z1}, {N, 0, Z1}, {N, N, Z1}, {0, N, Z1}};
     const f32 back[4][3] = {{N, 0, Z0}, {0, 0, Z0}, {0, N, Z0}, {N, N, Z0}};
-    const int tf[4][2] = {{0, W}, {W, W}, {W, 0}, {0, 0}};
-    const int tb[4][2] = {{W, W}, {0, W}, {0, 0}, {W, 0}};
+    const int tf[4][2] = {{0, H}, {W, H}, {W, 0}, {0, 0}};
+    const int tb[4][2] = {{W, H}, {0, H}, {0, 0}, {W, 0}};
     if (!w.Quad(front, tf, 4) || !w.Quad(back, tb, 5))
       return false;
   }
@@ -91,10 +82,10 @@ bool Flat(Writer& w, const u8* sprite)
     {
       if (!SpriteSolid(sprite, x, y))
         continue;
-      // The texel's square in model space (row 0 is the top) and its center in 64ths.
+      // The texel's square in model space (row 0 is the top) and its center in 128ths.
       const f32 x0 = static_cast<f32>(x), x1 = x0 + 1.f;
       const f32 y1 = N - static_cast<f32>(y), y0 = y1 - 1.f;
-      const int s = 4 * x + 2, t = 4 * y + 2;
+      const int s = S_TEXEL * x + S_TEXEL / 2, t = T_TEXEL * y + T_TEXEL / 2;
       const int tc[4][2] = {{s, t}, {s, t}, {s, t}, {s, t}};
       if (x == HELD_SPRITE - 1 || !SpriteSolid(sprite, x + 1, y))
       {
@@ -134,12 +125,12 @@ bool SpriteSolid(const u8* sprite, int x, int y)
   return (t[0] & 0x80) != 0 || (t[0] & 0x70) != 0;
 }
 
-u32 HeldMesh(u32 kind, const u32 tiles[3], const u8* sprite, u32 fmt, u8* out, u32 cap)
+u32 HeldMesh(u32 kind, const u8* sprite, u32 fmt, u8* out, u32 cap)
 {
   if (cap < 32 || kind == HELD_NONE || kind > HELD_TOOL)
     return 0;
   Writer w = {out + 3, out + cap, 0};
-  const bool ok = kind == HELD_BLOCK ? Cube(w, tiles, true) : kind == HELD_CUBE ? Cube(w, tiles, false) : Flat(w, sprite);
+  const bool ok = kind == HELD_BLOCK ? Cube(w, true) : kind == HELD_CUBE ? Cube(w, false) : Flat(w, sprite);
   if (!ok || w.quads == 0)
     return 0;
   const u32 vertices = 4 * w.quads;

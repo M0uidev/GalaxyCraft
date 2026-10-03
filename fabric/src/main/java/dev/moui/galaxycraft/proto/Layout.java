@@ -4,7 +4,7 @@ package dev.moui.galaxycraft.proto;
 public final class Layout {
     public static final String SHM_PATH = "/dev/shm/galaxycraft_v1";
     public static final int MAGIC = 0x52435847; // "GXCR"
-    public static final int VERSION = 8;
+    public static final int VERSION = 9;
     public static final int MOD_VERSION = 1;
 
     public static final long OFF_HEADER = 0;
@@ -12,6 +12,9 @@ public final class Layout {
     public static final long OFF_PLAYER = 128;
     public static final long OFF_INPUT = 224;
     public static final long OFF_GAMECAM = 320;
+    /** GxcPointerState: the mouse over the host's window (0..1) while a Minecraft screen is open. */
+    public static final long OFF_POINTER = 448;
+    public static final int POINTER_INSIDE = 1;
     /** GxcTextState: characters typed in the host's window. */
     public static final long OFF_TEXT = 512;
     public static final int TEXT_RING = 64;
@@ -37,6 +40,8 @@ public final class Layout {
     public static final int MSG_HELLO = 101;
     /** Voxel planet, M -> S: GxcPlanet, GxcChunk + display list + KCL, teleport. */
     public static final int MSG_PLANET = 102, MSG_CHUNK = 103, MSG_PLANET_TP = 104, MSG_OUTLINE = 105, MSG_HELD = 106;
+    /** A piece of the block atlas (GxcAtlas + data), M -> S. */
+    public static final int MSG_ATLAS = 107, ATLAS_PIECE_MAX = 65536;
     public static final int PLANET_MAX_CHUNKS = 131072;
     public static final int MSG_PAD = 0xFFFF;
 

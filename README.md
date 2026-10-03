@@ -26,6 +26,12 @@ Three programs share one world:
 - **Voxel planets.** Cube-sphere planets with a radius of 10 to 256 blocks: bedrock, stone, dirt
   and grass. You break and place blocks as in Minecraft, with the block outline. Planets are
   saved per galaxy.
+- **Every Minecraft block.** Any block can go on a planet, drawn with its own model bent onto the
+  planet's cells: slabs, stairs, crossed flowers, torches, fences that join, doors, see-through
+  glass and leaves. Blocks face the way Minecraft's placement rules say, relative to the planet's
+  local up, and Mario collides with their real shapes. `/gamemode creative` and **E** open the
+  creative inventory; while a Minecraft screen is open the mouse is a normal pointer, so you can
+  click, drag and scroll in it.
 - **Fluids.** Water and lava buckets, ice that melts into water, and obsidian and cobblestone
   where water and lava meet. A classic cobblestone generator works.
 - **Collision that feels like Minecraft.** Mario shrinks to Steve's width on planets, so he
@@ -69,6 +75,7 @@ appears above Mario. **P** lands you on it.
 | Left click / right click | spin / B, or break / place with an item in hand |
 | F | spin, always |
 | 1–9 | hotbar: pickaxe, blocks, buckets |
+| E | inventory (`/gamemode creative` for the creative one); the mouse is its pointer |
 | T | chat |
 | F5 | perspective |
 | F3+B | Mario's collision |
@@ -96,7 +103,7 @@ shares `/dev/shm/galaxycraft_v1` with `gxplay.sh`, so don't run them while playi
 | `dolphin/` | Dolphin patch (`patches/`) and the host bridge (`galaxycraft/`) |
 | `syati/` | The SMG2 module: planets, gravity, collision, camera, Mario's radius patches |
 | `protocol/` | Shared-memory protocol |
-| `tools/` | Dev harness, routes through the game, Steve's model, the block atlas, test scripts |
+| `tools/` | Dev harness, routes through the game, Steve's model, test scripts |
 | `docs/` | Design notes and plans per phase (in Spanish) |
 
 ## License

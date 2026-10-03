@@ -17,17 +17,17 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
 /**
  * End to end against the real game, only with -Dgalaxycraft.held=true (tools/gxvoxel.sh held):
  * Mario lands on a voxel planet and, seen from behind (F5), Steve holds what the hotbar holds,
- * one slot after the other: a tool, blocks of the planet's atlas, a block the atlas lacks and flat
- * items. The module's debug block says what it has in hand; a screenshot of each shows it.
+ * one slot after the other: a tool, blocks by their model's faces, a flower (drawn flat, as
+ * Minecraft holds it) and flat items. The module's debug block says what it has in hand; a screenshot of each shows it.
  */
 public final class HeldItemTest implements FabricClientGameTest {
     private static final Pattern MBX = Pattern.compile("^at=([0-9a-f]+)", Pattern.MULTILINE);
     /** Debug.held_kind: right after the mailbox (4048 bytes), 102 words into the debug block. */
     private static final int DBG_HELD_KIND = 4048 + 4 * 102;
-    private static final String[] ITEMS = {"iron_pickaxe", "grass_block", "stone", "oak_planks", "water_bucket",
-            "apple", "diamond_sword"};
-    private static final int[] KINDS = {HeldItem.TOOL, HeldItem.BLOCK, HeldItem.BLOCK, HeldItem.CUBE, HeldItem.ITEM,
-            HeldItem.ITEM, HeldItem.TOOL};
+    private static final String[] ITEMS = {"iron_pickaxe", "grass_block", "stone", "oak_planks", "poppy",
+            "water_bucket", "apple", "diamond_sword"};
+    private static final int[] KINDS = {HeldItem.TOOL, HeldItem.BLOCK, HeldItem.BLOCK, HeldItem.BLOCK, HeldItem.ITEM,
+            HeldItem.ITEM, HeldItem.ITEM, HeldItem.TOOL};
 
     @Override
     public void runTest(ClientGameTestContext ctx) {

@@ -1,7 +1,8 @@
 // The voxel planet inside SMG2 (docs/superpowers/specs/2026-10-02-galaxycraft-voxel-planets-design.md).
 // One actor per scene owns an inbox the host fills with the planet, its chunks (display list +
-// KCL, built by the Minecraft mod) and teleports. Each chunk is copied to the heap, drawn with the
-// block atlas and given its own collision part; a point gravity pulls toward the center.
+// KCL, built by the Minecraft mod), the block atlas (in pieces) and teleports. Each chunk is copied
+// to the heap, drawn with the atlas and given its own collision part; a point gravity pulls toward
+// the center.
 #include "syati.h"
 
 #include "Game/Gravity/PointGravity.h"
@@ -10,7 +11,6 @@
 #include "Inbox.h"
 #include "VoxelPlanet.h"
 #include "ViewMath.h"
-#include "atlas.h"
 #include "galaxycraft_protocol.h"
 
 extern "C" void validateCollisionParts__2MRFP14CollisionParts(CollisionParts*);
@@ -144,9 +144,60 @@ struct HbWriter
 class VoxelPlanetActor;
 VoxelPlanetActor* gActor = 0;
 u8* gInbox = 0;
-// The atlas copied to 32-byte aligned memory: the GPU drops an address's low 5 bits, and Kamek
-// does not keep the array's own alignment.
-u8* gAtlas = 0;
+// The block atlas (GXC_MSG_ATLAS): GX RGB5A3 with its mipmaps, put together from the pieces of
+// one id in 32-byte aligned memory (the GPU drops an address's low 5 bits). Drawn with once all
+// its bytes are in; pieces are sent in order, so a count of the bytes is enough.
+struct Atlas
+{
+  u8* tex;
+  u32 id, width, height, levels, total, have;
+  bool ready;
+};
+Atlas gAtlas;
+
+u8* Alloc32(u32 size);
+
+void AtlasPiece(const gxc::InboxAtlas& a)
+{
+  if (!gAtlas.tex || a.id != gAtlas.id || a.width != gAtlas.width || a.height != gAtlas.height ||
+      a.levels != gAtlas.levels)
+  {
+    // A new atlas: the old one's memory is reused if it is big enough (one per scene, mostly).
+    if (gAtlas.tex && gAtlas.total < a.total)
+    {
+      Bury(gAtlas.tex);
+      gAtlas.tex = 0;
+    }
+    if (!gAtlas.tex)
+      gAtlas.tex = Alloc32(a.total);
+    gAtlas.id = a.id, gAtlas.width = a.width, gAtlas.height = a.height, gAtlas.levels = a.levels;
+    gAtlas.total = a.total;
+    gAtlas.have = 0;
+    gAtlas.ready = false;
+    if (!gAtlas.tex)
+    {
+      gVoxelStats.alloc_failed++;
+      return;
+    }
+  }
+  // The mod sends an atlas from offset 0 up, again in each scene: pieces left over from the last
+  // scene's sending do not count toward this one.
+  if (a.offset == 0)
+  {
+    gAtlas.have = 0;
+    gAtlas.ready = false;
+  }
+  memcpy(gAtlas.tex + a.offset, a.data, a.size);
+  gAtlas.have += a.size;
+  if (!gAtlas.ready && gAtlas.have >= gAtlas.total)
+  {
+    DCFlushRange(gAtlas.tex, gAtlas.total);
+    gAtlas.ready = true;
+  }
+  gVoxelStats.atlas_id = gAtlas.id;
+  gVoxelStats.atlas_bytes = gAtlas.have;
+  gVoxelStats.atlas_ready = gAtlas.ready ? 1 : 0;
+}
 
 // Chunk memory comes from the scene's MEM2 heap (the larger one), 32-byte aligned for the GPU.
 // A failed JKRHeap allocation can stop the game, so this leaves the game a reserve instead.
@@ -238,6 +289,10 @@ public:
     else if (r.type == gxc::InboxRecord::HELD)
     {
       HeldItemSet(r.held);
+    }
+    else if (r.type == gxc::InboxRecord::ATLAS)
+    {
+      AtlasPiece(r.atlas);
     }
     else if (r.type == gxc::InboxRecord::TELEPORT && mPlanet)
     {
@@ -405,7 +460,7 @@ public:
   {
     if (!mPlanet)
       return;
-    if (gDrawnCount == 0)
+    if (gDrawnCount == 0 || !gAtlas.ready)
     {
       if (gHitboxOn)
         DrawHitbox();
@@ -415,19 +470,21 @@ public:
     GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
     GXSetVtxDesc(GX_VA_CLR0, GX_DIRECT);
     GXSetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-    // Positions: s16 with 3 fraction bits from the chunk's center (PlanetMesher), color RGB565.
+    // Positions: s16 with 3 fraction bits from the chunk's center (PlanetMesher), color RGB565,
+    // texture coordinates u16 with 15 fraction bits (a texel of a 1024-wide atlas is 32).
     GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_POS, GX_POS_XYZ, GX_S16, 3);
     GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
-    GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_TEX0, GX_TEX_ST, GX_U16, 10);
+    GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_TEX0, GX_TEX_ST, GX_U16, 15);
     GXSetNumChans(1);
     GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_VTX, 0, GX_DF_NONE, GX_AF_NONE);
     GXSetNumTexGens(1);
     GXSetTexCoordGen2(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY, GX_FALSE, GX_PTIDENTITY);
     GXTexObj tex;
     // Crisp texels up close (nearest), mipmaps blended far away: no shimmering grass in the distance.
-    GXInitTexObj(&tex, gAtlas, GXC_ATLAS_SIZE, GXC_ATLAS_SIZE, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_TRUE);
-    GXInitTexObjLOD(&tex, GX_NEAR_MIP_LIN, GX_NEAR, 0.f, static_cast<f32>(GXC_ATLAS_LEVELS - 1), 0.f, GX_FALSE,
-                    GX_TRUE, GX_ANISO_1);
+    GXInitTexObj(&tex, gAtlas.tex, static_cast<u16>(gAtlas.width), static_cast<u16>(gAtlas.height), GX_TF_RGB5A3,
+                 GX_CLAMP, GX_CLAMP, gAtlas.levels > 1 ? GX_TRUE : GX_FALSE);
+    GXInitTexObjLOD(&tex, gAtlas.levels > 1 ? GX_NEAR_MIP_LIN : GX_NEAR, GX_NEAR, 0.f,
+                    static_cast<f32>(gAtlas.levels - 1), 0.f, GX_FALSE, GX_TRUE, GX_ANISO_1);
     GXLoadTexObj(&tex, GX_TEXMAP0);
     GXSetNumIndStages(0);
     GXSetTevDirect(GX_TEVSTAGE0);
@@ -436,12 +493,16 @@ public:
     GXSetTevSwapModeTable(GX_TEV_SWAP0, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE, GX_CH_ALPHA);
     GXSetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
     GXSetTevOp(GX_TEVSTAGE0, GX_MODULATE);
+    // Alpha is the texture's alone (the vertex color has none): Minecraft's cutout, the holes of
+    // leaves, glass and flowers are not drawn and do not hide what is behind them.
+    GXSetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+    GXSetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
     GXColor black = {0, 0, 0, 0};
     GXSetFog(GX_FOG_NONE, 0.f, 0.f, 0.f, 0.f, black);
     GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
-    GXSetZCompLoc(GX_TRUE);
+    GXSetZCompLoc(GX_FALSE);
     GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_NOOP);
-    GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+    GXSetAlphaCompare(GX_GEQUAL, 128, GX_AOP_AND, GX_ALWAYS, 0);
     GXSetCullMode(GX_CULL_FRONT);  // the mesh is counter-clockwise seen from outside
     GXSetColorUpdate(GX_TRUE);
     GXSetAlphaUpdate(GX_FALSE);
@@ -477,6 +538,8 @@ public:
       drawn++;
     }
     gVoxelStats.drawn_last = drawn;
+    GXSetZCompLoc(GX_TRUE);
+    GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
     if (mOutlineOn)
       DrawOutline(view);
     if (gHitboxOn)
@@ -642,9 +705,7 @@ void VoxelPlanetCreate()
   gHitboxOn = false;
   memset(gGraves, 0, sizeof(gGraves));
   gInbox = static_cast<u8*>(operator new(INBOX_BYTES));
-  gAtlas = Alloc32(sizeof(gVoxelAtlas));
-  memcpy(gAtlas, gVoxelAtlas, sizeof(gVoxelAtlas));
-  DCFlushRange(gAtlas, sizeof(gVoxelAtlas));
+  memset(&gAtlas, 0, sizeof(gAtlas));  // the mod sends it again to every scene
   memset(gInbox, 0, sizeof(GxcInboxHeader));
   gActor = new VoxelPlanetActor();
   gActor->initWithoutIter();
@@ -655,11 +716,6 @@ void VoxelPlanetHitbox(const MarioHitbox* box)
   gHitboxOn = box != 0;
   if (box)
     gHitbox = *box;
-}
-
-const uint8_t* VoxelPlanetAtlas()
-{
-  return gAtlas;
 }
 
 uint8_t* VoxelPlanetAlloc32(uint32_t size)

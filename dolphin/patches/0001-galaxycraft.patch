@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..45865ee
+index 0000000..c41109d
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,480 @@
+@@ -0,0 +1,489 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -447,19 +447,29 @@ index 0000000..45865ee
 +  return s_state && s_state->bridge->MinecraftMode() && ModAlive(*s_state->shm);
 +}
 +
-+bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32])
++// Minecraft turns with the mouse: playing in its view, no Minecraft screen open (s_mutex held).
++static bool CaptureRule(const State& state)
++{
++  return state.bridge->Following() && state.bridge->InGame() && !state.bridge->GalaxyView() &&
++         !state.bridge->ScreenOpen();
++}
++
++bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32], float pointer_x,
++               float pointer_y)
 +{
 +  std::lock_guard lock(s_mutex);
 +  const bool active = s_state && s_state->bridge->MinecraftMode() && ModAlive(*s_state->shm);
 +  if (!active)
 +    return false;
 +  s_xinput_updates++;
-+  // In SMG2's menus and its own camera (Galaxy view) the mouse is the Wii Remote pointer:
-+  // Minecraft does not turn with it.
-+  const bool capture = s_state->bridge->Following() && s_state->bridge->InGame() &&
-+                       !s_state->bridge->GalaxyView();
++  // In SMG2's menus and its own camera (Galaxy view) the mouse is the Wii Remote pointer, and in
++  // a Minecraft screen (the inventory) Minecraft's own pointer: Minecraft does not turn with it.
++  const bool capture = CaptureRule(*s_state);
 +  if (capture && (dx != 0 || dy != 0))
 +    s_state->input->MouseDelta(dx, dy);
++  const bool screen = s_state->bridge->ScreenOpen();
++  s_state->input->Pointer(pointer_x, pointer_y,
++                          screen && pointer_x >= 0 && pointer_x <= 1 && pointer_y >= 0 && pointer_y <= 1);
 +  if (dz != 0)
 +    s_state->input->Wheel(-dz / 8.0);  // notches, up positive (as Minecraft's scroll)
 +  u8 keys[64];
@@ -496,8 +506,7 @@ index 0000000..45865ee
 +bool MouseCaptured()
 +{
 +  std::lock_guard lock(s_mutex);
-+  return s_state && s_state->bridge->Following() && s_state->bridge->InGame() &&
-+         !s_state->bridge->GalaxyView() && ModAlive(*s_state->shm);
++  return s_state && CaptureRule(*s_state) && ModAlive(*s_state->shm);
 +}
 +
 +bool BlocksStopHotkey()
@@ -535,10 +544,10 @@ index 0000000..45865ee
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..a94a357
+index 0000000..4c0180e
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,54 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -565,10 +574,13 @@ index 0000000..a94a357
 +bool InputActive();
 +
 +// XInput2 backend, after every input update (any thread): raw mouse motion since the previous
-+// update, X button bits, wheel motion (8 per notch, down positive) and the X keymap. Feeds them to
-+// Minecraft and Mario mode's Wii Remote, and returns true while the pointer is to be captured
-+// and recentred (playing, not in SMG2's menus, where the mouse is the Wii Remote pointer).
-+bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32]);
++// update, X button bits, wheel motion (8 per notch, down positive), the X keymap and where the
++// pointer is over the render window (0..1). Feeds them to Minecraft and Mario mode's Wii Remote,
++// and returns true while the pointer is to be captured and recentred (playing, not in SMG2's
++// menus, where the mouse is the Wii Remote pointer, nor in a Minecraft screen, where it is
++// Minecraft's pointer).
++bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32], float pointer_x,
++               float pointer_y);
 +
 +// XInput2 backend: a key typed this X11 keysym (layout applied); Minecraft gets its character.
 +void OnText(u32 keysym);
@@ -855,7 +867,7 @@ index d828bf3..89bda3b 100644
    void dragEnterEvent(QDragEnterEvent* event) override;
    void dropEvent(QDropEvent* event) override;
 diff --git a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
-index 309ed70..1add7f4 100644
+index 309ed70..1065124 100644
 --- a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
 +++ b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
 @@ -15,6 +15,7 @@
@@ -875,7 +887,17 @@ index 309ed70..1add7f4 100644
    XCloseDisplay(m_display);
  }
  
-@@ -342,6 +345,23 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+@@ -310,6 +313,9 @@ void KeyboardMouse::UpdateCursor(bool should_center_mouse)
+   // the mouse position as a range from -1 to 1
+   m_state.cursor.x = (win_x / win_width * 2 - 1) * window_scale.x;
+   m_state.cursor.y = (win_y / win_height * 2 - 1) * window_scale.y;
++  // GalaxyCraft: the pointer over the render window, 0..1, for Minecraft's screens.
++  m_galaxycraft_pointer_x = static_cast<float>(win_x / win_width);
++  m_galaxycraft_pointer_y = static_cast<float>(win_y / win_height);
+ }
+ 
+ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+@@ -342,6 +348,23 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
        update_mouse = true;
        break;
      case XI_RawKeyPress:
@@ -899,14 +921,15 @@ index 309ed70..1add7f4 100644
      case XI_RawKeyRelease:
        update_keyboard = true;
        break;
-@@ -414,9 +434,48 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+@@ -414,9 +437,49 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
    if (update_keyboard)
      XQueryKeymap(m_display, m_state.keyboard.data());
  
 +  // GalaxyCraft: Minecraft reads keyboard and mouse from here rather than from Qt, which may
 +  // never see the render window as focused (e.g. XWayland under Hyprland).
 +  CaptureForGalaxyCraft(GalaxyCraft::OnXInput2(delta_x, delta_y, delta_z, m_state.buttons,
-+                                               m_state.keyboard.data()));
++                                               m_state.keyboard.data(), m_galaxycraft_pointer_x,
++                                               m_galaxycraft_pointer_y));
 +
    return Core::DeviceRemoval::Keep;
  }
@@ -949,7 +972,7 @@ index 309ed70..1add7f4 100644
  {
    // This is the name string we got from the X server for this master
 diff --git a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
-index 4144805..d5dad50 100644
+index 4144805..e283734 100644
 --- a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
 +++ b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
 @@ -117,6 +117,7 @@ private:
@@ -960,12 +983,13 @@ index 4144805..d5dad50 100644
  
  public:
    Core::DeviceRemoval UpdateInput() override;
-@@ -133,6 +134,9 @@ private:
+@@ -133,6 +134,10 @@ private:
    Window m_window;
    Display* m_display;
    State m_state{};
 +  // GalaxyCraft: Minecraft owns keyboard and mouse; the pointer is hidden and kept centred.
 +  bool m_galaxycraft_capture = false;
++  float m_galaxycraft_pointer_x = -1, m_galaxycraft_pointer_y = -1;
 +  ::Cursor m_blank_cursor = 0;
    const int xi_opcode;
    const int pointer_deviceid;

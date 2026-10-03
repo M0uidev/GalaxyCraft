@@ -307,23 +307,63 @@ static void TestInboxOutline()
 static void TestInboxHeld()
 {
   std::vector<u8> b;
-  Put32(b, 106u << 16), Put32(b, 528), Put32(b, 1), Put32(b, 0), Put32(b, 1), Put32(b, 2);
-  for (int k = 0; k < 512; k++)
+  Put32(b, 106u << 16), Put32(b, 2064), Put32(b, 1), Put32(b, 0), Put32(b, 0), Put32(b, 0);
+  for (int k = 0; k < 2048; k++)
     b.push_back(static_cast<u8>(k));
-  Put32(b, 106u << 16), Put32(b, 528), Put32(b, 1), Put32(b, 16), Put32(b, 1), Put32(b, 2);  // no tile 16
-  b.resize(b.size() + 512);
+  Put32(b, 106u << 16), Put32(b, 2064), Put32(b, 5), Put32(b, 0), Put32(b, 0), Put32(b, 0);  // no kind 5
+  b.resize(b.size() + 2048);
   InboxRecord r;
   u32 off = 0;
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::HELD);
-  CHECK(r.held.kind == HELD_BLOCK && r.held.tiles[2] == 2 && r.held.sprite == b.data() + 24 && r.held.sprite[511] == 255);
+  CHECK(r.held.kind == HELD_BLOCK && r.held.sprite == b.data() + 24 && r.held.sprite[2047] == 255);
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
 }
 
-// A 16x16 RGB5A3 sprite with the texels for which solid(x, y) holds opaque, the rest holes.
+// A GxcAtlas record: header words, then size bytes of data.
+static void PutAtlas(std::vector<u8>& b, u32 id, u32 w, u32 h, u32 levels, u32 total, u32 offset, u32 size)
+{
+  Put32(b, 107u << 16), Put32(b, 24 + size);
+  Put32(b, id), Put32(b, w), Put32(b, h), Put32(b, levels), Put32(b, total), Put32(b, offset);
+  for (u32 k = 0; k < size; k++)
+    b.push_back(static_cast<u8>(k));
+  while (b.size() % 4)
+    b.push_back(0);
+}
+
+static void TestInboxAtlas()
+{
+  CHECK(AtlasBytes(64, 64, 4) == (64 * 64 + 32 * 32 + 16 * 16 + 8 * 8) * 2);
+  CHECK(AtlasBytes(1024, 512, 1) == 1024 * 512 * 2);
+  const u32 total = AtlasBytes(256, 128, 4);
+  std::vector<u8> b;
+  PutAtlas(b, 3, 256, 128, 4, total, 100, 10);
+  PutAtlas(b, 3, 256, 128, 4, total, total - 10, 10);  // the last piece
+  InboxRecord r;
+  u32 off = 0;
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::ATLAS);
+  CHECK(r.atlas.id == 3 && r.atlas.width == 256 && r.atlas.height == 128 && r.atlas.levels == 4);
+  CHECK(r.atlas.offset == 100 && r.atlas.size == 10 && r.atlas.data == b.data() + 8 + 24 && r.atlas.data[9] == 9);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.atlas.offset == total - 10);
+  CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
+  // Rejected: past its end, a wrong total, not a power of two, too big, mipmaps under 8 texels.
+  const u32 bad[][6] = {{256, 128, 4, total, total - 5, 10}, {256, 128, 4, total + 2, 0, 10},
+                        {200, 128, 1, 200 * 128 * 2, 0, 10}, {2048, 8, 1, 2048 * 8 * 2, 0, 10},
+                        {64, 16, 3, AtlasBytes(64, 16, 3), 0, 10}};
+  for (const auto& v : bad)
+  {
+    std::vector<u8> c;
+    PutAtlas(c, 1, v[0], v[1], v[2], v[3], v[4], v[5]);
+    off = 0;
+    CHECK(!NextInboxRecord(c.data(), c.size(), &off, 512, &r));
+  }
+}
+
+// A 16x64 RGB5A3 sprite whose band 0 has the texels for which solid(x, y) holds opaque, the
+// rest holes.
 template <typename F>
 static std::vector<u8> Sprite(F solid)
 {
-  std::vector<u8> s(512, 0);
+  std::vector<u8> s(HELD_SPRITE_BYTES, 0);
   for (int y = 0; y < 16; y++)
     for (int x = 0; x < 16; x++)
       if (solid(x, y))
@@ -331,7 +371,7 @@ static std::vector<u8> Sprite(F solid)
   return s;
 }
 
-// The vertices of a held mesh: position (texels), texture coordinate (64ths).
+// The vertices of a held mesh: position (texels), texture coordinate (128ths).
 struct HeldVertex
 {
   float x, y, z;
@@ -355,8 +395,7 @@ static std::vector<HeldVertex> HeldVertices(const std::vector<u8>& dl, u32 size)
 static void TestHeldBlock()
 {
   std::vector<u8> dl(HELD_DL_MAX);
-  const u32 tiles[3] = {0, 1, 2};  // grass: top, side, bottom
-  const u32 size = HeldMesh(HELD_BLOCK, tiles, 0, 4, dl.data(), dl.size());
+  const u32 size = HeldMesh(HELD_BLOCK, 0, 4, dl.data(), dl.size());
   CHECK(size % 32 == 0 && size >= 3 + 24 * HELD_VERTEX_BYTES && dl[0] == (0x80 | 4));
   const std::vector<HeldVertex> v = HeldVertices(dl, size);
   CHECK(v.size() == 24);
@@ -370,16 +409,22 @@ static void TestHeldBlock()
       up = up && v[q + k].y == 16;
       down = down && v[q + k].y == 0;
     }
-    // The top shows tile 0 (s, t in 0..16), the bottom tile 2 (s in 32..48), sides tile 1.
-    const int s = v[q].s < v[q + 2].s ? v[q].s : v[q + 2].s;
+    // Each face spans the sprite's width; the top shows band 0 (t 0..32), the sides band 1, the
+    // bottom band 2.
+    const int t = v[q].t < v[q + 2].t ? v[q].t : v[q + 2].t;
+    const int s0 = v[q].s < v[q + 2].s ? v[q].s : v[q + 2].s, s1 = v[q].s < v[q + 2].s ? v[q + 2].s : v[q].s;
     top = top || up;
     bottom = bottom || down;
-    CHECK(s == (up ? 0 : down ? 32 : 16));
+    CHECK(s0 == 0 && s1 == 128 && t == (up ? 0 : down ? 64 : 32));
     CHECK(v[q].shade == (up ? 255 : down ? 128 : v[q].shade));
-    if (!up && !down)  // sides upright: the bottom edge at the bottom of the tile
-      CHECK(v[q].y == 0 && v[q].t == 16 && v[q + 2].y == 16 && v[q + 2].t == 0);
+    if (!up && !down)  // sides upright: the bottom edge at the bottom of the band
+      CHECK(v[q].y == 0 && v[q].t == 64 && v[q + 2].y == 16 && v[q + 2].t == 32);
   }
   CHECK(top && bottom);
+  // CUBE: band 0 on every face.
+  const u32 cube = HeldMesh(HELD_CUBE, 0, 4, dl.data(), dl.size());
+  for (const HeldVertex& c : HeldVertices(dl, cube))
+    CHECK(c.t == 0 || c.t == 32);
 }
 
 static void TestHeldFlatItem()
@@ -388,29 +433,29 @@ static void TestHeldFlatItem()
   // One texel at (3, 0): both faces and its four sides.
   std::vector<u8> one = Sprite([](int x, int y) { return x == 3 && y == 0; });
   CHECK(SpriteSolid(one.data(), 3, 0) && !SpriteSolid(one.data(), 4, 0) && !SpriteSolid(one.data(), 3, 1));
-  u32 size = HeldMesh(HELD_ITEM, 0, one.data(), 4, dl.data(), dl.size());
+  u32 size = HeldMesh(HELD_ITEM, one.data(), 4, dl.data(), dl.size());
   std::vector<HeldVertex> v = HeldVertices(dl, size);
   CHECK(v.size() == 6 * 4);
   for (size_t i = 8; i < v.size(); i++)  // the sides: inside the texel's column, its color
   {
     CHECK(v[i].x >= 3 && v[i].x <= 4 && v[i].y >= 15 && v[i].y <= 16 && v[i].z >= 7.5f && v[i].z <= 8.5f);
-    CHECK(v[i].s == 14 && v[i].t == 2);
+    CHECK(v[i].s == 28 && v[i].t == 1);
   }
-  // The front face maps the whole sprite, row 0 at the top.
-  CHECK(v[0].z == 8.5f && v[0].y == 0 && v[0].t == 64 && v[3].y == 16 && v[3].t == 0);
+  // The front face maps the whole of band 0, row 0 at the top.
+  CHECK(v[0].z == 8.5f && v[0].y == 0 && v[0].t == 32 && v[3].y == 16 && v[3].t == 0 && v[1].s == 128);
   // A full sprite: sides only around the edge.
   std::vector<u8> full = Sprite([](int, int) { return true; });
-  size = HeldMesh(HELD_TOOL, 0, full.data(), 4, dl.data(), dl.size());
+  size = HeldMesh(HELD_TOOL, full.data(), 4, dl.data(), dl.size());
   CHECK(HeldVertices(dl, size).size() == (2 + 4 * 16) * 4);
   // A checkerboard is the worst case and still fits.
   std::vector<u8> checker = Sprite([](int x, int y) { return (x + y) % 2 == 0; });
-  size = HeldMesh(HELD_ITEM, 0, checker.data(), 4, dl.data(), dl.size());
+  size = HeldMesh(HELD_ITEM, checker.data(), 4, dl.data(), dl.size());
   CHECK(size != 0 && HeldVertices(dl, size).size() == (2 + 4 * 128) * 4);
   // Nothing held, or nothing in the sprite.
   std::vector<u8> empty = Sprite([](int, int) { return false; });
-  CHECK(HeldMesh(HELD_NONE, 0, 0, 4, dl.data(), dl.size()) == 0);
-  CHECK(HeldMesh(HELD_ITEM, 0, empty.data(), 4, dl.data(), dl.size()) == 96);  // the two faces, cut out
-  CHECK(HeldMesh(HELD_ITEM, 0, checker.data(), 4, dl.data(), 1000) == 0);       // no room
+  CHECK(HeldMesh(HELD_NONE, 0, 4, dl.data(), dl.size()) == 0);
+  CHECK(HeldMesh(HELD_ITEM, empty.data(), 4, dl.data(), dl.size()) == 96);  // the two faces, cut out
+  CHECK(HeldMesh(HELD_ITEM, checker.data(), 4, dl.data(), 1000) == 0);       // no room
 }
 
 static void TestMul34()
@@ -446,6 +491,7 @@ int main()
   TestCodePatch();
   TestInboxOutline();
   TestInboxHeld();
+  TestInboxAtlas();
   TestMul34();
   TestHeldBlock();
   TestHeldFlatItem();

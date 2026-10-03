@@ -4,32 +4,35 @@ import java.util.BitSet;
 import org.joml.Vector3d;
 
 /**
- * The cells of one planet and which of its chunks need resending. Chunks are 8×8×8 cells within
- * one face of the cube; their index is the slot the game keeps them in.
+ * The cells of one planet and which of its chunks need resending. A cell holds a block id of
+ * {@link Blocks} (Minecraft's block state). Chunks are 8×8×8 cells within one face of the cube;
+ * their index is the slot the game keeps them in.
  */
 public final class VoxelPlanet {
     public static final int CHUNK = 8;
     public static final int MIN_RADIUS = 10, MAX_RADIUS = 256;
 
     public final CubeSphere grid;
+    public final Blocks blocks;
     /** Blocks of solid ground under the grass top: the crust, with bedrock at its bottom. */
     public final int depth;
-    private final byte[] cells;
+    private final char[] cells;
     private final int[] versions;
     private final int[] filled; // cells per chunk that are not air
-    private final int[] solid;  // solid (block) cells per chunk
+    private final int[] solid;  // opaque full cubes per chunk (hiding everything around them)
     private final Fluids fluids;
     private final BitSet dirty = new BitSet();
     private final int chunksPerEdge, chunkLayers;
     private float[] spheres; // per chunk: center x y z (blocks), radius; computed on first use
 
     public VoxelPlanet(CubeSphere grid, int depth) {
-        this(grid, depth, new byte[grid.cellCount()]);
+        this(grid, depth, new char[grid.cellCount()], CubeBlocks.INSTANCE);
     }
 
-    private VoxelPlanet(CubeSphere grid, int depth, byte[] cells) {
+    private VoxelPlanet(CubeSphere grid, int depth, char[] cells, Blocks blocks) {
         if (cells.length != grid.cellCount()) throw new IllegalArgumentException("cells do not fit the grid");
         this.grid = grid;
+        this.blocks = blocks;
         this.depth = depth;
         this.cells = cells;
         this.chunksPerEdge = (grid.n + CHUNK - 1) / CHUNK;
@@ -39,17 +42,22 @@ public final class VoxelPlanet {
         this.solid = new int[chunkCount()];
         this.fluids = new Fluids(this);
         for (int c = 0; c < cells.length; c++) {
-            if (cells[c] == 0) continue;
+            if (cells[c] == Blocks.AIR) continue;
             filled[chunkOf(c)]++;
-            if (get(c).solid()) solid[chunkOf(c)]++;
-            else fluids.schedule(c); // flowing again where it was saved
+            BlockInfo b = info(c);
+            if (b.occludes()) solid[chunkOf(c)]++;
+            if (b.isFluid()) fluids.schedule(c); // flowing again where it was saved
         }
         dirty.set(0, chunkCount());
     }
 
     /** The hito-1 planet: bedrock at the bottom, stone, dirt, grass at radius 16, air up to 24. */
     public static VoxelPlanet standard() {
-        return generate(new CubeSphere(24, 7, 17), 9);
+        return standard(CubeBlocks.INSTANCE);
+    }
+
+    public static VoxelPlanet standard(Blocks blocks) {
+        return generate(new CubeSphere(24, 7, 17), 9, blocks);
     }
 
     /**
@@ -60,13 +68,17 @@ public final class VoxelPlanet {
      * still fits.
      */
     public static VoxelPlanet ofRadius(int radius) {
+        return ofRadius(radius, CubeBlocks.INSTANCE);
+    }
+
+    public static VoxelPlanet ofRadius(int radius, Blocks blocks) {
         if (radius < MIN_RADIUS || radius > MAX_RADIUS)
             throw new IllegalArgumentException("radius " + radius + " not in " + MIN_RADIUS + ".." + MAX_RADIUS);
         // -Dgalaxycraft.crustDepth: deeper crusts, as planets saved before had (tools/gxfit.sh).
         int depth = Math.min(radius - 2, Integer.getInteger("galaxycraft.crustDepth", crustDepth(radius)));
         int air = Math.max(8, Math.min(32, radius / 4));
         int n = (int) Math.round(Math.PI * radius / 2);
-        return generate(new CubeSphere(n, radius - depth, depth + air), depth);
+        return generate(new CubeSphere(n, radius - depth, depth + air), depth, blocks);
     }
 
     /** How deep a planet of that radius can be dug, bedrock included (blocks). */
@@ -82,9 +94,10 @@ public final class VoxelPlanet {
     public int sealBelowCrust() {
         int keep = crustDepth((int) Math.round(surface()));
         int changed = 0;
+        int bedrock = blocks.id(Material.BEDROCK);
         for (int c = 0; c < cells.length; c++) {
             int k = grid.k(c);
-            if (k < depth - keep && get(c) != Material.BEDROCK) {
+            if (k < depth - keep && get(c) != bedrock) {
                 set(c, Material.BEDROCK);
                 changed++;
             }
@@ -92,25 +105,25 @@ public final class VoxelPlanet {
         return changed;
     }
 
-    private static VoxelPlanet generate(CubeSphere grid, int depth) {
-        byte[] cells = new byte[grid.cellCount()];
-        byte[] column = new byte[grid.layers];
+    private static VoxelPlanet generate(CubeSphere grid, int depth, Blocks blocks) {
+        char[] cells = new char[grid.cellCount()];
+        char[] column = new char[grid.layers];
         for (int k = 0; k < grid.layers; k++) {
             Material m = k == 0 ? Material.BEDROCK : k == depth - 1 ? Material.GRASS
                     : k >= depth - 3 && k < depth ? Material.DIRT : k < depth ? Material.STONE : Material.AIR;
-            column[k] = (byte) m.ordinal();
+            column[k] = (char) blocks.id(m);
         }
         for (int c = 0; c < cells.length; c += grid.layers) System.arraycopy(column, 0, cells, c, grid.layers);
-        return new VoxelPlanet(grid, depth, cells);
+        return new VoxelPlanet(grid, depth, cells, blocks);
     }
 
-    /** A planet as saved by {@link #cells()}. */
-    public static VoxelPlanet of(CubeSphere grid, int depth, byte[] cells) {
-        return new VoxelPlanet(grid, depth, cells);
+    /** A planet as saved by {@link #cells()}, its ids those of blocks. */
+    public static VoxelPlanet of(CubeSphere grid, int depth, char[] cells, Blocks blocks) {
+        return new VoxelPlanet(grid, depth, cells, blocks);
     }
 
-    /** The cells as stored (Material ordinal, fluid level in the high nibble): what gets saved. */
-    public byte[] cells() {
+    /** The cells as stored (block ids): what gets saved. */
+    public char[] cells() {
         return cells;
     }
 
@@ -124,15 +137,38 @@ public final class VoxelPlanet {
         return grid.core;
     }
 
-    private static final Material[] MATERIALS = Material.values();
+    /** The block id of a cell (air past the layers). */
+    public int get(int cell) {
+        return cell < 0 ? Blocks.AIR : cells[cell];
+    }
 
-    public Material get(int cell) {
-        return cell < 0 ? Material.AIR : MATERIALS[cells[cell] & 0x0F];
+    public BlockInfo info(int cell) {
+        return blocks.info(get(cell));
+    }
+
+    /** Which of the planet's own blocks the cell is (water and lava at any level), or null. */
+    public Material material(int cell) {
+        return blocks.material(get(cell));
+    }
+
+    /** {@link Blocks#WATER}, {@link Blocks#LAVA} or {@link Blocks#NO_FLUID}. */
+    public int fluid(int cell) {
+        return info(cell).fluid();
     }
 
     /** A fluid's level (see {@link Fluids}); 0 for anything else. */
     public int level(int cell) {
-        return cell < 0 ? 0 : cells[cell] >> 4 & 0x0F;
+        return info(cell).level();
+    }
+
+    /** An opaque full cube: hides the faces next to it, darkens corners. */
+    public boolean occludes(int cell) {
+        return info(cell).occludes();
+    }
+
+    /** Collides as a whole cell (the planet's cubes, glass...). */
+    public boolean fullCollision(int cell) {
+        return info(cell).fullCollision();
     }
 
     public Fluids fluids() {
@@ -143,23 +179,48 @@ public final class VoxelPlanet {
         set(cell, m, 0);
     }
 
-    /**
-     * Sets a cell and marks its chunk and its neighbors' chunks (their faces change) dirty; the
-     * fluids around it flow on their next tick.
-     */
+    /** One of the planet's own blocks; a fluid at this level. */
     public void set(int cell, Material m, int level) {
-        byte b = (byte) (m.ordinal() | level << 4);
-        if (cells[cell] == b) return;
-        Material old = get(cell);
+        set(cell, m.fluid() ? blocks.fluidState(m.fluidKind(), level) : blocks.id(m));
+    }
+
+    /**
+     * Sets a cell to a block id and marks its chunk and its neighbors' chunks (their faces change)
+     * dirty; the fluids around it flow on their next tick.
+     */
+    public void set(int cell, int id) {
+        char b = (char) id;
+        char was = cells[cell];
+        if (was == b) return;
         cells[cell] = b;
-        filled[chunkOf(cell)] += (m != Material.AIR ? 1 : 0) - (old != Material.AIR ? 1 : 0);
-        solid[chunkOf(cell)] += (m.solid() ? 1 : 0) - (old.solid() ? 1 : 0);
-        dirty.set(chunkOf(cell));
+        int chunk = chunkOf(cell);
+        filled[chunk] += (b != Blocks.AIR ? 1 : 0) - (was != Blocks.AIR ? 1 : 0);
+        solid[chunk] += (blocks.info(b).occludes() ? 1 : 0) - (blocks.info(was).occludes() ? 1 : 0);
+        dirty.set(chunk);
         for (int s = 0; s < 6; s++) {
             int nb = grid.neighbor(cell, s);
             if (nb >= 0) dirty.set(chunkOf(nb));
         }
         fluids.touched(cell);
+    }
+
+    /**
+     * After the player changed these cells: their neighbors take the shape they should have now
+     * (Blocks.updateShape), and so on outward from each that changed, a bounded number of times
+     * (a broken door's lower half takes its upper one along).
+     */
+    public void settle(int... changed) {
+        java.util.ArrayDeque<Integer> due = new java.util.ArrayDeque<>();
+        for (int c : changed)
+            for (int s = 0; s < 6; s++) due.add(grid.neighbor(c, s));
+        for (int n = 0; n < 256 && !due.isEmpty(); n++) {
+            int c = due.poll();
+            if (c < 0 || get(c) == Blocks.AIR) continue;
+            int next = blocks.updateShape(this, c);
+            if (next == get(c)) continue;
+            set(c, next);
+            for (int s = 0; s < 6; s++) due.add(grid.neighbor(c, s));
+        }
     }
 
     public int chunkCount() {
@@ -199,7 +260,7 @@ public final class VoxelPlanet {
             if (!edge) continue;
             for (int s = 0; s < 6; s++) {
                 int nb = grid.neighbor(c, s);
-                if (nb >= 0 && chunkOf(nb) != chunk && !get(nb).solid()) return true;
+                if (nb >= 0 && chunkOf(nb) != chunk && !occludes(nb)) return true;
                 if (nb < 0 && s == CubeSphere.TOP) return true;
             }
         }

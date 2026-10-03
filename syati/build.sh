@@ -28,8 +28,6 @@ FLAGS="-c -Cpp_exceptions off -nodefaults -proc gekko -fp hard -lang=c++ -O4,s -
 mkdir -p build/obj build/CustomCode
 export WINEDEBUG=-all
 
-# Block atlas for the voxel planet, from the local Minecraft jar.
-python3 ../tools/voxel_atlas.py build/gen/atlas.h
 # Steve: Mario's model (and his gloves) replaced, built from the disc into build/ObjectData, and
 # where what he holds goes on his skeleton (build/gen/held.h).
 GXC_GAME="$GAME" python3 ../tools/steve/build.py --out build

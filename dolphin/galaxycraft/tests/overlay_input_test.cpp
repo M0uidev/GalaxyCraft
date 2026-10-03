@@ -106,6 +106,22 @@ TEST(input_writer_sets_keys_and_accumulates_mouse)
   CHECK(s.seq != 0 && s.seq % 2 == 0);
 }
 
+TEST(input_writer_publishes_the_pointer_when_it_changes)
+{
+  ShmFixture f;
+  InputWriter in(*f.shm);
+  in.Pointer(0.25f, 0.75f, true);
+  GxcPointerState p;
+  std::memcpy(&p, f.shm->Data() + GXC_OFF_POINTER, sizeof(p));
+  CHECK(p.x == 0.25f && p.y == 0.75f && p.flags == GXC_POINTER_INSIDE && p.seq == 2);
+  in.Pointer(0.25f, 0.75f, true);  // the same: not published again
+  std::memcpy(&p, f.shm->Data() + GXC_OFF_POINTER, sizeof(p));
+  CHECK(p.seq == 2);
+  in.Pointer(1.5f, 0.75f, false);
+  std::memcpy(&p, f.shm->Data() + GXC_OFF_POINTER, sizeof(p));
+  CHECK(p.flags == 0 && p.seq == 4);
+}
+
 TEST(input_writer_ignores_out_of_range_keys)
 {
   ShmFixture f;

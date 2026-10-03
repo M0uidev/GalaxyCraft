@@ -103,6 +103,48 @@ public final class VoxelPlanetTest implements FabricClientGameTest {
             ctx.waitTicks(30);
             gxdev("ctl", "shot voxel-4-placed");
 
+            // Minecraft's blocks, by its own placement rules, in a row on the grass the other way.
+            String[] items = {"oak_stairs", "torch", "poppy", "glass", "oak_fence", "oak_fence", "oak_door", "oak_slab"};
+            String[] names = ctx.computeOnClient(mc -> {
+                Vector3d feet = GalaxyCraftClient.galaxyPos().orElseThrow();
+                Vector3d d0 = new Vector3d(feet).sub(s.center()).normalize();
+                Vector3d row = new Vector3d(d0).cross(tangent(d0)).normalize();
+                var p = s.planet();
+                int[] cells = new int[items.length];
+                boolean[] ok = new boolean[items.length];
+                for (int k = 0; k < items.length; k++) {
+                    var item = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                            .getValue(net.minecraft.resources.Identifier.withDefaultNamespace(items[k]));
+                    // Along the surface, a block apart from 3 blocks out of the hole; looking down
+                    // and a little ahead, as a player would.
+                    double a = (k + 3) / p.surface();
+                    Vector3d dir = new Vector3d(d0).mul(Math.cos(a)).add(new Vector3d(row).mul(Math.sin(a)));
+                    // Aimed at the middle of that grass cell's top.
+                    Vector3d up = p.grid.center(p.grid.cellAt(new Vector3d(dir).mul(p.surface() - 0.5))).normalize();
+                    Vector3d ahead = new Vector3d(row).sub(new Vector3d(up).mul(row.dot(up))).normalize();
+                    Vector3d at = new Vector3d(up).mul(p.surface());
+                    Vector3d eye = new Vector3d(up).mul(2.5).add(at).sub(new Vector3d(ahead).mul(0.625)).mul(UNITS).add(s.center());
+                    Vector3d look = new Vector3d(up).negate().add(new Vector3d(ahead).mul(0.25)).normalize();
+                    ok[k] = PlanetClient.placeItem(eye, look, new net.minecraft.world.item.ItemStack(item), feet);
+                    cells[k] = p.grid.cellAt(new Vector3d(up).mul(p.surface() + 0.5));
+                }
+                // Read back once all are down: blocks placed later change some (fences join).
+                String[] out = new String[items.length + 1];
+                for (int k = 0; k < items.length; k++) {
+                    out[k] = (ok[k] ? "" : "NOT PLACED ") + PlanetClient.blockName(cells[k]);
+                    if (items[k].equals("oak_door"))
+                        out[items.length] = PlanetClient.blockName(p.grid.neighbor(cells[k], dev.moui.galaxycraft.voxel.CubeSphere.TOP));
+                }
+                return out;
+            });
+            for (String n : names) log("placed " + n);
+            for (int k = 0; k < items.length; k++)
+                check(names[k].startsWith("minecraft:" + items[k]), items[k] + " is on the planet: " + names[k]);
+            check(names[4].contains("=true"), "the fences join: " + names[4]);
+            check(names[items.length].contains("half=upper"), "the door has its upper half: " + names[items.length]);
+            ctx.waitTicks(30);
+            gxdev("ctl", "shot voxel-4b-minecraft-blocks");
+
             // Saved and loaded back from disk: the hole is still there, Mario still in it.
             ctx.runOnClient(mc -> {
                 try {

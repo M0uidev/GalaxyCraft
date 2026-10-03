@@ -136,7 +136,7 @@ class PlanetSessionTest {
         assertEquals(0, c.getInt(8) % 32);
         assertEquals(c.capacity(), 32 + c.getInt(8) + c.getInt(12));
         int hit = PlanetRaycast.cast(s.planet(), new Vector3d(0, 17.5, 0), new Vector3d(0, -1, 0), 4.5).hit();
-        assertEquals(Material.DIRT, s.planet().get(hit));
+        assertEquals(Material.DIRT, s.planet().material(hit));
     }
 
     @Test void dugIntoChunkUnderMarioComesWithCollision() {
@@ -175,7 +175,7 @@ class PlanetSessionTest {
         drain(s);
         Vector3d eye = new Vector3d(s.center()).add(0, 17.6 * 80, 0); // over the grass, looking down
         int cell = s.target(eye, new Vector3d(0, -1, 0), false);
-        assertEquals(Material.GRASS, s.planet().get(cell));
+        assertEquals(Material.GRASS, s.planet().material(cell));
         s.setOutline(cell);
         s.planet().set(s.planet().grid.neighbor(cell, CubeSphere.I_PLUS), Material.AIR); // a chunk to send too
         s.update(3, 100, MARIO); // same scene and host
@@ -212,7 +212,7 @@ class PlanetSessionTest {
         assertFalse(s.placeBlock(eye, new Vector3d(0, -1, 0), Material.DIRT, feet), "his own cell");
         Vector3d aside = new Vector3d(eye).add(2 * 80, 0, 0);
         assertTrue(s.placeBlock(aside, new Vector3d(0, -1, 0), Material.STONE, feet));
-        assertEquals(Material.STONE, s.planet().get(s.planet().grid.cellAt(new Vector3d(2, 16.5, 0))));
+        assertEquals(Material.STONE, s.planet().material(s.planet().grid.cellAt(new Vector3d(2, 16.5, 0))));
     }
 
     @Test void removeSendsPlanetZero() {
@@ -229,19 +229,19 @@ class PlanetSessionTest {
         Vector3d top = new Vector3d(s.center()).add(0, 33.5 * 80, 0);
         s.breakBlock(top, new Vector3d(0, -1, 0));
         PlanetStore store = new PlanetStore(dir);
-        store.write("SkyStationGalaxy", s.save());
+        store.write("SkyStationGalaxy", s.save(), CubeBlocks.INSTANCE);
         assertFalse(s.unsaved());
         assertTrue(Files.size(store.file("SkyStationGalaxy")) < 200_000, "compressed");
 
         PlanetSession t = new PlanetSession(80);
-        t.load(store.read("SkyStationGalaxy").orElseThrow());
+        t.load(store.read("SkyStationGalaxy", CubeBlocks.INSTANCE).orElseThrow());
         assertEquals(s.center(), t.center());
         assertEquals(s.planet().surface(), t.planet().surface());
         assertArrayEquals(s.planet().cells(), t.planet().cells());
         t.update(9, 100, MARIO);
         assertEquals(Layout.MSG_PLANET, t.peek().type());
-        assertTrue(store.read("BossGalaxy").isEmpty());
+        assertTrue(store.read("BossGalaxy", CubeBlocks.INSTANCE).isEmpty());
         store.delete("SkyStationGalaxy");
-        assertTrue(store.read("SkyStationGalaxy").isEmpty());
+        assertTrue(store.read("SkyStationGalaxy", CubeBlocks.INSTANCE).isEmpty());
     }
 }

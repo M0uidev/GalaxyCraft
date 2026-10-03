@@ -19,19 +19,20 @@ struct MarioHitbox
   float balls[3][3];
 };
 void VoxelPlanetHitbox(const MarioHitbox* box);
-// The block atlas (RGB565, GX ready), and 32-byte aligned memory from the scene's MEM2 heap (null
-// if it would leave the game short), for the held item (HeldItem.cpp).
-const uint8_t* VoxelPlanetAtlas();
+// 32-byte aligned memory from the scene's MEM2 heap (null if it would leave the game short), for
+// the held item (HeldItem.cpp).
 uint8_t* VoxelPlanetAlloc32(uint32_t size);
 
 // Counters for the dev harness (peek): inbox batches, records, chunks with something to draw,
 // collision parts made, last chunk slot and version seen, chunks dropped for lack of memory, free
 // bytes of the scene's MEM2 and MEM1 heaps (at the last batch), collision parts alive, chunks
 // drawn last frame (the rest were behind the camera or the horizon), chunks left without
-// collision because the stage's main collision zone was missing.
+// collision because the stage's main collision zone was missing, the block atlas being put
+// together (its id, bytes of it in, 1 once complete: planets are drawn only then).
 struct VoxelStats
 {
   uint32_t batches, records, chunks, parts_made, last_slot, last_version, alloc_failed, free_mem2, free_mem1;
   uint32_t parts_live, drawn_last, no_zone;
+  uint32_t atlas_id, atlas_bytes, atlas_ready;
 };
 extern VoxelStats gVoxelStats;

@@ -7,13 +7,14 @@ from collections import namedtuple
 
 SHM_PATH = "/dev/shm/galaxycraft_v1"
 MAGIC = 0x52435847  # "GXCR"
-VERSION = 8
+VERSION = 9
 
 OFF_HEADER = 0
 OFF_WORLD = 64
 OFF_PLAYER = 128
 OFF_INPUT = 224
 OFF_GAMECAM = 320
+OFF_POINTER = 448  # GxcPointerState: the mouse over the host's window while a Minecraft screen is open
 OFF_TEXT = 512  # GxcTextState: characters typed in the host's window
 RING_S2M_OFF = 4096
 RING_S2M_CAP = 4 * 1024 * 1024
@@ -32,7 +33,7 @@ MSG_PART_REMOVE = 3
 MSG_KCL_CHUNK = 4
 MSG_HELLO = 101
 MSG_PLANET, MSG_CHUNK, MSG_PLANET_TP = 102, 103, 104  # voxel planet, M -> S
-MSG_OUTLINE, MSG_HELD = 105, 106
+MSG_OUTLINE, MSG_HELD, MSG_ATLAS = 105, 106, 107
 MSG_PAD = 0xFFFF
 
 PLAYER_ON_GROUND = 1

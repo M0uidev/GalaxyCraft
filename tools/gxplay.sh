@@ -10,6 +10,8 @@
 # A voxel planet appears above Mario once linked in a level (one per galaxy, saved and loaded
 # again; /galaxycraft planet spawn <radius> makes a new one, up to 256): P lands on it; with a
 # block or the pickaxe in hand (slots 2-5) left click breaks and right click places, F spins.
+# Any block of Minecraft can go on a planet: /gamemode creative, then E opens the creative
+# inventory, where the mouse is a pointer (click, drag, scroll); Esc closes it.
 # Dolphin runs with 256 MiB of MEM2 (RAM override): big planets live in the extra memory, and
 # savestates of a normal Dolphin do not load in it (nor the other way around).
 # Closing either side closes the other.

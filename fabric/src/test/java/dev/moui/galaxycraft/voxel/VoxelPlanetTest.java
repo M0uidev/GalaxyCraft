@@ -11,11 +11,11 @@ class VoxelPlanetTest {
     @Test void standardLayers() {
         VoxelPlanet p = VoxelPlanet.standard();
         CubeSphere g = p.grid;
-        assertEquals(Material.BEDROCK, p.get(g.index(0, 3, 3, 0)));
-        assertEquals(Material.STONE, p.get(g.index(0, 3, 3, 5)));
-        assertEquals(Material.DIRT, p.get(g.index(0, 3, 3, 7)));
-        assertEquals(Material.GRASS, p.get(g.index(0, 3, 3, 8)));
-        assertEquals(Material.AIR, p.get(g.index(0, 3, 3, 9)));
+        assertEquals(Material.BEDROCK, p.material(g.index(0, 3, 3, 0)));
+        assertEquals(Material.STONE, p.material(g.index(0, 3, 3, 5)));
+        assertEquals(Material.DIRT, p.material(g.index(0, 3, 3, 7)));
+        assertEquals(Material.GRASS, p.material(g.index(0, 3, 3, 8)));
+        assertEquals(Material.AIR, p.material(g.index(0, 3, 3, 9)));
         assertEquals(16.0, p.surface());
     }
 
@@ -50,9 +50,9 @@ class VoxelPlanetTest {
         for (int r : new int[] {10, 16, 64, 128}) {
             VoxelPlanet p = VoxelPlanet.ofRadius(r);
             assertEquals(r, p.surface(), 1e-9);
-            assertEquals(Material.GRASS, p.get(p.grid.cellAt(new Vector3d(0, r - 0.5, 0))));
-            assertEquals(Material.AIR, p.get(p.grid.cellAt(new Vector3d(0, r + 0.5, 0))));
-            assertEquals(Material.BEDROCK, p.get(p.grid.index(1, 3, 3, 0)));
+            assertEquals(Material.GRASS, p.material(p.grid.cellAt(new Vector3d(0, r - 0.5, 0))));
+            assertEquals(Material.AIR, p.material(p.grid.cellAt(new Vector3d(0, r + 0.5, 0))));
+            assertEquals(Material.BEDROCK, p.material(p.grid.index(1, 3, 3, 0)));
             int top = p.grid.index(2, p.grid.n / 2, p.grid.n / 2, p.depth - 1);
             double w = p.grid.corner(top, 0, 0, 1).distance(p.grid.corner(top, 1, 0, 1));
             assertTrue(w > 0.8 && w < 1.25, "radius " + r + ": surface cells " + w + " wide");
@@ -65,7 +65,7 @@ class VoxelPlanetTest {
         for (int r = VoxelPlanet.MIN_RADIUS; r <= VoxelPlanet.MAX_RADIUS; r += 3) {
             VoxelPlanet p = VoxelPlanet.ofRadius(r);
             int low = p.grid.index(2, p.grid.n / 2, p.grid.n / 2, 1); // the stone on the bedrock
-            assertTrue(p.get(low).breakable(), "radius " + r);
+            assertTrue(p.info(low).breakable(), "radius " + r);
             double w = p.grid.corner(low, 0, 0, 0).distance(p.grid.corner(low, 1, 0, 0));
             assertTrue(w >= 0.75, "radius " + r + ": cells " + w + " wide over the bedrock");
         }
@@ -98,7 +98,7 @@ class VoxelPlanetTest {
         VoxelPlanet p = VoxelPlanet.standard();
         var hit = PlanetRaycast.cast(p, new Vector3d(0, 18, 0), new Vector3d(0, -1, 0), 4.5);
         assertNotNull(hit);
-        assertEquals(Material.GRASS, p.get(hit.hit()));
+        assertEquals(Material.GRASS, p.material(hit.hit()));
         assertEquals(p.grid.neighbor(hit.hit(), CubeSphere.TOP), hit.before());
         assertNull(PlanetRaycast.cast(p, new Vector3d(0, 21, 0), new Vector3d(0, -1, 0), 4.5), "out of reach");
         assertNull(PlanetRaycast.cast(p, new Vector3d(0, 18, 0), new Vector3d(0, 1, 0), 4.5));
@@ -110,8 +110,8 @@ class VoxelPlanetTest {
         int column = p.grid.index(0, 12, 12, 0);
         p.set(column + 3, Material.AIR); // a hole dug deep
         assertEquals(6 * 24 * 24 * 4, p.sealBelowCrust(), "k 1..4 of every column, the hole too");
-        for (int k = 0; k < 5; k++) assertEquals(Material.BEDROCK, p.get(column + k), "k " + k);
-        assertEquals(Material.STONE, p.get(column + 5));
+        for (int k = 0; k < 5; k++) assertEquals(Material.BEDROCK, p.material(column + k), "k " + k);
+        assertEquals(Material.STONE, p.material(column + 5));
         assertEquals(0, p.sealBelowCrust(), "once");
     }
 }

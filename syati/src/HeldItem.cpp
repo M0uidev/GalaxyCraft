@@ -16,7 +16,7 @@ namespace
 struct Model
 {
   u8* dl;  // HELD_DL_MAX bytes
-  u8* sprite;  // 16x16 RGB5A3
+  u8* sprite;  // 16x64 RGB5A3 (HELD_SPRITE_BYTES)
 };
 Model gModels[2] = {{0, 0}, {0, 0}};
 u32 gNext = 0;
@@ -60,21 +60,17 @@ public:
     GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
     GXSetVtxDesc(GX_VA_CLR0, GX_DIRECT);
     GXSetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-    // As core/HeldMesh writes them: half texels, the face's shade, 64ths of the texture.
+    // As core/HeldMesh writes them: half texels, the face's shade, 128ths of the sprite.
     GXSetVtxAttrFmt(GX_VTXFMT4, GX_VA_POS, GX_POS_XYZ, GX_U8, 1);
     GXSetVtxAttrFmt(GX_VTXFMT4, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
-    GXSetVtxAttrFmt(GX_VTXFMT4, GX_VA_TEX0, GX_TEX_ST, GX_U8, 6);
+    GXSetVtxAttrFmt(GX_VTXFMT4, GX_VA_TEX0, GX_TEX_ST, GX_U8, gxc::HELD_TEX_FRAC);
     GXSetNumChans(1);
     GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_VTX, 0, GX_DF_NONE, GX_AF_NONE);
     GXSetNumTexGens(1);
     GXSetTexCoordGen2(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY, GX_FALSE, GX_PTIDENTITY);
     GXTexObj tex;
-    if (gKind == gxc::HELD_BLOCK)
-      GXInitTexObj(&tex, const_cast<u8*>(VoxelPlanetAtlas()), gxc::HELD_ATLAS, gxc::HELD_ATLAS, GX_TF_RGB565, GX_CLAMP,
-                   GX_CLAMP, GX_FALSE);
-    else
-      GXInitTexObj(&tex, gDraw->sprite, gxc::HELD_SPRITE, gxc::HELD_SPRITE, GX_TF_RGB5A3, GX_CLAMP, GX_CLAMP,
-                   GX_FALSE);
+    GXInitTexObj(&tex, gDraw->sprite, gxc::HELD_SPRITE, gxc::HELD_SPRITE * gxc::HELD_BANDS, GX_TF_RGB5A3, GX_CLAMP,
+                 GX_CLAMP, GX_FALSE);
     GXInitTexObjLOD(&tex, GX_NEAR, GX_NEAR, 0.f, 0.f, 0.f, GX_FALSE, GX_FALSE, GX_ANISO_1);
     GXLoadTexObj(&tex, GX_TEXMAP0);
     GXSetNumIndStages(0);
@@ -123,12 +119,12 @@ void HeldItemSet(const gxc::InboxHeld& held)
   if (!m.dl)
     m.dl = VoxelPlanetAlloc32(gxc::HELD_DL_MAX);
   if (!m.sprite)
-    m.sprite = VoxelPlanetAlloc32(512);
+    m.sprite = VoxelPlanetAlloc32(gxc::HELD_SPRITE_BYTES);
   if (!m.dl || !m.sprite)
     return;
-  memcpy(m.sprite, held.sprite, 512);
-  DCFlushRange(m.sprite, 512);
-  const u32 size = gxc::HeldMesh(held.kind, held.tiles, m.sprite, GX_VTXFMT4, m.dl, gxc::HELD_DL_MAX);
+  memcpy(m.sprite, held.sprite, gxc::HELD_SPRITE_BYTES);
+  DCFlushRange(m.sprite, gxc::HELD_SPRITE_BYTES);
+  const u32 size = gxc::HeldMesh(held.kind, m.sprite, GX_VTXFMT4, m.dl, gxc::HELD_DL_MAX);
   if (size == 0)
     return;
   DCFlushRange(m.dl, size);

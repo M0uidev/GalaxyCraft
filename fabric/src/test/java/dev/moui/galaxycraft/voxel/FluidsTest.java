@@ -22,9 +22,9 @@ class FluidsTest {
     void waterSpreadsSevenBlocksOnFlatGround() {
         p.set(at(12, 12, 9), Material.WATER, Fluids.SOURCE);
         run(400);
-        assertEquals(Material.WATER, p.get(at(12 + 7, 12, 9)));
+        assertEquals(Material.WATER, p.material(at(12 + 7, 12, 9)));
         assertEquals(7, p.level(at(12 + 7, 12, 9)));
-        assertEquals(Material.AIR, p.get(at(12 + 8, 12, 9)));
+        assertEquals(Material.AIR, p.material(at(12 + 8, 12, 9)));
     }
 
     @Test
@@ -33,7 +33,7 @@ class FluidsTest {
         run(400);
         p.set(at(12, 12, 9), Material.AIR);
         run(400);
-        for (int i = 4; i < 21; i++) assertEquals(Material.AIR, p.get(at(i, 12, 9)), "i " + i);
+        for (int i = 4; i < 21; i++) assertEquals(Material.AIR, p.material(at(i, 12, 9)), "i " + i);
     }
 
     @Test
@@ -41,18 +41,18 @@ class FluidsTest {
         p.set(at(12, 12, 8), Material.AIR);
         p.set(at(12, 12, 9), Material.WATER, Fluids.SOURCE);
         run(Fluids.WATER_TICKS);
-        assertEquals(Material.WATER, p.get(at(12, 12, 8)));
+        assertEquals(Material.WATER, p.material(at(12, 12, 8)));
         assertEquals(Fluids.FALLING, p.level(at(12, 12, 8)));
-        assertEquals(Material.AIR, p.get(at(13, 12, 9)), "a source over a hole falls first");
+        assertEquals(Material.AIR, p.material(at(13, 12, 9)), "a source over a hole falls first");
         run(Fluids.WATER_TICKS);
-        assertEquals(Material.WATER, p.get(at(13, 12, 9)), "then, the hole full, it spreads");
+        assertEquals(Material.WATER, p.material(at(13, 12, 9)), "then, the hole full, it spreads");
     }
 
     @Test
     void lavaTouchingWaterHardens() {
         p.set(at(12, 12, 9), Material.LAVA, Fluids.SOURCE);
         p.set(at(13, 12, 9), Material.WATER, Fluids.SOURCE);
-        assertEquals(Material.OBSIDIAN, p.get(at(12, 12, 9)));
+        assertEquals(Material.OBSIDIAN, p.material(at(12, 12, 9)));
     }
 
     @Test
@@ -63,7 +63,7 @@ class FluidsTest {
             p.set(g.neighbor(at(12, 12, 9), s), Material.STONE);
         p.set(at(12, 12, 11), Material.LAVA, Fluids.SOURCE);
         run(120);
-        assertEquals(Material.STONE, p.get(at(12, 12, 9)));
+        assertEquals(Material.STONE, p.material(at(12, 12, 9)));
     }
 
     /**
@@ -81,22 +81,21 @@ class FluidsTest {
         p.set(at(14, 12, 9), Material.WATER, Fluids.SOURCE);
         run(200);
         int gap = at(11, 12, 9);
-        assertEquals(Material.COBBLESTONE, p.get(gap));
-        assertEquals(Material.LAVA, p.get(at(10, 12, 9)), "the lava source stays");
+        assertEquals(Material.COBBLESTONE, p.material(gap));
+        assertEquals(Material.LAVA, p.material(at(10, 12, 9)), "the lava source stays");
         for (int n = 0; n < 5; n++) {
-            p.set(gap, Material.STONE.broken());
+            p.set(gap, Material.AIR);
             run(Fluids.LAVA_TICKS * 2);
-            assertEquals(Material.COBBLESTONE, p.get(gap), "mined " + (n + 1));
+            assertEquals(Material.COBBLESTONE, p.material(gap), "mined " + (n + 1));
         }
-        assertEquals(Material.LAVA, p.get(at(10, 12, 9)));
+        assertEquals(Material.LAVA, p.material(at(10, 12, 9)));
     }
 
     @Test
     void iceBreaksIntoWaterAndFluidsSurviveASave() {
-        assertEquals(Material.WATER, Material.ICE.broken());
         p.set(at(12, 12, 9), Material.WATER, 3);
-        VoxelPlanet q = VoxelPlanet.of(g, p.depth, p.cells().clone());
-        assertEquals(Material.WATER, q.get(at(12, 12, 9)));
+        VoxelPlanet q = VoxelPlanet.of(g, p.depth, p.cells().clone(), p.blocks);
+        assertEquals(Material.WATER, q.material(at(12, 12, 9)));
         assertEquals(3, q.level(at(12, 12, 9)));
         assertTrue(q.fluids().scheduled() > 0, "it flows again once loaded");
     }
@@ -105,10 +104,20 @@ class FluidsTest {
     void fluidsDrawWithoutCollision() {
         p.set(at(12, 12, 9), Material.WATER, Fluids.SOURCE);
         int chunk = p.chunkOf(at(12, 12, 9));
-        var water = PlanetMesher.quads(p, chunk).stream().filter(q -> q.tile() == Material.WATER.top).toList();
+        var water = PlanetMesher.quads(p, chunk).stream().filter(q -> q.tile() == p.info(at(12, 12, 9)).tile()).toList();
         assertEquals(5, water.size(), "top and four sides, not the bottom on grass");
-        assertTrue(water.stream().noneMatch(PlanetMesher.Quad::solid));
+        int before = PlanetMesher.collision(p, chunk).size();
+        p.set(at(12, 12, 9), Material.AIR);
+        assertEquals(before, PlanetMesher.collision(p, chunk).size(), "water adds no collision");
         double top = water.stream().filter(q -> q.side() == CubeSphere.TOP).findFirst().orElseThrow().corners()[0].length();
         assertEquals(g.radius(9) + 8 / 9.0, top, 1e-6);
+    }
+
+    @Test
+    void waterWashesAwayFlowers() {
+        p.set(at(13, 12, 9), CubeBlocks.FLOWER);
+        p.set(at(12, 12, 9), Material.WATER, Fluids.SOURCE);
+        run(Fluids.WATER_TICKS * 2);
+        assertEquals(Material.WATER, p.material(at(13, 12, 9)));
     }
 }

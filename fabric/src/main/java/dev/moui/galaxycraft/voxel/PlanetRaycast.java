@@ -4,13 +4,17 @@ import org.joml.Vector3d;
 
 /**
  * What the crosshair points at on a planet: the block hit and the cell before it. As in Minecraft
- * it goes through fluids, unless it is an empty bucket's, which stops at their sources.
+ * it goes through fluids, unless it is an empty bucket's, which stops at their sources; it stops
+ * on anything with an outline, flowers included.
  */
 public final class PlanetRaycast {
     public static final double STEP = 0.05;
 
-    /** hit: first solid cell; before: the last cell crossed that is not a block (where one goes), or -1. */
-    public record Hit(int hit, int before) {}
+    /**
+     * hit: first targetable cell; before: the last cell crossed that is not (where a block goes),
+     * or -1; point: where the ray entered hit, planet blocks.
+     */
+    public record Hit(int hit, int before, Vector3d point) {}
 
     private PlanetRaycast() {}
 
@@ -27,8 +31,9 @@ public final class PlanetRaycast {
             p.set(dir).mul(t).add(origin);
             int c = planet.grid.cellAt(p);
             if (c < 0) continue;
-            Material m = planet.get(c);
-            if (m.solid() || (sources && m.fluid() && planet.level(c) == Fluids.SOURCE)) return new Hit(c, before);
+            BlockInfo b = planet.info(c);
+            if (b.targetable() || (sources && b.isFluid() && b.level() == Fluids.SOURCE))
+                return new Hit(c, before, new Vector3d(dir).mul(Math.max(0, t - STEP / 2)).add(origin));
             before = c;
         }
         return null;

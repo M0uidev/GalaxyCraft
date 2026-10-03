@@ -1,53 +1,35 @@
 package dev.moui.galaxycraft.voxel;
 
 /**
- * What a cell is made of, with its tiles in the 4×4 block atlas (tools/voxel_atlas.py). At most
- * 16: a cell keeps its material in the low nibble (the high one is a fluid's level).
+ * Blocks the planet itself makes and reacts with: its layers, what water and lava turn into, and
+ * the fluids. Any other block comes from {@link Blocks}. The order is that of planets saved as
+ * GXP1 (a cell was the ordinal), so it must not change.
  */
 public enum Material {
-    AIR(-1, -1, -1, null),
-    BEDROCK(4, 4, 4, null),
-    STONE(3, 3, 3, "minecraft:stone"),
-    DIRT(2, 2, 2, "minecraft:dirt"),
-    GRASS(0, 1, 2, "minecraft:grass_block"),
-    ICE(5, 5, 5, "minecraft:ice"),
-    WATER(6, 6, 6, "minecraft:water_bucket"),
-    LAVA(7, 7, 7, "minecraft:lava_bucket"),
-    COBBLESTONE(8, 8, 8, "minecraft:cobblestone"),
-    OBSIDIAN(9, 9, 9, "minecraft:obsidian");
+    AIR("minecraft:air"),
+    BEDROCK("minecraft:bedrock"),
+    STONE("minecraft:stone"),
+    DIRT("minecraft:dirt"),
+    GRASS("minecraft:grass_block[snowy=false]"),
+    ICE("minecraft:ice"),
+    WATER("minecraft:water[level=0]"),
+    LAVA("minecraft:lava[level=0]"),
+    COBBLESTONE("minecraft:cobblestone"),
+    OBSIDIAN("minecraft:obsidian");
 
-    public final int top, side, bottom;
-    /** The item that places it, or null if none does. */
-    public final String item;
+    /** Minecraft's block state, as BlockStateParser reads it. */
+    public final String state;
 
-    Material(int top, int side, int bottom, String item) {
-        this.top = top;
-        this.side = side;
-        this.bottom = bottom;
-        this.item = item;
-    }
-
-    /** A block: it collides, hides what is behind it and stops the crosshair. */
-    public boolean solid() {
-        return this != AIR && !fluid();
+    Material(String state) {
+        this.state = state;
     }
 
     public boolean fluid() {
         return this == WATER || this == LAVA;
     }
 
-    /** Whether the player can break it (bedrock seals the hollow center; fluids are scooped). */
-    public boolean breakable() {
-        return solid() && this != BEDROCK;
-    }
-
-    /** What is left where it is broken: ice melts into water, as in Minecraft. */
-    public Material broken() {
-        return this == ICE ? WATER : AIR;
-    }
-
-    public static Material ofItem(String id) {
-        for (Material m : values()) if (id.equals(m.item)) return m;
-        return null;
+    /** {@link Blocks#WATER}, {@link Blocks#LAVA} or {@link Blocks#NO_FLUID}. */
+    public int fluidKind() {
+        return this == WATER ? Blocks.WATER : this == LAVA ? Blocks.LAVA : Blocks.NO_FLUID;
     }
 }

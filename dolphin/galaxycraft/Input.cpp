@@ -182,6 +182,22 @@ void InputWriter::Text(u32 codepoint)
   m_shm.StoreRelease(GXC_OFF_TEXT, seq + 2);
 }
 
+void InputWriter::Pointer(float x, float y, bool inside)
+{
+  if (x == m_pointer_x && y == m_pointer_y && inside == m_pointer_inside)
+    return;
+  m_pointer_x = x, m_pointer_y = y, m_pointer_inside = inside;
+  GxcPointerState s{};
+  s.flags = inside ? GXC_POINTER_INSIDE : 0u;
+  s.x = x;
+  s.y = y;
+  const u32 seq = m_shm.GetU32(GXC_OFF_POINTER);
+  m_shm.StoreRelease(GXC_OFF_POINTER, seq + 1);
+  std::atomic_thread_fence(std::memory_order_release);
+  std::memcpy(m_shm.Data() + GXC_OFF_POINTER + 4, reinterpret_cast<const u8*>(&s) + 4, sizeof(s) - 4);
+  m_shm.StoreRelease(GXC_OFF_POINTER, seq + 2);
+}
+
 void InputWriter::Publish()
 {
   GxcInputState s{};

@@ -6,7 +6,7 @@
 class LiveActor;
 
 // What the player holds in Minecraft, drawn in Steve's right hand (HeldItem.cpp). Create once per
-// scene, after VoxelPlanetCreate (it draws blocks with the planet's atlas).
+// scene, after VoxelPlanetCreate (its memory comes from the planet's heap).
 void HeldItemCreate();
 // A GXC_MSG_HELD record from the inbox.
 void HeldItemSet(const gxc::InboxHeld& held);

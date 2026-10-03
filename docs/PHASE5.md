@@ -178,3 +178,25 @@ Medido el 2026-10-02 con radio 128: 4.056 chunks, 876 dibujados, 46 partes, ~200
 - Las partes de colisión reemplazadas no se liberan (unos cientos de bytes por edición).
 - Un planeta por galaxia; no se puede elegir dónde aparece (siempre encima del jugador).
 - Lejos no hay LOD: un planeta de radio 256 visto entero dibuja cientos de miles de quads.
+
+## Todos los bloques de Minecraft (2026-10-03)
+
+Diseño: `docs/superpowers/specs/2026-10-03-galaxycraft-all-blocks-design.md`.
+
+- Una celda guarda el id del estado de bloque de Minecraft (16 bits). `voxel/Blocks` es lo que el
+  planeta sabe de cada id; `client/McBlocks` lo saca de los modelos horneados de Minecraft, y
+  `voxel/CubeBlocks` es la versión de las pruebas.
+- Los modelos se doblan sobre la celda por interpolación trilineal (`voxel/CellSpace`: x → j,
+  y → afuera, z → i, sin espejo). Colisión con las cajas reales; los cubos llenos chocan como antes.
+- Colocar usa `getStateForPlacement`, `updateShape` y `canSurvive` de Minecraft sobre una copia
+  de los 3×3×3 vecinos escrita un instante en el nivel cliente, arriba del jugador.
+- El atlas ya no se compila en el módulo: el mod lo arma con todos los sprites de bloques (RGB5A3,
+  recortes con alfa) y lo manda por partes (`GXC_MSG_ATLAS`) a cada escena. Se fue
+  `tools/voxel_atlas.py`.
+- Los planetas se guardan como `GXP2` (paleta de estados + índices); los `GXP1` se leen igual.
+- `/gamemode creative` y **E**: con un menú de Minecraft abierto Dolphin suelta el ratón y manda la
+  posición del cursor (`GxcPointerState`, protocolo v9).
+
+Limitaciones: sin translucidez real (cristal tintado, hielo y agua se ven opacos o recortados),
+cofres, carteles y camas son cajas con su textura de partícula, texturas sin animar, tintes de
+bioma por defecto, sin redstone que funcione, losas que no se juntan en dobles.
