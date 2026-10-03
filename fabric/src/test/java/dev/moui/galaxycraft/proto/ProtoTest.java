@@ -26,8 +26,8 @@ class ProtoTest {
         assertEquals(320, Layout.OFF_GAMECAM);
         assertEquals(4096, Layout.OFF_RING_S2M);
         assertEquals(4198416, Layout.OFF_RING_M2S);
-        assertEquals(4268032, Layout.OFF_OVERLAY);
-        assertEquals(29151264L, Layout.TOTAL_SIZE);
+        assertEquals(5251072, Layout.OFF_OVERLAY);
+        assertEquals(30134304L, Layout.TOTAL_SIZE);
     }
 
     @Test void worldWithoutGravityCannotAnchor() {
@@ -44,7 +44,7 @@ class ProtoTest {
         var g = new Vector3d(0, -1, 0);
         assertTrue(new Seqlock.WorldState(1, 1, g, new Vector3d(), Layout.WORLD_FOLLOW).follow());
         assertFalse(new Seqlock.WorldState(1, 1, g, new Vector3d(), Layout.WORLD_ANCHOR).follow());
-        assertEquals(3, Layout.VERSION);
+        assertEquals(4, Layout.VERSION);
     }
 
     @Test void openMissingFileIsEmpty() {

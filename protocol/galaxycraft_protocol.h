@@ -1,5 +1,5 @@
 /*
- * GalaxyCraft shared-memory protocol, version 3.
+ * GalaxyCraft shared-memory protocol, version 4.
  *
  * Source of truth for the layout of /dev/shm/galaxycraft_v1. Mirrors:
  *   tools/gxproto.py
@@ -16,7 +16,7 @@
 
 #define GXC_SHM_NAME "/galaxycraft_v1"
 #define GXC_MAGIC 0x52435847u /* "GXCR" */
-#define GXC_VERSION 3u
+#define GXC_VERSION 4u
 
 /* Regions (byte offsets from the start of the mapping). */
 #define GXC_OFF_HEADER 0
@@ -27,8 +27,8 @@
 #define GXC_OFF_RING_S2M 4096
 #define GXC_RING_S2M_CAP (4u * 1024u * 1024u)
 #define GXC_OFF_RING_M2S (GXC_OFF_RING_S2M + 16 + GXC_RING_S2M_CAP)
-#define GXC_RING_M2S_CAP (64u * 1024u)
-#define GXC_OFF_OVERLAY 4268032 /* end of ring M2S rounded up to 4096 */
+#define GXC_RING_M2S_CAP (1024u * 1024u) /* planet chunks travel this way */
+#define GXC_OFF_OVERLAY 5251072 /* end of ring M2S rounded up to 4096 */
 #define GXC_OVERLAY_MAX_W 1920
 #define GXC_OVERLAY_MAX_H 1080
 #define GXC_OVERLAY_FRAME_BYTES (GXC_OVERLAY_MAX_W * GXC_OVERLAY_MAX_H * 4)
@@ -72,6 +72,8 @@ typedef struct { /* S -> M */
 #define GXC_WORLD_FOLLOW 2u
 
 #define GXC_PLAYER_ON_GROUND 1u
+/* Something in the main hand: the clicks break and place blocks instead of spinning (B). */
+#define GXC_PLAYER_ITEM_ACTIVE 2u
 
 typedef struct { /* M -> S */
   uint32_t seq;
@@ -145,6 +147,10 @@ enum {
   GXC_MSG_PART_REMOVE = 3,  /* uint32_t part_id */
   GXC_MSG_KCL_CHUNK = 4,    /* GxcKclChunk + data */
   GXC_MSG_HELLO = 101,      /* uint32_t mod_version */
+  /* Voxel planet, forwarded by the host to the module's inbox (GxcMailbox.inbox_addr). */
+  GXC_MSG_PLANET = 102,    /* GxcPlanet */
+  GXC_MSG_CHUNK = 103,     /* GxcChunk + display list + KCL (both big-endian already) */
+  GXC_MSG_PLANET_TP = 104, /* no payload: Mario onto the planet's surface */
   GXC_MSG_PAD = 0xFFFF,
 };
 
@@ -164,6 +170,23 @@ typedef struct {
 } GxcKclChunk;
 
 typedef struct {
+  uint32_t planet_id; /* 0: no planet (the module drops it) */
+  float center[3];    /* galaxy units */
+  float surface;      /* radius of the surface, galaxy units */
+  float gravity_range; /* radius of its point gravity, galaxy units */
+} GxcPlanet;
+
+/* Positions in the display list and the KCL are relative to the planet's center. */
+typedef struct {
+  uint32_t slot;    /* chunk index, < GXC_PLANET_MAX_CHUNKS */
+  uint32_t version; /* newer replaces older */
+  uint32_t dl_size; /* bytes, multiple of 32; 0 with kcl_size 0: the chunk is empty */
+  uint32_t kcl_size;
+} GxcChunk;
+
+#define GXC_PLANET_MAX_CHUNKS 512
+
+typedef struct {
   uint32_t latest; /* index 0..2 of the newest complete frame, 0xFFFFFFFF none */
   uint32_t width;
   uint32_t height;
@@ -177,7 +200,7 @@ typedef struct {
  * Dolphin finds it by scanning MEM1/MEM2 for the magic.
  */
 #define GXC_MBX_MAGIC "GXCRMBX1"
-#define GXC_MBX_VERSION 2u
+#define GXC_MBX_VERSION 3u
 #define GXC_MBX_MAX_PARTS 64
 #define GXC_MBX_FOLLOW 2u /* host_flags: Minecraft mode, the camera sits in Mario's eyes */
 #define GXC_MBX_GALAXY_VIEW 4u /* host_flags: keep the game's camera */
@@ -215,6 +238,20 @@ typedef struct {
   float mario_front[3]; /* game: where Mario faces */
   uint32_t part_count; /* <= GXC_MBX_MAX_PARTS */
   GxcMbxPart parts[GXC_MBX_MAX_PARTS];
+  uint32_t inbox_addr; /* game: GxcInbox for the voxel planet, 0 none */
+  uint32_t inbox_size; /* game: bytes, header included */
 } GxcMailbox;
+
+/*
+ * Inbox in guest RAM (big-endian). The host fills it only while state is 0: records first, then
+ * count and bytes, then state 1. The module applies every record and sets state back to 0.
+ * Record: GxcMsgHeader (type GXC_MSG_PLANET/CHUNK/PLANET_TP, length) + payload, padded to 4.
+ */
+typedef struct {
+  uint32_t state;
+  uint32_t count;
+  uint32_t bytes; /* of records after this header */
+  uint32_t scene_id; /* the scene the records were meant for */
+} GxcInboxHeader;
 
 #endif

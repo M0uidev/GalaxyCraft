@@ -7,7 +7,7 @@ from collections import namedtuple
 
 SHM_PATH = "/dev/shm/galaxycraft_v1"
 MAGIC = 0x52435847  # "GXCR"
-VERSION = 3
+VERSION = 4
 
 OFF_HEADER = 0
 OFF_WORLD = 64
@@ -17,8 +17,8 @@ OFF_GAMECAM = 320
 RING_S2M_OFF = 4096
 RING_S2M_CAP = 4 * 1024 * 1024
 RING_M2S_OFF = RING_S2M_OFF + 16 + RING_S2M_CAP
-RING_M2S_CAP = 64 * 1024
-OFF_OVERLAY = 4268032
+RING_M2S_CAP = 1024 * 1024
+OFF_OVERLAY = 5251072
 OVERLAY_FRAME_BYTES = 1920 * 1080 * 4
 TOTAL_SIZE = OFF_OVERLAY + 32 + 3 * OVERLAY_FRAME_BYTES
 
@@ -30,9 +30,11 @@ MSG_PART_UPSERT = 2
 MSG_PART_REMOVE = 3
 MSG_KCL_CHUNK = 4
 MSG_HELLO = 101
+MSG_PLANET, MSG_CHUNK, MSG_PLANET_TP = 102, 103, 104  # voxel planet, M -> S
 MSG_PAD = 0xFFFF
 
 PLAYER_ON_GROUND = 1
+PLAYER_ITEM_ACTIVE = 2  # something in the main hand: clicks break and place blocks
 WORLD_ANCHOR = 1  # WorldState.flags: query_pos is the host's anchor (where the player is)
 WORLD_FOLLOW = 2  # WorldState.flags: Minecraft mode, the player follows Mario (query_pos)
 VIEW_FIRST, VIEW_BACK, VIEW_FRONT, VIEW_GALAXY = 0, 1, 2, 3  # PlayerState.view (F5)
