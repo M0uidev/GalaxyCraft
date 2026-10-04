@@ -4,12 +4,14 @@
 # planet, lands Mario on it, digs under him and builds next to him. Exits non-zero on failure.
 #   tools/gxvoxel.sh          (captures: ~/.local/share/galaxycraft-dev/ScreenShots/SB4E01/voxel-*.png)
 #   tools/gxvoxel.sh held     HeldItemTest instead: Steve holds the hotbar's items (held-*.png)
+#   tools/gxvoxel.sh entities EntityTest instead: mobs, TNT and drops drawn by the game (entities-*.png)
 set -u
 : "${JAVA_HOME:=$(ls -d "$HOME"/.local/opt/jdk-25* 2>/dev/null | head -1)}"
 export JAVA_HOME
 cd "$(dirname "$0")/.." || exit 1
 G="python3 tools/gxdev.py"
-if [ "${1:-}" = held ]; then TEST=HeldItemTest PROP=galaxycraftHeld TAG=held; else TEST=VoxelPlanetTest PROP=galaxycraftVoxel TAG=voxel; fi
+if [ "${1:-}" = held ]; then TEST=HeldItemTest PROP=galaxycraftHeld TAG=held
+elif [ "${1:-}" = entities ]; then TEST=EntityTest PROP=galaxycraftEntities TAG=entities; else TEST=VoxelPlanetTest PROP=galaxycraftVoxel TAG=voxel; fi
 SAV="$HOME/.local/share/galaxycraft-dev/voxel-intro.sav"
 LOG="$HOME/.local/share/galaxycraft-dev/$TAG-minecraft.log"
 # GXC_KEEP=1 leaves Dolphin running after a failure, for peeking.

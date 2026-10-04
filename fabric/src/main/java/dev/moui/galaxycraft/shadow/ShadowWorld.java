@@ -4,7 +4,9 @@ import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.voxel.CellSpace;
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -19,6 +21,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.BucketItem;
 import net.minecraft.world.item.ItemStack;
@@ -81,10 +87,24 @@ public final class ShadowWorld {
     private static final ArrayDeque<Integer> edgeChanged = new ArrayDeque<>();
     private static BlockPos writingPos;
     private static volatile BlockPos mario = BlockPos.ZERO;
+    private static volatile Entities entities;
+    /** Shadow entities handed to the client each tick, at most. */
+    static final int MAX_ENTITIES = 256;
 
     private ShadowWorld() {}
 
     // ---- client thread ----
+
+    /**
+     * The running planet's entities in the shadow (mobs, primed TNT, falling blocks; not players
+     * nor items, which become planet drops), as of the last server tick, and where the shadow
+     * lies on the planet. Read from the client thread: the entities keep moving meanwhile.
+     */
+    public record Entities(VoxelPlanet planet, ShadowMap map, List<Entity> list) {}
+
+    public static Entities entities() {
+        return entities;
+    }
 
     /** Whether an integrated server with the shadow dimension is running. */
     public static boolean available() {
@@ -253,6 +273,43 @@ public final class ShadowWorld {
         for (Consumer<ServerLevel> op; (op = ops.poll()) != null; ) op.accept(level);
         for (int n = 0; n < MIRROR_PER_TICK && !toMirror.isEmpty(); n++) mirror(level, toMirror.poll());
         flushEdges(level);
+        entities = map == null ? null : new Entities(planet, map, collect(level));
+    }
+
+    /** The planet's entities, those that walked off a face's edge put on the next face. */
+    private static List<Entity> collect(ServerLevel level) {
+        List<Entity> out = new ArrayList<>();
+        for (Entity e : level.getAllEntities()) {
+            if (e instanceof Player || e instanceof net.minecraft.world.entity.item.ItemEntity
+                    || !e.isAlive() || !map.inStrip((int) Math.floor(e.getZ())))
+                continue;
+            if (!e.isPassenger()) wrap(level, e);
+            if (out.size() < MAX_ENTITIES) out.add(e);
+        }
+        return List.copyOf(out);
+    }
+
+    private static void wrap(ServerLevel level, Entity e) {
+        ShadowMap.Wrap w = map.wrap(e.getX(), e.getY(), e.getZ());
+        if (w == null || !level.isLoaded(BlockPos.containing(w.x(), w.y(), w.z()))) return;
+        float yaw = turn(w, e.getYRot());
+        Vec3 v = e.getDeltaMovement();
+        org.joml.Vector3d nv = w.turn().transform(new org.joml.Vector3d(v.x, v.y, v.z));
+        e.snapTo(w.x(), w.y(), w.z(), yaw, e.getXRot());
+        e.setOldPosAndRot();
+        e.setDeltaMovement(nv.x, nv.y, nv.z);
+        if (e instanceof LivingEntity le) {
+            le.setYBodyRot(turn(w, le.yBodyRot));
+            le.setYHeadRot(turn(w, le.getYHeadRot()));
+            if (le instanceof Mob mob) mob.getNavigation().stop();
+        }
+    }
+
+    /** A yaw (Minecraft's: looking along (-sin, 0, cos)) turned as the wrap turns directions. */
+    private static float turn(ShadowMap.Wrap w, float yaw) {
+        double r = Math.toRadians(yaw);
+        org.joml.Vector3d f = w.turn().transform(new org.joml.Vector3d(-Math.sin(r), 0, Math.cos(r)));
+        return (float) Math.toDegrees(Math.atan2(-f.x, f.z));
     }
 
     /** The server is stopping: nothing stays forced, nothing is left running. */
@@ -261,6 +318,7 @@ public final class ShadowWorld {
         if (level != null) release(level);
         planet = null;
         map = null;
+        entities = null;
         available = false;
         server = null;
         ops.clear();

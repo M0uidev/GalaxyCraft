@@ -24,6 +24,7 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * What the player holds, told to the game so Steve holds it too (HeldItem): a block whose item is
@@ -48,24 +49,43 @@ final class HeldClient {
             link.sent(held, sceneId, bridge.hostPid());
     }
 
+    /** How an item looks: GXC_HELD_* and its 16×16 ARGB sprites (BLOCK: top, sides, bottom). */
+    record Look(int kind, int[][] bands) {}
+
     private static byte[] payload(ItemStack stack) {
+        Look l = look(stack);
+        return l == null ? HeldItem.none()
+                : l.kind() == HeldItem.BLOCK ? HeldItem.block(l.bands()[0], l.bands()[1], l.bands()[2])
+                : HeldItem.sprite(l.kind(), l.bands()[0]);
+    }
+
+    /** How stack looks in hand (and lying on the ground); null if it cannot be shown. */
+    static Look look(ItemStack stack) {
         Identifier name = spriteName(stack);
         McBlocks blocks = PlanetClient.blocks();
         // An item drawn flat in Minecraft has its own texture under item/ (or is a plant's block texture).
         boolean flat = name == null || name.getPath().startsWith("item/");
         boolean cube = false; // no faces of its own on the cell's sides, but a full block (a chest is not)
         if (stack.getItem() instanceof BlockItem bi && blocks != null && !flat) {
-            BlockInfo info = blocks.info(McBlocks.id(bi.getBlock().defaultBlockState()));
-            int[] top = face(blocks, info, CubeSphere.TOP), side = face(blocks, info, CubeSphere.I_MINUS);
-            int[] bottom = face(blocks, info, CubeSphere.BOTTOM);
-            if (top != null && side != null && bottom != null) return HeldItem.block(top, side, bottom);
-            cube = info.fullCollision();
+            Look b = look(bi.getBlock().defaultBlockState());
+            if (b != null) return b;
+            cube = blocks.info(McBlocks.id(bi.getBlock().defaultBlockState())).fullCollision();
         }
         int kind = cube ? HeldItem.CUBE
                 : TOOLS.stream().anyMatch(stack::is) ? HeldItem.TOOL
                 : HeldItem.ITEM;
         int[] argb = name == null ? null : sprite(name, stack);
-        return argb == null ? HeldItem.none() : HeldItem.sprite(kind, argb);
+        return argb == null ? null : new Look(kind, new int[][] {argb});
+    }
+
+    /** A block by the faces of its model (BLOCK); null if it lacks one of them. */
+    static Look look(BlockState state) {
+        McBlocks blocks = PlanetClient.blocks();
+        if (blocks == null) return null;
+        BlockInfo info = blocks.info(McBlocks.id(state));
+        int[] top = face(blocks, info, CubeSphere.TOP), side = face(blocks, info, CubeSphere.I_MINUS);
+        int[] bottom = face(blocks, info, CubeSphere.BOTTOM);
+        return top == null || side == null || bottom == null ? null : new Look(HeldItem.BLOCK, new int[][] {top, side, bottom});
     }
 
     /**

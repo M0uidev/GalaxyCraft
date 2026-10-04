@@ -1,6 +1,9 @@
 package dev.moui.galaxycraft.shadow;
 
+import dev.moui.galaxycraft.voxel.CellSpace;
 import dev.moui.galaxycraft.voxel.CubeSphere;
+import org.joml.Matrix3d;
+import org.joml.Vector3d;
 
 /**
  * Where a planet's cells lie in the shadow dimension. Each cube face is a plain box of cells, so
@@ -81,6 +84,50 @@ public final class ShadowMap {
     public boolean onEdge(int cell) {
         int n = grid.n, i = grid.i(cell), j = grid.j(cell);
         return i == 0 || j == 0 || i == n - 1 || j == n - 1;
+    }
+
+    /**
+     * The planet around a shadow position on a face's box, its halo or just past it: {planet
+     * point (blocks), then the planet's step per shadow block along x, along y, along z}, from
+     * the face's nearest cell (extrapolated past it). Null if the position is near no face.
+     */
+    public double[] frame(double x, double y, double z) {
+        int bx = (int) Math.floor(x), bz = (int) Math.floor(z), f = Math.floorDiv(bx, STRIDE), n = grid.n;
+        int j = bx - f * STRIDE - 1, i = bz - z0 - 1;
+        if (f < 0 || f >= 6 || j < -2 || j > n + 1 || i < -2 || i > n + 1) return null;
+        int cell = grid.index(f, Math.clamp(i, 0, n - 1), Math.clamp(j, 0, n - 1), Math.clamp((int) Math.floor(y), 0, grid.layers - 1));
+        double fx = x - x(cell), fy = y - y(cell), fz = z - z(cell);
+        Vector3d o = CellSpace.point(grid, cell, fx, fy, fz);
+        Vector3d ax = CellSpace.point(grid, cell, fx + 1, fy, fz).sub(o);
+        Vector3d ay = CellSpace.point(grid, cell, fx, fy + 1, fz).sub(o);
+        Vector3d az = CellSpace.point(grid, cell, fx, fy, fz + 1).sub(o);
+        return new double[] {o.x, o.y, o.z, ax.x, ax.y, ax.z, ay.x, ay.y, ay.z, az.x, az.y, az.z};
+    }
+
+    /** Where something past its face's edge goes on the next face, and how its directions turn. */
+    public record Wrap(double x, double y, double z, Matrix3d turn) {}
+
+    /**
+     * Something at (x, y, z) in a face's halo or past it (it walked off the face's edge): the
+     * same planet point on the face it is over now, so it walks on around the planet. Null if it
+     * is still on its face (or near none, or beyond the planet's layers).
+     */
+    public Wrap wrap(double x, double y, double z) {
+        int bx = (int) Math.floor(x), bz = (int) Math.floor(z), f = Math.floorDiv(bx, STRIDE), n = grid.n;
+        int j = bx - f * STRIDE - 1, i = bz - z0 - 1;
+        if (j >= 0 && j < n && i >= 0 && i < n) return null;
+        double[] a = frame(x, y, z);
+        if (a == null || y < 0 || y >= grid.layers) return null;
+        Vector3d p = new Vector3d(a[0], a[1], a[2]);
+        int cell = grid.cellAt(p);
+        if (cell < 0 || grid.face(cell) == f) return null;
+        Vector3d m = CellSpace.local(grid, cell, p);
+        double nx = x(cell) + m.x, ny = y(cell) + m.y, nz = z(cell) + m.z;
+        double[] b = frame(nx, ny, nz);
+        if (b == null) return null;
+        Matrix3d from = new Matrix3d(a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11]);
+        Matrix3d to = new Matrix3d(b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11]);
+        return new Wrap(nx, ny, nz, to.invert().mul(from));
     }
 
     /** Whether a position belongs to this planet's strip of the shadow dimension. */

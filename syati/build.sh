@@ -33,7 +33,7 @@ export WINEDEBUG=-all
 GXC_GAME="$GAME" python3 ../tools/steve/build.py --out build
 # Module: core/ (also tested with g++) plus the game glue.
 OBJS=""
-for src in src/core/*.cpp src/GalaxyCraft.cpp src/VoxelPlanet.cpp src/HeldItem.cpp; do
+for src in src/core/*.cpp src/GalaxyCraft.cpp src/VoxelPlanet.cpp src/HeldItem.cpp src/EntityDraw.cpp; do
   obj="build/obj/$(basename "$src" .cpp).o"
   "$CC" $FLAGS -i src -i src/core -i build/gen -i ../protocol -i "$SYATI/include" -I- -i src/shim "$src" -o "$obj"
   OBJS="$OBJS $obj"

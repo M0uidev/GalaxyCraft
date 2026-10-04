@@ -187,6 +187,9 @@ enum {
   GXC_MSG_OUTLINE = 105,   /* GxcOutline: the block the player can act on */
   GXC_MSG_HELD = 106,      /* GxcHeld: what the player holds, drawn in Steve's right hand */
   GXC_MSG_ATLAS = 107,     /* GxcAtlas + data: a piece of the block atlas */
+  GXC_MSG_SKIN = 108,      /* entity texture, all big-endian (see GXC_ENT_*) */
+  GXC_MSG_MODEL = 109,     /* entity model display list, all big-endian */
+  GXC_MSG_ENTITIES = 110,  /* this frame's entities, all big-endian; only the newest one counts */
   GXC_MSG_PAD = 0xFFFF,
 };
 
@@ -267,6 +270,24 @@ typedef struct {
 } GxcAtlas;
 
 #define GXC_ATLAS_PIECE_MAX 65536
+
+/* Entities on a planet (dropped items, mobs, primed TNT, falling blocks), drawn by the game.
+ * Minecraft's models are cut into rigid pieces (a mob's head, body, legs...), each sent once per
+ * scene as a model; textures once as skins; then every frame only where each piece is. The mod
+ * writes these three messages big-endian already: the host swaps nothing.
+ *   SKIN:     u32 id, u32 width, u32 height (multiples of 4, at most 256), GX RGB5A3 texels
+ *   MODEL:    u32 id, u32 dl_size (a multiple of 32), display list: GX_QUADS in GXC_ENT_VTXFMT,
+ *             position s16 xyz (1/16 of a model pixel), color RGBA8, texcoord s16 st (1/4096)
+ *   ENTITIES: u32 count, then count x { u16 model, u16 skin, u8 overlay[4] (RGBA: the color
+ *             mixed over the piece by A/255, red when hurt, white when TNT flashes),
+ *             f32 mtx[12] (3x4 row-major, model pixels -> galaxy) } */
+#define GXC_ENT_MAX_SKINS 256
+#define GXC_ENT_MAX_MODELS 2048
+#define GXC_ENT_MAX 768
+#define GXC_ENT_BYTES 56
+#define GXC_ENT_SKIN_MAX 256
+#define GXC_ENT_DL_MAX 65536
+#define GXC_ENT_VTXFMT 3
 
 typedef struct {
   uint32_t latest; /* index 0..2 of the newest complete frame, 0xFFFFFFFF none */

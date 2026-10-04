@@ -319,6 +319,28 @@ static void TestInboxHeld()
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
 }
 
+static void TestInboxEntities()
+{
+  std::vector<u8> b;
+  Put32(b, 108u << 16), Put32(b, 12 + 8 * 4 * 2), Put32(b, 3), Put32(b, 8), Put32(b, 4);
+  b.resize(b.size() + 64);
+  Put32(b, 109u << 16), Put32(b, 8 + 32), Put32(b, 7), Put32(b, 32);
+  b.resize(b.size() + 32);
+  Put32(b, 110u << 16), Put32(b, 4 + 2 * ENT_BYTES), Put32(b, 2);
+  b.resize(b.size() + 2 * ENT_BYTES);
+  Put32(b, 109u << 16), Put32(b, 8 + 16), Put32(b, 1), Put32(b, 16);  // not a multiple of 32
+  b.resize(b.size() + 16);
+  InboxRecord r;
+  u32 off = 0;
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::SKIN);
+  CHECK(r.skin.id == 3 && r.skin.width == 8 && r.skin.height == 4 && r.skin.data == b.data() + 20);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::MODEL);
+  CHECK(r.model.id == 7 && r.model.dl_size == 32);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::ENTITIES);
+  CHECK(r.entities.count == 2);
+  CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
+}
+
 // A GxcAtlas record: header words, then size bytes of data.
 static void PutAtlas(std::vector<u8>& b, u32 id, u32 w, u32 h, u32 levels, u32 total, u32 offset, u32 size)
 {
@@ -491,6 +513,7 @@ int main()
   TestCodePatch();
   TestInboxOutline();
   TestInboxHeld();
+  TestInboxEntities();
   TestInboxAtlas();
   TestMul34();
   TestHeldBlock();

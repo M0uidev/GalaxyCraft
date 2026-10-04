@@ -42,6 +42,9 @@ public final class Layout {
     public static final int MSG_PLANET = 102, MSG_CHUNK = 103, MSG_PLANET_TP = 104, MSG_OUTLINE = 105, MSG_HELD = 106;
     /** A piece of the block atlas (GxcAtlas + data), M -> S. */
     public static final int MSG_ATLAS = 107, ATLAS_PIECE_MAX = 65536;
+    public static final int MSG_SKIN = 108, MSG_MODEL = 109, MSG_ENTITIES = 110;
+    public static final int ENT_MAX_SKINS = 256, ENT_MAX_MODELS = 2048, ENT_MAX = 768, ENT_BYTES = 56;
+    public static final int ENT_SKIN_MAX = 256, ENT_DL_MAX = 65536, ENT_VTXFMT = 3;
     public static final int PLANET_MAX_CHUNKS = 131072;
     public static final int MSG_PAD = 0xFFFF;
 

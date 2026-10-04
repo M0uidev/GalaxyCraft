@@ -3,12 +3,15 @@
 	"package": "dev.moui.galaxycraft.client.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
+		"AgeableMobRendererAccessor",
 		"CameraMixin",
 		"EntityRenderDispatcherMixin",
 		"GameRendererMixin",
 		"LevelRendererMixin",
+		"LivingEntityRendererInvoker",
 		"LocalPlayerMixin",
-		"MinecraftMixin"
+		"MinecraftMixin",
+		"ModelPartAccessor"
 	],
 	"injectors": {
 		"defaultRequire": 1

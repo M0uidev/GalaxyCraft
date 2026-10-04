@@ -122,6 +122,40 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
         a.total != AtlasBytes(a.width, a.height, a.levels) || a.offset > a.total || a.size > a.total - a.offset)
       return false;
   }
+  else if (type == InboxRecord::SKIN)
+  {
+    if (len < 12)
+      return false;
+    InboxSkin& k = out->skin;
+    k.id = ReadBE32(p);
+    k.width = ReadBE32(p + 4);
+    k.height = ReadBE32(p + 8);
+    k.data = p + 12;
+    if (k.id >= ENT_MAX_SKINS || k.width == 0 || k.height == 0 || k.width % 4 || k.height % 4 ||
+        k.width > ENT_SKIN_MAX || k.height > ENT_SKIN_MAX || len != 12 + k.width * k.height * 2)
+      return false;
+  }
+  else if (type == InboxRecord::MODEL)
+  {
+    if (len < 8)
+      return false;
+    InboxModel& m = out->model;
+    m.id = ReadBE32(p);
+    m.dl_size = ReadBE32(p + 4);
+    m.dl = p + 8;
+    if (m.id >= ENT_MAX_MODELS || m.dl_size == 0 || m.dl_size % 32 || m.dl_size > ENT_DL_MAX ||
+        len != 8 + m.dl_size)
+      return false;
+  }
+  else if (type == InboxRecord::ENTITIES)
+  {
+    if (len < 4)
+      return false;
+    out->entities.count = ReadBE32(p);
+    out->entities.list = p + 4;
+    if (out->entities.count > ENT_MAX || len != 4 + out->entities.count * ENT_BYTES)
+      return false;
+  }
   else if (type == InboxRecord::TELEPORT)
   {
     if (len != 0)

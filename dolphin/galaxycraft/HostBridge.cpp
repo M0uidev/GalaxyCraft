@@ -243,10 +243,14 @@ void HostBridge::Tick(GuestMemory& mem)
 void HostBridge::QueueInbox(const Msg& msg)
 {
   if (msg.type != GXC_MSG_PLANET && msg.type != GXC_MSG_CHUNK && msg.type != GXC_MSG_PLANET_TP &&
-      msg.type != GXC_MSG_OUTLINE && msg.type != GXC_MSG_HELD && msg.type != GXC_MSG_ATLAS)
+      msg.type != GXC_MSG_OUTLINE && msg.type != GXC_MSG_HELD && msg.type != GXC_MSG_ATLAS &&
+      msg.type != GXC_MSG_SKIN && msg.type != GXC_MSG_MODEL && msg.type != GXC_MSG_ENTITIES)
     return;
+  // Entity frames say where everything is now: an older one still waiting is stale.
+  if (msg.type == GXC_MSG_ENTITIES)
+    std::erase_if(m_inbox, [](const std::vector<u8>& r) { return (BE32(r.data()) >> 16) == GXC_MSG_ENTITIES; });
   // The held item's sprite and the atlas' texels are GX textures already: only the words before
-  // them are swapped.
+  // them are swapped. Entity messages come big-endian whole (fixed 0).
   const u32 fixed = msg.type == GXC_MSG_PLANET  ? sizeof(GxcPlanet) :
                     msg.type == GXC_MSG_CHUNK   ? sizeof(GxcChunk) :
                     msg.type == GXC_MSG_OUTLINE ? sizeof(GxcOutline) :

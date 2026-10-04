@@ -60,6 +60,7 @@ public final class PlanetClient {
     private static final ShadowLink shadow = new ShadowLink(session);
     private static boolean aimUsable; // an empty hand aims at a block a click uses
     private static final DropsClient drops = new DropsClient(session);
+    private static final EntityClient entities = new EntityClient(session, drops);
     private static McBlocks blocks;
     private static AtlasLink atlasLink;
 
@@ -165,6 +166,16 @@ public final class PlanetClient {
             sinceSave = 0;
             saveNow();
         }
+    }
+
+    /** Items lying on the planet (tests). */
+    public static int dropCount() {
+        return drops.all().size();
+    }
+
+    /** Render thread, once per emulated frame: the planet's entities to the game. */
+    public static void frame(BridgeClient bridge, float partialTick) {
+        bridge.world().ifPresent(w -> entities.frame(bridge, w.sceneId(), w.queryPos(), partialTick));
     }
 
     /** Saves this stage's planet, drops it and loads it back from disk (end-to-end tests). */

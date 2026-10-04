@@ -40,6 +40,10 @@ Three programs share one world:
 - **Survival items.** Outside creative, broken blocks drop what Minecraft's loot says (right tool,
   silk touch, fortune), drops fall onto the planet and go into your inventory when Mario walks over
   them, placing a block uses one from your hand, and **Q** throws the held item onto the planet.
+- **Entities drawn by the game.** Dropped items, mobs, primed TNT and falling blocks are drawn
+  inside SMG2 with Minecraft's own models and textures, not overlaid by Minecraft. Mobs (from
+  spawn eggs) live in the shadow dimension, are animated by their own models, and walk around the
+  planet across its cube faces. Lit TNT flashes, swells and blows up planet blocks.
 - **Fluids.** Water and lava buckets, ice that melts into water, and obsidian and cobblestone
   where water and lava meet. A classic cobblestone generator works.
 - **Collision that feels like Minecraft.** Mario shrinks to Steve's width on planets, so he

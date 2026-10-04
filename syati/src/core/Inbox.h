@@ -43,6 +43,28 @@ struct InboxAtlas
   const u8* data;
 };
 
+// Entities (GXC_MSG_SKIN, MODEL, ENTITIES and GXC_ENT_* in protocol/galaxycraft_protocol.h).
+const u32 ENT_MAX_SKINS = 256, ENT_MAX_MODELS = 2048, ENT_MAX = 768, ENT_BYTES = 56;
+const u32 ENT_SKIN_MAX = 256, ENT_DL_MAX = 65536;
+
+struct InboxSkin
+{
+  u32 id, width, height;
+  const u8* data;  // width x height GX RGB5A3
+};
+
+struct InboxModel
+{
+  u32 id, dl_size;
+  const u8* dl;
+};
+
+struct InboxEntities
+{
+  u32 count;
+  const u8* list;  // count x GXC_ENT_BYTES
+};
+
 // Bytes of a GX RGB5A3 texture of width x height texels with its mipmaps (each level half the
 // last, down to levels of them), as the mod lays them out.
 u32 AtlasBytes(u32 width, u32 height, u32 levels);
@@ -57,6 +79,9 @@ struct InboxRecord
     OUTLINE = 105,
     HELD = 106,
     ATLAS = 107,
+    SKIN = 108,
+    MODEL = 109,
+    ENTITIES = 110,
   };
   u32 type;
   InboxPlanet planet;
@@ -64,6 +89,9 @@ struct InboxRecord
   InboxOutline outline;
   InboxHeld held;
   InboxAtlas atlas;
+  InboxSkin skin;
+  InboxModel model;
+  InboxEntities entities;
 };
 
 u32 ReadBE32(const u8* p);

@@ -7,6 +7,7 @@
 
 #include "Game/Gravity/PointGravity.h"
 #include "Game/Map/CollisionParts.h"
+#include "EntityDraw.h"
 #include "HeldItem.h"
 #include "Inbox.h"
 #include "VoxelPlanet.h"
@@ -293,6 +294,18 @@ public:
     else if (r.type == gxc::InboxRecord::ATLAS)
     {
       AtlasPiece(r.atlas);
+    }
+    else if (r.type == gxc::InboxRecord::SKIN)
+    {
+      EntityDrawSkin(r.skin);
+    }
+    else if (r.type == gxc::InboxRecord::MODEL)
+    {
+      EntityDrawModel(r.model);
+    }
+    else if (r.type == gxc::InboxRecord::ENTITIES)
+    {
+      EntityDrawFrame(r.entities);
     }
     else if (r.type == gxc::InboxRecord::TELEPORT && mPlanet)
     {
