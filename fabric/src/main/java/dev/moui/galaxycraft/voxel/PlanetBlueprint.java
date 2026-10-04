@@ -34,6 +34,27 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
         return VoxelPlanet.crustDepth(radius);
     }
 
+    /** Blocks of crust above the bedrock at this radius: what the layers share. */
+    public static int room(int radius) {
+        return VoxelPlanet.crustDepth(radius) - 1;
+    }
+
+    /**
+     * The thicknesses, each at least 1, cut from the bottom layer up until they fit in room. Layers
+     * that still do not fit (more layers than room) stay at 1 and are left out when building.
+     */
+    public static int[] fit(int[] thickness, int room) {
+        int[] t = new int[thickness.length];
+        int sum = 0;
+        for (int i = 0; i < t.length; i++) sum += t[i] = Math.clamp(thickness[i], 1, MAX_THICKNESS);
+        for (int i = t.length - 1; i >= 0 && sum > room; i--) {
+            int cut = Math.min(t[i] - 1, sum - room);
+            t[i] -= cut;
+            sum -= cut;
+        }
+        return t;
+    }
+
     /** What is wrong with it for building, or null if nothing is. */
     public String problem() {
         if (name == null || name.isBlank()) return "no name";

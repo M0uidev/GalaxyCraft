@@ -48,6 +48,14 @@ class PlanetBlueprintTest {
         assertNotNull(new PlanetBlueprint("x", 32, 8, List.of(new PlanetBlueprint.Layer("a", 0))).problem());
     }
 
+    @Test void layersFitInTheCrust() {
+        assertEquals(7, PlanetBlueprint.room(32), "crust 8, one of them bedrock");
+        assertArrayEquals(new int[] {1, 2, 4}, PlanetBlueprint.fit(new int[] {1, 2, 4}, 7));
+        assertArrayEquals(new int[] {3, 3, 1}, PlanetBlueprint.fit(new int[] {3, 3, 5}, 7), "cut from the bottom");
+        assertArrayEquals(new int[] {5, 1, 1}, PlanetBlueprint.fit(new int[] {9, 9, 9}, 7));
+        assertArrayEquals(new int[] {1, 1, 1}, PlanetBlueprint.fit(new int[] {0, -3, 1}, 2), "never under 1");
+    }
+
     @Test void storeRoundTrip(@TempDir Path dir) throws Exception {
         BlueprintStore store = new BlueprintStore(dir.resolve("bp"));
         assertEquals(List.of(), store.list());

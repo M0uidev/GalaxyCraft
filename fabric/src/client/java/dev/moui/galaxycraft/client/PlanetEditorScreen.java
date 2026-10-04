@@ -8,8 +8,10 @@ import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -20,30 +22,35 @@ import net.minecraft.world.level.block.state.BlockState;
 /**
  * /galaxycraft: designs planets (name, radius, air above, layers from the surface down), saves
  * them as blueprints and loads them, which replaces this stage's planet with one built from it.
- * Saved blueprints are listed on the left: the name opens one here, Load builds it.
+ * Saved blueprints are listed on the left: the name opens one here, Load builds it. A layer's
+ * block is chosen from a searchable list ({@link BlockPickerScreen}) and its thickness on a slider
+ * from 1 up to what the crust above the bedrock still has room for at this radius.
  */
 public final class PlanetEditorScreen extends Screen {
     private static final int WHITE = 0xFFFFFFFF, GRAY = 0xFFA0A0A0, RED = 0xFFFF5555, GREEN = 0xFF55FF55;
     private static final int ROW = 22, LIST_W = 120, TOP = 60;
     private static boolean openNextTick;
 
-    /** One layer as typed: the boxes' text, read when the blueprint is made. */
+    /** One layer as edited. */
     private static final class Row {
-        String block, thickness;
+        String block;
+        int thickness;
 
-        Row(String block, String thickness) {
+        Row(String block, int thickness) {
             this.block = block;
             this.thickness = thickness;
         }
     }
 
-    private String name, radius, air;
+    private String name;
+    private int radius, air;
     private final List<Row> rows = new ArrayList<>();
     private List<String> saved = List.of();
     private int layerScroll, listScroll;
     private String status = "";
     private int statusColor = WHITE;
-    private final List<EditBox> blockBoxes = new ArrayList<>();
+    private final List<Thickness> sliders = new ArrayList<>();
+    private Button addLayer;
 
     private PlanetEditorScreen() {
         super(Component.literal("GalaxyCraft planets"));
@@ -64,11 +71,102 @@ public final class PlanetEditorScreen extends Screen {
 
     private void edit(PlanetBlueprint b) {
         name = b.name();
-        radius = Integer.toString(b.radius());
-        air = Integer.toString(b.air());
+        radius = Math.clamp(b.radius(), VoxelPlanet.MIN_RADIUS, VoxelPlanet.MAX_RADIUS);
+        air = Math.clamp(b.air(), PlanetBlueprint.MIN_AIR, PlanetBlueprint.MAX_AIR);
         rows.clear();
-        for (PlanetBlueprint.Layer l : b.layers()) rows.add(new Row(l.block(), Integer.toString(l.thickness())));
+        for (PlanetBlueprint.Layer l : b.layers()) rows.add(new Row(l.block(), l.thickness()));
+        fit();
         layerScroll = 0;
+    }
+
+    /** Blocks above the bedrock that the layers share at this radius. */
+    private int room() {
+        return PlanetBlueprint.room(radius);
+    }
+
+    /** Cuts the layers, bottom up, until they fit in the crust. */
+    private void fit() {
+        int[] t = PlanetBlueprint.fit(rows.stream().mapToInt(r -> r.thickness).toArray(), room());
+        for (int i = 0; i < t.length; i++) rows.get(i).thickness = t[i];
+        for (Thickness s : sliders) s.sync();
+    }
+
+    private int used() {
+        return rows.stream().mapToInt(r -> r.thickness).sum();
+    }
+
+    /** Whether any of layer r is above the bedrock (layers past the crust are not built). */
+    private boolean reached(int r) {
+        int above = 0;
+        for (int i = 0; i < r; i++) above += rows.get(i).thickness;
+        return above < room();
+    }
+
+    private boolean canAdd() {
+        return rows.size() < PlanetBlueprint.MAX_LAYERS && rows.size() < room();
+    }
+
+    /** A layer's thickness: 1 up to the room the other layers leave, on a scale as long as the crust allows. */
+    private final class Thickness extends AbstractSliderButton {
+        private final Row row;
+
+        Thickness(int x, int y, int w, Row row) {
+            super(x, y, w, 20, Component.empty(), 0);
+            this.row = row;
+            sync();
+        }
+
+        private int top() {
+            return Math.max(1, room() - (rows.size() - 1));
+        }
+
+        void sync() {
+            value = top() <= 1 ? 0 : (Math.min(row.thickness, top()) - 1) / (double) (top() - 1);
+            active = top() > 1;
+            updateMessage();
+        }
+
+        @Override
+        protected void updateMessage() {
+            setMessage(Component.literal(row.thickness + (row.thickness == 1 ? " block" : " blocks")));
+        }
+
+        @Override
+        protected void applyValue() {
+            int cap = Math.max(1, room() - (used() - row.thickness));
+            row.thickness = Math.min(cap, 1 + (int) Math.round(value * (top() - 1)));
+            if (top() > 1) value = (row.thickness - 1) / (double) (top() - 1);
+        }
+    }
+
+    /** An int on a slider: radius, air. */
+    private final class IntSlider extends AbstractSliderButton {
+        private final String label;
+        private final int min, max;
+        private final java.util.function.IntConsumer to;
+        private int n;
+
+        IntSlider(int x, int y, int w, String label, int min, int max, int n, java.util.function.IntConsumer to) {
+            super(x, y, w, 20, Component.empty(), (n - min) / (double) (max - min));
+            this.label = label;
+            this.min = min;
+            this.max = max;
+            this.n = n;
+            this.to = to;
+            updateMessage();
+        }
+
+        @Override
+        protected void updateMessage() {
+            setMessage(Component.literal(label + ": " + n));
+        }
+
+        @Override
+        protected void applyValue() {
+            n = min + (int) Math.round(value * (max - min));
+            value = (n - min) / (double) (max - min);
+            to.accept(n);
+        }
     }
 
     private void refreshSaved() {
@@ -85,9 +183,11 @@ public final class PlanetEditorScreen extends Screen {
         statusColor = color;
     }
 
+    private static final int PREVIEW_W = 16;
+
     @Override
     protected void init() {
-        blockBoxes.clear();
+        sliders.clear();
         int x = LIST_W + 20, right = width - 10;
         // The saved blueprints.
         int listRows = Math.max(1, (height - 40 - 24) / ROW);
@@ -99,24 +199,25 @@ public final class PlanetEditorScreen extends Screen {
             addRenderableWidget(Button.builder(Component.literal("Load"), b -> open(s, true)).bounds(10 + LIST_W - 32, y, 32, 20).build());
         }
         // The design.
-        box(x, 20, 120, name, 64, v -> name = v);
-        box(x + 128, 20, 40, radius, 3, v -> radius = v);
-        box(x + 176, 20, 40, air, 2, v -> air = v);
+        int w = right - x, nameW = Math.min(140, w * 2 / 5), radiusW = Math.min(120, (w - nameW - 8) * 3 / 5);
+        box(x, 20, nameW, name, 64, v -> name = v);
+        addRenderableWidget(new IntSlider(x + nameW + 4, 20, radiusW, "Radius", VoxelPlanet.MIN_RADIUS, VoxelPlanet.MAX_RADIUS, radius, v -> {
+            radius = v;
+            fit();
+        })).setTooltip(Tooltip.create(Component.literal("Arrow keys move it one by one")));
+        addRenderableWidget(new IntSlider(x + nameW + radiusW + 8, 20, Math.min(90, w - nameW - radiusW - 8), "Air",
+                PlanetBlueprint.MIN_AIR, PlanetBlueprint.MAX_AIR, air, v -> air = v))
+                .setTooltip(Tooltip.create(Component.literal("Room to build above the surface")));
         int visible = Math.max(1, (height - TOP - 48) / ROW);
         layerScroll = Math.clamp(layerScroll, 0, Math.max(0, rows.size() - visible));
-        int blockW = Math.max(60, right - x - 20 - 34 - 3 * 18);
+        int sliderW = 70, blockW = Math.max(80, right - x - 20 - sliderW - 4 - 54 - PREVIEW_W);
         for (int i = 0; i < visible && layerScroll + i < rows.size(); i++) {
             int r = layerScroll + i, y = TOP + i * ROW;
             Row row = rows.get(r);
-            EditBox b = box(x + 20, y, blockW, row.block, 256, v -> row.block = v);
-            blockBoxes.add(b);
-            b.setTextColor(state(row.block) == null ? RED : WHITE);
-            b.setResponder(v -> {
-                row.block = v;
-                b.setTextColor(state(v) == null ? RED : WHITE);
-            });
-            box(x + 24 + blockW, y, 30, row.thickness, 2, v -> row.thickness = v);
-            int bx = x + 58 + blockW;
+            addRenderableWidget(Button.builder(Component.empty(), b -> minecraft.gui.setScreen(new BlockPickerScreen(this, row.block, v -> row.block = v)))
+                    .bounds(x + 20, y, blockW, 20).tooltip(Tooltip.create(Component.literal(row.block + "\nClick to choose another block"))).build());
+            sliders.add(addRenderableWidget(new Thickness(x + 24 + blockW, y, sliderW, row)));
+            int bx = x + 28 + blockW + sliderW;
             addRenderableWidget(Button.builder(Component.literal("↑"), btn -> move(r, -1)).bounds(bx, y, 16, 20).build()).active = r > 0;
             addRenderableWidget(Button.builder(Component.literal("↓"), btn -> move(r, 1)).bounds(bx + 18, y, 16, 20).build()).active = r < rows.size() - 1;
             addRenderableWidget(Button.builder(Component.literal("✕"), btn -> {
@@ -125,12 +226,14 @@ public final class PlanetEditorScreen extends Screen {
             }).bounds(bx + 36, y, 16, 20).build()).active = rows.size() > 1;
         }
         int addY = TOP + Math.min(visible, rows.size() - layerScroll) * ROW;
-        if (rows.size() < PlanetBlueprint.MAX_LAYERS && addY + 20 <= height - 48)
-            addRenderableWidget(Button.builder(Component.literal("+ Layer"), b -> {
-                rows.add(new Row("minecraft:stone", "1"));
-                layerScroll = Math.max(0, rows.size() - visible);
-                rebuildWidgets();
-            }).bounds(x + 20, addY, 60, 20).build());
+        addLayer = null;
+        if (addY + 20 <= height - 48)
+            addLayer = addRenderableWidget(Button.builder(Component.literal("+ Layer"), b -> minecraft.gui.setScreen(
+                    new BlockPickerScreen(this, "", v -> {
+                        rows.add(new Row(v, 1));
+                        fit();
+                        layerScroll = Math.max(0, rows.size() - visible);
+                    }))).bounds(x + 20, addY, 60, 20).build());
         // Actions.
         int bw = Math.min(70, (right - x - 16) / 5), by = height - 26;
         addRenderableWidget(Button.builder(Component.literal("New"), b -> {
@@ -157,6 +260,12 @@ public final class PlanetEditorScreen extends Screen {
         rebuildWidgets();
     }
 
+    /** The name the inventory gives the block that text names, or the text if Minecraft has none by it. */
+    private static String blockName(String text) {
+        BlockState s = state(text);
+        return s == null ? text : s.getBlock().getName().getString();
+    }
+
     /** The block state that text names, or null if Minecraft has none by it. */
     private static BlockState state(String text) {
         try {
@@ -168,30 +277,15 @@ public final class PlanetEditorScreen extends Screen {
 
     /** The design as a blueprint, or null (and why, in the status line) if it is not one. */
     private PlanetBlueprint blueprint() {
-        int r, a;
-        try {
-            r = Integer.parseInt(radius.trim());
-            a = Integer.parseInt(air.trim());
-        } catch (NumberFormatException e) {
-            say("Radius and air must be numbers", RED);
-            return null;
-        }
         List<PlanetBlueprint.Layer> layers = new ArrayList<>();
         for (Row row : rows) {
             if (state(row.block) == null) {
                 say("Unknown block: " + row.block, RED);
                 return null;
             }
-            int t;
-            try {
-                t = Integer.parseInt(row.thickness.trim());
-            } catch (NumberFormatException e) {
-                say("Thickness must be a number", RED);
-                return null;
-            }
-            layers.add(new PlanetBlueprint.Layer(row.block.trim(), t));
+            layers.add(new PlanetBlueprint.Layer(row.block.trim(), row.thickness));
         }
-        PlanetBlueprint b = new PlanetBlueprint(name.trim(), r, a, layers);
+        PlanetBlueprint b = new PlanetBlueprint(name.trim(), radius, air, layers);
         String problem = b.problem();
         if (problem != null) {
             say(problem, RED);
@@ -274,22 +368,48 @@ public final class PlanetEditorScreen extends Screen {
         g.text(font, "Saved planets", 10, 10, WHITE);
         if (saved.isEmpty()) g.text(font, "None yet", 10, 28, GRAY);
         g.text(font, "Name", x, 10, GRAY);
-        g.text(font, "Radius", x + 128, 10, GRAY);
-        g.text(font, "Air", x + 176, 10, GRAY);
-        String crust;
-        try {
-            int r = Integer.parseInt(radius.trim());
-            crust = r < VoxelPlanet.MIN_RADIUS || r > VoxelPlanet.MAX_RADIUS
-                    ? "Radius " + VoxelPlanet.MIN_RADIUS + " to " + VoxelPlanet.MAX_RADIUS
-                    : "Surface down; crust " + VoxelPlanet.crustDepth(r) + " deep, then bedrock";
-        } catch (NumberFormatException e) {
-            crust = "Radius must be a number";
+        int room = room(), used = used(), right = width - 10;
+        String crust = used < room ? "Crust " + used + "/" + room + ", the last layer fills " + (room - used) + " more"
+                : rows.size() > room ? "Crust full: " + (rows.size() - room) + " layer(s) do not fit"
+                : "Crust " + room + "/" + room + " blocks, then bedrock";
+        int color = rows.size() > room ? RED : GRAY;
+        g.text(font, font.plainSubstrByWidth(crust, right - x), x, 46, color);
+        if (addLayer != null) addLayer.active = canAdd();
+        for (int i = 0; i < sliders.size(); i++) {
+            int r = layerScroll + i, y = TOP + i * ROW;
+            Row row = rows.get(r);
+            BlockState s = state(row.block);
+            g.text(font, Integer.toString(r + 1), x + 4, y + 6, GRAY);
+            if (s != null) g.item(new ItemStack(s.getBlock().asItem()), x + 22, y + 2);
+            int blockW = sliders.get(i).getX() - 4 - (x + 20);
+            String label = font.plainSubstrByWidth(blockName(row.block), blockW - 28);
+            g.text(font, label, x + 42, y + 6, s == null ? RED : reached(r) ? WHITE : GRAY);
         }
-        g.text(font, crust, x, 46, GRAY);
-        for (int i = 0; i < blockBoxes.size(); i++) {
-            BlockState s = state(rows.get(layerScroll + i).block);
-            if (s != null) g.item(new ItemStack(s.getBlock().asItem()), x, TOP + i * ROW + 2);
-        }
+        preview(g, right - PREVIEW_W + 4, TOP);
         g.text(font, status, x, height - 40, statusColor);
+    }
+
+    /** The crust as it will be built, a half-size block per block from the surface down to the bedrock. */
+    private void preview(GuiGraphicsExtractor g, int px, int py) {
+        int room = room(), cell = Math.min(8, (height - 48 - py) / (room + 1));
+        if (cell < 2) return;
+        List<ItemStack> column = new ArrayList<>();
+        for (Row row : rows) {
+            BlockState s = state(row.block);
+            for (int i = 0; i < row.thickness; i++) column.add(s == null ? ItemStack.EMPTY : new ItemStack(s.getBlock().asItem()));
+        }
+        ItemStack last = column.isEmpty() ? ItemStack.EMPTY : column.getLast();
+        while (column.size() < room) column.add(last);
+        column = new ArrayList<>(column.subList(0, room));
+        column.add(new ItemStack(net.minecraft.world.item.Items.BEDROCK));
+        g.fill(px - 1, py - 1, px + cell + 1, py + column.size() * cell + 1, 0x80000000);
+        for (int i = 0; i < column.size(); i++) {
+            if (column.get(i).isEmpty()) continue;
+            g.pose().pushMatrix();
+            g.pose().translate(px, py + i * cell);
+            g.pose().scale(cell / 16f, cell / 16f);
+            g.item(column.get(i), 0, 0);
+            g.pose().popMatrix();
+        }
     }
 }
