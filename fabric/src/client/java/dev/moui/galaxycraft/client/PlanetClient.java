@@ -70,6 +70,8 @@ public final class PlanetClient {
      * waits in line for the game, and Mario's collision would wait behind it.
      */
     static final int BULK_BACKLOG = 256 * 1024;
+    /** Bytes the host had not taken at the last tick (status). */
+    private static int lastBacklog;
     /** Ticks between saves of an edited planet. */
     private static final int SAVE_TICKS = 200;
     /** The stage's first planet (index 0): the same session all along, which tests hold on to. */
@@ -255,6 +257,7 @@ public final class PlanetClient {
                     p == focus ? "* " : "", p.planet().surface(), where, c.x, c.y, c.z, p.queued(), p.collisionChunks(),
                     p.tilesStatus(), p.detail() ? "" : ", far view only"));
         }
+        if (lastBacklog > 0) out.append(String.format("%s%d KB the game has not taken", out.isEmpty() ? "" : "; ", lastBacklog / 1024));
         return out.isEmpty() ? "no planet" + where : out.toString();
     }
 
@@ -412,6 +415,7 @@ public final class PlanetClient {
         order.remove(focus);
         order.addFirst(focus);
         long end = System.nanoTime() + MESH_BUDGET_NANOS;
+        lastBacklog = bridge.backlog();
         java.util.function.BooleanSupplier bulk = () -> System.nanoTime() - end < 0 && bridge.backlog() < BULK_BACKLOG;
         for (PlanetSession s : order) {
             s.update(world.sceneId(), bridge.hostPid(), world.queryPos());

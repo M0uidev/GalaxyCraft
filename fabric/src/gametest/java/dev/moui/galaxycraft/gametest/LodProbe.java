@@ -39,10 +39,10 @@ public final class LodProbe implements FabricClientGameTest {
             ctx.runOnClient(mc -> PlanetClient.remove());
             ctx.runOnClient(mc -> PlanetClient.requestSpawn(PlanetBlueprint.standard("lod", r).withMode(PlanetBlueprint.Mode.GENERATED)
                     .withBiome(7, "minecraft:forest", 0).withUnderground(50, true, 100).withPlants(100)));
-            ctx.waitFor(mc -> s.active() && s.queued() == 0, 6000);
+            waitSent(ctx, () -> s.active() && s.queued() == 0, 6000);
             // A second planet beside it: only its far view goes to the game (Mario is far from it).
             ctx.runOnClient(mc -> PlanetClient.requestAdd(32));
-            ctx.waitFor(mc -> PlanetClient.planets().size() == 2 && PlanetClient.planets().get(1).active()
+            waitSent(ctx, () -> PlanetClient.planets().size() == 2 && PlanetClient.planets().get(1).active()
                     && PlanetClient.planets().get(1).queued() == 0, 2000);
             PlanetSession b = ctx.computeOnClient(mc -> PlanetClient.planets().get(1));
             check(b.id() != s.id(), "the second planet has an id of its own: " + s.id() + ", " + b.id());
@@ -60,15 +60,21 @@ public final class LodProbe implements FabricClientGameTest {
                 // Beside the planet, level with its center, looking at it.
                 Vector3d eye = new Vector3d(1, 0, 0.3).normalize().mul((surface + blocks) * UNITS).add(center);
                 look(ctx, eye, center);
-                String stats = stats();
-                gxdev("ctl", "shot lod-" + blocks);
+                String stats = whileRunning(ctx, () -> {
+                    String st = stats();
+                    gxdev("ctl", "shot lod-" + blocks);
+                    return st;
+                });
                 log(String.format("%5d blocks off: max=%s %s", blocks, maxSpeed(ctx), stats));
             }
             // Both from afar: the second one is drawn as its far view.
             look(ctx, new Vector3d(center).add(bCenter).mul(0.5).add(new Vector3d(1, 0, 0.3).normalize().mul(1500 * UNITS)),
                     new Vector3d(center).add(bCenter).mul(0.5));
-            String both = stats();
-            gxdev("ctl", "shot lod-both");
+            String both = whileRunning(ctx, () -> {
+                String st = stats();
+                gxdev("ctl", "shot lod-both");
+                return st;
+            });
             log("both planets from 1500 blocks: " + both);
             check(both.contains("far_parts=") && !both.endsWith("far_parts=0"), "far views drawn");
             ctx.runOnClient(mc -> mc.player.connection.sendCommand("fly"));
@@ -95,6 +101,19 @@ public final class LodProbe implements FabricClientGameTest {
         ctx.waitTicks(60);
     }
 
+    /** Waits up to ticks for done (read on the client), saying every minute what is still to send. */
+    private static void waitSent(ClientGameTestContext ctx, java.util.function.BooleanSupplier done, int ticks) {
+        for (int waited = 0; !ctx.computeOnClient(mc -> done.getAsBoolean()); waited += 20) {
+            if (waited >= ticks) {
+                log("FAIL: still sending after " + ticks + " ticks: " + ctx.computeOnClient(mc -> PlanetClient.status()) + "; "
+                        + whileRunning(ctx, LodProbe::stats));
+                throw new AssertionError("planet not sent");
+            }
+            if (waited > 0 && waited % 1200 == 0) log("waiting: " + ctx.computeOnClient(mc -> PlanetClient.status()) + "; " + whileRunning(ctx, LodProbe::stats));
+            ctx.waitTicks(20);
+        }
+    }
+
     private static void check(boolean ok, String what) {
         if (!ok) {
             log("FAIL: " + what);
@@ -103,9 +122,19 @@ public final class LodProbe implements FabricClientGameTest {
         log("ok " + what);
     }
 
+    /**
+     * read, run while Minecraft keeps ticking: while a ctx call holds it, the view lapses to the game
+     * camera and the module draws (and counts) what that one sees.
+     */
+    private static <T> T whileRunning(ClientGameTestContext ctx, java.util.function.Supplier<T> read) {
+        java.util.concurrent.CompletableFuture<T> f = java.util.concurrent.CompletableFuture.supplyAsync(read);
+        while (!f.isDone()) ctx.waitTicks(5);
+        return f.join();
+    }
+
     /** The median of a few readings, taken while Minecraft keeps running (see PerfProbe). */
     private static String maxSpeed(ClientGameTestContext ctx) {
-        java.util.concurrent.CompletableFuture<String> m = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+        return whileRunning(ctx, () -> {
             double[] v = new double[5];
             for (int i = 0; i < v.length; i++) {
                 Matcher p = MAX_SPEED.matcher(gxdev("ctl", "status"));
@@ -119,14 +148,21 @@ public final class LodProbe implements FabricClientGameTest {
             java.util.Arrays.sort(v);
             return String.format("%.0f%%", v[2]);
         });
-        while (!m.isDone()) ctx.waitTicks(5);
-        return m.join();
     }
 
     /** VoxelStats: chunks the module has, drawn last frame, and parts of far views drawn. */
     private static String stats() {
+        // The control channel misses a reply now and then: a few tries before giving up.
         Matcher m = MBX.matcher(gxdev("ctl", "mbx"));
-        if (!m.find()) return "no mailbox";
+        for (int tries = 1; !m.find(); tries++) {
+            if (tries == 5) return "no mailbox";
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            m = MBX.matcher(gxdev("ctl", "mbx"));
+        }
         long vs = word(Long.parseLong(m.group(1), 16) + DBG_VOXEL_STATS);
         if (vs == 0) return "no stats";
         return "chunks=" + word(vs + 8) + " drawn=" + word(vs + 40) + " far_parts=" + word(vs + 60);
