@@ -7,6 +7,11 @@ loom {
 
 	runs {
 		configureEach {
+			// Game tests keep their planets apart from the player's, in a folder emptied before each
+			// run (a planet left by one run would be landed on by the next). The flags below that
+			// need saved planets point it elsewhere: the last -D wins.
+			if (name.toLowerCase().contains("gametest"))
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/gametest-planets"
 			if (project.hasProperty("galaxycraftDemo")) {
 				vmArg "-Dgalaxycraft.demo=true"
 			}
@@ -127,4 +132,9 @@ fabricApi {
 		enableGameTests = false
 		eula = true
 	}
+}
+
+tasks.matching { it.name == "runClientGameTest" }.configureEach {
+	def planets = layout.buildDirectory.dir("gametest-planets").get().asFile
+	doFirst { planets.deleteDir() }
 }
