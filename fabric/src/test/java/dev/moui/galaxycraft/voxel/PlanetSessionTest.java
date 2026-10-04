@@ -36,8 +36,20 @@ class PlanetSessionTest {
         return m.type() == Layout.MSG_CHUNK && (le(m).getInt(0) & PlanetSession.FAR_VIEW) != 0;
     }
 
+    /** A part of the far view whose tile is chunks in the game: drawn only from afar. */
+    static boolean covered(PlanetSession.Msg m) {
+        return far(m) && (le(m).getInt(0) & PlanetSession.FAR_COVERED) != 0;
+    }
+
+    /** A far view message's tile. */
+    static int tile(ByteBuffer far) {
+        return far.getInt(0) & (PlanetSession.FAR_COVERED - 1);
+    }
+
+    /** A planet far above Mario, every chunk of it sent (no render distance). */
     static PlanetSession spawned(int radius) {
         PlanetSession s = new PlanetSession(80);
+        s.setRenderDistance(Double.POSITIVE_INFINITY);
         s.spawn(radius, MARIO, new Vector3d(0, 1, 0));
         s.update(3, 100, MARIO);
         return s;
@@ -61,18 +73,16 @@ class PlanetSessionTest {
         assertEquals(80f * (float) PlanetSession.DEFAULT_MARIO_RADIUS, p.getFloat(32), 1e-3);
         assertTrue(msgs.stream().skip(1).allMatch(m -> m.type() == Layout.MSG_CHUNK));
         assertTrue(msgs.stream().skip(1).allMatch(m -> le(m).getInt(8) > 0), "nothing empty is sent");
+        // No render distance: every tile is chunks, its far view covered (for a camera far away).
+        assertTrue(msgs.stream().filter(PlanetSessionTest::far).allMatch(PlanetSessionTest::covered));
+        assertEquals(PlanetLod.tileCount(s.planet()), msgs.stream().filter(PlanetSessionTest::far).count());
+        msgs = msgs.stream().filter(m -> !far(m)).toList();
         // Every grass chunk, nearest to Mario (under the planet) first.
         int grass = (int) java.util.stream.IntStream.range(0, s.planet().chunkCount())
                 .filter(ch -> !PlanetMesher.quads(s.planet(), ch).isEmpty()).count();
-        // Then the far view, its six faces, before any chunk.
-        for (int f = 0; f < 6; f++) {
-            assertTrue(far(msgs.get(1 + f)));
-            assertEquals(s.id() << 24 | PlanetSession.FAR_VIEW | f, le(msgs.get(1 + f)).getInt(0));
-            assertEquals(0, le(msgs.get(1 + f)).getInt(12), "drawn only");
-        }
-        assertEquals(1 + 6 + grass, msgs.size());
-        assertTrue(msgs.stream().skip(7).allMatch(m -> le(m).getInt(0) >>> 24 == s.id()), "each chunk names its planet");
-        float first = le(msgs.get(7)).getFloat(20), last = le(msgs.get(msgs.size() - 1)).getFloat(20);
+        assertEquals(1 + grass, msgs.size());
+        assertTrue(msgs.stream().skip(1).allMatch(m -> le(m).getInt(0) >>> 24 == s.id()), "each chunk names its planet");
+        float first = le(msgs.get(1)).getFloat(20), last = le(msgs.get(msgs.size() - 1)).getFloat(20);
         assertTrue(first < last, "nearest first: y " + first + " then " + last);
     }
 
@@ -112,6 +122,195 @@ class PlanetSessionTest {
         assertTrue(s.collides(s.planet().chunkOf(ahead[0])), "the ground where he is headed collides");
         assertFalse(s.collides(s.planet().chunkOf(ahead[1])), "30 blocks behind him: no longer");
         assertTrue(s.collisionChunks() < 80, s.collisionChunks() + " collision parts");
+    }
+
+    /** Mario on the planet's face toward him, a block over the grass (radius r). */
+    static Vector3d onTop(PlanetSession s, int r) {
+        return new Vector3d(s.center()).add(0, -(r + 1) * 80, 0);
+    }
+
+    static boolean kcl(PlanetSession.Msg m) {
+        return m.type() == Layout.MSG_CHUNK && le(m).getInt(12) > 0;
+    }
+
+    @Test void withoutBudgetOnlyMariosCollisionIsBuilt() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, onTop(s, 64));
+        List<PlanetSession.Msg> got = new ArrayList<>();
+        for (PlanetSession.Msg m; (m = s.peek(() -> false)) != null; s.sent()) got.add(m);
+        assertEquals(Layout.MSG_PLANET, got.get(0).type());
+        assertTrue(got.size() > 1, "the ground under Mario");
+        assertTrue(got.stream().skip(1).allMatch(PlanetSessionTest::kcl), "nothing but collision: no far view, no far chunks");
+        assertEquals(got.size() - 1, s.collisionChunks());
+        assertTrue(s.queued() > 100, "the rest of the planet waits for time: " + s.queued());
+        // With time, the rest comes.
+        List<PlanetSession.Msg> rest = drain(s);
+        assertTrue(rest.stream().anyMatch(PlanetSessionTest::far));
+        assertTrue(rest.stream().noneMatch(PlanetSessionTest::kcl), "the collision was all there already");
+    }
+
+    @Test void collisionWhereMarioWalksJumpsAheadOfAStreamingPlanet() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = onTop(s, 64);
+        s.update(3, 100, top);
+        // A few chunks a tick, as a budget allows: most of the planet still waits.
+        for (int n = 0; n < 40 && s.peek() != null; n++) s.sent();
+        assertTrue(s.queued() > 100, s.queued() + " waiting");
+        // Mario runs to ground the planet has not sent yet (a quarter of the way around).
+        Vector3d side = new Vector3d(s.center()).add(65 * 80, 0, 0);
+        for (int i = 0; i < PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, side);
+        int ground = s.planet().chunkOf(s.cellAt(new Vector3d(s.center()).add(63.5 * 80, 0, 0)));
+        assertFalse(s.collides(ground));
+        // Out of time this tick: still, the ground under him is what comes.
+        for (PlanetSession.Msg m; (m = s.peek(() -> false)) != null; s.sent()) assertTrue(kcl(m) || le(m).getInt(12) == 0 && !far(m));
+        assertTrue(s.collides(ground), "his ground collides before the rest of the planet is sent");
+    }
+
+    @Test void anEditUnderMarioGoesOutAheadOfTheRest() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(32, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = onTop(s, 32);
+        s.update(3, 100, top);
+        while (s.peek(() -> false) != null) s.sent(); // the planet and Mario's collision
+        assertTrue(s.queued() > 10, "the rest waits");
+        int under = s.cellAt(new Vector3d(s.center()).add(0, -31.5 * 80, 0));
+        int chunk = s.planet().chunkOf(under);
+        assertTrue(s.collides(chunk));
+        s.planet().set(under, Blocks.AIR);
+        s.update(3, 100, top);
+        // It (and the neighbors whose faces it changed) goes now, out of budget or not.
+        List<PlanetSession.Msg> now = new ArrayList<>();
+        for (PlanetSession.Msg m; (m = s.peek(() -> false)) != null; s.sent()) now.add(m);
+        assertTrue(now.stream().anyMatch(m -> slot(le(m)) == chunk && kcl(m)), "the dug chunk, with its collision");
+        assertTrue(now.size() < 8, now.size() + ": nothing else");
+    }
+
+    @Test void teleportLandsOnItsGroundEvenOutOfBudget() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, MARIO);
+        s.teleport();
+        List<PlanetSession.Msg> got = new ArrayList<>();
+        for (PlanetSession.Msg m; (m = s.peek(() -> false)) != null; s.sent()) got.add(m);
+        assertEquals(Layout.MSG_PLANET_TP, got.get(got.size() - 1).type(), "the teleport, last");
+        assertTrue(got.stream().anyMatch(PlanetSessionTest::kcl), "after the ground where he lands");
+    }
+
+    /** Chunk messages with something to draw, by slot; far view messages by tile (dl bytes), drawn and covered. */
+    record Sent(java.util.Map<Integer, Integer> chunks, java.util.Map<Integer, Integer> far, java.util.Map<Integer, Integer> covered) {}
+
+    static Sent sent(List<PlanetSession.Msg> msgs) {
+        java.util.Map<Integer, Integer> chunks = new java.util.LinkedHashMap<>(), far = new java.util.LinkedHashMap<>(),
+                covered = new java.util.LinkedHashMap<>();
+        for (PlanetSession.Msg m : msgs) {
+            if (m.type() != Layout.MSG_CHUNK) continue;
+            ByteBuffer b = le(m);
+            if (covered(m)) covered.put(tile(b), b.getInt(8));
+            else if (far(m)) far.put(tile(b), b.getInt(8));
+            else chunks.put(slot(b), b.getInt(8));
+        }
+        return new Sent(chunks, far, covered);
+    }
+
+    @Test void aBigPlanetIsChunksAroundMarioAndItsFarViewElsewhere() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(128, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, onTop(s, 128));
+        Sent got = sent(drain(s));
+        VoxelPlanet p = s.planet();
+        int tiles = PlanetLod.tileCount(p), shown = 0;
+        for (int t = 0; t < tiles; t++) if (s.tileShown(t)) shown++;
+        assertTrue(shown > 0 && shown < tiles / 4, shown + " of " + tiles + " tiles as chunks");
+        for (int c : got.chunks().keySet()) assertTrue(s.tileShown(PlanetLod.tileOfChunk(p, c)) || s.collides(c), "chunk " + c + " out of view");
+        for (int t = 0; t < tiles; t++)
+            if (s.tileShown(t)) {
+                assertFalse(got.far().containsKey(t), "tile " + t + " is chunks: its far view not drawn near");
+                assertTrue(got.covered().getOrDefault(t, 0) > 0, "tile " + t + " is chunks: its far view kept for afar");
+            }
+            else assertTrue(got.far().containsKey(t), "tile " + t + " is far view");
+        long bytes = got.chunks().values().stream().mapToLong(Integer::longValue).sum()
+                + got.far().values().stream().mapToLong(Integer::longValue).sum()
+                + got.covered().values().stream().mapToLong(Integer::longValue).sum();
+        System.out.printf("radius 128, render %.0f: %d tiles of %d as chunks, %d chunks, %.1f MB%n", PlanetSession.RENDER, shown, tiles,
+                got.chunks().size(), bytes / 1e6);
+        assertTrue(bytes < 8_000_000, bytes + " bytes");
+    }
+
+    @Test void walkingAwayTheFarViewTakesOverBeforeTheChunksGo() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = onTop(s, 64);
+        s.update(3, 100, top);
+        Sent first = sent(drain(s));
+        VoxelPlanet p = s.planet();
+        int under = PlanetLod.tileOfChunk(p, p.chunkOf(s.cellAt(new Vector3d(s.center()).add(0, -63.5 * 80, 0))));
+        assertTrue(s.tileShown(under));
+        assertFalse(first.far().containsKey(under));
+        // To the other side of the planet.
+        Vector3d other = new Vector3d(s.center()).add(0, 65 * 80, 0);
+        for (int i = 0; i < PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, other);
+        List<PlanetSession.Msg> msgs = drain(s);
+        assertFalse(s.tileShown(under));
+        int farAt = -1, goneAt = -1;
+        for (int i = 0; i < msgs.size(); i++) {
+            ByteBuffer b = le(msgs.get(i));
+            if (msgs.get(i).type() != Layout.MSG_CHUNK) continue;
+            if (far(msgs.get(i)) && !covered(msgs.get(i)) && tile(b) == under && b.getInt(8) > 0 && farAt < 0) farAt = i;
+            if (!far(msgs.get(i)) && PlanetLod.tileOfChunk(p, slot(b)) == under && b.getInt(8) == 0 && goneAt < 0) goneAt = i;
+        }
+        assertTrue(farAt >= 0, "its far view comes back");
+        assertTrue(goneAt > farAt, "and only then do its chunks go: " + farAt + ", " + goneAt);
+        // Where he is now: chunks, and the far view there covered after them.
+        int there = PlanetLod.tileOfChunk(p, p.chunkOf(s.cellAt(new Vector3d(s.center()).add(0, 63.5 * 80, 0))));
+        assertTrue(s.tileShown(there));
+        int chunkAt = -1, hiddenAt = -1;
+        for (int i = 0; i < msgs.size(); i++) {
+            ByteBuffer b = le(msgs.get(i));
+            if (msgs.get(i).type() != Layout.MSG_CHUNK) continue;
+            if (!far(msgs.get(i)) && PlanetLod.tileOfChunk(p, slot(b)) == there && b.getInt(8) > 0) chunkAt = i;
+            if (covered(msgs.get(i)) && tile(b) == there && b.getInt(8) == 0) hiddenAt = i;
+        }
+        assertTrue(chunkAt >= 0 && hiddenAt > chunkAt, "its chunks, then its far view covered: " + chunkAt + ", " + hiddenAt);
+    }
+
+    @Test void aTileComingInWhileItsFarViewWaitsForRoomIsStillHidden() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        Vector3d away = new Vector3d(0, -1000 * 80, 0);
+        s.update(3, 100, away); // all far view
+        assertTrue(s.peek() != null);
+        s.sent(); // the planet
+        PlanetSession.Msg waiting = s.peek();
+        assertTrue(far(waiting) && le(waiting).getInt(8) > 0, "a tile's far view, built, the ring full");
+        int tile = tile(le(waiting));
+        // Mario lands right on that tile before the ring has room.
+        VoxelPlanet p = s.planet();
+        int chunk = PlanetLod.chunksOfTile(p, tile)[p.chunkLayers() - 1];
+        Vector3d c = new Vector3d();
+        p.sphere(chunk, c, new double[1]);
+        Vector3d on = new Vector3d(c).normalize(66).mul(80).add(s.center());
+        for (int i = 0; i < PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, on);
+        assertTrue(s.tileShown(tile));
+        List<PlanetSession.Msg> rest = drain(s); // the far view goes out as built, then...
+        long hides = rest.stream().filter(m -> covered(m) && tile(le(m)) == tile && le(m).getInt(8) == 0).count();
+        assertEquals(1, hides, "...covered again once its chunks are there");
+    }
+
+    @Test void theBiggestPlanetCostsTheGameItsGroundAroundMario() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(VoxelPlanet.MAX_RADIUS, MARIO, new Vector3d(0, 1, 0));
+        long t0 = System.nanoTime();
+        s.update(3, 100, onTop(s, VoxelPlanet.MAX_RADIUS));
+        Sent got = sent(drain(s));
+        long bytes = got.chunks().values().stream().mapToLong(Integer::longValue).sum()
+                + got.far().values().stream().mapToLong(Integer::longValue).sum()
+                + got.covered().values().stream().mapToLong(Integer::longValue).sum();
+        double secs = (System.nanoTime() - t0) / 1e9;
+        System.out.printf("radius 256, render %.0f: %d chunks, %d far tiles, %.1f MB, %.1f s%n", PlanetSession.RENDER, got.chunks().size(),
+                got.far().size(), bytes / 1e6, secs);
+        assertTrue(bytes < 12_000_000, bytes + " bytes");
     }
 
     @Test void biggestPlanetFitsTheGameAndSendsInSeconds() {
@@ -345,7 +544,9 @@ class PlanetSessionTest {
     }
 
     @Test void anOutlineWhileAFarPartWaitsLosesNeither() {
-        PlanetSession s = spawned(16);
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(16, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, new Vector3d(0, -1000 * 80, 0)); // Mario far away: all of it far view
         s.peek();
         s.sent(); // the planet
         assertTrue(far(s.peek()), "a part of the far view is built and waits");
@@ -354,7 +555,7 @@ class PlanetSessionTest {
         List<PlanetSession.Msg> msgs = drain(s);
         assertEquals(Layout.MSG_OUTLINE, msgs.get(0).type());
         assertEquals(1, msgs.stream().filter(m -> m.type() == Layout.MSG_OUTLINE).count());
-        assertEquals(6, msgs.stream().filter(PlanetSessionTest::far).count(), "all six faces");
+        assertEquals(PlanetLod.tileCount(s.planet()), msgs.stream().filter(PlanetSessionTest::far).count(), "every tile");
     }
 
     @Test void withoutDetailOnlyTheFarViewIsSent() {
@@ -380,6 +581,27 @@ class PlanetSessionTest {
         s.setDetail(true);
         s.update(3, 100, MARIO);
         assertTrue(drain(s).stream().anyMatch(m -> m.type() == Layout.MSG_CHUNK && !far(m)));
+    }
+
+    @Test void diggingNearMarioRefreshesTheFarViewSeenFromAfar() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = onTop(s, 64);
+        s.update(3, 100, top);
+        drain(s);
+        VoxelPlanet p = s.planet();
+        Vector3d ground = new Vector3d(s.center()).add(0, -63.5 * 80, 0);
+        int under = PlanetLod.tileOfChunk(p, p.chunkOf(s.cellAt(ground)));
+        assertTrue(s.tileShown(under));
+        assertTrue(s.breakBlock(top, new Vector3d(0, 1, 0)));
+        List<PlanetSession.Msg> later = new ArrayList<>();
+        for (int i = 0; i < PlanetSession.FAR_UPDATES; i++) {
+            s.update(3, 100, top);
+            later.addAll(drain(s));
+        }
+        assertTrue(later.stream().anyMatch(m -> covered(m) && tile(le(m)) == under && le(m).getInt(8) > 0),
+                "its tile's far view again, covered: the hole shows from afar too");
+        assertTrue(later.stream().noneMatch(m -> far(m) && !covered(m) && tile(le(m)) == under), "never drawn over its chunks");
     }
 
     @Test void aStageKeepsSeveralPlanetsEachInItsFile(@TempDir Path dir) throws Exception {

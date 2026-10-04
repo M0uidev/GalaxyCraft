@@ -54,8 +54,12 @@ import net.minecraft.world.phys.Vec3;
 public final class ShadowWorld {
     public static final ResourceKey<Level> KEY = ResourceKey.create(Registries.DIMENSION,
             Identifier.fromNamespaceAndPath(GalaxyCraft.MOD_ID, "shadow"));
-    /** Columns of 16×16 blocks copied in per server tick. */
-    static final int MIRROR_PER_TICK = 4;
+    /**
+     * Time each server tick may spend copying the planet in, ns: a row of 16 cells by the planet's
+     * layers at a time. Copying in whole columns, a few a tick, a new planet's dozens of them
+     * (thousands of blocks each, lit as they go) made the server's ticks last hundreds of ms.
+     */
+    static final long MIRROR_NANOS = 4_000_000;
     /** Copying in: no neighbor updates, no onPlace (the planet's states already fit together). */
     static final int MIRROR_FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_SKIP_ON_PLACE;
 
@@ -84,6 +88,9 @@ public final class ShadowWorld {
     private static ShadowMap map;
     private static final Set<Long> forced = new HashSet<>(), mirrored = new HashSet<>();
     private static final ArrayDeque<Long> toMirror = new ArrayDeque<>();
+    /** The column being copied in (in mirrored already, so edits reach it), and its next row of x; null: none. */
+    private static Long mirroring;
+    private static int mirrorX;
     private static final ArrayDeque<Integer> edgeChanged = new ArrayDeque<>();
     private static BlockPos writingPos;
     private static volatile BlockPos mario = BlockPos.ZERO;
@@ -322,6 +329,7 @@ public final class ShadowWorld {
                     level.setChunkForced(ChunkPos.getX(c), ChunkPos.getZ(c), false);
                     forced.remove(c);
                     mirrored.remove(c);
+                    if (c.equals(mirroring)) mirroring = null;
                 }
             for (Long c : columns)
                 if (forced.add(c)) {
@@ -407,7 +415,7 @@ public final class ShadowWorld {
             return;
         }
         for (Consumer<ServerLevel> op; (op = ops.poll()) != null; ) op.accept(level);
-        for (int n = 0; n < MIRROR_PER_TICK && !toMirror.isEmpty(); n++) mirror(level, toMirror.poll());
+        mirrorSome(level);
         flushEdges(level);
         moveProxy(level);
         entities = map == null ? null : new Entities(planet, map, collect(level));
@@ -581,35 +589,58 @@ public final class ShadowWorld {
         forced.clear();
         mirrored.clear();
         toMirror.clear();
+        mirroring = null;
         edgeChanged.clear();
     }
 
     private static void mirrorNow(ServerLevel level, BlockPos pos) {
         long c = ChunkPos.pack(pos);
-        if (mirrored.contains(c)) return;
+        if (mirrored.contains(c) && !Long.valueOf(c).equals(mirroring)) return; // copied in already (not half)
         if (forced.add(c)) level.setChunkForced(ChunkPos.getX(c), ChunkPos.getZ(c), true);
         toMirror.remove(c);
         mirror(level, c);
     }
 
-    /** Copies the planet's cells (and halo copies) of a column in where they differ. */
+    /** Copies columns in, a row at a time, for MIRROR_NANOS at most (a row at least). */
+    private static void mirrorSome(ServerLevel level) {
+        long until = System.nanoTime() + MIRROR_NANOS;
+        do {
+            if (mirroring == null) {
+                Long next = toMirror.poll();
+                if (next == null) return;
+                if (map == null || !forced.contains(next)) continue;
+                mirroring = next;
+                mirrorX = 0;
+                mirrored.add(next); // edits reach it from now on; the rows still to copy take what the cells are then
+            }
+            mirrorRow(level, mirroring, mirrorX++);
+            if (mirrorX == 16) mirroring = null;
+        } while (System.nanoTime() - until < 0);
+    }
+
+    /** Copies the planet's cells (and halo copies) of a column in where they differ, all at once. */
     private static void mirror(ServerLevel level, long column) {
         if (map == null || !forced.contains(column)) return;
-        int x0 = ChunkPos.getX(column) << 4, z0 = ChunkPos.getZ(column) << 4;
         mirrored.add(column);
+        for (int x = 0; x < 16; x++) mirrorRow(level, column, x);
+        if (Long.valueOf(column).equals(mirroring)) mirroring = null;
+    }
+
+    /** One row of a column: x = its 16 blocks along z, by the planet's layers. */
+    private static void mirrorRow(ServerLevel level, long column, int row) {
+        int x = (ChunkPos.getX(column) << 4) + row, z0 = ChunkPos.getZ(column) << 4;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        for (int x = x0; x < x0 + 16; x++)
-            for (int z = z0; z < z0 + 16; z++)
-                for (int y = 0; y < map.grid.layers; y++) {
-                    int cell = map.cell(x, y, z);
-                    if (cell < 0) cell = map.haloSource(x, y, z);
-                    if (cell < 0) {
-                        if (y == 0 && map.haloSource(x, 0, z) < 0) break; // not this planet's column
-                        continue;
-                    }
-                    BlockState s = state(planet.get(cell));
-                    if (level.getBlockState(pos.set(x, y, z)) != s) write(level, pos.immutable(), s, MIRROR_FLAGS);
+        for (int z = z0; z < z0 + 16; z++)
+            for (int y = 0; y < map.grid.layers; y++) {
+                int cell = map.cell(x, y, z);
+                if (cell < 0) cell = map.haloSource(x, y, z);
+                if (cell < 0) {
+                    if (y == 0 && map.haloSource(x, 0, z) < 0) break; // not this planet's column
+                    continue;
                 }
+                BlockState s = state(planet.get(cell));
+                if (level.getBlockState(pos.set(x, y, z)) != s) write(level, pos.immutable(), s, MIRROR_FLAGS);
+            }
     }
 
     private static void write(ServerLevel level, BlockPos pos, BlockState s, int flags) {

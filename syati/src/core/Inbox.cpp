@@ -75,7 +75,8 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
     const u32 word = ReadBE32(p);
     c.planet = word >> 24;
     c.far = (word & CHUNK_FAR_VIEW) != 0;
-    c.slot = word & CHUNK_SLOT_MASK;
+    c.covered = c.far && (word & CHUNK_FAR_COVERED) != 0;
+    c.slot = word & (c.far ? CHUNK_SLOT_MASK & ~CHUNK_FAR_COVERED : CHUNK_SLOT_MASK);
     c.version = ReadBE32(p + 4);
     c.dl_size = ReadBE32(p + 8);
     c.kcl_size = ReadBE32(p + 12);

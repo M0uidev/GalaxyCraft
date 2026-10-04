@@ -41,6 +41,35 @@ class PlanetLodTest {
         }
     }
 
+    @Test void tilesShareOutEveryChunkOnce() {
+        for (int radius : new int[] {10, 32, 128, 256}) {
+            VoxelPlanet p = VoxelPlanet.ofRadius(radius, CubeBlocks.INSTANCE);
+            int tiles = PlanetLod.tileCount(p);
+            assertTrue(PlanetLod.tilesPerEdge(p) <= PlanetLod.MAX_TILES_PER_EDGE, "radius " + radius);
+            int[] seen = new int[p.chunkCount()];
+            for (int t = 0; t < tiles; t++)
+                for (int c : PlanetLod.chunksOfTile(p, t)) {
+                    seen[c]++;
+                    assertEquals(t, PlanetLod.tileOfChunk(p, c));
+                }
+            for (int c = 0; c < seen.length; c++) assertEquals(1, seen[c], "radius " + radius + " chunk " + c);
+        }
+    }
+
+    @Test void aFlatPlanetsTilesLieOnItsSurface() {
+        VoxelPlanet p = VoxelPlanet.ofRadius(128, CubeBlocks.INSTANCE);
+        int quads = 0;
+        for (int t = 0; t < PlanetLod.tileCount(p); t++) {
+            Vector3d[] v = vertices(PlanetLod.tile(p, t, 80));
+            assertTrue(v.length > 0, "tile " + t);
+            int onSurface = 0;
+            for (Vector3d x : v) if (Math.abs(x.length() - p.surface()) < 0.05) onSurface++;
+            assertTrue(onSurface >= v.length / 2, "tops (and the tops of its skirts) on the surface");
+            quads += v.length / 4;
+        }
+        assertTrue(quads < 20_000, quads + " quads for the whole planet");
+    }
+
     @Test void aWholePlanetIsAFewThousandQuads() {
         VoxelPlanet p = VoxelPlanet.ofRadius(256, CubeBlocks.INSTANCE);
         int quads = 0;

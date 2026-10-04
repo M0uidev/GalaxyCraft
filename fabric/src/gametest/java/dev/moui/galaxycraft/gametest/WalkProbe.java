@@ -99,10 +99,11 @@ public final class WalkProbe implements FabricClientGameTest {
 
     /** Mario's steps over some ticks, as an angle from our look (right positive); want: expected. */
     private void leg(ClientGameTestContext ctx, String what, int ticks, double want) {
-        Vector3d p0 = pos(ctx), up = peekVec(MBX_GRAVITY).negate();
-        Vector3d look = peekVec(MBX_LOOK), cam = peekVec(MBX_CAM_DIR);
+        Vector3d[] at = whileRunning(ctx, () -> new Vector3d[] {peekVec(MBX_GRAVITY).negate(), peekVec(MBX_LOOK), peekVec(MBX_CAM_DIR)});
+        Vector3d up = at[0], look = at[1], cam = at[2];
+        Vector3d p0 = pos(ctx);
         ctx.waitTicks(ticks);
-        Vector3d p1 = pos(ctx), front = peekVec(MBX_FRONT);
+        Vector3d p1 = pos(ctx), front = whileRunning(ctx, () -> peekVec(MBX_FRONT));
         Vector3d step = new Vector3d(p1).sub(p0);
         double moved = flatLength(step, up);
         double a = angle(step, look, up), off = Math.abs(Math.IEEEremainder(a - want, 360));
@@ -141,6 +142,17 @@ public final class WalkProbe implements FabricClientGameTest {
     }
 
 
+
+    /**
+     * Reads the dev Dolphin while Minecraft keeps ticking: between a test's ticks Minecraft stands
+     * still, and the game waits for a stalled Minecraft (HostBridge::WaitForMod), past the
+     * heartbeat timeout it stops following it and the mailbox's look is zero.
+     */
+    private static <T> T whileRunning(ClientGameTestContext ctx, java.util.function.Supplier<T> read) {
+        java.util.concurrent.CompletableFuture<T> f = java.util.concurrent.CompletableFuture.supplyAsync(read);
+        while (!f.isDone()) ctx.waitTicks(1);
+        return f.join();
+    }
 
     private static Vector3d peekVec(int offset) {
         return peekAt(mailbox() + offset);

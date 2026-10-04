@@ -41,25 +41,87 @@ public final class PlanetLod {
     }
 
     public static Part face(VoxelPlanet p, int face, double unitsPerBlock) {
+        int n = p.grid.n;
+        return region(p, face, 0, n, 0, n, patchColumns(n), unitsPerBlock);
+    }
+
+    /**
+     * Tiles: the far view in pieces that stand in for chunks, so that the ground around Mario can
+     * be his chunks and the rest of the planet its far view (PlanetSession's render distance). A
+     * tile is TILE_CHUNKS × TILE_CHUNKS chunk columns of a face, patches of whole chunks inside it
+     * and skirts all around (a tile's neighbor may be chunks, or another tile).
+     */
+    public static final int TILE_CHUNKS = 4;
+    /** At most this many tiles along a face's edge (slots of the game's far view: 6 × 16 × 16). */
+    public static final int MAX_TILES_PER_EDGE = 16;
+
+    /** Tiles along a face's edge. */
+    public static int tilesPerEdge(VoxelPlanet p) {
+        int chunks = (p.grid.n + VoxelPlanet.CHUNK - 1) / VoxelPlanet.CHUNK;
+        return (chunks + TILE_CHUNKS - 1) / TILE_CHUNKS;
+    }
+
+    public static int tileCount(VoxelPlanet p) {
+        int t = tilesPerEdge(p);
+        return 6 * t * t;
+    }
+
+    /** The tile a chunk lies in. */
+    public static int tileOfChunk(VoxelPlanet p, int chunk) {
+        int t = tilesPerEdge(p), per = p.chunksPerEdge(), layers = p.chunkLayers();
+        int cj = chunk / layers % per, ci = chunk / (layers * per) % per, f = chunk / (layers * per * per);
+        return (f * t + ci / TILE_CHUNKS) * t + cj / TILE_CHUNKS;
+    }
+
+    /** The chunks of a tile, every layer. */
+    public static int[] chunksOfTile(VoxelPlanet p, int tile) {
+        int t = tilesPerEdge(p), per = p.chunksPerEdge(), layers = p.chunkLayers();
+        int f = tile / (t * t), ti = tile / t % t, tj = tile % t;
+        int[] out = new int[TILE_CHUNKS * TILE_CHUNKS * layers];
+        int n = 0;
+        for (int ci = ti * TILE_CHUNKS; ci < Math.min(per, ti * TILE_CHUNKS + TILE_CHUNKS); ci++)
+            for (int cj = tj * TILE_CHUNKS; cj < Math.min(per, tj * TILE_CHUNKS + TILE_CHUNKS); cj++)
+                for (int ck = 0; ck < layers; ck++) out[n++] = ((f * per + ci) * per + cj) * layers + ck;
+        return java.util.Arrays.copyOf(out, n);
+    }
+
+    /** Columns along a tile's patch: whole chunks, wider on big planets (about PATCHES of them along a face). */
+    static int tilePatchColumns(int n) {
+        int s = VoxelPlanet.CHUNK;
+        while (s < TILE_CHUNKS * VoxelPlanet.CHUNK && (n + s - 1) / s > 2 * PATCHES) s *= 2;
+        return s;
+    }
+
+    /** A tile's part of the far view (its display list empty if it has no ground at all). */
+    public static Part tile(VoxelPlanet p, int tile, double unitsPerBlock) {
+        int t = tilesPerEdge(p), n = p.grid.n, cols = TILE_CHUNKS * VoxelPlanet.CHUNK;
+        int f = tile / (t * t), ti = tile / t % t, tj = tile % t;
+        return region(p, f, ti * cols, Math.min(n, ti * cols + cols), tj * cols, Math.min(n, tj * cols + cols),
+                tilePatchColumns(n), unitsPerBlock);
+    }
+
+    /** Columns [i0, i1) × [j0, j1) of a face, in patches of s × s: walls between them, skirts around. */
+    private static Part region(VoxelPlanet p, int face, int i0r, int i1r, int j0r, int j1r, int s, double unitsPerBlock) {
         CubeSphere g = p.grid;
-        int s = patchColumns(g.n), m = (g.n + s - 1) / s;
-        Patch[][] patch = new Patch[m][m];
-        for (int a = 0; a < m; a++)
-            for (int b = 0; b < m; b++) patch[a][b] = patch(p, face, a * s, Math.min(g.n, a * s + s), b * s, Math.min(g.n, b * s + s));
+        int ma = (i1r - i0r + s - 1) / s, mb = (j1r - j0r + s - 1) / s;
+        Patch[][] patch = new Patch[ma][mb];
+        for (int a = 0; a < ma; a++)
+            for (int b = 0; b < mb; b++)
+                patch[a][b] = patch(p, face, i0r + a * s, Math.min(i1r, i0r + a * s + s), j0r + b * s, Math.min(j1r, j0r + b * s + s));
         List<PlanetMesher.Quad> quads = new ArrayList<>();
         int skirt = 2 * s + 2;
-        for (int a = 0; a < m; a++)
-            for (int b = 0; b < m; b++) {
+        for (int a = 0; a < ma; a++)
+            for (int b = 0; b < mb; b++) {
                 Patch t = patch[a][b];
-                int i0 = a * s, i1 = Math.min(g.n, i0 + s), j0 = b * s, j1 = Math.min(g.n, j0 + s);
+                int i0 = i0r + a * s, i1 = Math.min(i1r, i0 + s), j0 = j0r + b * s, j1 = Math.min(j1r, j0 + s);
                 double r = g.radius(t.height);
                 Vector3d mid = g.dir(face, i0, j0).add(g.dir(face, i1, j1)).normalize();
                 quads.add(top(p, t.block, new Vector3d[] {g.dir(face, i0, j0).mul(r), g.dir(face, i1, j0).mul(r),
                         g.dir(face, i1, j1).mul(r), g.dir(face, i0, j1).mul(r)}, mid));
-                // Walls toward lower neighbors (+i and +j here, -i and -j by those), skirts at the face's edges.
-                wall(p, quads, t, a + 1 < m ? patch[a + 1][b] : null, g.dir(face, i1, j0), g.dir(face, i1, j1), mid, skirt);
+                // Walls toward lower neighbors (+i and +j here, -i and -j by those), skirts at the region's edges.
+                wall(p, quads, t, a + 1 < ma ? patch[a + 1][b] : null, g.dir(face, i1, j0), g.dir(face, i1, j1), mid, skirt);
                 wall(p, quads, t, a > 0 ? patch[a - 1][b] : null, g.dir(face, i0, j0), g.dir(face, i0, j1), mid, skirt);
-                wall(p, quads, t, b + 1 < m ? patch[a][b + 1] : null, g.dir(face, i0, j1), g.dir(face, i1, j1), mid, skirt);
+                wall(p, quads, t, b + 1 < mb ? patch[a][b + 1] : null, g.dir(face, i0, j1), g.dir(face, i1, j1), mid, skirt);
                 wall(p, quads, t, b > 0 ? patch[a][b - 1] : null, g.dir(face, i0, j0), g.dir(face, i1, j0), mid, skirt);
             }
         return new Part(displayList(p, quads, unitsPerBlock), sphere(quads, unitsPerBlock));

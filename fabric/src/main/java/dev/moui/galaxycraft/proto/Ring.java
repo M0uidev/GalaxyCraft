@@ -52,6 +52,11 @@ public final class Ring {
         return true;
     }
 
+    /** Bytes written and not read yet (the reader's backlog). */
+    public int used() {
+        return Seqlock.getAcquire(seg, off) - Seqlock.getAcquire(seg, off + 4);
+    }
+
     public Optional<Msg> pop() {
         while (true) {
             int head = Seqlock.getAcquire(seg, off);

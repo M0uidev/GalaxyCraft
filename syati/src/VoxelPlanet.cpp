@@ -8,6 +8,7 @@
 #include "Game/Gravity/PointGravity.h"
 #include "Game/Map/CollisionParts.h"
 #include "EntityDraw.h"
+#include "Graves.h"
 #include "HeldItem.h"
 #include "Inbox.h"
 #include "VoxelPlanet.h"
@@ -46,14 +47,16 @@ struct Slot
 // .pa with no fields and one entry: every triangle gets attribute 0 (plain ground).
 __attribute__((aligned(32))) u8 gPa[20] = {0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 4, 0, 0, 0, 0};
 
-// A part of a planet's far view (one face of its cube, PlanetLod): drawn instead of its chunks
-// when the camera is far.
+// A part of a planet's far view (one tile of a face of its cube, PlanetLod.tile): the mod sends
+// each tile either as its chunks (near Mario, its render distance) or as this, so both are drawn;
+// a tile of chunks has its part too, covered: drawn instead of them only from afar.
 struct FarPart
 {
   u32 version;
   u8* dl;  // 32-byte aligned, positions in whole units from the planet's center
   u32 dl_size;
   f32 sphere[4];
+  bool covered;  // its tile is chunks: drawn only from afar
 };
 
 // The planets of the scene, by the mod's id (0: an unused entry). Each has one slot per chunk
@@ -70,55 +73,35 @@ struct Planet
   u32 slot_count;
   u32* drawn;
   u32 drawn_count;
-  u32 parts;  // collision parts alive
-  FarPart far[gxc::FAR_VIEW_PARTS];
+  u32 parts;    // collision parts alive
+  FarPart* far;  // FAR_VIEW_PARTS of them, from the scene's heap with the first one (0: none yet)
 };
 Planet gPlanets[MAX_PLANETS];
 // The camera is this far above a planet's surface (or its radius, if more), galaxy units, or
-// farther: its far view is drawn instead of its chunks.
+// farther: its far view alone is drawn, covered parts and all, not its chunks.
 const f32 FAR_VIEW_ABOVE = 96.f * 80.f;
 
 // Replaced chunks' memory is freed a few frames later: Mario's binder may still read the last
-// triangle it stood on.
-const int GRAVE_SLOTS = 64;
+// triangle it stood on, the GPU the last display list. A planet streaming in replaces dozens of
+// chunks a frame: the graves hold thousands, first in first out.
 const u32 GRAVE_FRAMES = 8;
-struct Grave
+gxc::Graves gGraves;
+
+void FreeHeap(void* p)
 {
-  void* ptr;
-  u32 frames;
-};
-Grave gGraves[GRAVE_SLOTS];
+  operator delete(p);
+}
 
 void Bury(void* p)
 {
-  if (!p)
-    return;
-  int oldest = 0;
-  for (int i = 0; i < GRAVE_SLOTS; i++)
-  {
-    if (!gGraves[i].ptr)
-    {
-      oldest = i;
-      break;
-    }
-    if (gGraves[i].frames < gGraves[oldest].frames)
-      oldest = i;
-  }
-  if (gGraves[oldest].ptr)
-    operator delete(gGraves[oldest].ptr);
-  gGraves[oldest].ptr = p;
-  gGraves[oldest].frames = GRAVE_FRAMES;
+  gGraves.Bury(p, GRAVE_FRAMES, FreeHeap);
 }
 
 void TickGraves()
 {
-  for (int i = 0; i < GRAVE_SLOTS; i++)
-    if (gGraves[i].ptr && --gGraves[i].frames == 0)
-    {
-      operator delete(gGraves[i].ptr);
-      gGraves[i].ptr = 0;
-    }
+  gGraves.Tick(FreeHeap);
 }
+
 // Mario's hitbox (VoxelPlanetHitbox): lines with a color each, built in turn in two lists.
 const int HB_SEGMENTS = 16;
 // 2 circles of the cylinder, its 8 sides, 3 probes (2 lines each), 3 balls of 2 circles.
@@ -395,12 +378,12 @@ public:
   void Drop(Planet& p)
   {
     NewSlots(p, 0);
-    for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
+    if (p.far)
     {
-      Bury(p.far[f].dl);
-      p.far[f].dl = 0;
-      p.far[f].dl_size = 0;
-      p.far[f].version = 0;
+      for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
+        Bury(p.far[f].dl);
+      Bury(p.far);
+      p.far = 0;
     }
     p.gravity->mRange = 1.f;
     p.gravity->updateIdentityMtx();
@@ -464,9 +447,25 @@ public:
 
   void ReplaceFar(Planet& p, const gxc::InboxChunk& c)
   {
+    if (!p.far)
+    {
+      p.far = reinterpret_cast<FarPart*>(Alloc32(gxc::FAR_VIEW_PARTS * sizeof(FarPart)));
+      if (!p.far)
+      {
+        gVoxelStats.alloc_failed++;
+        return;
+      }
+      memset(p.far, 0, gxc::FAR_VIEW_PARTS * sizeof(FarPart));
+    }
     FarPart& f = p.far[c.slot];
     if (c.version <= f.version)
       return;
+    if (c.covered && c.dl_size == 0)  // its chunks are in: the part it has stays, for afar
+    {
+      f.version = c.version;
+      f.covered = true;
+      return;
+    }
     u8* dl = c.dl_size ? Alloc32(c.dl_size) : 0;
     if (c.dl_size && !dl)
     {
@@ -477,6 +476,7 @@ public:
     f.version = c.version;
     f.dl = dl;
     f.dl_size = c.dl_size;
+    f.covered = c.covered;
     for (int k = 0; k < 4; k++)
       f.sphere[k] = c.sphere[k];
     if (dl)
@@ -688,7 +688,9 @@ public:
       DrawHitbox();
   }
 
-  // Its chunks, or its far view when the camera is far from it (or it has no chunks yet).
+  // Its far view's tiles and its chunks: the mod sends each tile as one or the other (chunks within
+  // its render distance of Mario), so whatever the planet has is drawn. From afar, its far view
+  // alone: the covered parts stand in for the chunks.
   static void DrawPlanet(const Planet& p, const f32 view[12], const f32 proj[7], u32* drawn, u32* far)
   {
     // The camera in the planet's frame: chunks behind it, past the horizon or beside the view are
@@ -703,18 +705,15 @@ public:
     // planet's center, so neighbors' shared corners come out of the same math and leave no seams.
     f32 planet[12];
     gxc::ViewTranslate(view, p.center, planet);
-    bool hasFar = false;
-    for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
-      hasFar = hasFar || p.far[f].dl;
     const f32 above = gxc::Sqrt(eye[0] * eye[0] + eye[1] * eye[1] + eye[2] * eye[2]) - p.surface;
-    const f32 farAt = p.surface > FAR_VIEW_ABOVE ? p.surface : FAR_VIEW_ABOVE;
-    if (hasFar && (p.drawn_count == 0 || above > farAt))
+    const bool afar = p.far && above > (p.surface > FAR_VIEW_ABOVE ? p.surface : FAR_VIEW_ABOVE);
+    if (p.far)
     {
       GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(planet), GX_PNMTX0);
       for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
       {
         const FarPart& part = p.far[f];
-        if (!part.dl || gxc::SphereHidden(eye, fwd, origin, p.occluder, part.sphere, part.sphere[3]))
+        if (!part.dl || (part.covered && !afar) || gxc::SphereHidden(eye, fwd, origin, p.occluder, part.sphere, part.sphere[3]))
           continue;
         f32 pos[12];
         gxc::ViewTranslate(planet, part.sphere, pos);
@@ -724,8 +723,9 @@ public:
         GXCallDisplayList(part.dl, part.dl_size);
         (*far)++;
       }
-      return;
     }
+    if (afar)
+      return;
     for (u32 i = 0; i < p.drawn_count; i++)
     {
       const Slot& s = p.slots[p.drawn[i]];
@@ -892,7 +892,7 @@ void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size)
   memset(gPlanets, 0, sizeof(gPlanets));
   gHitboxDl[0] = gHitboxDl[1] = 0;
   gHitboxOn = false;
-  memset(gGraves, 0, sizeof(gGraves));
+  gGraves.Reset();
   gInbox = static_cast<u8*>(operator new(INBOX_BYTES));
   memset(&gAtlas, 0, sizeof(gAtlas));  // the mod sends it again to every scene
   memset(gInbox, 0, sizeof(GxcInboxHeader));

@@ -326,6 +326,16 @@ public final class VoxelPlanet {
         return 6 * chunksPerEdge * chunksPerEdge * chunkLayers;
     }
 
+    /** Chunks along a face's edge. */
+    public int chunksPerEdge() {
+        return chunksPerEdge;
+    }
+
+    /** Chunks from the bottom layer to the top. */
+    public int chunkLayers() {
+        return chunkLayers;
+    }
+
     /** The cube face a chunk is on. */
     public int faceOfChunk(int chunk) {
         return chunk / (chunkLayers * chunksPerEdge * chunksPerEdge);

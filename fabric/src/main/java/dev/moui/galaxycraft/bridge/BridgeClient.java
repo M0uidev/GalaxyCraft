@@ -147,6 +147,11 @@ public final class BridgeClient {
         return linked() && m2s.push(type, payload);
     }
 
+    /** Bytes sent to the host that it has not taken yet (0 when not linked). */
+    public int backlog() {
+        return linked() ? m2s.used() : 0;
+    }
+
     /** The stage (galaxy) the game has loaded, "" if the host did not say. */
     public String stage() {
         return stage;
