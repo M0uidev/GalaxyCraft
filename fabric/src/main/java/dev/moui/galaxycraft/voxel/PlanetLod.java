@@ -66,8 +66,9 @@ public final class PlanetLod {
     }
 
     /**
-     * The ground of a patch: the mean of its columns' tops (the top of the highest opaque block,
-     * fluid or leaves; plants and air above them do not count) and the block most of them have there.
+     * The ground of a patch: the mean of its columns' tops (the top of the highest opaque block or
+     * fluid; leaves, plants and air above them do not count: trees blur into lumps from afar) and the
+     * block most of them have there.
      */
     private static Patch patch(VoxelPlanet p, int face, int i0, int i1, int j0, int j1) {
         CubeSphere g = p.grid;
@@ -80,7 +81,7 @@ public final class PlanetLod {
                 for (int k = g.layers - 1; k >= 0; k--) {
                     int id = p.get(g.index(face, i, j, k));
                     BlockInfo b = p.blocks.info(id);
-                    if (b.occludes() || b.isFluid() || p.blocks.leaves(id)) {
+                    if ((b.occludes() || b.isFluid()) && !p.blocks.leaves(id)) {
                         top = k + 1;
                         block = id;
                         break;

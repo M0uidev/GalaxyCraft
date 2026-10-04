@@ -67,4 +67,31 @@ class PlanetLodTest {
         for (Vector3d x : v) if (Math.abs(x.length() - (p.surface() - 3)) < 0.05) floor++;
         assertTrue(floor >= 4, "the pit's floor is three blocks down: " + floor + " corners there");
     }
+
+    /** CubeBlocks, with its glass taken for leaves. */
+    record LeafyBlocks(Blocks b) implements Blocks {
+        public BlockInfo info(int id) { return b.info(id); }
+        public int id(Material m) { return b.id(m); }
+        public Material material(int id) { return b.material(id); }
+        public int fluidState(int fluid, int level) { return b.fluidState(fluid, level); }
+        public boolean faceVisible(int id, int neighbor, int side) { return b.faceVisible(id, neighbor, side); }
+        public String name(int id) { return b.name(id); }
+        public int parse(String name) { return b.parse(name); }
+        public int atlasColumns() { return b.atlasColumns(); }
+        public int atlasRows() { return b.atlasRows(); }
+        @Override public boolean leaves(int id) { return id == CubeBlocks.GLASS; }
+    }
+
+    @Test void treetopsDoNotRaiseTheFarView() {
+        VoxelPlanet p = VoxelPlanet.standard(new LeafyBlocks(CubeBlocks.INSTANCE));
+        int before = vertices(PlanetLod.face(p, 2, 80)).length;
+        int s = PlanetLod.patchColumns(p.grid.n), top = p.grid.layers - 1;
+        while (p.get(p.grid.index(2, s, s, top)) == Blocks.AIR) top--;
+        // Leaves two blocks over the grass of the patch at (1, 1): a crown seen from above.
+        for (int i = s; i < 2 * s; i++)
+            for (int j = s; j < 2 * s; j++) p.set(p.grid.index(2, i, j, top + 3), CubeBlocks.GLASS);
+        Vector3d[] v = vertices(PlanetLod.face(p, 2, 80));
+        assertEquals(before, v.length, "no walls: the patch stays at the ground");
+        for (Vector3d x : v) assertTrue(x.length() <= p.surface() + 0.05, "nothing over the surface: " + x.length());
+    }
 }
