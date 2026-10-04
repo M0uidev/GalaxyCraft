@@ -147,6 +147,39 @@ void SetLoadPatch(LoadPatch& p, bool on, f32 value)
   FlushCode(site, 4);
   p.on = on;
 }
+// W goes where Minecraft looks. SMG2 holds Mario's heading steady while its own camera swings
+// around him, in two ways that a mouse-turned view runs into:
+// - Mario's stick becomes a direction in the world with the camera's axes (Mario::calcWorldPadDir,
+//   unnamed at 0x803a3ab0), except in a mode (Mario + 0x10, bit 0x20) where it uses two axes kept
+//   on Mario (0x803a49d0): the branch to them is skipped ("beq" -> "b").
+// - He turns toward that direction at a running rate (about 70 degrees a second), so a view turned
+//   while W is held left him heading off for a second: the walk (0x803a1ff0) passes its turn step
+//   500 radians a frame instead ("fmr f1, f31" -> "lfs f1, 500(r2 constant)"), and he faces it at
+//   once, as Minecraft's player does.
+// Both only while the view is Minecraft's.
+struct WordPatch
+{
+  u32 site;
+  u32 original;
+  u32 patched;
+  bool on;
+};
+WordPatch gCameraStickPatches[] = {
+    {0x803a3b20, 0x4182000C, 0x4800000C},
+    {0x803a20ac, 0xFC20F890, 0xC0220F94},
+};
+
+void SetWordPatch(WordPatch& p, bool on)
+{
+  if (on == p.on)
+    return;
+  u32* site = reinterpret_cast<u32*>(p.site);
+  if (*site != (on ? p.original : p.patched))
+    return;
+  *site = on ? p.patched : p.original;
+  FlushCode(site, 4);
+  p.on = on;
+}
 bool gDemo = false;  // a cutscene owns Mario and the camera this frame
 // Mario (Steve) is not drawn (first person, outside cutscenes). MR::hidePlayer is no use: Mario then
 // ignores the stick. Skipping MarioActor::draw leaves him playable, and his shadow stays.
@@ -359,6 +392,9 @@ void MarioMovement(void* self)
   gOut.dbg.following = gFollowing;
   gDemo = MR::isDemoActive();
   gOut.dbg.demo = gDemo;
+  // W walks where Minecraft looks (see gCameraStickPatches); counts from his next movement.
+  for (u32 i = 0; i < sizeof(gCameraStickPatches) / sizeof(gCameraStickPatches[0]); i++)
+    SetWordPatch(gCameraStickPatches[i], gFollowing && !gDemo && !GalaxyView());
   // Steve (Mario's model) is hidden only in first person; cutscenes always show him.
   gHidden = !gxc::MarioVisible(gFollowing, gDemo, (gOut.mbx.host_flags & GXC_MBX_THIRD_PERSON) != 0);
   // What the player holds in Minecraft, in Steve's hand while the mod plays him.

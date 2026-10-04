@@ -7,6 +7,7 @@
 #   tools/gxvoxel.sh entities EntityTest instead: mobs, TNT and drops drawn by the game (entities-*.png)
 #   tools/gxvoxel.sh perf     PerfProbe instead: what each kind of planet costs the emulator (perf-*.png);
 #                             GXC_PERF_ARGS="-PperfOnly=caves -PperfRadius=128" narrows or changes it
+#   tools/gxvoxel.sh walk     WalkProbe instead: Mario walks where the camera looks, also while it turns
 set -u
 : "${JAVA_HOME:=$(ls -d "$HOME"/.local/opt/jdk-25* 2>/dev/null | head -1)}"
 export JAVA_HOME
@@ -15,14 +16,18 @@ G="python3 tools/gxdev.py"
 if [ "${1:-}" = held ]; then TEST=HeldItemTest PROP=galaxycraftHeld TAG=held
 elif [ "${1:-}" = entities ]; then TEST=EntityTest PROP=galaxycraftEntities TAG=entities
 elif [ "${1:-}" = perf ]; then TEST=PerfProbe PROP=galaxycraftPerf TAG=perf
+elif [ "${1:-}" = walk ]; then TEST=WalkProbe PROP=galaxycraftWalk TAG=walk
 else TEST=VoxelPlanetTest PROP=galaxycraftVoxel TAG=voxel; fi
-SAV="$HOME/.local/share/galaxycraft-dev/voxel-intro.sav"
+# GXC_SAV=<savestate> starts from another one instead (made with the current module; not remade).
+SAV="${GXC_SAV:-$HOME/.local/share/galaxycraft-dev/voxel-intro.sav}"
 LOG="$HOME/.local/share/galaxycraft-dev/$TAG-minecraft.log"
 # GXC_KEEP=1 leaves Dolphin running after a failure, for peeking.
 fail() { echo "gxvoxel: FAILED: $*" >&2; [ -n "${GXC_KEEP:-}" ] || $G stop > /dev/null; exit 1; }
 
 # GXC_REUSE=1 reuses the last prologue savestate (only if syati/ has not changed since).
-if [ -z "${GXC_REUSE:-}" ] || [ ! -f "$SAV" ]; then
+if [ -n "${GXC_SAV:-}" ]; then
+  [ -f "$SAV" ] || fail "no savestate $SAV"
+elif [ -z "${GXC_REUSE:-}" ] || [ ! -f "$SAV" ]; then
   syati/build.sh > /dev/null 2>&1 || fail "syati/build.sh"
   $G stop > /dev/null
   $G start --speed 0 || fail "dolphin did not start"
