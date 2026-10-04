@@ -70,6 +70,13 @@ public final class PlanetSession {
     private Vector3d mario;
     /** Where Mario is headed: his position LOOKAHEAD updates on at his last step's speed. */
     private Vector3d ahead;
+    /**
+     * Where a teleport lands him, until he is there (the game moves him frames later): collision
+     * stays there meanwhile, or he would land where it had just been taken away.
+     */
+    private Vector3d landing;
+    private int landingUpdates;
+    static final int LANDING_UPDATES = 200;
 
     public PlanetSession(double unitsPerBlock) {
         this.unitsPerBlock = unitsPerBlock;
@@ -164,7 +171,9 @@ public final class PlanetSession {
         if (planet == null) return;
         Vector3d land = mario == null || mario.lengthSquared() < 1 ? new Vector3d(0, 1, 0) : new Vector3d(mario);
         tpGround = (float) (ground(land) * unitsPerBlock);
-        land.normalize(planet.surface());
+        land.normalize(Math.max(planet.surface(), tpGround / unitsPerBlock));
+        landing = land;
+        landingUpdates = 0;
         List<Integer> first = residency(land, land);
         pending.removeIf(first::contains);
         pending.addFirst(TP_MARK);
@@ -192,9 +201,10 @@ public final class PlanetSession {
         }
         if (planet.fluids().tick()) unsaved = true;
         for (int c : planet.takeDirty()) queue(c);
+        if (landing != null && (mario != null && mario.distance(landing) < NEAR || ++landingUpdates > LANDING_UPDATES)) landing = null;
         if (++sinceResidency >= RESIDENCY_UPDATES && mario != null) {
             sinceResidency = 0;
-            for (int c : residency(mario, ahead)) queue(c);
+            for (int c : landing != null ? residency(landing, landing) : residency(mario, ahead)) queue(c);
         }
     }
 

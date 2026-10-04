@@ -130,6 +130,28 @@ class PlanetSessionTest {
         assertTrue(msgs.subList(0, tp).stream().allMatch(m -> le(m).getFloat(20) < 0));
     }
 
+    @Test void theLandingKeepsItsCollisionUntilMarioIsThere() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, MARIO);
+        drain(s);
+        s.teleport();
+        drain(s);
+        int landed = s.collisionChunks();
+        assertTrue(landed > 0);
+        // The game moves him a few frames later: meanwhile he is still far away.
+        for (int i = 0; i < 4 * PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, MARIO);
+        drain(s);
+        assertEquals(landed, s.collisionChunks(), "the ground where he lands still collides");
+        // There at last, and then off again: collision follows him from then on.
+        Vector3d there = new Vector3d(s.center()).add(0, -64 * 80, 0);
+        for (int i = 0; i < PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, there);
+        Vector3d other = new Vector3d(s.center()).add(0, 64 * 80, 0);
+        for (int i = 0; i < 2 * PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, other);
+        drain(s);
+        assertFalse(s.collides(s.planet().chunkOf(s.cellAt(new Vector3d(s.center()).add(0, -63.5 * 80, 0)))), "no longer under his old landing");
+    }
+
     @Test void teleportLandsOnTopOfWhatIsThere() {
         PlanetSession s = new PlanetSession(80);
         s.spawn(32, MARIO, new Vector3d(0, 1, 0));
