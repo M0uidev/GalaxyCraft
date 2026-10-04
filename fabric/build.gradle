@@ -63,6 +63,13 @@ loom {
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 				if (project.hasProperty("lodRadius")) vmArg "-Dgalaxycraft.lodRadius=${project.property("lodRadius")}"
 			}
+			if (project.hasProperty("galaxycraftTp")) { // tools/gxvoxel.sh tp: TpProbe in the dev Dolphin
+				vmArg "-Dgalaxycraft.tp=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftFit")) { // tools/gxfit.sh: MarioFitTest in the dev Dolphin
 				vmArg "-Dgalaxycraft.fit=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"

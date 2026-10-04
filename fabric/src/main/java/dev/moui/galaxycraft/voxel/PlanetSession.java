@@ -139,6 +139,8 @@ public final class PlanetSession {
      */
     private Vector3d landing;
     private int landingUpdates;
+    private int watchUpdates = -1; // updates since the last teleport, -1 once checked
+    static final int WATCH_UPDATES = 300;
     static final int LANDING_UPDATES = 200;
     /**
      * Far chunks leave out the faces only a dark cave shows (PlanetMesher.Dark), hidden from a
@@ -266,6 +268,10 @@ public final class PlanetSession {
         land.normalize(Math.max(planet.surface(), tpGround / unitsPerBlock));
         landing = land;
         landingUpdates = 0;
+        watchUpdates = 0;
+        dev.moui.galaxycraft.GalaxyCraft.LOG.info("Teleport onto planet {}: Mario {} blocks from the center, lands at {} (ground {}, surface {})",
+                id, mario == null ? "?" : String.format("%.1f", mario.length()), String.format("%.1f", land.length()),
+                String.format("%.1f", tpGround / unitsPerBlock), String.format("%.1f", planet.surface()));
         for (int c : residency(land, land)) queueUrgent(c);
         urgent.add(TP_MARK);
     }
@@ -301,6 +307,14 @@ public final class PlanetSession {
         }
         if (mario != null) underground(PlanetMesher.covered(planet, planet.grid.cellAt(new Vector3d(mario).normalize(mario.length() + 1.5))));
         if (landing != null && (mario != null && mario.distance(landing) < NEAR || ++landingUpdates > LANDING_UPDATES)) landing = null;
+        // A while after a teleport, says if Mario ended under the ground (users see him inside the planet).
+        if (watchUpdates >= 0 && ++watchUpdates >= WATCH_UPDATES) {
+            watchUpdates = -1;
+            double under = mario == null ? 0 : ground(mario) - mario.length();
+            if (under > 2)
+                dev.moui.galaxycraft.GalaxyCraft.LOG.warn("Mario is {} blocks under the ground of planet {} after a teleport ({} blocks from the center, {} chunks to send)",
+                        String.format("%.1f", under), id, String.format("%.1f", mario.length()), queued());
+        }
         if (detail && ++sinceResidency >= RESIDENCY_UPDATES && mario != null) {
             sinceResidency = 0;
             Vector3d from = landing != null ? landing : mario, to = landing != null ? landing : ahead;
