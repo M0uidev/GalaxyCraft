@@ -19,14 +19,16 @@ struct InboxPlanet
 
 const u32 PLANET_GONE = 1;
 // A chunk record's slot word: the planet's id in the top byte, FAR_VIEW for a part of its far view
-// (the slot below is then its tile: face, then up to 16 × 16 tiles of it, PlanetLod.tile), else
-// the chunk's slot.
-const u32 CHUNK_FAR_VIEW = 0x800000u, CHUNK_SLOT_MASK = 0x7FFFFFu, FAR_VIEW_PARTS = 6 * 16 * 16;
+// (the slot below is then its tile: face, then up to 16 × 16 tiles of it, PlanetLod.tile, and
+// FAR_COVERED if the tile is chunks in the game), else the chunk's slot.
+const u32 CHUNK_FAR_VIEW = 0x800000u, CHUNK_FAR_COVERED = 0x400000u, CHUNK_SLOT_MASK = 0x7FFFFFu,
+          FAR_VIEW_PARTS = 6 * 16 * 16;
 
 struct InboxChunk
 {
   u32 planet;  // the planet's id (0: whichever there is, as before several were)
   bool far;    // a part of the planet's far view: slot is its tile
+  bool covered;  // and its tile is chunks: drawn only from afar (no display list: keep the last one)
   u32 slot, version, dl_size, kcl_size;
   f32 sphere[4];  // bounding sphere, center relative to the planet's
   const u8* dl;   // dl_size bytes

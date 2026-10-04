@@ -234,12 +234,15 @@ typedef struct {
  */
 /*
  * slot: the planet's id in the top byte; with GXC_CHUNK_FAR_VIEW a part of its far view (a tile:
- * up to 16 x 16 per face of its cube, GXC_FAR_VIEW_PARTS in all, sent where Mario's render distance
- * does not reach instead of its chunks, and empty (dl_size 0) where it does; positions in whole
+ * up to 16 x 16 per face of its cube, GXC_FAR_VIEW_PARTS in all, drawn where Mario's render
+ * distance does not reach instead of its chunks, and where it does only from afar); positions in whole
  * units from the planet's center, GX vertex format 5, no KCL) and the tile below; else the
  * chunk's index.
  */
 #define GXC_CHUNK_FAR_VIEW 0x800000u
+/* With GXC_CHUNK_FAR_VIEW: the tile is chunks in the game. The part is drawn only for a camera far
+ * from the planet (instead of its chunks); without a display list, the last one is kept. */
+#define GXC_CHUNK_FAR_COVERED 0x400000u
 #define GXC_FAR_VIEW_PARTS (6 * 16 * 16)
 typedef struct {
   uint32_t slot;    /* planet id << 24 | chunk index (or GXC_CHUNK_FAR_VIEW | tile) */

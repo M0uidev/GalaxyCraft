@@ -67,6 +67,11 @@ public final class PlanetSession {
     /** The slot word of a part of the far view (its tile below, PlanetLod.tile). */
     static final int FAR_VIEW = 0x800000;
     /**
+     * And of one whose tile the game has as chunks: it keeps the part only for a camera far from
+     * the planet (then it draws the far view alone); without a display list, it keeps the one it has.
+     */
+    static final int FAR_COVERED = 0x400000;
+    /**
      * Tiles within this many blocks of Mario (or where he is headed) are chunks; the others, their
      * far view. One that is chunks stays so until RENDER_KEEP blocks farther. -Dgalaxycraft.renderDistance
      * changes it; 0 sends every chunk, as before render distances.
@@ -113,11 +118,11 @@ public final class PlanetSession {
     private final BitSet farDirty = new BitSet(); // tiles edited since their far view was sent
     private double render = RENDER;
     private BitSet shown = new BitSet();      // tiles the game gets as chunks (the rest: their far view)
-    private BitSet farOnGuest = new BitSet(); // tiles whose far view the game may have
+    private BitSet farOnGuest = new BitSet(); // tiles whose far view the game may draw near (not covered)
     private float[] tileSpheres;              // per tile: center (blocks), radius
     private boolean builtFarMark; // built hides a tile's far view (a mark in pending): builtTile's
     private int builtTile;
-    private boolean builtFarShows; // the far view built (farPending's first) shows its tile, not hides it
+    private boolean builtFarShows; // the far view built (farPending's first) shows its tile, not covered
     private boolean guestHasIt; // the next sendAll is to a game that has this planet already
     private int sinceFar;
     private int scene = Integer.MIN_VALUE, host = Integer.MIN_VALUE;
@@ -287,11 +292,11 @@ public final class PlanetSession {
             int t = PlanetLod.tileOfChunk(planet, c);
             if (detail && near.get(c)) queueUrgent(c); // an edit under Mario: its collision now
             else if (detail && shown.get(t)) queue(c);
-            if (!shown.get(t)) farDirty.set(t);
+            farDirty.set(t); // also a tile of chunks: seen from afar, the game draws its far view
         }
         if (++sinceFar >= FAR_UPDATES && !farDirty.isEmpty()) {
             sinceFar = 0;
-            farDirty.stream().filter(t -> !shown.get(t)).forEach(this::queueFar);
+            farDirty.stream().forEach(this::queueFar);
             farDirty.clear();
         }
         if (mario != null) underground(PlanetMesher.covered(planet, planet.grid.cellAt(new Vector3d(mario).normalize(mario.length() + 1.5))));
@@ -331,13 +336,9 @@ public final class PlanetSession {
         }
         while (built == null && !farPending.isEmpty() && planet != null && bulk.getAsBoolean()) {
             int t = farPending.peek();
-            if (shown.get(t) && !farOnGuest.get(t)) { // chunks there: nothing to hide
-                farPending.poll();
-                farPendingSet.clear(t);
-                continue;
-            }
+            // A tile of chunks gets it too, covered: the game draws it only from afar.
             builtFarShows = !shown.get(t);
-            built = farMsg(t, builtFarShows ? PlanetLod.tile(planet, t, unitsPerBlock) : null);
+            built = farMsg(t, PlanetLod.tile(planet, t, unitsPerBlock), !builtFarShows);
             builtFar = true;
         }
         while (built == null && !pending.isEmpty() && bulk.getAsBoolean()) {
@@ -345,7 +346,7 @@ public final class PlanetSession {
             if (c <= HIDE_MARK) { // a tile's chunks are out: its far view goes
                 int t = HIDE_MARK - c;
                 if (shown.get(t) && farOnGuest.get(t)) {
-                    built = farMsg(t, null);
+                    built = farMsg(t, null, true);
                     builtFarMark = true;
                     builtTile = t;
                 }
@@ -744,7 +745,7 @@ public final class PlanetSession {
         if (guestHasIt) farOnGuest.set(0, tileCount);
         guestHasIt = false;
         tiles(mario, ahead, false);
-        for (int t = 0; t < tileCount; t++) if (!shown.get(t)) queueFar(t);
+        for (int t = 0; t < tileCount; t++) queueFar(t);
         if (!detail) return;
         if (mario != null) residency(mario, ahead);
         List<double[]> order = new ArrayList<>();
@@ -758,13 +759,13 @@ public final class PlanetSession {
         for (double[] o : order)
             if (near.get((int) o[1])) queueUrgent((int) o[1]); // what Mario stands on, before the rest
             else if (shown.get(PlanetLod.tileOfChunk(planet, (int) o[1]))) queue((int) o[1]);
-        // Their chunks out, the shown tiles' far views go (if the game had them).
+        // Their chunks out, the shown tiles' far views are covered (if the game drew them).
         shown.stream().forEach(t -> pending.add(HIDE_MARK - t));
     }
 
     /**
      * Which tiles are chunks: those within the render distance of the way from a to b (none
-     * without detail or Mario). With changes, a tile coming in queues its chunks, then the hiding
+     * without detail or Mario). With changes, a tile coming in queues its chunks, then the covering
      * of its far view; one going out, its far view, then the dropping of its chunks.
      */
     private void tiles(Vector3d a, Vector3d b, boolean changes) {
@@ -805,11 +806,11 @@ public final class PlanetSession {
         farPending.add(t);
     }
 
-    /** A far view message for a tile: that part, or none (hidden: its chunks stand there). */
-    private Msg farMsg(int t, PlanetLod.Part part) {
+    /** A far view message for a tile: that part, or none (keep the one it has); covered: its chunks stand there. */
+    private Msg farMsg(int t, PlanetLod.Part part, boolean covered) {
         byte[] dl = part == null ? new byte[0] : part.displayList();
         ByteBuffer b = ByteBuffer.allocate(32 + dl.length).order(ByteOrder.LITTLE_ENDIAN);
-        b.putInt(id << 24 | FAR_VIEW | t).putInt(++farVersion[t]).putInt(dl.length).putInt(0);
+        b.putInt(id << 24 | FAR_VIEW | (covered ? FAR_COVERED : 0) | t).putInt(++farVersion[t]).putInt(dl.length).putInt(0);
         if (part == null) b.putFloat(0).putFloat(0).putFloat(0).putFloat(0);
         else for (float x : part.sphere()) b.putFloat(x);
         b.put(dl);

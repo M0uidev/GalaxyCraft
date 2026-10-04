@@ -48,13 +48,15 @@ struct Slot
 __attribute__((aligned(32))) u8 gPa[20] = {0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 4, 0, 0, 0, 0};
 
 // A part of a planet's far view (one tile of a face of its cube, PlanetLod.tile): the mod sends
-// each tile either as its chunks (near Mario, its render distance) or as this, so both are drawn.
+// each tile either as its chunks (near Mario, its render distance) or as this, so both are drawn;
+// a tile of chunks has its part too, covered: drawn instead of them only from afar.
 struct FarPart
 {
   u32 version;
   u8* dl;  // 32-byte aligned, positions in whole units from the planet's center
   u32 dl_size;
   f32 sphere[4];
+  bool covered;  // its tile is chunks: drawn only from afar
 };
 
 // The planets of the scene, by the mod's id (0: an unused entry). Each has one slot per chunk
@@ -75,6 +77,9 @@ struct Planet
   FarPart* far;  // FAR_VIEW_PARTS of them, from the scene's heap with the first one (0: none yet)
 };
 Planet gPlanets[MAX_PLANETS];
+// The camera is this far above a planet's surface (or its radius, if more), galaxy units, or
+// farther: its far view alone is drawn, covered parts and all, not its chunks.
+const f32 FAR_VIEW_ABOVE = 96.f * 80.f;
 
 // Replaced chunks' memory is freed a few frames later: Mario's binder may still read the last
 // triangle it stood on, the GPU the last display list. A planet streaming in replaces dozens of
@@ -455,6 +460,12 @@ public:
     FarPart& f = p.far[c.slot];
     if (c.version <= f.version)
       return;
+    if (c.covered && c.dl_size == 0)  // its chunks are in: the part it has stays, for afar
+    {
+      f.version = c.version;
+      f.covered = true;
+      return;
+    }
     u8* dl = c.dl_size ? Alloc32(c.dl_size) : 0;
     if (c.dl_size && !dl)
     {
@@ -465,6 +476,7 @@ public:
     f.version = c.version;
     f.dl = dl;
     f.dl_size = c.dl_size;
+    f.covered = c.covered;
     for (int k = 0; k < 4; k++)
       f.sphere[k] = c.sphere[k];
     if (dl)
@@ -677,7 +689,8 @@ public:
   }
 
   // Its far view's tiles and its chunks: the mod sends each tile as one or the other (chunks within
-  // its render distance of Mario), so whatever the planet has is drawn.
+  // its render distance of Mario), so whatever the planet has is drawn. From afar, its far view
+  // alone: the covered parts stand in for the chunks.
   static void DrawPlanet(const Planet& p, const f32 view[12], const f32 proj[7], u32* drawn, u32* far)
   {
     // The camera in the planet's frame: chunks behind it, past the horizon or beside the view are
@@ -692,13 +705,15 @@ public:
     // planet's center, so neighbors' shared corners come out of the same math and leave no seams.
     f32 planet[12];
     gxc::ViewTranslate(view, p.center, planet);
+    const f32 above = gxc::Sqrt(eye[0] * eye[0] + eye[1] * eye[1] + eye[2] * eye[2]) - p.surface;
+    const bool afar = p.far && above > (p.surface > FAR_VIEW_ABOVE ? p.surface : FAR_VIEW_ABOVE);
     if (p.far)
     {
       GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(planet), GX_PNMTX0);
       for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
       {
         const FarPart& part = p.far[f];
-        if (!part.dl || gxc::SphereHidden(eye, fwd, origin, p.occluder, part.sphere, part.sphere[3]))
+        if (!part.dl || (part.covered && !afar) || gxc::SphereHidden(eye, fwd, origin, p.occluder, part.sphere, part.sphere[3]))
           continue;
         f32 pos[12];
         gxc::ViewTranslate(planet, part.sphere, pos);
@@ -709,6 +724,8 @@ public:
         (*far)++;
       }
     }
+    if (afar)
+      return;
     for (u32 i = 0; i < p.drawn_count; i++)
     {
       const Slot& s = p.slots[p.drawn[i]];

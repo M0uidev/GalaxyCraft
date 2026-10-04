@@ -262,7 +262,7 @@ static void TestInboxRejectsBadChunks()
 }
 
 // Several planets: a chunk's slot carries its planet's id in the top byte, a far view's part has
-// bit 23 set (its face below); a planet may come with flags (GONE); a teleport may name its planet.
+// bit 23 set (its tile below, bit 22 if covered); a planet may come with flags (GONE); a teleport may name its planet.
 static void TestInboxPlanetIdsAndFarView()
 {
   std::vector<u8> b;
@@ -287,7 +287,12 @@ static void TestInboxPlanetIdsAndFarView()
   Put32(c, 103u << 16), Put32(c, 32), Put32(c, 0x800000u | 1535), Put32(c, 1), Put32(c, 0), Put32(c, 0);
   c.resize(c.size() + 16);
   off = 0;
-  CHECK(NextInboxRecord(c.data(), c.size(), &off, 131072, &r) && r.chunk.far && r.chunk.slot == 1535);
+  CHECK(NextInboxRecord(c.data(), c.size(), &off, 131072, &r) && r.chunk.far && r.chunk.slot == 1535 && !r.chunk.covered);
+  c.clear();  // covered (its tile is chunks in the game), no display list: keep the one it has
+  Put32(c, 103u << 16), Put32(c, 32), Put32(c, 0x800000u | 0x400000u | 1535), Put32(c, 2), Put32(c, 0), Put32(c, 0);
+  c.resize(c.size() + 16);
+  off = 0;
+  CHECK(NextInboxRecord(c.data(), c.size(), &off, 131072, &r) && r.chunk.far && r.chunk.covered && r.chunk.slot == 1535);
   c.clear();
   Put32(c, 103u << 16), Put32(c, 32), Put32(c, 0x800000u | 1536), Put32(c, 1), Put32(c, 0), Put32(c, 0);
   c.resize(c.size() + 16);
