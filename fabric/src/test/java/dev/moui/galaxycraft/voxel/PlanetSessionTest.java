@@ -257,6 +257,29 @@ class PlanetSessionTest {
         assertTrue(chunkAt >= 0 && hiddenAt > chunkAt, "its chunks, then its far view hidden: " + chunkAt + ", " + hiddenAt);
     }
 
+    @Test void aTileComingInWhileItsFarViewWaitsForRoomIsStillHidden() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        Vector3d away = new Vector3d(0, -1000 * 80, 0);
+        s.update(3, 100, away); // all far view
+        assertTrue(s.peek() != null);
+        s.sent(); // the planet
+        PlanetSession.Msg waiting = s.peek();
+        assertTrue(far(waiting) && le(waiting).getInt(8) > 0, "a tile's far view, built, the ring full");
+        int tile = le(waiting).getInt(0) & 0x7FFFFF;
+        // Mario lands right on that tile before the ring has room.
+        VoxelPlanet p = s.planet();
+        int chunk = PlanetLod.chunksOfTile(p, tile)[p.chunkLayers() - 1];
+        Vector3d c = new Vector3d();
+        p.sphere(chunk, c, new double[1]);
+        Vector3d on = new Vector3d(c).normalize(66).mul(80).add(s.center());
+        for (int i = 0; i < PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, on);
+        assertTrue(s.tileShown(tile));
+        List<PlanetSession.Msg> rest = drain(s); // the far view goes out as built, then...
+        long hides = rest.stream().filter(m -> far(m) && (le(m).getInt(0) & 0x7FFFFF) == tile && le(m).getInt(8) == 0).count();
+        assertEquals(1, hides, "...hidden again once its chunks are there");
+    }
+
     @Test void theBiggestPlanetCostsTheGameItsGroundAroundMario() {
         PlanetSession s = new PlanetSession(80);
         s.spawn(VoxelPlanet.MAX_RADIUS, MARIO, new Vector3d(0, 1, 0));

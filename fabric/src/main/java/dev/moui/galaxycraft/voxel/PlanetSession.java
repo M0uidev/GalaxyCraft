@@ -117,6 +117,7 @@ public final class PlanetSession {
     private float[] tileSpheres;              // per tile: center (blocks), radius
     private boolean builtFarMark; // built hides a tile's far view (a mark in pending): builtTile's
     private int builtTile;
+    private boolean builtFarShows; // the far view built (farPending's first) shows its tile, not hides it
     private boolean guestHasIt; // the next sendAll is to a game that has this planet already
     private int sinceFar;
     private int scene = Integer.MIN_VALUE, host = Integer.MIN_VALUE;
@@ -335,7 +336,8 @@ public final class PlanetSession {
                 farPendingSet.clear(t);
                 continue;
             }
-            built = farMsg(t, shown.get(t) ? null : PlanetLod.tile(planet, t, unitsPerBlock));
+            builtFarShows = !shown.get(t);
+            built = farMsg(t, builtFarShows ? PlanetLod.tile(planet, t, unitsPerBlock) : null);
             builtFar = true;
         }
         while (built == null && !pending.isEmpty() && bulk.getAsBoolean()) {
@@ -407,7 +409,8 @@ public final class PlanetSession {
             built = null;
             int t = farPending.poll();
             farPendingSet.clear(t);
-            farOnGuest.set(t, !shown.get(t));
+            farOnGuest.set(t, builtFarShows); // what it carried, whatever the tile is by now
+            if (builtFarShows && shown.get(t)) pending.add(HIDE_MARK - t); // chunks there since: hidden after them
             return;
         }
         if (builtFarMark) {
