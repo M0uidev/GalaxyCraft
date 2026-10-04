@@ -29,7 +29,8 @@ public final class EntityTest implements FabricClientGameTest {
     public void runTest(ClientGameTestContext ctx) {
         if (!Boolean.getBoolean("galaxycraft.entities")) return;
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
-            sp.getServer().runCommand("gamemode adventure @a");
+            sp.getServer().runCommand("gamemode survival @a");
+            sp.getServer().runCommand("difficulty normal");
             sp.getServer().runCommand("gamerule fall_damage false");
             sp.getServer().runCommand("time set day");
             sp.getServer().runCommand("tp @a 0 100 0 0 0");
@@ -88,6 +89,7 @@ public final class EntityTest implements FabricClientGameTest {
                 gxdev("ctl", "shot entities-walk-" + k);
                 ctx.waitTicks(3);
             }
+            fight(ctx, sp, map, x0, y, z0);
             ctx.getInput().pressKey(o -> o.keyTogglePerspective);
             ctx.waitTicks(20);
             for (int k = 0; k < 4; k++) {
@@ -106,6 +108,76 @@ public final class EntityTest implements FabricClientGameTest {
             ctx.waitTicks(10);
             log("PASS");
         }
+    }
+
+    /** Mario hits the pig to death, a TNT goes off, a zombie hits Mario. */
+    private static void fight(ClientGameTestContext ctx, TestSingleplayerContext sp, ShadowMap map, double x0, double y, double z0) {
+        // Aiming: from two blocks off the pig, looking at it, the pig is what a click hits.
+        boolean aims = ctx.computeOnClient(mc -> {
+            for (var e : ShadowWorld.entities().list())
+                if (e instanceof net.minecraft.world.entity.animal.pig.Pig pig) {
+                    double[] f = map.frame(pig.getX(), pig.getY() + 0.45, pig.getZ());
+                    org.joml.Vector3d at = new org.joml.Vector3d(f[0], f[1], f[2]);
+                    org.joml.Vector3d eye = new org.joml.Vector3d(f[3], f[4], f[5]).mul(2).add(at);
+                    return PlanetClient.aimedFrom(eye, new org.joml.Vector3d(at).sub(eye)) == pig;
+                }
+            return false;
+        });
+        check(aims, "looking at the pig aims at it");
+        int dropsBefore = PlanetClient.dropCount();
+        sp.getServer().runCommand("item replace entity @a hotbar.0 with diamond_sword");
+        ctx.getInput().pressKey(o -> o.keyHotbarSlots[0]);
+        int hits = 0;
+        for (; hits < 6 && pigAlive(ctx); hits++) {
+            ctx.waitTicks(15); // a full swing
+            ctx.runOnClient(mc -> {
+                for (var e : ShadowWorld.entities().list())
+                    if (e instanceof net.minecraft.world.entity.animal.pig.Pig pig && pig.isAlive())
+                        ShadowWorld.attack(pig.getId(), mc.player.getUUID());
+            });
+            ctx.waitTicks(2);
+        }
+        log("hits: " + hits);
+        log("pig: " + ctx.computeOnClient(mc -> ShadowWorld.entities().list().stream()
+                .filter(e -> e instanceof net.minecraft.world.entity.animal.pig.Pig)
+                .map(e -> ((net.minecraft.world.entity.LivingEntity) e).getHealth() + "hp").toList())
+                + ", Mario's stand-in: " + ShadowWorld.proxyState());
+        boolean dying = ctx.computeOnClient(mc -> ShadowWorld.entities().list().stream()
+                .anyMatch(e -> e instanceof net.minecraft.world.entity.animal.pig.Pig pig && pig.deathTime > 0));
+        check(dying, "the pig falls over, dying");
+        gxdev("ctl", "shot entities-pig-dying");
+        ctx.waitTicks(25);
+        check(PlanetClient.particleCount() > 0, "its last poof of smoke (" + PlanetClient.particleCount() + " particles)");
+        gxdev("ctl", "shot entities-pig-poof");
+        ctx.waitTicks(20);
+        boolean pork = ctx.computeOnClient(mc -> mc.player.getInventory().contains(new net.minecraft.world.item.ItemStack(
+                net.minecraft.world.item.Items.PORKCHOP)));
+        log("drops " + dropsBefore + " -> " + PlanetClient.dropCount() + ", pork in the inventory: " + pork);
+        check(PlanetClient.dropCount() > dropsBefore || pork, "its pork drops (on the planet or picked up)");
+
+        // TNT a few blocks away: it goes off with its flash.
+        sp.getServer().runCommand(String.format(java.util.Locale.ROOT,
+                "execute in galaxycraft:shadow run summon minecraft:tnt %.2f %.2f %.2f {fuse:20}", x0, y, z0 - 6));
+        ctx.waitTicks(21);
+        check(PlanetClient.particleCount() > 5, "the explosion's flash and smoke (" + PlanetClient.particleCount() + " particles)");
+        gxdev("ctl", "shot entities-explosion");
+        ctx.waitTicks(40);
+
+        // A zombie next to Mario: it goes for him, and the player is hurt.
+        sp.getServer().runCommand("effect clear @a");
+        sp.getServer().runCommand("effect give @a instant_health 1 5");
+        ctx.waitTicks(10);
+        float before = ctx.computeOnClient(mc -> mc.player.getHealth());
+        sp.getServer().runCommand(String.format(java.util.Locale.ROOT,
+                "execute in galaxycraft:shadow run summon minecraft:zombie %.2f %.2f %.2f", x0 + 1.5, y, z0));
+        ctx.waitFor(mc -> mc.player.getHealth() < before, 200);
+        log("ok the zombie hurts Mario (" + before + " -> " + ctx.computeOnClient(mc -> mc.player.getHealth()) + ")");
+        gxdev("ctl", "shot entities-zombie");
+    }
+
+    private static boolean pigAlive(ClientGameTestContext ctx) {
+        return ctx.computeOnClient(mc -> ShadowWorld.entities().list().stream()
+                .anyMatch(e -> e instanceof net.minecraft.world.entity.animal.pig.Pig pig && pig.isAlive()));
     }
 
     /** v kept on the face's box from lo, n cells wide, a block in from its edges. */

@@ -44,6 +44,10 @@ Three programs share one world:
   inside SMG2 with Minecraft's own models and textures, not overlaid by Minecraft. Mobs (from
   spawn eggs) live in the shadow dimension, are animated by their own models, and walk around the
   planet across its cube faces. Lit TNT flashes, swells and blows up planet blocks.
+- **Fighting.** Clicking a mob in reach hits it with what is in hand, as Minecraft would (damage,
+  knockback, enchantments, wear). Mobs fall over and vanish in a puff when they die, and drop
+  their loot on the planet. Hostile mobs chase and hurt Mario, arrows and explosions too.
+  Particles (death puffs, explosions, broken blocks' pieces, hits) are drawn by the game.
 - **Fluids.** Water and lava buckets, ice that melts into water, and obsidian and cobblestone
   where water and lava meet. A classic cobblestone generator works.
 - **Collision that feels like Minecraft.** Mario shrinks to Steve's width on planets, so he

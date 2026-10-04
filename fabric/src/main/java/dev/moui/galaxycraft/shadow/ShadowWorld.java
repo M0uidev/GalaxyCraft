@@ -88,6 +88,11 @@ public final class ShadowWorld {
     private static BlockPos writingPos;
     private static volatile BlockPos mario = BlockPos.ZERO;
     private static volatile Entities entities;
+    private static volatile MarioAt marioAt;
+    private static final ConcurrentLinkedQueue<Particle> particles = new ConcurrentLinkedQueue<>();
+    /** Particles waiting for the client at most: more are dropped (a big explosion makes plenty). */
+    static final int MAX_PARTICLES = 512;
+    private static MarioProxy proxy;
     /** Shadow entities handed to the client each tick, at most. */
     static final int MAX_ENTITIES = 256;
 
@@ -106,6 +111,46 @@ public final class ShadowWorld {
         return entities;
     }
 
+    /** Where Mario is on the running planet (blocks, its space), where he looks, and who plays him. */
+    public record MarioAt(VoxelPlanet planet, org.joml.Vector3d feet, org.joml.Vector3d look, UUID player) {}
+
+    /** Client tick: Mario's stand-in in the shadow goes where he is (null: none). */
+    public static void mario(MarioAt at) {
+        marioAt = at;
+    }
+
+    /** A particle Minecraft made in the shadow: at pos, moving by vel (blocks per tick), planet space. */
+    public record Particle(VoxelPlanet planet, net.minecraft.core.particles.ParticleOptions options, org.joml.Vector3d pos,
+            org.joml.Vector3d vel) {}
+
+    public static Particle pollParticle() {
+        return particles.poll();
+    }
+
+    /** Mario's stand-in in the shadow, for tests: where, game mode; "none" if there is none. */
+    public static String proxyState() {
+        MarioProxy p = proxy;
+        return p == null ? "none" : p.blockPosition().toShortString() + " " + p.gameMode() + (p.isRemoved() ? " removed" : "");
+    }
+
+    /** The player hits a shadow entity (by its id) as Mario, from where he stands there. */
+    public static void attack(int entityId, UUID player) {
+        ops.add(level -> {
+            Entity target = level.getEntity(entityId);
+            ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(player);
+            if (target == null || p == null || proxy == null || proxy.isRemoved()) return;
+            // The blow is the player's: what is in hand (the same stack, so it wears out) and how charged it is.
+            proxy.setItemInHand(InteractionHand.MAIN_HAND, p.getMainHandItem());
+            proxy.getAttributes().assignAllValues(p.getAttributes()); // the weapon's damage and speed
+            ((dev.moui.galaxycraft.mixin.LivingEntityAccessor) (Object) proxy).galaxycraft$setAttackStrengthTicker(
+                    ((dev.moui.galaxycraft.mixin.LivingEntityAccessor) p).galaxycraft$attackStrengthTicker());
+            Vec3 to = target.position().subtract(proxy.position());
+            proxy.setYRot((float) Math.toDegrees(Math.atan2(-to.x, to.z)));
+            proxy.attack(target);
+            p.resetAttackStrengthTicker();
+            proxy.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        });
+    }
     /** Whether an integrated server with the shadow dimension is running. */
     public static boolean available() {
         return available;
@@ -273,17 +318,96 @@ public final class ShadowWorld {
         for (Consumer<ServerLevel> op; (op = ops.poll()) != null; ) op.accept(level);
         for (int n = 0; n < MIRROR_PER_TICK && !toMirror.isEmpty(); n++) mirror(level, toMirror.poll());
         flushEdges(level);
+        moveProxy(level);
         entities = map == null ? null : new Entities(planet, map, collect(level));
+    }
+
+    /** Mario's stand-in: made when there is a planet and a player, kept where Mario is. */
+    private static void moveProxy(ServerLevel level) {
+        MarioAt at = marioAt;
+        ServerPlayer p = at == null || map == null || at.planet() != planet ? null : level.getServer().getPlayerList().getPlayer(at.player());
+        int cell = p == null ? -1 : map.grid.cellAt(at.feet());
+        if (cell < 0) {
+            if (proxy != null) proxy.setGameMode(net.minecraft.world.level.GameType.SPECTATOR);
+            return;
+        }
+        if (proxy == null || proxy.isRemoved() || proxy.level() != level) {
+            proxy = new MarioProxy(level);
+            level.addNewPlayer(proxy);
+        }
+        proxy.follow(at.player());
+        net.minecraft.world.level.GameType mode = p.isAlive() ? p.gameMode() : net.minecraft.world.level.GameType.SPECTATOR;
+        if (proxy.gameMode() != mode) proxy.setGameMode(mode);
+        org.joml.Vector3d m = CellSpace.local(map.grid, cell, at.feet());
+        org.joml.Vector3d d = CellSpace.direction(map.grid, cell, at.look());
+        float yaw = (float) Math.toDegrees(Math.atan2(-d.x, d.z)), pitch = (float) -Math.toDegrees(Math.asin(Math.clamp(d.y, -1, 1)));
+        proxy.snapTo(map.x(cell) + m.x, map.y(cell) + m.y, map.z(cell) + m.z, yaw, pitch);
+        proxy.setYHeadRot(yaw);
+        if (p.isAlive()) proxy.setHealth(p.getHealth());
+    }
+
+    // ---- particles (server thread, from the mixins) ----
+
+    /** One particle made in the shadow at (x, y, z) moving by (vx, vy, vz): to the planet's space. */
+    public static void particle(net.minecraft.core.particles.ParticleOptions options, double x, double y, double z, double vx,
+            double vy, double vz) {
+        if (map == null || particles.size() >= MAX_PARTICLES) return;
+        double[] f = map.frame(x, y, z);
+        if (f == null) return;
+        // The frame is about the shadow position given: the point itself is its origin.
+        org.joml.Vector3d pos = new org.joml.Vector3d(f[0], f[1], f[2]);
+        org.joml.Vector3d vel = new org.joml.Vector3d(f[3] * vx + f[6] * vy + f[9] * vz, f[4] * vx + f[7] * vy + f[10] * vz,
+                f[5] * vx + f[8] * vy + f[11] * vz);
+        particles.add(new Particle(planet, options, pos, vel));
+    }
+
+    /** ServerLevel.sendParticles in the shadow: as a client spreads them (count 0: one, moving by dist times speed). */
+    public static void sendParticles(net.minecraft.core.particles.ParticleOptions options, double x, double y, double z, int count,
+            double dx, double dy, double dz, double sx, double sy, double sz) {
+        java.util.Random r = new java.util.Random();
+        if (count == 0) {
+            particle(options, x, y, z, dx * sx, dy * sy, dz * sz);
+            return;
+        }
+        for (int i = 0; i < Math.min(count, 64); i++)
+            particle(options, x + r.nextGaussian() * dx, y + r.nextGaussian() * dy, z + r.nextGaussian() * dz,
+                    r.nextGaussian() * sx, r.nextGaussian() * sy, r.nextGaussian() * sz);
+    }
+
+    /** An explosion in the shadow: its flash of particles, and its sound (sent only to players there). */
+    public static void explosion(ServerLevel level, double x, double y, double z, float radius,
+            net.minecraft.core.particles.ParticleOptions flash, net.minecraft.core.Holder<net.minecraft.sounds.SoundEvent> sound) {
+        particle(flash, x, y, z, 0, 0, 0);
+        java.util.Random r = new java.util.Random();
+        for (int i = 0; i < 16; i++)
+            particle(net.minecraft.core.particles.ParticleTypes.POOF, x + r.nextGaussian() * radius / 3, y + r.nextGaussian() * radius / 3,
+                    z + r.nextGaussian() * radius / 3, r.nextGaussian() * 0.15, r.nextGaussian() * 0.15, r.nextGaussian() * 0.15);
+        level.playSound(null, x, y, z, sound, net.minecraft.sounds.SoundSource.BLOCKS, 4.0F,
+                (1.0F + (level.getRandom().nextFloat() - level.getRandom().nextFloat()) * 0.2F) * 0.7F);
+    }
+
+    /** A block broken in the shadow (level event 2001): its pieces fly, as a client shows them. */
+    public static void blockBroken(BlockPos pos, int stateId) {
+        BlockState s = Block.stateById(stateId);
+        if (s == null || s.isAir()) return;
+        var options = new net.minecraft.core.particles.BlockParticleOption(net.minecraft.core.particles.ParticleTypes.BLOCK, s);
+        java.util.Random r = new java.util.Random();
+        for (int i = 0; i < 12; i++) {
+            double fx = r.nextDouble(), fy = r.nextDouble(), fz = r.nextDouble();
+            particle(options, pos.getX() + fx, pos.getY() + fy, pos.getZ() + fz, (fx - 0.5) * 0.15, fy * 0.15 + 0.05,
+                    (fz - 0.5) * 0.15);
+        }
     }
 
     /** The planet's entities, those that walked off a face's edge put on the next face. */
     private static List<Entity> collect(ServerLevel level) {
         List<Entity> out = new ArrayList<>();
         for (Entity e : level.getAllEntities()) {
+            // Dying mobs stay until Minecraft removes them: they fall over first.
             if (e instanceof Player || e instanceof net.minecraft.world.entity.item.ItemEntity
-                    || !e.isAlive() || !map.inStrip((int) Math.floor(e.getZ())))
+                    || e.isRemoved() || !map.inStrip((int) Math.floor(e.getZ())))
                 continue;
-            if (!e.isPassenger()) wrap(level, e);
+            if (!e.isPassenger() && e.isAlive()) wrap(level, e);
             if (out.size() < MAX_ENTITIES) out.add(e);
         }
         return List.copyOf(out);
@@ -325,6 +449,8 @@ public final class ShadowWorld {
     }
 
     private static void release(ServerLevel level) {
+        if (proxy != null && !proxy.isRemoved()) level.removePlayerImmediately(proxy, Entity.RemovalReason.DISCARDED);
+        proxy = null;
         for (Long c : forced) level.setChunkForced(ChunkPos.getX(c), ChunkPos.getZ(c), false);
         forced.clear();
         mirrored.clear();
@@ -430,9 +556,9 @@ public final class ShadowWorld {
         return true;
     }
 
-    /** Entity events that only start an animation on the client, replayed on shadow entities. */
+    /** Entity events that only start an animation (or make particles: 60, a mob's last poof) on the client, replayed on shadow entities. */
     private static final Set<Byte> ANIMATION_EVENTS = Set.of((byte) 1, (byte) 4, (byte) 10, (byte) 11, (byte) 34,
-            (byte) 39, (byte) 45, (byte) 58, (byte) 59, (byte) 61, (byte) 62, (byte) 66);
+            (byte) 39, (byte) 45, (byte) 58, (byte) 59, (byte) 60, (byte) 61, (byte) 62, (byte) 66);
     /** By class: its client-only setupAnimationStates (bats, rabbits, camels...), or none. */
     private static final java.util.Map<Class<?>, java.util.Optional<java.lang.reflect.Method>> SETUP =
             new java.util.concurrent.ConcurrentHashMap<>();

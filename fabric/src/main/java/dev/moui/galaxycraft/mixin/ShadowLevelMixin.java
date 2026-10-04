@@ -1,7 +1,15 @@
 package dev.moui.galaxycraft.mixin;
 
 import dev.moui.galaxycraft.shadow.ShadowWorld;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.particles.ExplosionParticleInfo;
+import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
+import net.minecraft.util.random.WeightedList;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.level.ExplosionDamageCalculator;
+import net.minecraft.world.level.Level;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -32,6 +40,29 @@ abstract class ShadowLevelMixin {
             ShadowWorld.giveExperience(self, orb.getValue());
             cir.setReturnValue(false);
         }
+    }
+
+    @Inject(method = "sendParticles(Lnet/minecraft/core/particles/ParticleOptions;ZZDDDIDDDDDDLnet/minecraft/network/protocol/game/ClientboundLevelParticlesPacket$RandomizationType;)I",
+            at = @At("HEAD"))
+    private void galaxycraft$particles(ParticleOptions particle, boolean overrideLimiter, boolean alwaysShow, double x, double y, double z,
+            int count, double xDist, double yDist, double zDist, double xSpeed, double ySpeed, double zSpeed,
+            ClientboundLevelParticlesPacket.RandomizationType type, CallbackInfoReturnable<Integer> cir) {
+        if (ShadowWorld.isShadow((ServerLevel) (Object) this))
+            ShadowWorld.sendParticles(particle, x, y, z, count, xDist, yDist, zDist, xSpeed, ySpeed, zSpeed);
+    }
+
+    @Inject(method = "explode", at = @At("TAIL"))
+    private void galaxycraft$explosion(@Nullable Entity source, @Nullable DamageSource damageSource,
+            @Nullable ExplosionDamageCalculator calculator, double x, double y, double z, float r, boolean fire,
+            Level.ExplosionInteraction interaction, ParticleOptions small, ParticleOptions large,
+            WeightedList<ExplosionParticleInfo> blockParticles, Holder<SoundEvent> sound, CallbackInfo ci) {
+        ServerLevel self = (ServerLevel) (Object) this;
+        if (ShadowWorld.isShadow(self)) ShadowWorld.explosion(self, x, y, z, r, r >= 2 ? large : small, sound);
+    }
+
+    @Inject(method = "levelEvent", at = @At("HEAD"))
+    private void galaxycraft$blockBroken(@Nullable Entity source, int type, BlockPos pos, int data, CallbackInfo ci) {
+        if (type == 2001 && ShadowWorld.isShadow((ServerLevel) (Object) this)) ShadowWorld.blockBroken(pos, data);
     }
 
     @Inject(method = "broadcastEntityEvent", at = @At("HEAD"))

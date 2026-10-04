@@ -102,7 +102,7 @@ public:
     for (u32 n = 0; n < gCount; n++)
     {
       const u8* e = gList + n * gxc::ENT_BYTES;
-      const u32 model = (u32(e[0]) << 8) | e[1], skin = (u32(e[2]) << 8) | e[3];
+      const u32 raw = (u32(e[0]) << 8) | e[1], model = raw & 0x7FFF, skin = (u32(e[2]) << 8) | e[3];
       if (model >= gxc::ENT_MAX_MODELS || skin >= gxc::ENT_MAX_SKINS || !gModels[model].size || !gSkins[skin].data)
         continue;  // not here yet (or lost): drawn once it is
       if (skin != loaded)
@@ -121,6 +121,14 @@ public:
       for (int k = 0; k < 12; k++)
         m[k] = ReadF32(e + 8 + 4 * k);
       gxc::Mul34(view, m, pos);
+      if (raw & 0x8000)
+      {
+        // A particle: facing the camera, only its size kept (model y is down, view y up).
+        const f32 size = gxc::Sqrt(m[0] * m[0] + m[4] * m[4] + m[8] * m[8]);
+        for (int r = 0; r < 3; r++)
+          for (int c = 0; c < 3; c++)
+            pos[4 * r + c] = r == c ? (r == 1 ? -size : size) : 0.f;
+      }
       GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(pos), GX_PNMTX0);
       GXCallDisplayList(gModels[model].dl, gModels[model].size);
       gDrawn++;

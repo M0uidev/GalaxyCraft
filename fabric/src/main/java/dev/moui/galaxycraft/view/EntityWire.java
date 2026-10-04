@@ -80,6 +80,15 @@ public final class EntityWire {
         return v << 24 | v << 16 | v << 8 | 0xFF;
     }
 
+    /** Model ids with this bit are drawn facing the camera (particles): only their scale is kept. */
+    public static final int BILLBOARD = 0x8000;
+
+    /** A square 16 pixels a side around the origin (y down), showing (u0, v0) to (u1, v1), unshaded. */
+    public static List<Quad> square(float u0, float v0, float u1, float v1) {
+        return List.of(new Quad(new float[][] {{-8, -8, 0}, {8, -8, 0}, {8, 8, 0}, {-8, 8, 0}},
+                new float[][] {{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}}, 0xFFFFFFFF));
+    }
+
     /**
      * A cube 16 pixels a side around the origin (model y down, as Minecraft's models) textured by
      * a 16-wide skin of bands, each 16 tall: top, sides and bottom are bands 0, 1 and 2 of bands.

@@ -8,6 +8,7 @@ import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Seqlock;
 import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.voxel.AtlasLink;
+import dev.moui.galaxycraft.voxel.CellSpace;
 import dev.moui.galaxycraft.voxel.Material;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.PlanetStore;
@@ -20,6 +21,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -39,6 +41,8 @@ import org.joml.Vector3d;
  */
 public final class PlanetClient {
     /** SDL scancode of P; protocol mouse mask bits (bit n = SDL button n). */
+    /** How far Mario's blows reach (Minecraft's entity interaction range), blocks. */
+    static final double REACH = 3;
     private static final int SC_P = 19, MOUSE_LEFT = 1 << 1, MOUSE_RIGHT = 1 << 3;
     public static final int DEFAULT_RADIUS = 32;
     /** Ticks between saves of an edited planet. */
@@ -150,14 +154,31 @@ public final class PlanetClient {
             boolean item = itemActive(player) && !screen;
             // Minecraft's outline on the block the clicks would act on, only with something in hand.
             session.setOutline(item ? session.target(eye, look, player.getMainHandItem().is(Items.BUCKET)) : -1);
+            // Mario stands where he is in the shadow too, so mobs chase him and his blows land.
+            Vector3d eyeLocal = session.localOf(eye);
+            ShadowWorld.mario(new ShadowWorld.MarioAt(session.planet(), session.localOf(world.queryPos()), new Vector3d(look),
+                    player.getUUID()));
+            // A mob in reach in front of the block hit takes the blow instead, whatever is in hand.
+            boolean hit = false;
+            if (!screen && pressed(buttons, MOUSE_LEFT) && shadow.available()) {
+                double block = aim == null ? Double.MAX_VALUE
+                        : CellSpace.point(session.planet().grid, aim.cell(), aim.hit().x, aim.hit().y, aim.hit().z).distance(eyeLocal);
+                Entity target = entities.aimed(eyeLocal, look, Math.min(REACH, block));
+                if (target != null) {
+                    ShadowWorld.attack(target.getId(), player.getUUID());
+                    hit = true;
+                }
+            }
             if (item) {
                 // Minecraft gets the same clicks and swings the arm by itself.
-                if (pressed(buttons, MOUSE_LEFT)) breakBlock(player, eye, look, aim);
+                if (pressed(buttons, MOUSE_LEFT) && !hit) breakBlock(player, eye, look, aim);
                 if (pressed(buttons, MOUSE_RIGHT)) use(player, eye, look, world.queryPos(), aim);
             }
         }
+        else ShadowWorld.mario(null);
         shadow.tick(stage == null ? "" : stage, world.queryPos());
         drops.tick(Minecraft.getInstance(), frame, frame == null ? null : world.queryPos());
+        entities.tick();
         lastButtons = buttons;
         lastP = p;
         session.update(world.sceneId(), bridge.hostPid(), world.queryPos());
@@ -166,6 +187,16 @@ public final class PlanetClient {
             sinceSave = 0;
             saveNow();
         }
+    }
+
+    /** Particles alive on the planet (tests). */
+    public static int particleCount() {
+        return entities.particleCount();
+    }
+
+    /** The mob a look from eye (planet space) would hit (tests). */
+    public static Entity aimedFrom(Vector3d eye, Vector3d look) {
+        return entities.aimed(eye, look, REACH);
     }
 
     /** Items lying on the planet (tests). */

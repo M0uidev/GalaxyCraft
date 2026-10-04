@@ -8,7 +8,9 @@
 		"ShadowAnimationMixin",
 		"ShadowChunkMixin",
 		"ShadowFluidMixin",
+		"LivingEntityAccessor",
 		"ShadowLevelMixin",
+		"ShadowParticleMixin",
 		"ShadowReachMixin"
 	],
 	"injectors": {

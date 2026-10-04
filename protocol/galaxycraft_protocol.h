@@ -278,7 +278,7 @@ typedef struct {
  *   SKIN:     u32 id, u32 width, u32 height (multiples of 4, at most 256), GX RGB5A3 texels
  *   MODEL:    u32 id, u32 dl_size (a multiple of 32), display list: GX_QUADS in GXC_ENT_VTXFMT,
  *             position s16 xyz (1/16 of a model pixel), color RGBA8, texcoord s16 st (1/4096)
- *   ENTITIES: u32 count, then count x { u16 model, u16 skin, u8 overlay[4] (RGBA: the color
+ *   ENTITIES: u32 count, then count x { u16 model (bit 15: faces the camera, a particle), u16 skin, u8 overlay[4] (RGBA: the color
  *             mixed over the piece by A/255, red when hurt, white when TNT flashes),
  *             f32 mtx[12] (3x4 row-major, model pixels -> galaxy) } */
 #define GXC_ENT_MAX_SKINS 256

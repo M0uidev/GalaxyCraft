@@ -64,12 +64,52 @@ final class EntityClient {
     private final Set<Integer> sentModels = new HashSet<>(), sentSkins = new HashSet<>();
     private final Map<Object, HeldClient.Look> looks = new HashMap<>();
     private final Set<Class<?>> failed = new HashSet<>();
+    private final ParticleClient particles = new ParticleClient();
+    /** Shadow entities drawn last frame and the shadow's frame around each (what the clicks can hit). */
+    private final List<Seen> seen = new ArrayList<>();
+
+    private record Seen(Entity entity, Matrix4d at, Vector3d pos) {}
     private int scene = Integer.MIN_VALUE, host = Integer.MIN_VALUE;
     private boolean wasEmpty = true;
 
     EntityClient(PlanetSession session, DropsClient drops) {
         this.session = session;
         this.drops = drops;
+    }
+
+    int particleCount() {
+        return particles.all().size();
+    }
+
+    /** Client tick: the particles move. */
+    void tick() {
+        particles.tick(session.active() ? session.planet() : null);
+    }
+
+    /**
+     * The mob nearest along the look from eye (planet space) whose box it meets within reach
+     * blocks; null if none.
+     */
+    Entity aimed(Vector3d eye, Vector3d look, double reach) {
+        Entity best = null;
+        double bestDist = reach;
+        for (Seen s : seen) {
+            if (!s.entity().isAlive() || !s.entity().isPickable()) continue;
+            // Planet points into the shadow around the entity: there its box is a plain box.
+            Matrix4d inv = new Matrix4d(s.at()).invertAffine();
+            Vector3d from = inv.transformPosition(new Vector3d(eye)).add(s.pos());
+            Vector3d to = inv.transformPosition(new Vector3d(look).normalize().mul(reach).add(eye)).add(s.pos());
+            var hit = s.entity().getBoundingBox().inflate(s.entity().getPickRadius())
+                    .clip(new net.minecraft.world.phys.Vec3(from.x, from.y, from.z), new net.minecraft.world.phys.Vec3(to.x, to.y, to.z));
+            if (hit.isEmpty()) continue;
+            Vector3d h = new Vector3d(hit.get().x, hit.get().y, hit.get().z).sub(s.pos());
+            double d = s.at().transformPosition(h).distance(eye);
+            if (d < bestDist) {
+                bestDist = d;
+                best = s.entity();
+            }
+        }
+        return best;
     }
 
     /** Render thread, once per emulated frame: this frame's entities to the game. */
@@ -82,6 +122,7 @@ final class EntityClient {
             wasEmpty = false;
         }
         List<EntityWire.Piece> pieces = new ArrayList<>();
+        seen.clear();
         if (session.active() && marioFeetGal != null) {
             Vector3d mario = session.localOf(marioFeetGal);
             for (PlanetDrops.Drop<ItemStack> d : drops.all())
@@ -89,10 +130,11 @@ final class EntityClient {
             ShadowWorld.Entities shadow = ShadowWorld.entities();
             if (shadow != null && shadow.planet() == session.planet())
                 for (Entity e : shadow.list()) shadowEntity(shadow, e, mario, pt, pieces);
+            for (ParticleClient.Live l : particles.all()) particle(l, mario, pt, pieces);
         }
         if (pieces.isEmpty() && wasEmpty) return;
         for (EntityWire.Piece p : pieces) {
-            if (!send(bridge, Layout.MSG_MODEL, p.model(), models, sentModels)) return;
+            if (!send(bridge, Layout.MSG_MODEL, p.model() & ~EntityWire.BILLBOARD, models, sentModels)) return;
             if (!send(bridge, Layout.MSG_SKIN, p.skin(), skins, sentSkins)) return;
         }
         if (bridge.send(Layout.MSG_ENTITIES, EntityWire.frame(pieces))) wasEmpty = pieces.isEmpty();
@@ -152,6 +194,7 @@ final class EntityClient {
             if (f == null || new Vector3d(f[0], f[1], f[2]).distance(mario) > RANGE) return;
             // The shadow's blocks around the entity, as planet blocks (its frame there).
             Matrix4d at = new Matrix4d(f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], 0, f[0], f[1], f[2], 1);
+            seen.add(new Seen(e, at, new Vector3d(st.x, st.y, st.z)));
             PoseStack ps = new PoseStack();
             if (e instanceof PrimedTnt tnt) {
                 float fuse = tnt.getFuse() - pt + 1;
@@ -167,6 +210,35 @@ final class EntityClient {
             failed.add(e.getClass());
             GalaxyCraft.LOG.warn("Not drawing {} in the game: {}", e.getType(), ex.toString());
         }
+    }
+
+    /** A particle, facing the camera: its sprite now, or a bit of its block's side. */
+    private void particle(ParticleClient.Live l, Vector3d mario, float pt, List<EntityWire.Piece> out) {
+        Vector3d at = new Vector3d(l.pos).fma(pt, l.vel);
+        if (at.distance(mario) > RANGE) return;
+        int skin, model;
+        if (l.block != null) {
+            HeldClient.Look look = look(l.block, () -> HeldClient.look(l.block));
+            if (look == null) return;
+            skin = lookSkin(l.block, look);
+            model = squareModel("bit" + l.bit, (l.bit % 4) / 4f, (1 + (l.bit / 4) / 4f) / 3, (l.bit % 4 + 1) / 4f,
+                    (1 + (l.bit / 4 + 1) / 4f) / 3);
+        } else {
+            skin = entitySkin(l.frame());
+            model = squareModel("square", 0, 0, 1, 1);
+        }
+        if (skin < 0 || model < 0) return;
+        Matrix4d m = new Matrix4d().translation(at).scale(l.size / 16);
+        out.add(new EntityWire.Piece(model | EntityWire.BILLBOARD, skin, 0, toGal(m)));
+    }
+
+    private int squareModel(String key, float u0, float v0, float u1, float v1) {
+        Integer id = modelIds.get(key);
+        if (id == null) {
+            id = addModel(EntityWire.square(u0, v0, u1, v1));
+            modelIds.put(key, id);
+        }
+        return id;
     }
 
     /** A block entity (TNT, falling sand): its block's cube, scaled around its center. */
