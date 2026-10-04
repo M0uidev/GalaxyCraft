@@ -156,6 +156,14 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
     if (out->entities.count > ENT_MAX || len != 4 + out->entities.count * ENT_BYTES)
       return false;
   }
+  else if (type == InboxRecord::SEAT)
+  {
+    if (len != 16)
+      return false;
+    for (int k = 0; k < 3; k++)
+      out->seat.pos[k] = ReadF32(p + 4 * k);
+    out->seat.riding = ReadBE32(p + 12);
+  }
   else if (type == InboxRecord::HURT)
   {
     if (len != 16)

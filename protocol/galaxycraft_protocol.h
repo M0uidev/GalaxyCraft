@@ -190,6 +190,8 @@ enum {
   GXC_MSG_SKIN = 108,      /* entity texture, all big-endian (see GXC_ENT_*) */
   GXC_MSG_MODEL = 109,     /* entity model display list, all big-endian */
   GXC_MSG_ENTITIES = 110,  /* this frame's entities, all big-endian; only the newest one counts */
+  GXC_MSG_SEAT = 112,      /* Mario rides something: f32 pos[3] (galaxy), u32 riding (0: he gets off); big-endian,
+                              sent every frame while he rides (the game lets go if they stop) */
   GXC_MSG_HURT = 111,      /* the player was hurt in Minecraft: f32 from[3] (galaxy), u32 GXC_HURT_*; big-endian */
   GXC_MSG_PAD = 0xFFFF,
 };

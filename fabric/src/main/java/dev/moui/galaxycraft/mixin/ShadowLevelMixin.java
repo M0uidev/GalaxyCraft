@@ -36,6 +36,8 @@ abstract class ShadowLevelMixin {
     private void galaxycraft$dropsOnThePlanet(Entity entity, CallbackInfoReturnable<Boolean> cir) {
         ServerLevel self = (ServerLevel) (Object) this;
         if (entity instanceof ItemEntity item && ShadowWorld.catchItem(self, item)) cir.setReturnValue(false);
+        else if (entity instanceof net.minecraft.world.entity.projectile.Projectile p && ShadowWorld.catchProjectile(self, p))
+            cir.setReturnValue(false);
         else if (entity instanceof ExperienceOrb orb && ShadowWorld.isShadow(self)) {
             ShadowWorld.giveExperience(self, orb.getValue());
             cir.setReturnValue(false);

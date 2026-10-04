@@ -66,6 +66,13 @@ struct InboxHurt
   u32 kind;
 };
 
+// Mario rides something (GXC_MSG_SEAT): where he sits, or riding 0 when he gets off.
+struct InboxSeat
+{
+  f32 pos[3];
+  u32 riding;
+};
+
 struct InboxEntities
 {
   u32 count;
@@ -90,6 +97,7 @@ struct InboxRecord
     MODEL = 109,
     ENTITIES = 110,
     HURT = 111,
+    SEAT = 112,
   };
   u32 type;
   InboxPlanet planet;
@@ -101,6 +109,7 @@ struct InboxRecord
   InboxModel model;
   InboxEntities entities;
   InboxHurt hurt;
+  InboxSeat seat;
 };
 
 u32 ReadBE32(const u8* p);

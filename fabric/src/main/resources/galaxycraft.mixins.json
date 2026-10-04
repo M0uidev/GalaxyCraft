@@ -12,7 +12,8 @@
 		"LivingEntityAccessor",
 		"ShadowLevelMixin",
 		"ShadowParticleMixin",
-		"ShadowReachMixin"
+		"ShadowReachMixin",
+		"ShadowRideMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

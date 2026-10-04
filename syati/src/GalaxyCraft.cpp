@@ -60,6 +60,7 @@ struct Debug
   u32 entities_drawn;  // entity pieces drawn last frame (EntityDraw.h)
   u32 player_life;     // SMG2's life meter (Minecraft's blows must leave it as it was)
   u32 hurts[2];        // Minecraft's blows passed on to Mario, and taken by him
+  u32 riding;          // bit 0: Mario sits on a minecart or boat (GXC_MSG_SEAT); above: seat records seen
 };
 
 struct Published
@@ -333,6 +334,7 @@ void MarioMovement(void* self)
   const TVec3f* at = MR::getPlayerPos();
   const f32 before[3] = {at->x, at->y, at->z};
   movement__10MarioActorFv(self);
+  EntityDrawAfterMario();
   {
     const u8* mb = reinterpret_cast<const u8*>(reinterpret_cast<const MarioActor*>(self)->mMario);
     if (IsRam(reinterpret_cast<u32>(mb)))
@@ -368,6 +370,7 @@ void MarioMovement(void* self)
   uint32_t taken = 0;
   gOut.dbg.hurts[0] = EntityDrawHurts(&taken);
   gOut.dbg.hurts[1] = taken;
+  gOut.dbg.riding = EntityDrawRiding();
   gOut.dbg.star_pointer_valid = isStarPointerValid__2MRFl(0);
 
   const TVec3f* mario = MR::getPlayerPos();

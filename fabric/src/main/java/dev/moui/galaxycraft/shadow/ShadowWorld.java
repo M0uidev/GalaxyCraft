@@ -93,6 +93,10 @@ public final class ShadowWorld {
     /** Particles waiting for the client at most: more are dropped (a big explosion makes plenty). */
     static final int MAX_PARTICLES = 512;
     private static MarioProxy proxy;
+    /** What Mario rides (server thread), and where he sits on it (planet space; null: nothing). */
+    private static Entity riding;
+    private static volatile Seat seat;
+    private static volatile Steer steer = new Steer(false, false, false, false, false);
     /** Shadow entities handed to the client each tick, at most. */
     static final int MAX_ENTITIES = 256;
 
@@ -153,6 +157,61 @@ public final class ShadowWorld {
     public static String proxyState() {
         MarioProxy p = proxy;
         return p == null ? "none" : p.blockPosition().toShortString() + " " + p.gameMode() + (p.isRemoved() ? " removed" : "");
+    }
+
+    /** Mario's seat on what he rides: planet space; null when he rides nothing. */
+    public record Seat(VoxelPlanet planet, org.joml.Vector3d pos) {}
+
+    public static Seat seat() {
+        return seat;
+    }
+
+    /** The movement keys while Mario rides (client tick): forward pushes, left and right steer a boat, sneak gets off. */
+    public record Steer(boolean forward, boolean back, boolean left, boolean right, boolean sneak) {}
+
+    public static void steer(Steer s) {
+        steer = s;
+    }
+
+    /** Mario gets off what he rides. */
+    public static void dismount() {
+        ops.add(level -> riding = null);
+    }
+
+    /**
+     * The player uses a shadow entity (right click, by its id): a minecart or boat is ridden;
+     * anything else gets the held item as from the player (shears, a bucket, wheat, a name tag,
+     * trading).
+     */
+    public static void interact(int entityId, UUID player) {
+        ops.add(level -> {
+            Entity target = level.getEntity(entityId);
+            ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(player);
+            if (target == null || p == null || !target.isAlive()) return;
+            if (target instanceof net.minecraft.world.entity.vehicle.minecart.AbstractMinecart
+                    || target instanceof net.minecraft.world.entity.vehicle.boat.AbstractBoat) {
+                riding = target;
+                return;
+            }
+            p.interactOn(target, InteractionHand.MAIN_HAND, target.position());
+        });
+    }
+
+    /** A projectile the player launched (an arrow, a snowball, a trident) while Mario is on the planet: it flies from him. */
+    public static boolean catchProjectile(ServerLevel level, net.minecraft.world.entity.projectile.Projectile p) {
+        if (isShadow(level) || !catchThrown || !(p.getOwner() instanceof ServerPlayer)) return false;
+        ServerLevel shadow = level.getServer().getLevel(KEY);
+        MarioProxy at = proxy;
+        if (shadow == null || at == null || at.isRemoved()) return false;
+        Entity copy = p.getType().create(shadow, net.minecraft.world.entity.EntitySpawnReason.TRIGGERED);
+        if (!(copy instanceof net.minecraft.world.entity.projectile.Projectile moved)) return false;
+        moved.restoreFrom(p);
+        moved.setOwner(at); // its hits are Mario's, from where he stands
+        Vec3 look = at.getLookAngle();
+        moved.snapTo(at.getX() + look.x * 0.5, at.getEyeY() - 0.1 + look.y * 0.5, at.getZ() + look.z * 0.5, at.getYRot(), at.getXRot());
+        moved.setDeltaMovement(look.scale(p.getDeltaMovement().length()));
+        shadow.addFreshEntity(moved);
+        return true;
     }
 
     /** The player hits a shadow entity (by its id) as Mario, from where he stands there. */
@@ -317,6 +376,16 @@ public final class ShadowWorld {
         if (r.consumesAction() || stack.isEmpty() || stack.getItem() instanceof BlockItem
                 || stack.getItem() instanceof BucketItem || sp.getCooldowns().isOnCooldown(stack))
             return r;
+        if (stack.getItem() instanceof net.minecraft.world.item.BoatItem && proxy != null && !proxy.isRemoved()) {
+            // A boat goes where Mario looks: placed by his stand-in, turned to the spot clicked.
+            Vec3 to = h.getLocation().subtract(proxy.getEyePosition());
+            proxy.setYRot((float) Math.toDegrees(Math.atan2(-to.x, to.z)));
+            proxy.setXRot((float) -Math.toDegrees(Math.atan2(to.y, Math.sqrt(to.x * to.x + to.z * to.z))));
+            proxy.setItemInHand(InteractionHand.MAIN_HAND, stack);
+            r = stack.use(level, proxy, InteractionHand.MAIN_HAND);
+            proxy.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+            return r;
+        }
         int count = stack.getCount();
         r = stack.useOn(new UseOnContext(level, sp, InteractionHand.MAIN_HAND, stack, h));
         if (sp.hasInfiniteMaterials()) stack.setCount(count);
@@ -366,6 +435,39 @@ public final class ShadowWorld {
         proxy.snapTo(map.x(cell) + m.x, map.y(cell) + m.y, map.z(cell) + m.z, yaw, pitch);
         proxy.setYHeadRot(yaw);
         if (p.isAlive()) proxy.setHealth(p.getHealth());
+        // Mario's body: what he walks into is pushed, arrows lying there are picked up.
+        for (Entity e : level.getEntities(proxy, proxy.getBoundingBox().inflate(0.2))) {
+            if (e == riding) continue;
+            if (e.isPushable()) e.push(proxy);
+            if (e instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow) e.playerTouch(p);
+        }
+        ride(level, p);
+    }
+
+    /** Mario on a minecart or boat: pushed or paddled by the movement keys, off with sneak. */
+    private static void ride(ServerLevel level, ServerPlayer p) {
+        Steer s = steer;
+        if (riding != null && (riding.isRemoved() || riding.level() != level || s.sneak() || !p.isAlive())) riding = null;
+        if (riding == null) {
+            seat = null;
+            return;
+        }
+        Vec3 look = proxy.getLookAngle();
+        Vec3 flat = new Vec3(look.x, 0, look.z).normalize();
+        if (riding instanceof net.minecraft.world.entity.vehicle.boat.AbstractBoat) {
+            float yaw = riding.getYRot() + (s.left() ? -3 : 0) + (s.right() ? 3 : 0);
+            riding.setYRot(yaw);
+            double r = Math.toRadians(yaw);
+            Vec3 front = new Vec3(-Math.sin(r), 0, Math.cos(r));
+            if (s.forward()) riding.push(front.scale(0.04));
+            if (s.back()) riding.push(front.scale(-0.005));
+        } else {
+            if (s.forward()) riding.push(flat.scale(0.02));
+            if (s.back()) riding.push(flat.scale(-0.02));
+        }
+        Vec3 at = riding.getPassengerRidingPosition(proxy);
+        double[] f = map.frame(at.x, at.y, at.z);
+        seat = f == null ? null : new Seat(planet, new org.joml.Vector3d(f[0], f[1], f[2]));
     }
 
     // ---- particles (server thread, from the mixins) ----
@@ -473,6 +575,8 @@ public final class ShadowWorld {
     private static void release(ServerLevel level) {
         if (proxy != null && !proxy.isRemoved()) level.removePlayerImmediately(proxy, Entity.RemovalReason.DISCARDED);
         proxy = null;
+        riding = null;
+        seat = null;
         for (Long c : forced) level.setChunkForced(ChunkPos.getX(c), ChunkPos.getZ(c), false);
         forced.clear();
         mirrored.clear();

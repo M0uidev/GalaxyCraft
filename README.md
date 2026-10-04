@@ -52,6 +52,11 @@ Three programs share one world:
   while SMG2's own life meter is left alone: Minecraft's health is what counts.
 - **Every entity.** Arrows, minecarts, boats, armor stands, thrown items, paintings, and mobs'
   armor, held items, saddles and wool are drawn too, each by its own Minecraft renderer.
+- **Using them.** Arrows, snowballs, tridents and other projectiles fly from Mario. Boats go
+  where he looks, minecarts on rails. Right click a minecart or boat to ride it (W pushes or
+  paddles, A/D steer a boat, Shift gets off); right click a mob to use what is in hand on it
+  (shears, buckets, wheat, name tags, trading). Mario pushes what he walks into and picks up
+  arrows lying around.
 - **Fluids.** Water and lava buckets, ice that melts into water, and obsidian and cobblestone
   where water and lava meet. A classic cobblestone generator works.
 - **Collision that feels like Minecraft.** Mario shrinks to Steve's width on planets, so he

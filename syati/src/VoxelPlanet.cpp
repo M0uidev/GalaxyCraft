@@ -307,6 +307,10 @@ public:
     {
       EntityDrawFrame(r.entities);
     }
+    else if (r.type == gxc::InboxRecord::SEAT)
+    {
+      EntityDrawSeat(r.seat);
+    }
     else if (r.type == gxc::InboxRecord::HURT)
     {
       EntityDrawHurt(r.hurt);

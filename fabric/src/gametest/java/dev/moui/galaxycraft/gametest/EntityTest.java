@@ -193,6 +193,8 @@ public final class EntityTest implements FabricClientGameTest {
         sp.getServer().runCommand("execute in galaxycraft:shadow run kill @e[type=zombie]");
         sp.getServer().runCommand("effect give @a instant_health 1 5");
 
+        playWithThem(ctx, sp, map, x0, y, z0);
+
         // Everything else, by its own renderer: an arrow, a minecart, a boat, an armored armor stand.
         int drawnBefore = count();
         String[] more = {"arrow{Motion:[0.0,0.0,0.0]}", "minecart", "oak_boat",
@@ -211,6 +213,85 @@ public final class EntityTest implements FabricClientGameTest {
         ctx.runOnClient(mc -> mc.player.setYRot(mc.player.getYRot() - 90));
         ctx.waitTicks(5);
         gxdev("ctl", "shot entities-more");
+    }
+
+    /** A fired arrow, a boat put down, a cow milked, a minecart ridden along its rails. */
+    private static void playWithThem(ClientGameTestContext ctx, TestSingleplayerContext sp, ShadowMap map, double x0, double y,
+            double z0) {
+        // The player shoots: the arrow flies in the shadow, from Mario.
+        sp.getServer().runOnServer(server -> {
+            var p = server.getPlayerList().getPlayers().get(0);
+            var arrow = new net.minecraft.world.entity.projectile.arrow.Arrow(p.level(), p,
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ARROW), null);
+            arrow.shootFromRotation(p, p.getXRot(), p.getYRot(), 0, 3, 0);
+            p.level().addFreshEntity(arrow);
+        });
+        ctx.waitTicks(5);
+        check(ctx.computeOnClient(mc -> ShadowWorld.entities().list().stream()
+                .anyMatch(e -> e instanceof net.minecraft.world.entity.projectile.arrow.Arrow)), "a fired arrow flies in the shadow");
+        gxdev("ctl", "shot entities-arrow");
+
+        // A boat, put down where Mario looks.
+        sp.getServer().runCommand("item replace entity @a hotbar.0 with oak_boat");
+        ctx.waitTicks(5);
+        ctx.runOnClient(mc -> {
+            mc.player.setXRot(40); // two blocks off: not where Mario stands
+            PlanetClient.useHeld(mc.player, GalaxyCraftClient.frame(), GalaxyCraftClient.galaxyPos().get());
+        });
+        ctx.waitTicks(10);
+        check(ctx.computeOnClient(mc -> ShadowWorld.entities().list().stream()
+                .anyMatch(e -> e instanceof net.minecraft.world.entity.vehicle.boat.AbstractBoat)), "the boat is put down");
+        ctx.runOnClient(mc -> mc.player.setXRot(15));
+
+        // The cow, milked.
+        sp.getServer().runCommand("item replace entity @a hotbar.0 with bucket");
+        ctx.waitTicks(5);
+        ctx.runOnClient(mc -> {
+            for (var e : ShadowWorld.entities().list())
+                if (e instanceof net.minecraft.world.entity.animal.cow.Cow) ShadowWorld.interact(e.getId(), mc.player.getUUID());
+        });
+        ctx.waitTicks(5);
+        check(ctx.computeOnClient(mc -> mc.player.getMainHandItem().is(net.minecraft.world.item.Items.MILK_BUCKET)), "the cow is milked");
+
+        // Rails a few blocks off, a minecart on them: Mario gets in and rides it along.
+        double rz = Math.min(z0 + 3, map.z0 + map.grid.n - 1.5);
+        int ry = (int) Math.floor(y - 1.5);
+        sp.getServer().runCommand(String.format(java.util.Locale.ROOT, "execute in galaxycraft:shadow run fill %d %d %d %d %d %d minecraft:rail",
+                (int) Math.floor(x0 - 4), ry, (int) Math.floor(rz), (int) Math.floor(x0 + 4), ry, (int) Math.floor(rz)));
+        sp.getServer().runCommand(String.format(java.util.Locale.ROOT, "execute in galaxycraft:shadow run summon minecraft:minecart %.2f %d %.2f",
+                Math.floor(x0 - 3) + 0.5, ry, Math.floor(rz) + 0.5));
+        ctx.waitTicks(10);
+        int[] cart = new int[1];
+        ctx.runOnClient(mc -> {
+            for (var e : ShadowWorld.entities().list())
+                if (e instanceof net.minecraft.world.entity.vehicle.minecart.AbstractMinecart m) {
+                    cart[0] = m.getId();
+                    ShadowWorld.interact(m.getId(), mc.player.getUUID());
+                }
+        });
+        ctx.waitTicks(10);
+        // (The test pauses Minecraft between ticks while the game runs on: only what came through counts.)
+        check(word(DBG_LIFE + 12) >> 8 > 0, "Mario sits in the minecart (seats seen: " + (word(DBG_LIFE + 12) >> 8) + ")");
+        float[] before = marioPos();
+        double cartX0 = sp.getServer().computeOnServer(server -> server.getLevel(ShadowWorld.KEY).getEntity(cart[0]).getX());
+        sp.getServer().runOnServer(server -> server.getLevel(ShadowWorld.KEY).getEntity(cart[0]).setDeltaMovement(0.4, 0, 0));
+        ctx.waitTicks(15);
+        String where = sp.getServer().computeOnServer(server -> {
+            var m = server.getLevel(ShadowWorld.KEY).getEntity(cart[0]);
+            return m.getX() + " " + m.getY() + " " + m.getZ() + " on " + server.getLevel(ShadowWorld.KEY).getBlockState(m.blockPosition());
+        });
+        double cartX1 = sp.getServer().computeOnServer(server -> server.getLevel(ShadowWorld.KEY).getEntity(cart[0]).getX());
+        float[] after = marioPos();
+        double moved = Math.sqrt(Math.pow(after[0] - before[0], 2) + Math.pow(after[1] - before[1], 2) + Math.pow(after[2] - before[2], 2));
+        log("minecart " + cartX0 + " -> " + where + ", Mario moved " + Math.round(moved));
+        gxdev("ctl", "shot entities-riding");
+        check(Math.abs(cartX1 - cartX0) > 1.5 && where.contains("rail"), "the minecart rolls along its rails");
+        check(moved > 150, "Mario rides along with it");
+        ShadowWorld.dismount();
+        ctx.waitTicks(10);
+        int seats = word(DBG_LIFE + 12) >> 8;
+        ctx.waitTicks(10);
+        check((word(DBG_LIFE + 12) & 1) == 0 && word(DBG_LIFE + 12) >> 8 == seats, "he gets off (no more seats)");
     }
 
     private static int word(int offset) {

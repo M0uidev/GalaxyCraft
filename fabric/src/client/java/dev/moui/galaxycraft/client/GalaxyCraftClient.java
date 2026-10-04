@@ -164,6 +164,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         return Optional.of(frame.dirToGal(LookMath.direction(yaw, pitch)));
     }
 
+    /** The gravity frame (tests). */
+    public static GravityFrame frame() {
+        return frame;
+    }
+
     public static boolean linked() {
         return bridge.linked();
     }

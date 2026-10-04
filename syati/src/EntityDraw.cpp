@@ -35,6 +35,11 @@ u32 gLifeFrames = 0;
 const u32 LIFE_FRAMES = 120;
 // The blow's sensor: this far from Mario toward the attacker, this big (galaxy units).
 const f32 HURT_REACH = 40.f, HURT_RADIUS = 80.f;
+// Mario rides something: held on its seat, for SEAT_FRAMES frames after the mod's last word.
+f32 gSeat[3];
+u32 gSeatFrames = 0;
+const u32 SEAT_FRAMES = 30;  // half a second: a hitch in Minecraft does not throw him off
+u32 gSeats = 0;  // seat records received, for the dev harness
 u32 gHurts = 0, gHurtsTaken = 0;  // for the dev harness: blows passed on, and taken by Mario
 
 f32 ReadF32(const u8* p)
@@ -234,6 +239,7 @@ void EntityDrawCreate()
   gCount = 0;
   gHurtPending = false;
   gLifeFrames = 0;
+  gSeatFrames = 0;
   gMario = 0;
   EntityDrawActor* actor = new EntityDrawActor();
   actor->initWithoutIter();
@@ -284,6 +290,30 @@ void EntityDrawHurt(const gxc::InboxHurt& hurt)
 {
   gHurt = hurt;
   gHurtPending = true;
+}
+
+void EntityDrawSeat(const gxc::InboxSeat& seat)
+{
+  for (int k = 0; k < 3; k++)
+    gSeat[k] = seat.pos[k];
+  gSeatFrames = seat.riding ? SEAT_FRAMES : 0;
+  gSeats++;
+}
+
+void EntityDrawAfterMario()
+{
+  if (!gSeatFrames)
+    return;
+  gSeatFrames--;
+  MR::setPlayerPos(TVec3f(gSeat[0], gSeat[1], gSeat[2]));
+  TVec3f* v = MR::getPlayerVelocity();
+  if (v)
+    v->set(0.f, 0.f, 0.f);
+}
+
+uint32_t EntityDrawRiding()
+{
+  return (gSeatFrames != 0) | (gSeats << 8);
 }
 
 void EntityDrawMario(void* marioActor)

@@ -43,6 +43,8 @@ public final class PlanetClient {
     /** SDL scancode of P; protocol mouse mask bits (bit n = SDL button n). */
     /** How far Mario's blows reach (Minecraft's entity interaction range), blocks. */
     static final double REACH = 3;
+    /** Keys by their USB HID usage (as the host reports them). */
+    private static final int SC_W = 26, SC_A = 4, SC_S = 22, SC_D = 7, SC_LSHIFT = 225, SC_RSHIFT = 229;
     private static final int SC_P = 19, MOUSE_LEFT = 1 << 1, MOUSE_RIGHT = 1 << 3;
     public static final int DEFAULT_RADIUS = 32;
     /** Ticks between saves of an edited planet. */
@@ -169,10 +171,22 @@ public final class PlanetClient {
                     hit = true;
                 }
             }
+            // Right click on a mob or vehicle in reach uses it (rides a minecart or boat).
+            if (!screen && pressed(buttons, MOUSE_RIGHT) && shadow.available()) {
+                double block = aim == null ? Double.MAX_VALUE
+                        : CellSpace.point(session.planet().grid, aim.cell(), aim.hit().x, aim.hit().y, aim.hit().z).distance(eyeLocal);
+                Entity target = entities.aimed(eyeLocal, look, Math.min(REACH, block));
+                if (target != null) {
+                    ShadowWorld.interact(target.getId(), player.getUUID());
+                    hit = true;
+                }
+            }
+            ShadowWorld.steer(new ShadowWorld.Steer(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),
+                    key(in, SC_LSHIFT) || key(in, SC_RSHIFT)));
             if (item) {
                 // Minecraft gets the same clicks and swings the arm by itself.
                 if (pressed(buttons, MOUSE_LEFT) && !hit) breakBlock(player, eye, look, aim);
-                if (pressed(buttons, MOUSE_RIGHT)) use(player, eye, look, world.queryPos(), aim);
+                if (pressed(buttons, MOUSE_RIGHT) && !hit) use(player, eye, look, world.queryPos(), aim);
             }
         }
         else ShadowWorld.mario(null);
@@ -196,6 +210,13 @@ public final class PlanetClient {
         }
     }
 
+    /** A right click with what is in hand, where the player looks (tests). */
+    public static void useHeld(LocalPlayer player, GravityFrame frame, Vector3d marioFeetGal) {
+        Vector3d eye = frame.toGal(vec(player.getEyePosition()));
+        Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
+        use(player, eye, look, marioFeetGal, session.aim(eye, look));
+    }
+
     /** Particles alive on the planet (tests). */
     public static int particleCount() {
         return entities.particleCount();
@@ -211,10 +232,21 @@ public final class PlanetClient {
         return drops.all().size();
     }
 
-    /** Render thread, once per emulated frame: the planet's entities to the game. */
+    /** Render thread, once per emulated frame: the planet's entities to the game, and Mario's seat if he rides. */
     public static void frame(BridgeClient bridge, float partialTick) {
         bridge.world().ifPresent(w -> entities.frame(bridge, w.sceneId(), w.queryPos(), partialTick));
+        ShadowWorld.Seat s = ShadowWorld.seat();
+        boolean on = s != null && session.active() && s.planet() == session.planet();
+        if (on || riding) {
+            Vector3d at = on ? session.galOf(s.pos()) : new Vector3d();
+            if (bridge.send(Layout.MSG_SEAT, java.nio.ByteBuffer.allocate(16).putFloat((float) at.x).putFloat((float) at.y)
+                    .putFloat((float) at.z).putInt(on ? 1 : 0).array()))
+                riding = on;
+        }
     }
+
+    /** Mario sat on something last frame (the game is told once when he gets off). */
+    private static boolean riding;
 
     /** Saves this stage's planet, drops it and loads it back from disk (end-to-end tests). */
     public static void reloadFromDisk() throws Exception {
@@ -282,6 +314,10 @@ public final class PlanetClient {
         } catch (NumberFormatException e) {
             return DEFAULT_RADIUS;
         }
+    }
+
+    private static boolean key(Optional<Seqlock.InputState> in, int usage) {
+        return in.map(i -> (i.keys()[usage / 8] >> (usage % 8) & 1) != 0).orElse(false);
     }
 
     private static boolean pressed(int buttons, int mask) {
