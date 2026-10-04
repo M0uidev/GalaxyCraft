@@ -190,6 +190,7 @@ enum {
   GXC_MSG_SKIN = 108,      /* entity texture, all big-endian (see GXC_ENT_*) */
   GXC_MSG_MODEL = 109,     /* entity model display list, all big-endian */
   GXC_MSG_ENTITIES = 110,  /* this frame's entities, all big-endian; only the newest one counts */
+  GXC_MSG_HURT = 111,      /* the player was hurt in Minecraft: f32 from[3] (galaxy), u32 GXC_HURT_*; big-endian */
   GXC_MSG_PAD = 0xFFFF,
 };
 
@@ -279,15 +280,19 @@ typedef struct {
  *   MODEL:    u32 id, u32 dl_size (a multiple of 32), display list: GX_QUADS in GXC_ENT_VTXFMT,
  *             position s16 xyz (1/16 of a model pixel), color RGBA8, texcoord s16 st (1/4096)
  *   ENTITIES: u32 count, then count x { u16 model (bit 15: faces the camera, a particle), u16 skin, u8 overlay[4] (RGBA: the color
- *             mixed over the piece by A/255, red when hurt, white when TNT flashes),
+ *             mixed over the piece by A/255, red when hurt, white when TNT flashes), u8 tint[4] (RGBA
+ *             the piece is multiplied by: dyed wool and leather, tinted leaves),
  *             f32 mtx[12] (3x4 row-major, model pixels -> galaxy) } */
 #define GXC_ENT_MAX_SKINS 256
 #define GXC_ENT_MAX_MODELS 2048
 #define GXC_ENT_MAX 768
-#define GXC_ENT_BYTES 56
+#define GXC_ENT_BYTES 60
 #define GXC_ENT_SKIN_MAX 256
 #define GXC_ENT_DL_MAX 65536
 #define GXC_ENT_VTXFMT 3
+#define GXC_HURT_HIT 0u       /* a blow, an arrow */
+#define GXC_HURT_FIRE 1u      /* fire, lava */
+#define GXC_HURT_EXPLOSION 2u /* TNT, a creeper */
 
 typedef struct {
   uint32_t latest; /* index 0..2 of the newest complete frame, 0xFFFFFFFF none */

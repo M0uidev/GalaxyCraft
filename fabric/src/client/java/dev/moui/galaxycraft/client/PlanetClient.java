@@ -179,6 +179,13 @@ public final class PlanetClient {
         shadow.tick(stage == null ? "" : stage, world.queryPos());
         drops.tick(Minecraft.getInstance(), frame, frame == null ? null : world.queryPos());
         entities.tick();
+        // The player hurt by the shadow: Mario reels in the game too.
+        for (ShadowWorld.Hurt h; (h = ShadowWorld.pollHurt()) != null; )
+            if (session.active() && h.planet() == session.planet()) {
+                Vector3d from = session.galOf(h.from());
+                bridge.send(Layout.MSG_HURT, java.nio.ByteBuffer.allocate(16).putFloat((float) from.x).putFloat((float) from.y)
+                        .putFloat((float) from.z).putInt(h.kind()).array());
+            }
         lastButtons = buttons;
         lastP = p;
         session.update(world.sceneId(), bridge.hostPid(), world.queryPos());

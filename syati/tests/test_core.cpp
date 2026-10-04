@@ -328,6 +328,7 @@ static void TestInboxEntities()
   b.resize(b.size() + 32);
   Put32(b, 110u << 16), Put32(b, 4 + 2 * ENT_BYTES), Put32(b, 2);
   b.resize(b.size() + 2 * ENT_BYTES);
+  Put32(b, 111u << 16), Put32(b, 16), Put32(b, 0x3F800000), Put32(b, 0), Put32(b, 0), Put32(b, 2);
   Put32(b, 109u << 16), Put32(b, 8 + 16), Put32(b, 1), Put32(b, 16);  // not a multiple of 32
   b.resize(b.size() + 16);
   InboxRecord r;
@@ -338,6 +339,8 @@ static void TestInboxEntities()
   CHECK(r.model.id == 7 && r.model.dl_size == 32);
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::ENTITIES);
   CHECK(r.entities.count == 2);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::HURT);
+  CHECK(r.hurt.from[0] == 1.f && r.hurt.kind == 2);
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
 }
 

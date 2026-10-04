@@ -11,5 +11,11 @@ void EntityDrawCreate();
 void EntityDrawSkin(const gxc::InboxSkin& skin);
 void EntityDrawModel(const gxc::InboxModel& model);
 void EntityDrawFrame(const gxc::InboxEntities& entities);
+// GXC_MSG_HURT: Mario reacts as to an enemy's blow from there (SMG2's life meter is kept).
+void EntityDrawHurt(const gxc::InboxHurt& hurt);
+// Once per frame: Mario's actor (MarioActor).
+void EntityDrawMario(void* marioActor);
+// Blows passed on to Mario so far (and how many he took), for the dev harness.
+uint32_t EntityDrawHurts(uint32_t* taken);
 // Pieces drawn last frame, for the dev harness.
 uint32_t EntityDrawCount();

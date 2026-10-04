@@ -25,16 +25,17 @@ class EntityWireTest {
     }
 
     @Test
-    void aFrameHoldsEachPieceIn56Bytes() {
+    void aFrameHoldsEachPieceIn60Bytes() {
         double[] m = new double[12];
         m[3] = 1.5;
-        byte[] b = EntityWire.frame(List.of(new EntityWire.Piece(2, 3, 0xFF000066, m)));
+        byte[] b = EntityWire.frame(List.of(new EntityWire.Piece(2, 3, 0xFF000066, 0x80FF80FF, m)));
         assertEquals(4 + Layout.ENT_BYTES, b.length);
         ByteBuffer in = ByteBuffer.wrap(b);
         assertEquals(1, in.getInt());
         assertEquals(2, in.getShort());
         assertEquals(3, in.getShort());
         assertEquals(0xFF000066, in.getInt());
+        assertEquals(0x80FF80FF, in.getInt());
         in.getFloat();
         in.getFloat();
         in.getFloat();

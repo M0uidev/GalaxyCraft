@@ -58,6 +58,8 @@ struct Debug
   u32 clip_rescued;  // frustum tests our camera clipped and the game's camera kept (see ClipFrustum)
   u32 held_kind;     // GXC_HELD_* in Steve's hand (0 also if it could not be built)
   u32 entities_drawn;  // entity pieces drawn last frame (EntityDraw.h)
+  u32 player_life;     // SMG2's life meter (Minecraft's blows must leave it as it was)
+  u32 hurts[2];        // Minecraft's blows passed on to Mario, and taken by him
 };
 
 struct Published
@@ -361,6 +363,11 @@ void MarioMovement(void* self)
   HeldItemFrame(static_cast<const LiveActor*>(self), !gHidden && gFollowing);
   gOut.dbg.held_kind = HeldItemKind();
   gOut.dbg.entities_drawn = EntityDrawCount();
+  EntityDrawMario(self);
+  gOut.dbg.player_life = MR::getPlayerLife();
+  uint32_t taken = 0;
+  gOut.dbg.hurts[0] = EntityDrawHurts(&taken);
+  gOut.dbg.hurts[1] = taken;
   gOut.dbg.star_pointer_valid = isStarPointerValid__2MRFl(0);
 
   const TVec3f* mario = MR::getPlayerPos();

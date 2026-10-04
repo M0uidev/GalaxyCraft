@@ -127,6 +127,28 @@ public final class ShadowWorld {
         return particles.poll();
     }
 
+    /** The player was hurt through Mario's stand-in: from where (planet space) and how (Layout.HURT_*). */
+    public record Hurt(VoxelPlanet planet, org.joml.Vector3d from, int kind) {}
+
+    private static final ConcurrentLinkedQueue<Hurt> hurts = new ConcurrentLinkedQueue<>();
+
+    public static Hurt pollHurt() {
+        return hurts.poll();
+    }
+
+    /** Server thread: Mario's stand-in passed a blow on to the player; the game makes Mario feel it. */
+    static void hurt(net.minecraft.world.damagesource.DamageSource source, Entity proxy) {
+        if (map == null) return;
+        Vec3 from = source.getSourcePosition();
+        if (from == null) from = proxy.position().add(proxy.getLookAngle()); // no attacker: from in front
+        double[] f = map.frame(from.x, from.y, from.z);
+        if (f == null) return;
+        int kind = source.is(net.minecraft.tags.DamageTypeTags.IS_EXPLOSION) ? dev.moui.galaxycraft.proto.Layout.HURT_EXPLOSION
+                : source.is(net.minecraft.tags.DamageTypeTags.IS_FIRE) ? dev.moui.galaxycraft.proto.Layout.HURT_FIRE
+                : dev.moui.galaxycraft.proto.Layout.HURT_HIT;
+        hurts.add(new Hurt(planet, new org.joml.Vector3d(f[0], f[1], f[2]), kind));
+    }
+
     /** Mario's stand-in in the shadow, for tests: where, game mode; "none" if there is none. */
     public static String proxyState() {
         MarioProxy p = proxy;

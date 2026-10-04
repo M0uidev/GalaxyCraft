@@ -23,7 +23,9 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
 public final class EntityTest implements FabricClientGameTest {
     private static final Pattern MBX = Pattern.compile("^at=([0-9a-f]+)", Pattern.MULTILINE);
     /** Debug.entities_drawn: right after the mailbox (4048 bytes), 103 words into the debug block. */
-    private static final int DBG_ENTITIES = 4048 + 4 * 103;
+    private static final int DBG_ENTITIES = 4048 + 4 * 103, DBG_LIFE = 4048 + 4 * 104;
+    /** GxcMailbox.anchor_pos: Mario's position, after magic, version, three words and gravity. */
+    private static final int MBX_MARIO = 36;
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
@@ -168,11 +170,68 @@ public final class EntityTest implements FabricClientGameTest {
         sp.getServer().runCommand("effect give @a instant_health 1 5");
         ctx.waitTicks(10);
         float before = ctx.computeOnClient(mc -> mc.player.getHealth());
+        int life = word(DBG_LIFE);
         sp.getServer().runCommand(String.format(java.util.Locale.ROOT,
                 "execute in galaxycraft:shadow run summon minecraft:zombie %.2f %.2f %.2f", x0 + 1.5, y, z0));
-        ctx.waitFor(mc -> mc.player.getHealth() < before, 200);
+        float[] from = new float[3];
+        ctx.waitFor(mc -> {
+            if (mc.player.getHealth() >= before) System.arraycopy(marioPos(), 0, from, 0, 3);
+            return mc.player.getHealth() < before;
+        }, 200);
         log("ok the zombie hurts Mario (" + before + " -> " + ctx.computeOnClient(mc -> mc.player.getHealth()) + ")");
         gxdev("ctl", "shot entities-zombie");
+        ctx.waitTicks(10);
+        float[] to = marioPos();
+        double moved = Math.sqrt(Math.pow(to[0] - from[0], 2) + Math.pow(to[1] - from[1], 2) + Math.pow(to[2] - from[2], 2));
+        gxdev("ctl", "shot entities-mario-hurt");
+        int[] hurts = words(DBG_LIFE + 4, 2);
+        log("Mario " + java.util.Arrays.toString(from) + " -> " + java.util.Arrays.toString(to) + ", blows passed on " + hurts[0]
+                + ", taken " + hurts[1]);
+        check(moved > 30, "Mario reels from the blow (moved " + Math.round(moved) + " units)");
+        ctx.waitTicks(60);
+        check(word(DBG_LIFE) == life, "SMG2's life meter is left as it was (" + life + " -> " + word(DBG_LIFE) + ")");
+        sp.getServer().runCommand("execute in galaxycraft:shadow run kill @e[type=zombie]");
+        sp.getServer().runCommand("effect give @a instant_health 1 5");
+
+        // Everything else, by its own renderer: an arrow, a minecart, a boat, an armored armor stand.
+        int drawnBefore = count();
+        String[] more = {"arrow{Motion:[0.0,0.0,0.0]}", "minecart", "oak_boat",
+                "armor_stand{equipment:{head:{id:\"minecraft:diamond_helmet\",count:1},chest:{id:\"minecraft:iron_chestplate\",count:1}}}"};
+        for (int i = 0; i < more.length; i++) {
+            String type = more[i].contains("{") ? more[i].substring(0, more[i].indexOf('{')) : more[i];
+            String nbt = more[i].contains("{") ? " " + more[i].substring(more[i].indexOf('{')) : "";
+            sp.getServer().runCommand(String.format(java.util.Locale.ROOT,
+                    "execute in galaxycraft:shadow run summon minecraft:%s %.2f %.2f %.2f%s", type, x0 + 2.5, y, z0 - 2 + 1.5 * i, nbt));
+        }
+        ctx.waitTicks(20);
+        int drawn = count();
+        log("in the shadow: " + ctx.computeOnClient(mc -> ShadowWorld.entities().list().stream()
+                .map(e -> e.getType().toShortString()).toList().toString()) + ", pieces " + drawnBefore + " -> " + drawn);
+        check(drawn >= drawnBefore + 12, "the arrow, minecart, boat and armor stand (with its armor) are drawn");
+        ctx.runOnClient(mc -> mc.player.setYRot(mc.player.getYRot() - 90));
+        ctx.waitTicks(5);
+        gxdev("ctl", "shot entities-more");
+    }
+
+    private static int word(int offset) {
+        return words(offset, 1)[0];
+    }
+
+    /** Mario's position in the galaxy, as the game publishes it. */
+    private static float[] marioPos() {
+        int[] w = words(MBX_MARIO, 3);
+        return new float[] {Float.intBitsToFloat(w[0]), Float.intBitsToFloat(w[1]), Float.intBitsToFloat(w[2])};
+    }
+
+    /** n big-endian words at the mailbox + offset (the debug block follows it at 4048). */
+    private static int[] words(int offset, int n) {
+        Matcher m = MBX.matcher(gxdev("ctl", "mbx"));
+        check(m.find(), "the mailbox is found");
+        long at = Long.parseLong(m.group(1), 16) + offset;
+        String[] parts = gxdev("ctl", "peek 0x" + Long.toHexString(at) + " " + 4 * n).strip().split("\\s+");
+        int[] w = new int[n];
+        for (int i = 0; i < 4 * n; i++) w[i / 4] = w[i / 4] << 8 | Integer.parseInt(parts[parts.length - 4 * n + i], 16);
+        return w;
     }
 
     private static boolean pigAlive(ClientGameTestContext ctx) {

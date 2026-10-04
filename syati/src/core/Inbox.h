@@ -44,7 +44,7 @@ struct InboxAtlas
 };
 
 // Entities (GXC_MSG_SKIN, MODEL, ENTITIES and GXC_ENT_* in protocol/galaxycraft_protocol.h).
-const u32 ENT_MAX_SKINS = 256, ENT_MAX_MODELS = 2048, ENT_MAX = 768, ENT_BYTES = 56;
+const u32 ENT_MAX_SKINS = 256, ENT_MAX_MODELS = 2048, ENT_MAX = 768, ENT_BYTES = 60;
 const u32 ENT_SKIN_MAX = 256, ENT_DL_MAX = 65536;
 
 struct InboxSkin
@@ -57,6 +57,13 @@ struct InboxModel
 {
   u32 id, dl_size;
   const u8* dl;
+};
+
+// The player was hurt (GXC_MSG_HURT): from where, and how (GXC_HURT_*).
+struct InboxHurt
+{
+  f32 from[3];
+  u32 kind;
 };
 
 struct InboxEntities
@@ -82,6 +89,7 @@ struct InboxRecord
     SKIN = 108,
     MODEL = 109,
     ENTITIES = 110,
+    HURT = 111,
   };
   u32 type;
   InboxPlanet planet;
@@ -92,6 +100,7 @@ struct InboxRecord
   InboxSkin skin;
   InboxModel model;
   InboxEntities entities;
+  InboxHurt hurt;
 };
 
 u32 ReadBE32(const u8* p);

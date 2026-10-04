@@ -46,6 +46,8 @@ final class MarioProxy extends FakePlayer {
         DamageSource there = source.sourcePositionRaw() != null && source.getEntity() == null
                 ? new DamageSource(source.typeHolder(), p.position())
                 : new DamageSource(source.typeHolder(), source.getDirectEntity(), source.getEntity());
-        return p.hurtServer((ServerLevel) p.level(), there, amount);
+        boolean hurt = p.hurtServer((ServerLevel) p.level(), there, amount);
+        if (hurt) ShadowWorld.hurt(source, this);
+        return hurt;
     }
 }

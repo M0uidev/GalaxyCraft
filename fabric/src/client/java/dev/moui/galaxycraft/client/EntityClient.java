@@ -4,8 +4,6 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.bridge.BridgeClient;
-import dev.moui.galaxycraft.client.mixin.AgeableMobRendererAccessor;
-import dev.moui.galaxycraft.client.mixin.LivingEntityRendererInvoker;
 import dev.moui.galaxycraft.client.mixin.ModelPartAccessor;
 import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.shadow.ShadowWorld;
@@ -23,37 +21,34 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;
-import net.minecraft.client.renderer.entity.AgeableMobRenderer;
+import net.minecraft.client.model.geom.builders.UVPair;
 import net.minecraft.client.renderer.entity.EntityRenderer;
-import net.minecraft.client.renderer.entity.LivingEntityRenderer;
-import net.minecraft.client.renderer.entity.TntRenderer;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.item.FallingBlockEntity;
-import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Matrix4d;
-import org.joml.Matrix4f;
 import org.joml.Vector3d;
 
 /**
  * The planet's entities drawn by the game instead of by Minecraft: dropped items (DropsClient),
- * and what Minecraft runs in the shadow dimension (mobs, primed TNT, falling blocks). Mobs are
- * posed by their own renderers and models, then cut into their rigid pieces: each piece and
- * each texture goes to the game once per scene, and every frame only where each piece is
- * (EntityWire). Not drawn yet: armor, held items and other render layers of mobs.
+ * and everything Minecraft runs in the shadow dimension (mobs, arrows, minecarts, boats, TNT,
+ * falling blocks, armor stands, paintings...), drawn by its own renderer into EntityCapture and
+ * cut into rigid pieces: each piece and each texture goes to the game once per scene, and every
+ * frame only where each piece is (EntityWire).
  */
 final class EntityClient {
     /** Entities farther from Mario than this (blocks) are not sent. */
     static final double RANGE = 64;
-    /** Overlays: a hurt mob's red, a flashing TNT's white (RGBA, A how much). */
-    static final int HURT = 0xFF000066, FLASH = 0xFFFFFFA0;
+    /** A hurt mob's overlay: red (RGBA, A how much). */
+    static final int HURT = 0xFF000066;
     private static final Object CUBE = new Object();
 
     private final PlanetSession session;
@@ -65,6 +60,12 @@ final class EntityClient {
     private final Map<Object, HeldClient.Look> looks = new HashMap<>();
     private final Set<Class<?>> failed = new HashSet<>();
     private final ParticleClient particles = new ParticleClient();
+    private final EntityCapture capture = new EntityCapture(this);
+    private final CameraRenderState camera = new CameraRenderState();
+    private final Map<RenderType, java.util.Optional<Identifier>> textures = new IdentityHashMap<>();
+    /** Custom shapes made at most (they are made by their looks, which may keep changing). */
+    static final int MAX_CUSTOM = 256;
+    private int customModels;
     /** Shadow entities drawn last frame and the shadow's frame around each (what the clicks can hit). */
     private final List<Seen> seen = new ArrayList<>();
 
@@ -75,6 +76,8 @@ final class EntityClient {
     EntityClient(PlanetSession session, DropsClient drops) {
         this.session = session;
         this.drops = drops;
+        camera.orientation = new org.joml.Quaternionf(); // renderers that face the camera (thrown items) need one
+        camera.pos = net.minecraft.world.phys.Vec3.ZERO;
     }
 
     int particleCount() {
@@ -162,7 +165,7 @@ final class EntityClient {
         double size = look.kind() == HeldItem.ITEM || look.kind() == HeldItem.TOOL ? 0.5 : 0.25;
         Matrix4d m = upright(d.pos);
         m.translate(0, bob + size / 2 + 0.05, 0).rotateY(age / 20 + phase).scale(size / 16, -size / 16, size / 16);
-        out.add(new EntityWire.Piece(model, skin, 0, toGal(m)));
+        out.add(new EntityWire.Piece(model, skin, 0, -1, toGal(m)));
     }
 
     /** Planet blocks around a planet point, y away from the center (the planet's up there). */
@@ -174,7 +177,7 @@ final class EntityClient {
     }
 
     /** Planet blocks to galaxy units, then 3x4 row-major. */
-    private double[] toGal(Matrix4d planet) {
+    double[] toGal(Matrix4d planet) {
         Vector3d c = session.galOf(new Vector3d());
         double u = session.galOf(new Vector3d(1, 0, 0)).sub(c).x;
         Matrix4d g = new Matrix4d().translation(c).scale(u).mul(planet);
@@ -195,16 +198,12 @@ final class EntityClient {
             // The shadow's blocks around the entity, as planet blocks (its frame there).
             Matrix4d at = new Matrix4d(f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], 0, f[0], f[1], f[2], 1);
             seen.add(new Seen(e, at, new Vector3d(st.x, st.y, st.z)));
+            // Its own renderer draws it, into the game's pieces (EntityCapture).
             PoseStack ps = new PoseStack();
-            if (e instanceof PrimedTnt tnt) {
-                float fuse = tnt.getFuse() - pt + 1;
-                block(tnt.getBlockState(), 1 + (fuse < 10 ? TntRenderer.getSwellAmount(fuse) : 0),
-                        TntRenderer.isLit(fuse) ? FLASH : 0, at, out);
-            } else if (e instanceof FallingBlockEntity fb) {
-                block(fb.getBlockState(), 1, 0, at, out);
-            } else if (r instanceof LivingEntityRenderer lr && st instanceof LivingEntityRenderState ls) {
-                living(lr, ls, at, ps, out);
-            }
+            net.minecraft.world.phys.Vec3 offset = r.getRenderOffset(st);
+            ps.translate(offset.x, offset.y, offset.z);
+            capture.begin(at, out);
+            r.submit(st, ps, capture, camera);
         } catch (RuntimeException ex) {
             // Some renderers need what only the client's own entities have: those stay unseen.
             failed.add(e.getClass());
@@ -229,7 +228,7 @@ final class EntityClient {
         }
         if (skin < 0 || model < 0) return;
         Matrix4d m = new Matrix4d().translation(at).scale(l.size / 16);
-        out.add(new EntityWire.Piece(model | EntityWire.BILLBOARD, skin, 0, toGal(m)));
+        out.add(new EntityWire.Piece(model | EntityWire.BILLBOARD, skin, 0, -1, toGal(m)));
     }
 
     private int squareModel(String key, float u0, float v0, float u1, float v1) {
@@ -241,56 +240,122 @@ final class EntityClient {
         return id;
     }
 
-    /** A block entity (TNT, falling sand): its block's cube, scaled around its center. */
-    private void block(BlockState state, double scale, int overlay, Matrix4d at, List<EntityWire.Piece> out) {
+    /** A block as its cube of faces (a falling block), m: its center, a pixel to a block, y down. */
+    void blockPiece(BlockState state, Matrix4d m, int overlay, List<EntityWire.Piece> out) {
         HeldClient.Look look = look(state, () -> HeldClient.look(state));
         if (look == null) return;
         int skin = lookSkin(state, look), model = lookModel(look);
-        if (skin < 0 || model < 0) return;
-        Matrix4d m = new Matrix4d(at).translate(0, 0.5, 0).scale(scale / 16, -scale / 16, scale / 16);
-        out.add(new EntityWire.Piece(model, skin, overlay, toGal(m)));
+        if (skin >= 0 && model >= 0) out.add(new EntityWire.Piece(model, skin, overlay, -1, toGal(m)));
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private void living(LivingEntityRenderer r, LivingEntityRenderState st, Matrix4d at, PoseStack ps, List<EntityWire.Piece> out) {
-        if (st.isInvisible) return;
-        int skin = entitySkin(r.getTextureLocation(st));
-        if (skin < 0) return;
-        LivingEntityRendererInvoker inv = (LivingEntityRendererInvoker) r;
-        // As LivingEntityRenderer.submit poses the model.
-        ps.scale(st.scale, st.scale, st.scale);
-        inv.galaxycraft$setupRotations(st, ps, st.bodyRot, st.scale);
-        ps.scale(-1, -1, 1);
-        inv.galaxycraft$scale(st, ps);
-        ps.translate(0, -1.501F, 0);
-        EntityModel model = r instanceof AgeableMobRenderer am
-                ? (st.isBaby ? ((AgeableMobRendererAccessor) am).galaxycraft$babyModel() : ((AgeableMobRendererAccessor) am).galaxycraft$adultModel())
-                : r.getModel();
-        model.setupAnim(st);
-        walk(model.root(), ps, at, skin, st.hasRedOverlay ? HURT : 0, out);
-    }
-
-    /** As ModelPart.render: each visible piece with cubes, where the pose puts it. */
-    private void walk(ModelPart part, PoseStack ps, Matrix4d at, int skin, int overlay, List<EntityWire.Piece> out) {
-        ModelPartAccessor a = (ModelPartAccessor) (Object) part;
-        if (!part.visible || (a.galaxycraft$cubes().isEmpty() && a.galaxycraft$children().isEmpty())) return;
-        ps.pushPose();
-        part.translateAndRotate(ps);
-        if (!part.skipDraw && !a.galaxycraft$cubes().isEmpty()) {
-            int model = partModel(part, a);
-            if (model >= 0) {
-                Matrix4f pose = ps.last().pose();
-                Matrix4d m = new Matrix4d(at).mul(new Matrix4d(pose)).scale(1 / 16.0);
-                out.add(new EntityWire.Piece(model, skin, overlay, toGal(m)));
+    /**
+     * Baked quads of an item or block model (positions in blocks), one piece per sprite: each
+     * sprite's quads a model (made once per source and tints), its texture a skin.
+     */
+    void quadPieces(Object source, List<BakedQuad> quads, int[] tints, Matrix4d m, int overlay, List<EntityWire.Piece> out) {
+        Map<TextureAtlasSprite, List<BakedQuad>> bySprite = new IdentityHashMap<>();
+        for (BakedQuad q : quads) bySprite.computeIfAbsent(q.materialInfo().sprite(), k -> new ArrayList<>()).add(q);
+        for (var entry : bySprite.entrySet()) {
+            TextureAtlasSprite sprite = entry.getKey();
+            int skin = spriteSkin(sprite);
+            if (skin < 0) continue;
+            QuadsKey key = new QuadsKey(new Ident(source), sprite, java.util.Arrays.hashCode(tints));
+            Integer model = modelIds.get(key);
+            if (model == null) {
+                List<EntityWire.Quad> converted = new ArrayList<>();
+                for (BakedQuad q : entry.getValue()) converted.add(quad(q, sprite, tints));
+                model = addModel(converted);
+                modelIds.put(key, model);
             }
+            if (model >= 0) out.add(new EntityWire.Piece(model, skin, overlay, -1, toGal(m)));
         }
-        for (ModelPart child : a.galaxycraft$children().values()) walk(child, ps, at, skin, overlay, out);
-        ps.popPose();
+    }
+
+    private record Ident(Object o) {
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Ident i && i.o == o;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(o);
+        }
+    }
+
+    private record QuadsKey(Ident source, TextureAtlasSprite sprite, int tints) {}
+
+    /** A baked quad in pixels, its sprite's own texture coordinates, shaded and tinted as Minecraft. */
+    private static EntityWire.Quad quad(BakedQuad q, TextureAtlasSprite s, int[] tints) {
+        float[][] pos = new float[4][], uv = new float[4][];
+        for (int k = 0; k < 4; k++) {
+            var p = q.position(k);
+            pos[k] = new float[] {p.x() * 16, p.y() * 16, p.z() * 16};
+            long packed = q.packedUV(k);
+            uv[k] = new float[] {(UVPair.unpackU(packed) - s.getU0()) / (s.getU1() - s.getU0()),
+                    (UVPair.unpackV(packed) - s.getV0()) / (s.getV1() - s.getV0())};
+        }
+        var n = q.direction().getUnitVec3f();
+        int rgba = EntityWire.shade(n.x(), -n.y(), n.z()); // baked models have y up
+        int ti = q.materialInfo().tintIndex();
+        if (q.materialInfo().isTinted() && ti >= 0 && ti < tints.length) rgba = multiply(rgba, EntityCapture.tint(tints[ti]));
+        return new EntityWire.Quad(pos, uv, rgba);
+    }
+
+    private static int multiply(int a, int b) {
+        int out = 0;
+        for (int sh = 0; sh < 32; sh += 8) out |= ((a >>> sh & 0xFF) * (b >>> sh & 0xFF) / 255) << sh;
+        return out;
+    }
+
+    /** Custom quads (a painting): a model per shape, made once. */
+    int customModel(List<EntityWire.Quad> quads) {
+        int hash = 1;
+        for (EntityWire.Quad q : quads)
+            hash = 31 * hash + java.util.Arrays.deepHashCode(q.pos()) * 7 + java.util.Arrays.deepHashCode(q.uv()) + q.rgba();
+        String key = "custom" + quads.size() + ":" + hash;
+        Integer id = modelIds.get(key);
+        if (id == null) {
+            if (++customModels > MAX_CUSTOM) return -1; // ever-changing shapes would use up the ids
+            id = addModel(quads);
+            modelIds.put(key, id);
+        }
+        return id;
+    }
+
+    /** A model's texture from its render type: the image it samples (null: none, or an atlas). */
+    int renderTypeSkin(RenderType type) {
+        Identifier texture = textures.computeIfAbsent(type, EntityClient::textureOf).orElse(null);
+        return texture == null ? -1 : entitySkin(texture);
+    }
+
+    private static java.util.Optional<Identifier> textureOf(RenderType type) {
+        try {
+            java.lang.reflect.Field state = RenderType.class.getDeclaredField("state");
+            state.setAccessible(true);
+            Object setup = state.get(type);
+            java.lang.reflect.Field textures = setup.getClass().getDeclaredField("textures");
+            textures.setAccessible(true);
+            for (Object binding : ((Map<?, ?>) textures.get(setup)).values()) {
+                java.lang.reflect.Method location = binding.getClass().getDeclaredMethod("location");
+                location.setAccessible(true);
+                return java.util.Optional.of((Identifier) location.invoke(binding));
+            }
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            GalaxyCraft.LOG.warn("No texture in {}: {}", type, e.toString());
+        }
+        return java.util.Optional.empty();
+    }
+
+    /** A sprite's own image (its first frame), as a skin. */
+    int spriteSkin(TextureAtlasSprite s) {
+        Identifier name = s.contents().name();
+        return entitySkin(name.withPath(p -> "textures/" + p + ".png"), true);
     }
 
     // ---- models and skins, made once ----
 
-    private int partModel(ModelPart part, ModelPartAccessor a) {
+    int partModel(ModelPart part, ModelPartAccessor a) {
         Integer id = partIds.get(part);
         if (id != null) return id;
         List<EntityWire.Quad> quads = new ArrayList<>();
@@ -350,11 +415,16 @@ final class EntityClient {
 
     /** A mob's texture, read from the resources (at most ENT_SKIN_MAX a side: larger ones shrink). */
     private int entitySkin(Identifier texture) {
+        return entitySkin(texture, false);
+    }
+
+    /** firstFrame: an animated sprite's frames stack downward, only the top square is used. */
+    private int entitySkin(Identifier texture, boolean firstFrame) {
         Integer id = skinIds.get(texture);
         if (id != null) return id;
         int result = -1;
         try (InputStream in = Minecraft.getInstance().getResourceManager().open(texture); NativeImage img = NativeImage.read(in)) {
-            int w = img.getWidth(), h = img.getHeight(), div = 1;
+            int w = img.getWidth(), h = firstFrame ? Math.min(img.getHeight(), img.getWidth()) : img.getHeight(), div = 1;
             while (w / div > Layout.ENT_SKIN_MAX || h / div > Layout.ENT_SKIN_MAX) div *= 2;
             int sw = w / div, sh = h / div;
             int[] argb = new int[sw * sh];

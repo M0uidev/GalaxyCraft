@@ -22,8 +22,8 @@ public final class EntityWire {
     /** A quad: 4 corners (x, y, z in model pixels), their texture coordinates (0..1), RGBA. */
     public record Quad(float[][] pos, float[][] uv, int rgba) {}
 
-    /** One piece this frame: model and skin ids, overlay RGBA, 3x4 row-major model pixels -> galaxy. */
-    public record Piece(int model, int skin, int overlay, double[] mtx) {}
+    /** One piece this frame: model and skin ids, overlay and tint RGBA, 3x4 row-major model pixels -> galaxy. */
+    public record Piece(int model, int skin, int overlay, int tint, double[] mtx) {}
 
     private EntityWire() {}
 
@@ -63,7 +63,7 @@ public final class EntityWire {
         b.putInt(n);
         for (int i = 0; i < n; i++) {
             Piece p = pieces.get(i);
-            b.putShort((short) p.model).putShort((short) p.skin).putInt(p.overlay);
+            b.putShort((short) p.model).putShort((short) p.skin).putInt(p.overlay).putInt(p.tint);
             for (double v : p.mtx) b.putFloat((float) v);
         }
         return b.array();

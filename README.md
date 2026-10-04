@@ -47,7 +47,11 @@ Three programs share one world:
 - **Fighting.** Clicking a mob in reach hits it with what is in hand, as Minecraft would (damage,
   knockback, enchantments, wear). Mobs fall over and vanish in a puff when they die, and drop
   their loot on the planet. Hostile mobs chase and hurt Mario, arrows and explosions too.
-  Particles (death puffs, explosions, broken blocks' pieces, hits) are drawn by the game.
+  Particles (death puffs, explosions, broken blocks' pieces, hits) are drawn by the game. When
+  something hurts the player, Mario reels in SMG2 as from an enemy's blow (or a blast, or fire),
+  while SMG2's own life meter is left alone: Minecraft's health is what counts.
+- **Every entity.** Arrows, minecarts, boats, armor stands, thrown items, paintings, and mobs'
+  armor, held items, saddles and wool are drawn too, each by its own Minecraft renderer.
 - **Fluids.** Water and lava buckets, ice that melts into water, and obsidian and cobblestone
   where water and lava meet. A classic cobblestone generator works.
 - **Collision that feels like Minecraft.** Mario shrinks to Steve's width on planets, so he
