@@ -19,7 +19,8 @@ namespace gxc
 //                                (no up: opposite of the game's gravity)
 //   unfollow                     back to whatever the mod says
 //   text STRING                  type these characters (ASCII) into Minecraft, as the keyboard would
-//   status                       focus/input gates, mode and mod state (Dolphin side)
+//   status                       focus/input gates, mode and mod state (Dolphin side); fps, vps,
+//                                speed and max_speed (unthrottled, percent: 100 = full speed)
 //   link on|off                  same as the Ctrl+G hotkey: Minecraft mode or Wiimote mode
 //   keys [w a s d space shift ctrl esc tab lmb rmb]...   hold these until the next keys, as if
 //                                typed in Minecraft mode (no list: release all)
