@@ -34,6 +34,11 @@ abstract class ShadowLevelMixin {
         }
     }
 
+    @Inject(method = "broadcastEntityEvent", at = @At("HEAD"))
+    private void galaxycraft$animateEvent(Entity entity, byte id, CallbackInfo ci) {
+        if (ShadowWorld.isShadow((ServerLevel) (Object) this)) ShadowWorld.entityEvent(entity, id);
+    }
+
     @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/Entity;DDDLnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V",
             at = @At("HEAD"), cancellable = true)
     private void galaxycraft$soundAtMario(@Nullable Entity except, double x, double y, double z, Holder<SoundEvent> sound,

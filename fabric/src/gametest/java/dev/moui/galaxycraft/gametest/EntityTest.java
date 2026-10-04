@@ -71,6 +71,23 @@ public final class EntityTest implements FabricClientGameTest {
             int drawn = count();
             // Pig, cow and chicken are several pieces each; TNT and the diamond one each.
             check(drawn >= 10, "the game draws them (" + drawn + " pieces)");
+            // The pig walks a few blocks: its legs swing by Minecraft's own walk cycle.
+            sp.getServer().runOnServer(server -> {
+                for (var e : server.getLevel(ShadowWorld.KEY).getAllEntities())
+                    if (e instanceof net.minecraft.world.entity.animal.pig.Pig pig)
+                        pig.getNavigation().moveTo(pig.getX() + (pig.getX() > x0 ? -4 : 4), pig.getY(), pig.getZ(), 1.0);
+            });
+            ctx.waitTicks(10);
+            float walk = sp.getServer().computeOnServer(server -> {
+                for (var e : server.getLevel(ShadowWorld.KEY).getAllEntities())
+                    if (e instanceof net.minecraft.world.entity.animal.pig.Pig pig) return pig.walkAnimation.speed();
+                return -1f;
+            });
+            check(walk > 0.1f, "the walking pig's legs swing (walk speed " + walk + ")");
+            for (int k = 0; k < 3; k++) {
+                gxdev("ctl", "shot entities-walk-" + k);
+                ctx.waitTicks(3);
+            }
             ctx.getInput().pressKey(o -> o.keyTogglePerspective);
             ctx.waitTicks(20);
             for (int k = 0; k < 4; k++) {

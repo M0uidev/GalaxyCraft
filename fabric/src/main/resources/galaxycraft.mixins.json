@@ -5,6 +5,7 @@
 	"mixins": [
 		"EntityCollideMixin",
 		"ServerGamePacketListenerMixin",
+		"ShadowAnimationMixin",
 		"ShadowChunkMixin",
 		"ShadowFluidMixin",
 		"ShadowLevelMixin",

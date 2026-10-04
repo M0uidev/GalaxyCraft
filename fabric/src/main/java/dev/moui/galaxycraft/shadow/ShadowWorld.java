@@ -430,6 +430,48 @@ public final class ShadowWorld {
         return true;
     }
 
+    /** Entity events that only start an animation on the client, replayed on shadow entities. */
+    private static final Set<Byte> ANIMATION_EVENTS = Set.of((byte) 1, (byte) 4, (byte) 10, (byte) 11, (byte) 34,
+            (byte) 39, (byte) 45, (byte) 58, (byte) 59, (byte) 61, (byte) 62, (byte) 66);
+    /** By class: its client-only setupAnimationStates (bats, rabbits, camels...), or none. */
+    private static final java.util.Map<Class<?>, java.util.Optional<java.lang.reflect.Method>> SETUP =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * An entity event of the shadow (an iron golem's swing, a sheep grazing): what a client would
+     * do with it, done on the server's entity, which is the one the game draws. Only events that
+     * start animations: others (a death) would act twice.
+     */
+    public static void entityEvent(Entity e, byte id) {
+        if (!ANIMATION_EVENTS.contains(id)) return;
+        try {
+            e.handleEntityEvent(id);
+        } catch (RuntimeException ex) {
+            GalaxyCraft.LOG.debug("Entity event {} of {} in the shadow: {}", id, e.getType(), ex.toString());
+        }
+    }
+
+    /** What the client calls each tick to start and stop a mob's animation states. */
+    public static void setupAnimationStates(LivingEntity e) {
+        SETUP.computeIfAbsent(e.getClass(), c -> {
+            for (Class<?> k = c; k != null && k != LivingEntity.class; k = k.getSuperclass())
+                try {
+                    java.lang.reflect.Method m = k.getDeclaredMethod("setupAnimationStates");
+                    m.setAccessible(true);
+                    return java.util.Optional.of(m);
+                } catch (NoSuchMethodException ignored) {
+                    // up the hierarchy
+                }
+            return java.util.Optional.empty();
+        }).ifPresent(m -> {
+            try {
+                m.invoke(e);
+            } catch (ReflectiveOperationException | RuntimeException ex) {
+                SETUP.put(e.getClass(), java.util.Optional.empty());
+            }
+        });
+    }
+
     /** Experience from the shadow (ores, furnaces): to the player. */
     public static void giveExperience(ServerLevel level, int value) {
         for (ServerPlayer sp : level.getServer().getPlayerList().getPlayers()) {
