@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "CodePatch.h"
+#include "Graves.h"
 #include "HeldMesh.h"
 #include "Inbox.h"
 #include "Kcl.h"
@@ -282,11 +283,52 @@ static void TestInboxPlanetIdsAndFarView()
         r.chunk.slot == 70000);
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 131072, &r) && r.chunk.planet == 9 && r.chunk.far && r.chunk.slot == 5);
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 131072, &r) && r.teleport.ground == 1500.f && r.teleport.planet == 9);
-  std::vector<u8> c;  // a far view has six parts
-  Put32(c, 103u << 16), Put32(c, 32), Put32(c, 0x800000u | 6), Put32(c, 1), Put32(c, 0), Put32(c, 0);
+  std::vector<u8> c;  // a far view has 6 × 16 × 16 tiles
+  Put32(c, 103u << 16), Put32(c, 32), Put32(c, 0x800000u | 1535), Put32(c, 1), Put32(c, 0), Put32(c, 0);
+  c.resize(c.size() + 16);
+  off = 0;
+  CHECK(NextInboxRecord(c.data(), c.size(), &off, 131072, &r) && r.chunk.far && r.chunk.slot == 1535);
+  c.clear();
+  Put32(c, 103u << 16), Put32(c, 32), Put32(c, 0x800000u | 1536), Put32(c, 1), Put32(c, 0), Put32(c, 0);
   c.resize(c.size() + 16);
   off = 0;
   CHECK(!NextInboxRecord(c.data(), c.size(), &off, 131072, &r));
+}
+
+static long gFirstFreed;
+static int gFreedCount;
+static void CountFree(void* p)
+{
+  if (gFreedCount++ == 0)
+    gFirstFreed = reinterpret_cast<long>(p);
+}
+
+// Replaced chunks' memory waits its frames however many are replaced at once (a planet streaming
+// in replaces dozens a frame): Mario's binder may still read the last triangle he stood on.
+static void TestGraves()
+{
+  static Graves g;
+  g.Reset();
+  gFreedCount = 0;
+  for (long i = 1; i <= 100; i++)
+    g.Bury(reinterpret_cast<void*>(i), 8, CountFree);
+  g.Bury(0, 8, CountFree);  // nothing
+  CHECK(g.Count() == 100 && gFreedCount == 0);
+  for (int f = 0; f < 7; f++)
+    g.Tick(CountFree);
+  CHECK(gFreedCount == 0);
+  g.Bury(reinterpret_cast<void*>(101), 8, CountFree);
+  g.Tick(CountFree);  // the 8th frame: the first hundred go, the last one waits
+  CHECK(gFreedCount == 100 && g.Count() == 1 && gFirstFreed == 1);
+  for (int f = 0; f < 7; f++)
+    g.Tick(CountFree);
+  CHECK(gFreedCount == 101 && g.Count() == 0 && g.Early() == 0);
+  // More than it holds: the oldest goes early, and that is counted.
+  g.Reset();
+  gFreedCount = 0;
+  for (u32 i = 0; i < Graves::SLOTS + 3; i++)
+    g.Bury(reinterpret_cast<void*>(static_cast<long>(i + 1)), 8, CountFree);
+  CHECK(g.Count() == Graves::SLOTS && g.Early() == 3 && gFreedCount == 3 && gFirstFreed == 1);
 }
 
 static void TestPlanetDropAndViewTranslate()
@@ -582,6 +624,7 @@ int main()
   TestKclSize();
   TestCameraEye();
   TestMarioVisible();
+  TestGraves();
   if (g_failures)
   {
     std::printf("%d of %d checks failed\n", g_failures, g_checks);

@@ -249,9 +249,9 @@ public final class PlanetClient {
         for (PlanetSession p : planets()) {
             if (!p.active()) continue;
             Vector3d c = p.center();
-            out.append(out.isEmpty() ? "" : "; ").append(String.format("%splanet of radius %.0f%s at (%.0f, %.0f, %.0f), %d to send, %d chunks with collision%s",
+            out.append(out.isEmpty() ? "" : "; ").append(String.format("%splanet of radius %.0f%s at (%.0f, %.0f, %.0f), %d to send, %d chunks with collision, %s%s",
                     p == focus ? "* " : "", p.planet().surface(), where, c.x, c.y, c.z, p.queued(), p.collisionChunks(),
-                    p.detail() ? "" : ", far view only"));
+                    p.tilesStatus(), p.detail() ? "" : ", far view only"));
         }
         return out.isEmpty() ? "no planet" + where : out.toString();
     }
