@@ -269,6 +269,10 @@ public final class McBlocks implements Blocks {
         return Block.shouldRenderFace(state(id), state(neighbor), DIRECTIONS[CellSpace.DIRECTION_OF_SIDE[side]]);
     }
 
+    @Override public boolean leaves(int id) {
+        return state(id).getBlock() instanceof net.minecraft.world.level.block.LeavesBlock;
+    }
+
     @Override public String name(int id) {
         return BlockStateParser.serialize(state(id));
     }

@@ -69,13 +69,21 @@ public final class PlanetMesher {
 
     /** The visible faces of a chunk, corners in blocks. */
     public static List<Quad> quads(VoxelPlanet p, int chunk) {
+        return quads(p, chunk, null);
+    }
+
+    /**
+     * The visible faces of a chunk; with dark (a chunk far from Mario), not those that only show
+     * from inside a cave the sky does not light (see {@link Dark}).
+     */
+    static List<Quad> quads(VoxelPlanet p, int chunk, Dark dark) {
         List<Quad> out = new ArrayList<>();
         for (int c : p.cellsOf(chunk)) {
             int id = p.get(c);
             if (id == Blocks.AIR) continue;
             BlockInfo b = p.blocks.info(id);
             if (b.isFluid()) {
-                fluidQuads(p, c, b, out);
+                fluidQuads(p, c, b, out, dark);
                 continue;
             }
             for (ModelQuad mq : b.quads()) {
@@ -84,7 +92,9 @@ public final class PlanetMesher {
                     nb = p.grid.neighbor(c, mq.cull());
                     if (mq.cull() == CubeSphere.BOTTOM && nb < 0) continue; // faces the sealed center
                     if (!p.blocks.faceVisible(id, p.get(nb), mq.cull())) continue;
-                }
+                    if (hiddenInCrown(p, id, nb, mq.cull())) continue;
+                    if (dark != null && dark.in(nb)) continue;
+                } else if (dark != null && dark.in(c)) continue;
                 Vector3d[] q = new Vector3d[4];
                 float[] pos = mq.pos();
                 for (int v = 0; v < 4; v++) q[v] = CellSpace.point(p.grid, c, pos[3 * v], pos[3 * v + 1], pos[3 * v + 2]);
@@ -102,15 +112,83 @@ public final class PlanetMesher {
     }
 
     /**
+     * A leaf's face toward leaves that have leaves behind them too: deep in a crown, where the
+     * holes of the leaves in front hardly show it. Minecraft draws every face between leaves, and
+     * a forest planet would then draw several times more faces than all its ground.
+     */
+    static boolean hiddenInCrown(VoxelPlanet p, int id, int nb, int side) {
+        if (!p.blocks.leaves(id) || !p.blocks.leaves(p.get(nb))) return false;
+        int behind = p.grid.neighbor(nb, side);
+        return behind >= 0 && (p.blocks.leaves(p.get(behind)) || p.info(behind).occludes());
+    }
+
+    /**
+     * Cells deep in caves: farther than LIT steps through open cells (not opaque cubes) from any
+     * open to the sky (nothing opaque straight above). Seen from afar, what faces them is hidden
+     * by the ground over them; the mouth of a cave, near the sky, still shows. Answers are kept for
+     * one chunk's meshing.
+     */
+    static final class Dark {
+        static final int LIT = 6;
+        private final VoxelPlanet p;
+        private final java.util.Map<Integer, Boolean> dark = new java.util.HashMap<>(), sky = new java.util.HashMap<>();
+
+        Dark(VoxelPlanet p) {
+            this.p = p;
+        }
+
+        boolean in(int cell) {
+            if (cell < 0) return false;
+            Boolean d = dark.get(cell);
+            if (d == null) dark.put(cell, d = !lit(cell));
+            return d;
+        }
+
+        private boolean lit(int from) {
+            java.util.Map<Integer, Integer> steps = new java.util.HashMap<>();
+            java.util.ArrayDeque<Integer> todo = new java.util.ArrayDeque<>();
+            steps.put(from, 0);
+            todo.add(from);
+            while (!todo.isEmpty()) {
+                int c = todo.poll(), n = steps.get(c);
+                if (open(c)) return true;
+                if (n == LIT) continue;
+                for (int s = 0; s < 6; s++) {
+                    int nb = p.grid.neighbor(c, s);
+                    if (nb < 0) {
+                        if (s == CubeSphere.TOP) return true; // above the planet's layers
+                        continue;
+                    }
+                    if (steps.containsKey(nb) || p.occludes(nb)) continue;
+                    steps.put(nb, n + 1);
+                    todo.add(nb);
+                }
+            }
+            return false;
+        }
+
+        /** Nothing opaque straight above. */
+        private boolean open(int cell) {
+            Boolean o = sky.get(cell);
+            if (o != null) return o;
+            int up = p.grid.neighbor(cell, CubeSphere.TOP);
+            o = up < 0 || !p.occludes(up) && open(up);
+            sky.put(cell, o);
+            return o;
+        }
+    }
+
+    /**
      * A fluid's faces: those facing anything but an opaque cube or itself (or itself lower down,
      * above its surface), as high as its level.
      */
-    private static void fluidQuads(VoxelPlanet p, int c, BlockInfo b, List<Quad> out) {
+    private static void fluidQuads(VoxelPlanet p, int c, BlockInfo b, List<Quad> out, Dark dark) {
         double top = Fluids.height(p, c);
         for (int s = 0; s < 6; s++) {
             int nb = p.grid.neighbor(c, s);
             if (s == CubeSphere.BOTTOM && nb < 0) continue; // faces the sealed center
             if (p.occludes(nb)) continue;
+            if (dark != null && nb >= 0 && dark.in(nb)) continue;
             double bottom = 0; // of a side: a fluid shows only above its own fluid next to it
             if (p.fluid(nb) == b.fluid()) {
                 if (s == CubeSphere.TOP || s == CubeSphere.BOTTOM) continue;
@@ -269,8 +347,12 @@ public final class PlanetMesher {
         return out;
     }
 
-    /** withKcl false: drawn only (far from Mario, no collision part). */
-    public static ChunkMesh mesh(VoxelPlanet p, int chunk, double unitsPerBlock, boolean withKcl) {
+    /**
+     * near false: far from Mario, drawn only (no collision part) and without what shows only from
+     * inside a dark cave, as the ground over it hides it from afar.
+     */
+    public static ChunkMesh mesh(VoxelPlanet p, int chunk, double unitsPerBlock, boolean near) {
+        boolean withKcl = near;
         Vector3d origin = new Vector3d();
         double[] radius = new double[1];
         p.sphere(chunk, origin, radius);
@@ -279,7 +361,7 @@ public final class PlanetMesher {
         // by up to 1/8 unit and showed the background through the seam). The radius covers the shift.
         origin.mul(unitsPerBlock).round();
         float[] sphere = {(float) origin.x, (float) origin.y, (float) origin.z, (float) (radius[0] * unitsPerBlock + 1)};
-        List<Quad> quads = quads(p, chunk);
+        List<Quad> quads = quads(p, chunk, near ? null : new Dark(p));
         if (quads.isEmpty()) return new ChunkMesh(new byte[0], new byte[0], sphere);
         if (quads.size() * 4 > 0xFFFF) throw new IllegalStateException("chunk too detailed for one draw");
         int size = 3 + quads.size() * 4 * VERTEX_BYTES;

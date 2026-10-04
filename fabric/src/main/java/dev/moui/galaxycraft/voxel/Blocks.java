@@ -38,6 +38,11 @@ public interface Blocks {
      * The state cell should have now, given its neighbors (Minecraft's updateShape over the six of
      * them: fences join, a door's upper half goes with its lower one). Its own id if nothing changes.
      */
+    /** Whether it is leaves: a face between leaves deep in a crown is not drawn (PlanetMesher). */
+    default boolean leaves(int id) {
+        return false;
+    }
+
     default int updateShape(VoxelPlanet p, int cell) {
         return p.get(cell);
     }

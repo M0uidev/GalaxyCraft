@@ -78,6 +78,32 @@ class PlanetMesherTest {
         for (double l : floor.light()) assertTrue(l < sun * 0.7, "corner " + l + " vs open " + sun);
     }
 
+    @Test void aDarkCaveIsDrawnOnlyNearMario() {
+        VoxelPlanet p = VoxelPlanet.standard();
+        // A sealed pocket deep under the grass (k 8), and a shaft from the grass into another.
+        int[] pocket = {p.grid.index(2, 12, 12, 2), p.grid.index(2, 12, 13, 2), p.grid.index(2, 13, 12, 2)};
+        for (int c : pocket) p.set(c, Material.AIR);
+        int shaftChunk = p.chunkOf(p.grid.index(2, 4, 4, 3));
+        for (int k = 3; k <= 8; k++) p.set(p.grid.index(2, 4, 4, k), Material.AIR);
+        p.set(p.grid.index(2, 4, 5, 3), Material.AIR);
+        int chunk = p.chunkOf(pocket[0]);
+        int near = PlanetMesher.quads(p, chunk).size(), far = PlanetMesher.quads(p, chunk, new PlanetMesher.Dark(p)).size();
+        assertTrue(near > far, near + " near, " + far + " far");
+        // What the pocket shows from inside: the faces around its three cells.
+        var walls = PlanetMesher.quads(p, chunk).stream().filter(q -> {
+            Vector3d c = new Vector3d();
+            for (Vector3d v : q.corners()) c.add(v);
+            c.div(4);
+            return c.distance(p.grid.center(pocket[0])) < 2.5;
+        }).count();
+        assertEquals(near - far, walls, "only the pocket's walls are left out");
+        assertEquals(PlanetMesher.quads(p, shaftChunk).size(), PlanetMesher.quads(p, shaftChunk, new PlanetMesher.Dark(p)).size(),
+                "a cave the sky reaches shows from afar");
+        // The bytes sent for a chunk far from Mario leave the dark faces out too.
+        byte[] dl = PlanetMesher.mesh(p, chunk, 80, false).displayList();
+        assertEquals(far * 4, dl.length == 0 ? 0 : ByteBuffer.wrap(dl).getShort(1) & 0xFFFF);
+    }
+
     @Test void meshBytesMatchTheQuads() {
         VoxelPlanet p = VoxelPlanet.standard();
         int chunk = p.chunkOf(p.grid.index(2, 12, 12, 8));
