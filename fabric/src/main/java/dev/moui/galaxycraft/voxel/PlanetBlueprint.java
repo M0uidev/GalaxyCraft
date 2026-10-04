@@ -12,7 +12,7 @@ import java.util.List;
  * bedrock that always seals the bottom; layers past the crust's depth are left out. Saved as JSON
  * by {@link BlueprintStore}; planets are built from it, never edited through it.
  */
-public record PlanetBlueprint(String name, int radius, int air, List<Layer> layers, Mode mode, long seed, String biome, int biomeSize) {
+public record PlanetBlueprint(String name, int radius, int air, List<Layer> layers, Mode mode, long seed, String biome, int biomeSize, boolean water) {
     public static final int MIN_AIR = 4, MAX_AIR = 64, MAX_THICKNESS = 64, MAX_LAYERS = 32, MAX_BIOME_SIZE = 512;
     /** The biome of a one-biome planet picked from its seed. */
     public static final String RANDOM = "random";
@@ -24,7 +24,8 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
     /**
      * LAYERS: a smooth ball of the layers. GENERATED: terrain and blocks from Minecraft's noises and
      * a biome (voxel.gen), the layers unused; biomeSize 0 makes it all one biome, more mixes biomes
-     * about that many blocks across.
+     * about that many blocks across; water fills what lies below the base surface (shallow seas,
+     * lakes; oceans and rivers among mixed biomes).
      */
     public enum Mode { LAYERS, GENERATED }
 
@@ -35,7 +36,7 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
     }
 
     public PlanetBlueprint(String name, int radius, int air, List<Layer> layers) {
-        this(name, radius, air, layers, Mode.LAYERS, 0, RANDOM, 0);
+        this(name, radius, air, layers, Mode.LAYERS, 0, RANDOM, 0, false);
     }
 
     /** What /galaxycraft planet spawn makes: grass, two of dirt, stone. */
@@ -108,15 +109,19 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
     }
 
     public PlanetBlueprint withMode(Mode m) {
-        return new PlanetBlueprint(name, radius, air, layers, m, seed, biome, biomeSize);
+        return new PlanetBlueprint(name, radius, air, layers, m, seed, biome, biomeSize, water);
     }
 
     public PlanetBlueprint withAir(int air) {
-        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize);
+        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize, water);
     }
 
     public PlanetBlueprint withBiome(long seed, String biome, int biomeSize) {
-        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize);
+        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize, water);
+    }
+
+    public PlanetBlueprint withWater(boolean water) {
+        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize, water);
     }
 
     public String toJson() {

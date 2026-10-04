@@ -142,3 +142,20 @@ biome picker.
 - The world's registry lacks a noise (other mods, data packs): the bridge falls back to
   `NormalNoise` with fixed parameters equal to vanilla's, logged once.
 - Generation throws: logged, the chat says why, the current planet is left as it was.
+
+## Addendum 2026-10-04: water (option A, shallow)
+
+Chosen with the user: water stays as the planets have it (drawn opaque, no collision, no
+swimming), so seas are shallow and Mario walks their floor with his head out. Transparency and
+swimming are a later stage.
+
+- Blueprint `water` (missing → false; on by default for new generated ones; editor "Water" button).
+- Water fills every column whose ground is below the base surface, up to it (sea level = the base
+  surface's top block). With water, heights go at most `MAX_WATER_DEPTH` = 2 below it.
+- Several biomes: continentalness runs free and the table includes oceans, rivers and beaches
+  (`find(c, water)`). One biome: any surface biome can be picked; an ocean or river one reaches
+  continentalness 0.2 so it gets islands. "Random" still picks land biomes.
+- Under water the filler is on top (lakes on dirt, oceans on gravel or sand); islands get the top
+  (sand). Frozen biomes (`BiomeSurface.frozen`) put ice on their water.
+- Loading any planet now schedules only fluid cells that can change (flowing, or next to air,
+  a block without collision or the other fluid), so a still sea costs nothing.

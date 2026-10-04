@@ -78,10 +78,10 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
                 McBlocks blocks = McBlocks.create(mc);
                 McWorldgen wg = PlanetClient.worldgen();
                 StringBuilder out = new StringBuilder();
-                for (Object[] c : new Object[][] {{"minecraft:desert", 32, 0}, {"minecraft:jagged_peaks", 64, 0},
-                        {"minecraft:plains", 96, 96}, {PlanetBlueprint.RANDOM, 48, 0}}) {
+                for (Object[] c : new Object[][] {{"minecraft:desert", 32, 0, false}, {"minecraft:jagged_peaks", 64, 0, false},
+                        {"minecraft:plains", 96, 96, true}, {PlanetBlueprint.RANDOM, 48, 0, true}, {"minecraft:warm_ocean", 48, 0, true}}) {
                     PlanetBlueprint g = PlanetBlueprint.standard("gen", (int) c[1]).withAir(24)
-                            .withMode(PlanetBlueprint.Mode.GENERATED).withBiome(7, (String) c[0], (int) c[2]);
+                            .withMode(PlanetBlueprint.Mode.GENERATED).withBiome(7, (String) c[0], (int) c[2]).withWater((boolean) c[3]);
                     long t0 = System.nanoTime();
                     VoxelPlanet p = g.build(blocks, wg);
                     long ms = (System.nanoTime() - t0) / 1_000_000;
@@ -107,6 +107,7 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
                                 img.setRGB(at[f][0] * n + i, at[f][1] * n + j, r << 16 | gr << 8 | b);
                             }
                     if (lowest < 1) throw new AssertionError(c[0] + ": ground down to the bedrock");
+                    if ((boolean) c[3] && p.fluids().tick()) throw new AssertionError(c[0] + ": its still water ticks");
                     try {
                         ImageIO.write(img, "png", Path.of("screenshots", "galaxycraft-gen-" + ((String) c[0]).replace("minecraft:", "") + "-" + c[1] + ".png").toFile());
                     } catch (java.io.IOException e) {
@@ -123,6 +124,9 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
                 throw new AssertionError("the desert is not sand");
             if (gen.lines().filter(l -> l.startsWith("minecraft:plains")).allMatch(l -> l.split("=").length < 3))
                 throw new AssertionError("several biomes gave one top");
+            if (!gen.lines().filter(l -> l.startsWith("minecraft:plains") || l.startsWith("minecraft:warm_ocean"))
+                    .allMatch(l -> l.contains("minecraft:water=")))
+                throw new AssertionError("no water where there should be");
             System.out.println("PlanetEditorProbe passed: " + result);
         }
     }

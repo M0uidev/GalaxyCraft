@@ -47,9 +47,30 @@ public final class VoxelPlanet {
             filled[chunkOf(c)]++;
             BlockInfo b = info(c);
             if (b.occludes()) solid[chunkOf(c)]++;
-            if (b.isFluid()) fluids.schedule(c); // flowing again where it was saved
         }
+        // Flowing again where it was saved, but only what can change: a sea of still water would
+        // otherwise keep the fluid ticks busy for a while after every load.
+        for (int c = 0; c < cells.length; c++)
+            if (cells[c] != Blocks.AIR && info(c).isFluid() && unsettled(c)) fluids.schedule(c);
         dirty.set(0, chunkCount());
+    }
+
+    /**
+     * Whether a fluid cell may change on its next tick: it is flowing, or something it flows into
+     * (air, a block without collision) is below or beside it, or the other fluid touches it.
+     */
+    private boolean unsettled(int c) {
+        BlockInfo me = info(c);
+        if (me.level() != 0) return true;
+        for (int side = 0; side < 6; side++) {
+            int nb = grid.neighbor(c, side);
+            if (nb < 0) continue;
+            int id = get(nb);
+            BlockInfo b = id == Blocks.AIR ? null : info(nb);
+            if (b != null && b.isFluid() && b.fluid() != me.fluid()) return true;
+            if (side != CubeSphere.TOP && (b == null || !b.isFluid() && !b.collides())) return true;
+        }
+        return false;
     }
 
     /** The hito-1 planet: bedrock at the bottom, stone, dirt, grass at radius 16, air up to 24. */

@@ -45,6 +45,7 @@ public final class PlanetEditorScreen extends Screen {
     private String name;
     private int radius, air, biomeSize;
     private PlanetBlueprint.Mode mode;
+    private boolean water;
     private String seed, biome;
     private final List<Row> rows = new ArrayList<>();
     private List<String> saved = List.of();
@@ -86,6 +87,7 @@ public final class PlanetEditorScreen extends Screen {
         seed = Long.toString(b.seed());
         biome = b.biome();
         biomeSize = b.biomeSize();
+        water = b.water();
         rows.clear();
         for (PlanetBlueprint.Layer l : b.layers()) rows.add(new Row(l.block(), l.thickness()));
         fit();
@@ -230,7 +232,10 @@ public final class PlanetEditorScreen extends Screen {
                 .setTooltip(Tooltip.create(Component.literal("Room to build above the surface")));
         addRenderableWidget(Button.builder(Component.literal("Mode: " + (mode == PlanetBlueprint.Mode.LAYERS ? "Layers" : "Generated")), b -> {
             mode = mode == PlanetBlueprint.Mode.LAYERS ? PlanetBlueprint.Mode.GENERATED : PlanetBlueprint.Mode.LAYERS;
-            if (mode == PlanetBlueprint.Mode.GENERATED && seed.equals("0")) seed = Long.toString(new java.util.Random().nextLong());
+            if (mode == PlanetBlueprint.Mode.GENERATED && seed.equals("0")) { // a first generated one
+                seed = Long.toString(new java.util.Random().nextLong());
+                water = true;
+            }
             rebuildWidgets();
         }).bounds(x, 44, MODE_W, 20).tooltip(Tooltip.create(Component.literal(
                 "Layers: a smooth ball of your layers\nGenerated: terrain and blocks of a Minecraft biome"))).build());
@@ -242,7 +247,8 @@ public final class PlanetEditorScreen extends Screen {
             // A new one of the same kind: generated ones get a seed of their own.
             PlanetBlueprint.Mode kind = mode;
             edit(PlanetBlueprint.standard("My planet", PlanetClient.DEFAULT_RADIUS).withMode(kind)
-                    .withBiome(kind == PlanetBlueprint.Mode.GENERATED ? new java.util.Random().nextLong() : 0, PlanetBlueprint.RANDOM, 0));
+                    .withBiome(kind == PlanetBlueprint.Mode.GENERATED ? new java.util.Random().nextLong() : 0, PlanetBlueprint.RANDOM, 0)
+                    .withWater(true));
             say("", WHITE);
             rebuildWidgets();
         }).bounds(x, by, bw, 20).build());
@@ -286,7 +292,7 @@ public final class PlanetEditorScreen extends Screen {
         addRenderableWidget(Button.builder(Component.empty(), b -> {
             McWorldgen gen = PlanetClient.worldgen();
             if (gen == null) say("Biomes need a single player world", RED);
-            else minecraft.gui.setScreen(PickerScreen.biomes(this, gen.biomes().land(), biome, v -> biome = v));
+            else minecraft.gui.setScreen(PickerScreen.biomes(this, gen.biomes().all(), biome, v -> biome = v));
         }).bounds(x + 40, TOP, w, 20).tooltip(Tooltip.create(Component.literal(biome + "\nClick to choose another biome"))).build());
         EditBox seedBox = box(x + 40, TOP + ROW, Math.min(140, w - 40), seed, 20, v -> seed = v);
         seedBox.setResponder(v -> {
@@ -301,6 +307,11 @@ public final class PlanetEditorScreen extends Screen {
                 v -> v == 0 ? "Biomes: one per planet" : "Biomes: about " + v + " blocks across",
                 0, PlanetBlueprint.MAX_BIOME_SIZE, 16, biomeSize, v -> biomeSize = v))
                 .setTooltip(Tooltip.create(Component.literal("One per planet: all of it the biome above\nMore: Minecraft's biomes mixed, this big")));
+        addRenderableWidget(Button.builder(Component.literal("Water: " + (water ? "On" : "Off")), b -> {
+            water = !water;
+            rebuildWidgets();
+        }).bounds(x + 40, TOP + 3 * ROW, 90, 20).tooltip(Tooltip.create(Component.literal(
+                "Shallow seas and lakes below the surface\nMixed biomes get oceans, rivers and beaches"))).build());
     }
 
     /** The biome's name, red when this game has no such land biome. */
@@ -358,7 +369,7 @@ public final class PlanetEditorScreen extends Screen {
             say("Unknown biome: " + biome, RED);
             return null;
         }
-        PlanetBlueprint b = new PlanetBlueprint(name.trim(), radius, air, layers, mode, s, biome, biomeSize);
+        PlanetBlueprint b = new PlanetBlueprint(name.trim(), radius, air, layers, mode, s, biome, biomeSize, water);
         String problem = b.problem();
         if (problem != null) {
             say(problem, RED);

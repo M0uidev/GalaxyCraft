@@ -25,8 +25,13 @@ public final class PlanetGenerator {
     static final int STEEP = 3;
     /** Below this a planet's relief is scaled down with its radius. */
     static final double FULL_RELIEF_RADIUS = 64;
-    /** Continentalness from the coast inland: what several-biome planets use until there is water. */
+    /** Continentalness from the coast inland: what several-biome planets without water use. */
     static final Climate.Span INLAND = new Climate.Span(new Climate(-0.11, -1, -1, -1, -1), new Climate(1, 1, 1, 1, 1));
+    static final Climate.Span EVERYWHERE = new Climate.Span(new Climate(-1, -1, -1, -1, -1), new Climate(1, 1, 1, 1, 1));
+    /** Deepest water, blocks: Mario walks its floor (no swimming yet) with his head out. */
+    static final int MAX_WATER_DEPTH = 2;
+    /** An ocean or river planet's continentalness reaches this far inland: it gets a few islands. */
+    static final double ISLANDS = 0.2;
 
     private PlanetGenerator() {}
 
@@ -55,8 +60,15 @@ public final class PlanetGenerator {
         int n = VoxelPlanet.gridSize(radius);
         CubeSphere grid = new CubeSphere(n, radius - depth, depth + air);
         String fixed = bp.biomeSize() == 0 ? biome(bp, table) : null;
-        Climate.Span span = fixed == null ? INLAND : table.span(fixed);
-        if (span == null) throw new IllegalArgumentException("no land biome " + fixed);
+        boolean water = bp.water();
+        Climate.Span span = fixed == null ? (water ? EVERYWHERE : INLAND) : table.span(fixed);
+        if (span == null) throw new IllegalArgumentException("no biome " + fixed);
+        if (fixed != null && water && table.watery(fixed)) {
+            Climate m = span.max();
+            span = new Climate.Span(span.min(), new Climate(Math.max(m.continentalness(), ISLANDS), m.erosion(), m.ridges(),
+                    m.temperature(), m.humidity()));
+        }
+        int lowest = water ? Math.min(depth - 2, MAX_WATER_DEPTH) : depth - 2;
         double climateScale = bp.biomeSize() == 0 ? 0 : 256.0 / bp.biomeSize();
         double relief = Math.min(1, radius / FULL_RELIEF_RADIUS);
 
@@ -74,14 +86,15 @@ public final class PlanetGenerator {
                     Climate c = span.map(new Climate(noise.value(Field.CONTINENTALNESS, tx, ty, tz),
                             noise.value(Field.EROSION, tx, ty, tz), noise.value(Field.RIDGES, tx, ty, tz),
                             noise.value(Field.TEMPERATURE, cx, cy, cz), noise.value(Field.HUMIDITY, cx, cy, cz)));
-                    biome[col] = fixed != null ? fixed : table.find(c);
+                    biome[col] = fixed != null ? fixed : table.find(c, water);
                     double h = TerrainShaper.height(c) * relief;
-                    height[col] = (int) Math.round(h > 0 ? soft(h, air - 4) : -soft(-h, depth - 2));
+                    height[col] = (int) Math.round(h > 0 ? soft(h, air - 4) : -soft(-h, lowest));
                 }
 
         Map<String, int[]> palettes = new HashMap<>(); // cover, top, filler, stone ids by biome
         char[] cells = new char[grid.cellCount()];
-        int bedrock = ids.applyAsInt("minecraft:bedrock");
+        int bedrock = ids.applyAsInt("minecraft:bedrock"), waterId = ids.applyAsInt(BiomeSurface.WATER),
+                ice = ids.applyAsInt(BiomeSurface.ICE), sea = depth - 1;
         for (int col = 0; col < columns; col++) {
             int[] pal = palettes.computeIfAbsent(biome[col], b -> {
                 BiomeSurface.Palette s = BiomeSurface.of(b);
@@ -89,13 +102,17 @@ public final class PlanetGenerator {
                         ids.applyAsInt(s.filler()), ids.applyAsInt(s.stone())};
             });
             int base = col * grid.layers, top = depth - 1 + height[col];
-            boolean steep = steep(grid, n, height, col);
+            boolean steep = steep(grid, n, height, col), wet = water && top < sea;
             cells[base] = (char) bedrock;
             for (int k = 1; k <= top; k++) {
                 int below = top - k;
-                cells[base + k] = (char) (below == 0 ? (steep ? pal[3] : pal[1]) : below <= BiomeSurface.FILLER_DEPTH ? pal[2] : pal[3]);
+                cells[base + k] = (char) (below == 0 ? (steep ? pal[3] : wet ? pal[2] : pal[1])
+                        : below <= BiomeSurface.FILLER_DEPTH ? pal[2] : pal[3]);
             }
-            if (!steep && top + 1 < grid.layers) cells[base + top + 1] = (char) pal[0];
+            if (wet) {
+                for (int k = top + 1; k <= sea; k++) cells[base + k] = (char) waterId;
+                if (BiomeSurface.frozen(biome[col])) cells[base + sea] = (char) ice;
+            } else if (!steep && top + 1 < grid.layers) cells[base + top + 1] = (char) pal[0];
         }
         return new Cells(grid, depth, cells);
     }

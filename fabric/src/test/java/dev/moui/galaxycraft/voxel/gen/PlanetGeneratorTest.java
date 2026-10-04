@@ -26,7 +26,8 @@ class PlanetGeneratorTest {
 
     /** Desert where it is warm, plains elsewhere; peaks are high and rough. */
     private static final BiomeTable TABLE = new BiomeTable() {
-        @Override public String find(Climate c) {
+        @Override public String find(Climate c, boolean water) {
+            if (water && c.continentalness() < -0.3) return c.temperature() < -0.3 ? "minecraft:frozen_ocean" : "minecraft:ocean";
             return c.temperature() > 0 ? "minecraft:desert" : "minecraft:plains";
         }
 
@@ -34,6 +35,7 @@ class PlanetGeneratorTest {
             return switch (biome) {
                 case "minecraft:desert", "minecraft:plains" -> new Climate.Span(new Climate(0, 0, -1, -1, -1), new Climate(0.5, 0.5, 1, 1, 1));
                 case "minecraft:jagged_peaks" -> new Climate.Span(new Climate(0.5, -1, 0.5, -1, -1), new Climate(1, -0.78, 1, 1, 1));
+                case "minecraft:ocean", "minecraft:frozen_ocean" -> new Climate.Span(new Climate(-1, -1, -1, -1, -1), new Climate(-0.45, 1, 1, 1, 1));
                 default -> null;
             };
         }
@@ -41,13 +43,23 @@ class PlanetGeneratorTest {
         @Override public List<String> land() {
             return List.of("minecraft:desert", "minecraft:jagged_peaks", "minecraft:plains");
         }
+
+        @Override public List<String> all() {
+            return List.of("minecraft:desert", "minecraft:frozen_ocean", "minecraft:jagged_peaks", "minecraft:ocean", "minecraft:plains");
+        }
+
+        @Override public boolean watery(String biome) {
+            return biome.endsWith("ocean");
+        }
     };
 
     /** Sand is cobblestone here, sandstone obsidian; the rest by its kind. */
     private static int id(String name) {
         Material m = name.contains("sandstone") ? Material.OBSIDIAN : name.contains("sand") ? Material.COBBLESTONE
                 : name.contains("bedrock") ? Material.BEDROCK : name.contains("dirt") ? Material.DIRT
-                : name.contains("grass") ? Material.GRASS : name.contains("snow") ? Material.ICE : Material.STONE;
+                : name.contains("grass") ? Material.GRASS : name.contains("snow") ? Material.ICE
+                : name.contains("water") ? Material.WATER : name.contains("ice") ? Material.LAVA : name.contains("gravel") ? Material.DIRT
+                : Material.STONE;
         return B.id(m);
     }
 
@@ -117,7 +129,7 @@ class PlanetGeneratorTest {
         for (long s = 0; s < 20; s++) seen.add(PlanetGenerator.biome(bp(32, 8, s, PlanetBlueprint.RANDOM, 0), TABLE));
         assertTrue(TABLE.land().containsAll(seen));
         assertTrue(seen.size() > 1);
-        assertThrows(IllegalArgumentException.class, () -> build(bp(32, 8, 0, "minecraft:ocean", 0)));
+        assertThrows(IllegalArgumentException.class, () -> build(bp(32, 8, 0, "minecraft:nether_wastes", 0)));
     }
 
     @Test void severalBiomesMix() {
@@ -126,6 +138,44 @@ class PlanetGeneratorTest {
         Set<Material> tops = new HashSet<>();
         for (int c = 0; c < g.cellCount(); c += g.layers) tops.add(p.material(c + top(p, c)));
         assertTrue(tops.contains(Material.COBBLESTONE) && tops.contains(Material.GRASS), tops.toString());
+    }
+
+    /** Water cells in a column, from the top down to the first that is not. */
+    private static int water(VoxelPlanet p, int c0) {
+        int k = p.grid.layers - 1, w = 0;
+        while (k > 0 && p.get(c0 + k) == Blocks.AIR) k--;
+        while (k > 0 && (p.material(c0 + k) == Material.WATER || p.material(c0 + k) == Material.LAVA)) {
+            w++;
+            k--;
+        }
+        return w;
+    }
+
+    @Test void shallowSeasUpToTheBaseSurface() {
+        VoxelPlanet p = build(bp(64, 12, 4, "minecraft:plains", 48).withWater(true));
+        CubeSphere g = p.grid;
+        int wet = 0, frozen = 0;
+        for (int c = 0; c < g.cellCount(); c += g.layers) {
+            int w = water(p, c);
+            assertTrue(w <= PlanetGenerator.MAX_WATER_DEPTH, w + " deep");
+            if (w == 0) continue;
+            wet++;
+            assertNotEquals(Blocks.AIR, p.get(c + p.depth - 1), "water reaches the base surface");
+            assertEquals(Blocks.AIR, p.get(c + p.depth), "and no higher");
+            if (p.material(c + p.depth - 1) == Material.LAVA) frozen++; // ice is lava in the tests
+            assertNotEquals(Material.GRASS, p.material(c + p.depth - 1 - w), "no grass under water");
+        }
+        assertTrue(wet > 100 && frozen > 0, wet + " wet columns, " + frozen + " frozen");
+        assertFalse(p.fluids().tick(), "still water: nothing to tick");
+    }
+
+    @Test void anOceanPlanetIsMostlyWaterWithIslands() {
+        VoxelPlanet p = build(bp(48, 12, 6, "minecraft:ocean", 0).withWater(true));
+        CubeSphere g = p.grid;
+        int wet = 0, dry = 0;
+        for (int c = 0; c < g.cellCount(); c += g.layers) if (water(p, c) > 0) wet++; else dry++;
+        assertTrue(wet > dry && dry > 0, wet + " wet, " + dry + " dry");
+        assertEquals(0, water(build(bp(48, 12, 6, "minecraft:ocean", 0)), 0) + water(build(bp(48, 12, 6, "minecraft:desert", 0)), 0));
     }
 
     @Test void blueprintsSavedBeforeAreLayered() {

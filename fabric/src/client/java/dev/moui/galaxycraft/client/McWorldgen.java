@@ -27,7 +27,7 @@ import net.minecraft.world.level.levelgen.synth.NormalNoise;
 /**
  * Generated planets made with Minecraft's own worldgen, read from the integrated server's
  * registries: the overworld's climate noises (seeded as a world of that seed seeds them) and its
- * biome table, kept to the land biomes found at the surface.
+ * biome table, kept to the biomes found at the surface (with and without the watery ones).
  */
 public final class McWorldgen implements Worldgen {
     private final HolderGetter<NormalNoise> noises;
@@ -60,26 +60,33 @@ public final class McWorldgen implements Worldgen {
     }
 
     private static final class Table implements BiomeTable {
-        private final Climate.ParameterList<String> land;
+        private final Climate.ParameterList<String> land, all;
         private final Map<String, dev.moui.galaxycraft.voxel.gen.Climate.Span> spans = new HashMap<>();
-        private final List<String> ids;
+        private final java.util.Set<String> landIds = new TreeSet<>(), watery = new java.util.HashSet<>();
+        private final List<String> landList, allList;
 
         Table(Climate.ParameterList<Holder<Biome>> overworld) {
-            List<Pair<Climate.ParameterPoint, String>> kept = new ArrayList<>();
+            List<Pair<Climate.ParameterPoint, String>> keptLand = new ArrayList<>(), kept = new ArrayList<>();
             for (Pair<Climate.ParameterPoint, Holder<Biome>> e : overworld.values()) {
                 Holder<Biome> b = e.getSecond();
                 Climate.ParameterPoint p = e.getFirst();
-                if (b.is(BiomeTags.IS_OCEAN) || b.is(BiomeTags.IS_RIVER) || b.is(BiomeTags.IS_BEACH)) continue;
                 if (p.depth().min() > 0 || p.depth().max() < 0) continue; // underground: caves
                 String id = b.unwrapKey().orElseThrow().identifier().toString();
                 kept.add(Pair.of(p, id));
+                if (b.is(BiomeTags.IS_OCEAN) || b.is(BiomeTags.IS_RIVER)) watery.add(id);
+                if (!b.is(BiomeTags.IS_OCEAN) && !b.is(BiomeTags.IS_RIVER) && !b.is(BiomeTags.IS_BEACH)) {
+                    keptLand.add(Pair.of(p, id));
+                    landIds.add(id);
+                }
                 var span = new dev.moui.galaxycraft.voxel.gen.Climate.Span(
                         climate(p, true), climate(p, false));
                 spans.merge(id, span, (a, c) -> new dev.moui.galaxycraft.voxel.gen.Climate.Span(
                         min(a.min(), c.min()), max(a.max(), c.max())));
             }
-            land = new Climate.ParameterList<>(kept);
-            ids = List.copyOf(new TreeSet<>(spans.keySet()));
+            land = new Climate.ParameterList<>(keptLand);
+            all = new Climate.ParameterList<>(kept);
+            landList = List.copyOf(landIds);
+            allList = List.copyOf(new TreeSet<>(spans.keySet()));
         }
 
         private static dev.moui.galaxycraft.voxel.gen.Climate climate(Climate.ParameterPoint p, boolean min) {
@@ -104,8 +111,8 @@ public final class McWorldgen implements Worldgen {
         }
 
         @Override
-        public String find(dev.moui.galaxycraft.voxel.gen.Climate c) {
-            return land.findValue(Climate.target((float) c.temperature(), (float) c.humidity(), (float) c.continentalness(),
+        public String find(dev.moui.galaxycraft.voxel.gen.Climate c, boolean water) {
+            return (water ? all : land).findValue(Climate.target((float) c.temperature(), (float) c.humidity(), (float) c.continentalness(),
                     (float) c.erosion(), 0, (float) c.ridges()));
         }
 
@@ -116,7 +123,17 @@ public final class McWorldgen implements Worldgen {
 
         @Override
         public List<String> land() {
-            return ids;
+            return landList;
+        }
+
+        @Override
+        public List<String> all() {
+            return allList;
+        }
+
+        @Override
+        public boolean watery(String biome) {
+            return watery.contains(biome);
         }
     }
 }
