@@ -27,4 +27,10 @@ class InputDiffTest {
         assertEquals(List.of(new InputDiff.KeyEvent(0, true), new InputDiff.KeyEvent(1, false)),
                 InputDiff.buttons(0b10, 0b01));
     }
+
+    @Test void modifiersFromHeldKeys() {
+        assertEquals(0, InputDiff.modifiers(keys(4, 42)));
+        assertEquals(0x1 | 0x80, InputDiff.modifiers(keys(225, 228)));  // left Shift, right Ctrl
+        assertEquals(0x2 | 0x40 | 0x100 | 0x800, InputDiff.modifiers(keys(229, 224, 226, 231)));
+    }
 }

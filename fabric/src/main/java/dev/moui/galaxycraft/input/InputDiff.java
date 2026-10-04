@@ -21,6 +21,18 @@ public final class InputDiff {
         return out;
     }
 
+    /** SDL modifier mask (SDL_KMOD_*) of the Ctrl, Shift, Alt and GUI keys held in an SDL-scancode bitmap. */
+    public static int modifiers(byte[] keys) {
+        // Scancodes 224..231: LCtrl, LShift, LAlt, LGUI, RCtrl, RShift, RAlt, RGUI.
+        final int[] kmod = {0x40, 0x1, 0x100, 0x400, 0x80, 0x2, 0x200, 0x800};
+        int mods = 0;
+        for (int i = 0; i < kmod.length; i++) {
+            int sc = 224 + i;
+            if (sc / 8 < keys.length && (keys[sc / 8] & (1 << (sc % 8))) != 0) mods |= kmod[i];
+        }
+        return mods;
+    }
+
     /** Button masks: bit n = SDL mouse button n (1 left, 2 middle, 3 right). */
     public static List<KeyEvent> buttons(int prev, int cur) {
         List<KeyEvent> out = new ArrayList<>();

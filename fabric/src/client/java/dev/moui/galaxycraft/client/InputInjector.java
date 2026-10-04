@@ -7,6 +7,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonInfo;
+import org.lwjgl.sdl.SDLKeyboard;
 
 /** Feeds the host's keyboard and mouse (Dolphin's window) into Minecraft's own input handlers. */
 final class InputInjector {
@@ -21,8 +22,12 @@ final class InputInjector {
             return;
         }
         long window = mc.getWindow().handle();
+        // Text fields read the keycode (Backspace is 8) and modifiers, not the scancode: as SDL
+        // would, both come from the layout and the keys held now.
+        int mods = InputDiff.modifiers(cur.keys());
         for (InputDiff.KeyEvent e : InputDiff.keys(prev.keys(), cur.keys())) {
-            mc.keyboardHandler.keyPress(window, e.down() ? PRESS : RELEASE, new KeyEvent(e.code(), 0, 0));
+            int keycode = SDLKeyboard.SDL_GetKeyFromScancode(e.code(), (short) mods, true);
+            mc.keyboardHandler.keyPress(window, e.down() ? PRESS : RELEASE, new KeyEvent(e.code(), keycode, mods));
         }
         for (InputDiff.KeyEvent e : InputDiff.buttons(prev.buttons(), cur.buttons())) {
             mc.mouseHandler.onButton(window, new MouseButtonInfo(e.code(), 0), e.down() ? PRESS : RELEASE);
