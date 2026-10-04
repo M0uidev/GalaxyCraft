@@ -16,13 +16,22 @@ import java.util.List;
  * @param quads        its model; empty for air and fluids (drawn from tile and tint)
  * @param boxes        collision boxes in block space: minX, minY, minZ, maxX, maxY, maxZ each
  * @param outline      the bounds of its outline shape in block space, the same six numbers
+ * @param shape        the boxes of that outline shape, the same six numbers each: what the crosshair meets
  * @param tile         a fluid's atlas tile (its still texture), or the block's particle tile
  * @param tint         that tile's tint, 0xRRGGBB
  */
 public record BlockInfo(int fluid, int level, boolean collides, boolean fullCollision, boolean occludes,
         boolean targetable, boolean breakable, boolean replaceable, List<ModelQuad> quads, List<double[]> boxes,
-        double[] outline, int tile, int tint) {
+        double[] outline, List<double[]> shape, int tile, int tint) {
     public static final double[] FULL = {0, 0, 0, 1, 1, 1};
+
+    /** Its outline shape is one box, outline. */
+    public BlockInfo(int fluid, int level, boolean collides, boolean fullCollision, boolean occludes,
+            boolean targetable, boolean breakable, boolean replaceable, List<ModelQuad> quads, List<double[]> boxes,
+            double[] outline, int tile, int tint) {
+        this(fluid, level, collides, fullCollision, occludes, targetable, breakable, replaceable, quads, boxes,
+                outline, List.of(outline), tile, tint);
+    }
 
     public boolean air() {
         return fluid == Blocks.NO_FLUID && !targetable && quads.isEmpty() && !collides;

@@ -77,6 +77,25 @@ class BlockShapesTest {
         assertEquals(0.5, outline[4], 1e-9);
     }
 
+    @Test void theCrosshairMeetsASlabWhereItIs() {
+        int c = at(12, 12, 9), side = g.neighbor(c, CubeSphere.J_MINUS);
+        p.set(c, CubeBlocks.SLAB);
+        // Across the cell's empty upper half, from beside it: on past the slab.
+        Vector3d from = CellSpace.point(g, side, 0.5, 0.75, 0.5);
+        Vector3d dir = CellSpace.point(g, c, 0.5, 0.75, 0.5).sub(from).normalize();
+        PlanetRaycast.Hit over = PlanetRaycast.cast(p, from, dir, 1.5);
+        assertTrue(over == null || over.hit() != c, "the slab's empty half is not hit");
+        // Through its lower half: its side, and from above its top, half a block up.
+        from = CellSpace.point(g, side, 0.5, 0.25, 0.5);
+        dir = CellSpace.point(g, c, 0.5, 0.25, 0.5).sub(from).normalize();
+        assertEquals(CubeSphere.J_MINUS, PlanetRaycast.cast(p, from, dir, 1.5).face());
+        from = CellSpace.point(g, c, 0.5, 2, 0.5);
+        PlanetRaycast.Hit top = PlanetRaycast.cast(p, from, CellSpace.point(g, c, 0.5, 0, 0.5).sub(from).normalize(), 4);
+        assertEquals(c, top.hit());
+        assertEquals(CubeSphere.TOP, top.face());
+        assertEquals(0.5, CellSpace.local(g, c, top.point()).y, 1e-3);
+    }
+
     @Test void flowersAreDrawnButDoNotCollide() {
         int c = at(12, 12, 9);
         int chunk = p.chunkOf(c);
@@ -138,8 +157,9 @@ class BlockShapesTest {
         Vector3d c = s.center();
         int top = planet.grid.cellAt(new Vector3d(0.3, planet.surface() + 0.5, 0.3));
         planet.set(top, CubeBlocks.FLOWER);
-        // The flower is targetable but not replaceable: the block goes on top of it.
-        assertTrue(s.placeBlock(new Vector3d(0.3, planet.surface() + 3, 0.3).add(c), new Vector3d(0, -1, 0),
+        // The flower is targetable but not replaceable: the block goes on top of it (aimed at its stem).
+        Vector3d up = planet.grid.center(top).normalize();
+        assertTrue(s.placeBlock(planet.grid.center(top).fma(2.5, up).add(c), new Vector3d(up).negate(),
                 Placer.of(planet.blocks.id(Material.STONE)), new Vector3d()));
         assertEquals(CubeBlocks.FLOWER, planet.get(top));
         assertEquals(Material.STONE, planet.material(planet.grid.neighbor(top, CubeSphere.TOP)));

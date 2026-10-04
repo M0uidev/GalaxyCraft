@@ -193,7 +193,7 @@ public final class McBlocks implements Blocks {
         float hardness = state.getDestroySpeed(none, BlockPos.ZERO);
         return new BlockInfo(NO_FLUID, 0, !collision.isEmpty(), Block.isShapeFullBlock(collision), state.isSolidRender(),
                 !state.isAir() && !outline.isEmpty(), !state.isAir() && hardness >= 0, state.canBeReplaced(),
-                List.copyOf(quads), boxes, bounds, particle, WHITE);
+                List.copyOf(quads), boxes, bounds, outline.isEmpty() ? List.of(BlockInfo.FULL) : boxes(outline), particle, WHITE);
     }
 
     private static VoxelShape shape(java.util.function.Supplier<VoxelShape> s) {

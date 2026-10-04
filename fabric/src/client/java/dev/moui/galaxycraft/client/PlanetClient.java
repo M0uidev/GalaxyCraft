@@ -152,34 +152,28 @@ public final class PlanetClient {
             Vector3d eye = frame.toGal(vec(player.getEyePosition()));
             Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
             PlanetSession.Aim aim = screen ? null : session.aim(eye, look);
-            aimUsable = aim != null && shadow.available() && blocks.usable(session.planet().get(aim.cell()));
+            Vector3d eyeLocal = session.localOf(eye);
+            // A mob in reach in front of the block hit is what the crosshair is on, as in Minecraft:
+            // it takes the clicks, whatever is in hand, and the block behind it is not outlined.
+            double block = aim == null ? Double.MAX_VALUE
+                    : CellSpace.point(session.planet().grid, aim.cell(), aim.hit().x, aim.hit().y, aim.hit().z).distance(eyeLocal);
+            Entity target = screen || !shadow.available() ? null : entities.aimed(eyeLocal, look, Math.min(REACH, block));
+            aimUsable = target == null && aim != null && shadow.available() && blocks.usable(session.planet().get(aim.cell()));
             boolean item = itemActive(player) && !screen;
             // Minecraft's outline on the block the clicks would act on, only with something in hand.
-            session.setOutline(item ? session.target(eye, look, player.getMainHandItem().is(Items.BUCKET)) : -1);
+            session.setOutline(item && target == null ? session.target(eye, look, player.getMainHandItem().is(Items.BUCKET)) : -1);
             // Mario stands where he is in the shadow too, so mobs chase him and his blows land.
-            Vector3d eyeLocal = session.localOf(eye);
             ShadowWorld.mario(new ShadowWorld.MarioAt(session.planet(), session.localOf(world.queryPos()), new Vector3d(look),
                     player.getUUID()));
-            // A mob in reach in front of the block hit takes the blow instead, whatever is in hand.
             boolean hit = false;
-            if (!screen && pressed(buttons, MOUSE_LEFT) && shadow.available()) {
-                double block = aim == null ? Double.MAX_VALUE
-                        : CellSpace.point(session.planet().grid, aim.cell(), aim.hit().x, aim.hit().y, aim.hit().z).distance(eyeLocal);
-                Entity target = entities.aimed(eyeLocal, look, Math.min(REACH, block));
-                if (target != null) {
-                    ShadowWorld.attack(target.getId(), player.getUUID());
-                    hit = true;
-                }
+            if (target != null && pressed(buttons, MOUSE_LEFT)) {
+                ShadowWorld.attack(target.getId(), player.getUUID());
+                hit = true;
             }
             // Right click on a mob or vehicle in reach uses it (rides a minecart or boat).
-            if (!screen && pressed(buttons, MOUSE_RIGHT) && shadow.available()) {
-                double block = aim == null ? Double.MAX_VALUE
-                        : CellSpace.point(session.planet().grid, aim.cell(), aim.hit().x, aim.hit().y, aim.hit().z).distance(eyeLocal);
-                Entity target = entities.aimed(eyeLocal, look, Math.min(REACH, block));
-                if (target != null) {
-                    ShadowWorld.interact(target.getId(), player.getUUID());
-                    hit = true;
-                }
+            if (target != null && pressed(buttons, MOUSE_RIGHT)) {
+                ShadowWorld.interact(target.getId(), player.getUUID());
+                hit = true;
             }
             ShadowWorld.steer(new ShadowWorld.Steer(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),
                     key(in, SC_LSHIFT) || key(in, SC_RSHIFT)));

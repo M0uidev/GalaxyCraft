@@ -59,6 +59,7 @@ public final class PlanetSession {
     private int sinceResidency;
     private boolean unsaved;
     private int outline = -1; // the cell outlined in the game, -1 none
+    private int outlineId = -1; // the block that was in it then: a door opening changes its outline
     private Vector3d mario;
 
     public PlanetSession(double unitsPerBlock) {
@@ -253,7 +254,7 @@ public final class PlanetSession {
         PlanetRaycast.Hit h = cast(eyeGal, lookGal);
         if (h == null || placer == null) return false;
         CubeSphere g = planet.grid;
-        int face = faceAt(h.hit(), h.point());
+        int face = h.face();
         int cell = planet.info(h.hit()).replaceable() ? h.hit() : g.neighbor(h.hit(), face);
         if (cell < 0 || !planet.info(cell).replaceable()) return false;
         Vector3d hit = CellSpace.local(g, cell, h.point());
@@ -287,7 +288,7 @@ public final class PlanetSession {
         if (h == null) return null;
         Vector3d hit = CellSpace.local(planet.grid, h.hit(), h.point());
         hit.set(clamp01(hit.x), clamp01(hit.y), clamp01(hit.z));
-        return new Aim(h.hit(), faceAt(h.hit(), h.point()), hit);
+        return new Aim(h.hit(), h.face(), hit);
     }
 
     /** A change Minecraft made to the planet (redstone, a door opened): kept, and saved. */
@@ -322,15 +323,6 @@ public final class PlanetSession {
         return out;
     }
 
-    /** The side of cell nearest a point on (or just inside) it: the face a ray entered through. */
-    private int faceAt(int cell, Vector3d point) {
-        Vector3d m = CellSpace.local(planet.grid, cell, point);
-        double[] dist = {1 - m.y, m.y, m.z, 1 - m.z, m.x, 1 - m.x}; // by side: TOP, BOTTOM, I-, I+, J-, J+
-        int best = 0;
-        for (int s = 1; s < 6; s++) if (dist[s] < dist[best]) best = s;
-        return best;
-    }
-
     private static double clamp01(double v) {
         return Math.max(0, Math.min(1, v));
     }
@@ -345,10 +337,13 @@ public final class PlanetSession {
         return h == null ? -1 : h.hit();
     }
 
-    /** Outlines this cell in the game (Minecraft's block outline), -1 for none. Sent if it changed. */
+    /** Outlines this cell in the game (Minecraft's block outline), -1 for none. Sent if it or its block changed. */
     public void setOutline(int cell) {
-        if (planet == null || cell == outline) return;
+        if (planet == null) return;
+        int id = cell < 0 ? -1 : planet.get(cell);
+        if (cell == outline && id == outlineId) return;
         outline = cell;
+        outlineId = id;
         queueOutline();
     }
 
@@ -406,7 +401,7 @@ public final class PlanetSession {
 
     private void clearQueues() {
         control.clear();
-        outline = -1;
+        outline = outlineId = -1;
         pending.clear();
         pendingSet.clear();
         built = null;
