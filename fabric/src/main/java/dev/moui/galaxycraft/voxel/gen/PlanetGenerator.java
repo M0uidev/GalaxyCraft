@@ -141,6 +141,19 @@ public final class PlanetGenerator {
             }
         }
         Underground.carve(grid, depth, cells, height, dirs, keepRoof, noise, bp.caves(), bp.entrances(), radius);
+        // Ground a cave opened to the sky gets its biome's top, as Minecraft's carvers leave it:
+        // dirt left bare there would turn to grass later, a block at a time, each meshed and sent.
+        for (int col = 0; col < columns; col++) {
+            int[] pal = palettes.get(biome[col]);
+            if (pal[1] == pal[2]) continue;
+            int base = col * grid.layers;
+            for (int k = grid.layers - 2; k > 0; k--) {
+                int id = cells[base + k];
+                if (id == Blocks.AIR || id == pal[0]) continue;
+                if (id == pal[2] && cells[base + k + 1] == Blocks.AIR) cells[base + k] = (char) pal[1];
+                break; // the first ground from the sky down
+            }
+        }
         Underground.ores(grid, depth, cells, height, bp.seed(), bp.ores(), ids);
         if (bp.plants() > 0) {
             // Bare ground: its biome's top block, not under water, not a cliff, open above (or snow).

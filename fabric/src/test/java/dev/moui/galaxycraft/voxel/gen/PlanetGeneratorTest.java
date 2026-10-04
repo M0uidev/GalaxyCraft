@@ -204,12 +204,31 @@ class PlanetGeneratorTest {
         for (int i = 0; i < solid.cells().length; i++) {
             if (solid.cells()[i] != Blocks.AIR && solid.cells()[i] != unique("minecraft:water")) ground++;
             if (solid.cells()[i] == caves.cells()[i]) continue;
+            if (caves.cells()[i] == unique("minecraft:grass_block")) {
+                assertEquals(unique("minecraft:dirt"), (int) solid.cells()[i], "only dirt a cave opened turns to grass");
+                assertEquals(Blocks.AIR, caves.cells()[i + 1], "opened");
+                continue;
+            }
             assertEquals(Blocks.AIR, caves.cells()[i], "caves only take blocks away");
             assertNotEquals(unique("minecraft:bedrock"), solid.cells()[i], "not the bedrock");
             assertNotEquals(unique("minecraft:water"), solid.cells()[i], "not the water");
             carved++;
         }
         assertTrue(carved > ground / 100, carved + " of " + ground + " carved");
+    }
+
+    @Test void groundACaveOpensToTheSkyIsGrassNotDirt() {
+        PlanetBlueprint bp = bp(96, 16, 3, "minecraft:plains", 0);
+        PlanetGenerator.Cells solid = cells(bp), c = cells(bp.withUnderground(100, true, 0));
+        CubeSphere g = c.grid();
+        int opened = 0;
+        for (int base = 0; base < c.cells().length; base += g.layers) {
+            int k = g.layers - 1;
+            while (k > 0 && c.cells()[base + k] == Blocks.AIR) k--;
+            assertNotEquals(unique("minecraft:dirt"), (int) c.cells()[base + k], "no bare dirt under the sky (Minecraft would grow grass on it)");
+            if (k < ground(solid, base) && c.cells()[base + k] == unique("minecraft:grass_block")) opened++;
+        }
+        assertTrue(opened > 0, "some opened ground is grass");
     }
 
     @Test void withoutEntrancesAndUnderWaterTheRoofStays() {
