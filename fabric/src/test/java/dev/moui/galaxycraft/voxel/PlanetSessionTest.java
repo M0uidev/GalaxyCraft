@@ -75,6 +75,26 @@ class PlanetSessionTest {
         assertTrue(s.collisionChunks() > 0 && s.collisionChunks() <= PlanetSession.MAX_PARTS);
     }
 
+    @Test void collisionReachesAheadOfAFastMario() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = new Vector3d(s.center()).add(0, -64 * 80, 0);
+        s.update(3, 100, top);
+        drain(s);
+        // Running along the ground, 1.5 blocks an update (falling is faster still).
+        Vector3d step = new Vector3d(1.5 * 80, 0, 0), at = new Vector3d(top);
+        for (int i = 0; i < 2 * PlanetSession.RESIDENCY_UPDATES; i++) {
+            s.update(3, 100, at.add(step));
+            drain(s);
+        }
+        // The grass under a point (just under the surface, radius 64).
+        java.util.function.Function<Vector3d, Integer> ground = p -> s.cellAt(new Vector3d(p).sub(s.center()).normalize(63.5 * 80).add(s.center()));
+        int[] ahead = {ground.apply(new Vector3d(at).fma(PlanetSession.LOOKAHEAD - 2, step)), ground.apply(new Vector3d(at).fma(-20, step))};
+        assertTrue(s.collides(s.planet().chunkOf(ahead[0])), "the ground where he is headed collides");
+        assertFalse(s.collides(s.planet().chunkOf(ahead[1])), "30 blocks behind him: no longer");
+        assertTrue(s.collisionChunks() < 80, s.collisionChunks() + " collision parts");
+    }
+
     @Test void biggestPlanetFitsTheGameAndSendsInSeconds() {
         long t0 = System.nanoTime();
         PlanetSession s = new PlanetSession(80);

@@ -26,11 +26,17 @@ public final class PlanetSession {
     public static final double DEFAULT_MARIO_RADIUS = 0.3;
     /** The outline stands this fraction of a cell out of it. */
     static final double OUTLINE_GROW = 0.02;
-    /** Collision reaches this far around Mario, blocks, for at most MAX_PARTS chunks. */
-    public static final double NEAR = 24;
+    /**
+     * Collision reaches this far around Mario and around where he will be in LOOKAHEAD updates at
+     * his speed, blocks, for at most MAX_PARTS chunks; a chunk that has it keeps it KEEP blocks
+     * farther. Each collision part costs the game every frame, so they stay few: a fall or a run
+     * still finds the ground ahead loaded.
+     */
+    public static final double NEAR = 12, KEEP = 4;
+    public static final int LOOKAHEAD = 15;
     public static final int MAX_PARTS = 160;
     /** Updates between recomputing which chunks are near Mario. */
-    public static final int RESIDENCY_UPDATES = 10;
+    public static final int RESIDENCY_UPDATES = 2;
     /**
      * Mario's collision radius at the planet's surface, blocks (Steve's): his own is 60 units (1.5
      * blocks wide), too wide for a 1-block hole or tunnel. Below the surface it shrinks as the
@@ -62,6 +68,8 @@ public final class PlanetSession {
     private int outline = -1; // the cell outlined in the game, -1 none
     private int outlineId = -1; // the block that was in it then: a door opening changes its outline
     private Vector3d mario;
+    /** Where Mario is headed: his position LOOKAHEAD updates on at his last step's speed. */
+    private Vector3d ahead;
 
     public PlanetSession(double unitsPerBlock) {
         this.unitsPerBlock = unitsPerBlock;
@@ -157,7 +165,7 @@ public final class PlanetSession {
         Vector3d land = mario == null || mario.lengthSquared() < 1 ? new Vector3d(0, 1, 0) : new Vector3d(mario);
         tpGround = (float) (ground(land) * unitsPerBlock);
         land.normalize(planet.surface());
-        List<Integer> first = residency(land);
+        List<Integer> first = residency(land, land);
         pending.removeIf(first::contains);
         pending.addFirst(TP_MARK);
         for (int i = first.size() - 1; i >= 0; i--) {
@@ -172,7 +180,11 @@ public final class PlanetSession {
      */
     public void update(int sceneId, int hostPid, Vector3d marioGal) {
         if (planet == null) return;
+        Vector3d was = mario;
         mario = marioGal == null ? null : local(marioGal);
+        // A jump of more than a few blocks in one update is a teleport, not a speed.
+        ahead = mario == null || was == null || was.distance(mario) > 8 ? mario
+                : new Vector3d(mario).sub(was).mul(LOOKAHEAD).add(mario);
         if (sceneId != scene || hostPid != host) {
             scene = sceneId;
             host = hostPid;
@@ -182,7 +194,7 @@ public final class PlanetSession {
         for (int c : planet.takeDirty()) queue(c);
         if (++sinceResidency >= RESIDENCY_UPDATES && mario != null) {
             sinceResidency = 0;
-            for (int c : residency(mario)) queue(c);
+            for (int c : residency(mario, ahead)) queue(c);
         }
     }
 
@@ -198,7 +210,7 @@ public final class PlanetSession {
             pendingSet.clear(c);
             // A chunk that just got something to show (dug into) may be under Mario already:
             // whether it is near is decided now, not at the next residency pass.
-            if (!near.get(c) && mario != null && near.cardinality() < MAX_PARTS && distance(c, mario) < NEAR)
+            if (!near.get(c) && mario != null && near.cardinality() < MAX_PARTS && distance(c, mario, ahead) < NEAR)
                 near.set(c);
             boolean kcl = near.get(c);
             if (!onGuest.get(c) && !planet.mayShow(c)) continue;
@@ -233,6 +245,11 @@ public final class PlanetSession {
     /** Messages and chunks still to send (chunks may turn out to have nothing to send). */
     public int queued() {
         return control.size() + pending.size() + (built != null ? 1 : 0);
+    }
+
+    /** Whether a chunk carries collision now. */
+    public boolean collides(int chunk) {
+        return withKcl.get(chunk);
     }
 
     /** Chunks that carry collision now. */
@@ -433,7 +450,7 @@ public final class PlanetSession {
         clearQueues();
         control.add(new Msg(Layout.MSG_PLANET, planetPayload(id)));
         planet.takeDirty();
-        if (mario != null) residency(mario);
+        if (mario != null) residency(mario, ahead);
         List<double[]> order = new ArrayList<>();
         Vector3d c = new Vector3d();
         double[] r = new double[1];
@@ -446,18 +463,15 @@ public final class PlanetSession {
     }
 
     /**
-     * Collision goes to the nearest chunks within NEAR blocks of at (planet blocks). Returns the
-     * chunks to send for it, nearest first: those the game has whose collision changes, and those
-     * near that it does not have yet.
+     * Collision goes to the nearest chunks within NEAR blocks of the way from at to to (planet
+     * blocks; KEEP more for those that have it). Returns the chunks to send for it, nearest first:
+     * those the game has whose collision changes, and those near that it does not have yet.
      */
-    private List<Integer> residency(Vector3d at) {
+    private List<Integer> residency(Vector3d at, Vector3d to) {
         List<double[]> close = new ArrayList<>();
-        Vector3d c = new Vector3d();
-        double[] r = new double[1];
         for (int ch = 0; ch < planet.chunkCount(); ch++) {
-            planet.sphere(ch, c, r);
-            double d = c.distance(at) - r[0];
-            if (d < NEAR) close.add(new double[] {d, ch});
+            double d = distance(ch, at, to);
+            if (d < NEAR || near.get(ch) && d < NEAR + KEEP) close.add(new double[] {d, ch});
         }
         close.sort((a, b) -> Double.compare(a[0], b[0]));
         BitSet next = new BitSet();
@@ -479,10 +493,18 @@ public final class PlanetSession {
     }
 
     private double distance(int chunk, Vector3d at) {
+        return distance(chunk, at, at);
+    }
+
+    /** From a chunk's bounding sphere to the segment from a to b, blocks (0 or less: it touches). */
+    private double distance(int chunk, Vector3d a, Vector3d b) {
         Vector3d c = new Vector3d();
         double[] r = new double[1];
         planet.sphere(chunk, c, r);
-        return c.distance(at) - r[0];
+        Vector3d ab = new Vector3d(b).sub(a);
+        double len2 = ab.lengthSquared();
+        double t = len2 < 1e-9 ? 0 : Math.clamp(new Vector3d(c).sub(a).dot(ab) / len2, 0, 1);
+        return c.distance(new Vector3d(a).fma(t, ab)) - r[0];
     }
 
     private void queue(int chunk) {
