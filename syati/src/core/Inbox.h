@@ -139,4 +139,9 @@ void ViewTranslate(const f32 view[12], const f32 t[3], f32 out[12]);
 // Whether a sphere (c, r) cannot be seen from cam: wholly behind the camera (fwd: unit view
 // direction), or in the shadow of the opaque ball (center, occluder radius) seen from cam.
 bool SphereHidden(const f32 cam[3], const f32 fwd[3], const f32 center[3], f32 occluder, const f32 c[3], f32 r);
+
+// Whether a sphere of radius r centered at v (view space: the camera at the origin looking down
+// -z) lies wholly beside the view: past its left, right, top or bottom side. proj is what
+// GXGetProjectionv gives (type, then m00 m02 m11 m12 m22 m23); an orthographic one hides nothing.
+bool SphereOutsideView(const f32 proj[7], const f32 v[3], f32 r);
 }  // namespace gxc

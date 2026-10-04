@@ -22,6 +22,7 @@ extern "C" void setCurrentPlacementZoneId__2MRFl(long);
 extern "C" void* getSceneHeapGDDR3__2MRFv();
 extern "C" void* getSceneHeapNapa__2MRFv();
 extern "C" u32 getFreeSize__7JKRHeapFv(void*);
+extern "C" void GXGetProjectionv(f32* p);
 // operator new(size, JKRHeap*, alignment)
 extern "C" void* __nw__FUlP7JKRHeapi(u32 size, void* heap, int align);
 
@@ -485,6 +486,9 @@ public:
     // The camera's projection: this draw type runs after screen passes (bloom, in the Starship)
     // that leave another projection loaded, and the planet would land off screen.
     MR::loadProjectionMtx();
+    // That projection's sides: chunks wholly beside the view are not drawn.
+    f32 proj[7];
+    GXGetProjectionv(proj);
     if (gDrawnCount == 0 || !gAtlas.ready)
     {
       if (gHitboxOn)
@@ -540,7 +544,7 @@ public:
         view[4 * r + c] = cam[r][c];
     GXSetCurrentMtx(GX_PNMTX0);
 
-    // The camera in the planet's frame: chunks behind it or past the horizon are skipped. The
+    // The camera in the planet's frame: chunks behind it, past the horizon or beside the view are skipped. The
     // bedrock shell (unbreakable) is the ball that hides them.
     // From the view matrix this frame draws with (in first person GalaxyCraft's, not the game
     // camera's): position -Rᵀt, forward -(third row), as GX cameras look down -z.
@@ -561,6 +565,9 @@ public:
       // Each chunk's vertices are relative to its own center.
       f32 pos[12];
       gxc::ViewTranslate(planet, s.sphere, pos);
+      const f32 at[3] = {pos[3], pos[7], pos[11]};
+      if (gxc::SphereOutsideView(proj, at, s.sphere[3]))
+        continue;
       GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(pos), GX_PNMTX0);
       GXCallDisplayList(s.dl, s.dl_size);
       drawn++;

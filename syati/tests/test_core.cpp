@@ -290,6 +290,20 @@ static void TestPlanetDropAndViewTranslate()
   const f32 tall[3] = {0, 0, -400};  // far behind the ball but huge: sticks out
   CHECK(!SphereHidden(cam, fwd, o, 100.f, tall, 300.f));
   CHECK(Near(m[3], 6.f) && Near(m[7], 9.f) && Near(m[11], 5.f) && m[6] == 1.f);
+
+  // A 90° wide, 60° tall view (as C_MTXPerspective builds it: m00 = cot(fovx/2), m11 = cot(fovy/2)).
+  const f32 proj[7] = {0.f, 1.f, 0.f, 1.7320508f, 0.f, -1.f, -10.f};
+  const f32 ahead[3] = {0, 0, -100}, right[3] = {150, 0, -100}, rightEdge[3] = {104, 0, -100};
+  const f32 up[3] = {0, 70, -100}, upEdge[3] = {0, 60, -100}, back2[3] = {0, 0, 100};
+  CHECK(!SphereOutsideView(proj, ahead, 1.f));
+  CHECK(SphereOutsideView(proj, right, 10.f));
+  CHECK(!SphereOutsideView(proj, rightEdge, 10.f));  // pokes into the view
+  CHECK(SphereOutsideView(proj, up, 1.f));
+  CHECK(!SphereOutsideView(proj, upEdge, 3.f));
+  CHECK(SphereOutsideView(proj, back2, 1.f));
+  CHECK(!SphereOutsideView(proj, back2, 500.f));  // around the camera
+  const f32 ortho[7] = {1.f, 1.f, 0.f, 1.f, 0.f, -1.f, 0.f};
+  CHECK(!SphereOutsideView(ortho, right, 1.f));
 }
 
 static void TestInboxOutline()

@@ -226,6 +226,24 @@ bool SphereHidden(const f32 cam[3], const f32 fwd[3], const f32 center[3], f32 o
   return cos_t * cos_dl - sin_t * sin_dl > cos_a;
 }
 
+bool SphereOutsideView(const f32 proj[7], const f32 v[3], f32 r)
+{
+  if (proj[0] != 0.f)
+    return false;
+  // Seen where -w <= m00 x + m02 z <= w (w = -z), and the same in y: the four side planes through
+  // the camera, with these normals (pointing out of the view).
+  const f32 planes[4][3] = {{proj[1], 0.f, proj[2] + 1.f}, {-proj[1], 0.f, 1.f - proj[2]},
+                            {0.f, proj[3], proj[4] + 1.f}, {0.f, -proj[3], 1.f - proj[4]}};
+  for (int i = 0; i < 4; i++)
+  {
+    const f32* n = planes[i];
+    const f32 len = Sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+    if (n[0] * v[0] + n[1] * v[1] + n[2] * v[2] > r * len)
+      return true;
+  }
+  return false;
+}
+
 void ViewEye(const f32 view[12], f32 eye[3], f32 fwd[3])
 {
   for (int k = 0; k < 3; k++)
