@@ -118,7 +118,7 @@ class PlanetGeneratorTest {
         for (int c = 0; c < g.cellCount(); c += g.layers) {
             Material m = p.material(c + top(p, c));
             if (m == Material.COBBLESTONE) sand++;
-            else assertEquals(Material.OBSIDIAN, m, "a cliff's top is the desert's stone");
+            else assertEquals(Material.STONE, m, "a cliff's top is the desert's stone");
             if (m != Material.COBBLESTONE) other++;
         }
         assertTrue(sand > 10 * other, sand + " sand, " + other + " cliffs");
@@ -176,6 +176,79 @@ class PlanetGeneratorTest {
         for (int c = 0; c < g.cellCount(); c += g.layers) if (water(p, c) > 0) wet++; else dry++;
         assertTrue(wet > dry && dry > 0, wet + " wet, " + dry + " dry");
         assertEquals(0, water(build(bp(48, 12, 6, "minecraft:ocean", 0)), 0) + water(build(bp(48, 12, 6, "minecraft:desert", 0)), 0));
+    }
+
+    /** Every block its own id (cells only, no VoxelPlanet: these are not CubeBlocks ids). */
+    private static final java.util.Map<String, Integer> UNIQUE = new java.util.HashMap<>();
+
+    private static int unique(String name) {
+        return UNIQUE.computeIfAbsent(name, k -> UNIQUE.size() + 1);
+    }
+
+    private static PlanetGenerator.Cells cells(PlanetBlueprint bp) {
+        return PlanetGenerator.cells(bp, waves(bp.seed()), TABLE, PlanetGeneratorTest::unique);
+    }
+
+    /** Index of the highest ground cell (not air, not water) in a column. */
+    private static int ground(PlanetGenerator.Cells c, int base) {
+        int k = c.grid().layers - 1;
+        while (k > 0 && (c.cells()[base + k] == Blocks.AIR || c.cells()[base + k] == unique("minecraft:water")
+                || c.cells()[base + k] == unique("minecraft:snow") || c.cells()[base + k] == unique("minecraft:ice"))) k--;
+        return k;
+    }
+
+    @Test void cavesOnlyCarveTheGroundAndNeverTheBedrock() {
+        PlanetBlueprint bp = bp(96, 16, 3, "minecraft:plains", 0).withWater(true);
+        PlanetGenerator.Cells solid = cells(bp.withUnderground(0, true, 0)), caves = cells(bp.withUnderground(60, true, 0));
+        int carved = 0, ground = 0;
+        for (int i = 0; i < solid.cells().length; i++) {
+            if (solid.cells()[i] != Blocks.AIR && solid.cells()[i] != unique("minecraft:water")) ground++;
+            if (solid.cells()[i] == caves.cells()[i]) continue;
+            assertEquals(Blocks.AIR, caves.cells()[i], "caves only take blocks away");
+            assertNotEquals(unique("minecraft:bedrock"), solid.cells()[i], "not the bedrock");
+            assertNotEquals(unique("minecraft:water"), solid.cells()[i], "not the water");
+            carved++;
+        }
+        assertTrue(carved > ground / 100, carved + " of " + ground + " carved");
+    }
+
+    @Test void withoutEntrancesAndUnderWaterTheRoofStays() {
+        PlanetBlueprint bp = bp(96, 16, 3, "minecraft:plains", 48).withWater(true);
+        PlanetGenerator.Cells solid = cells(bp.withUnderground(0, true, 0)), closed = cells(bp.withUnderground(100, false, 0)),
+                open = cells(bp.withUnderground(100, true, 0));
+        CubeSphere g = solid.grid();
+        int holes = 0;
+        for (int base = 0; base < solid.cells().length; base += g.layers) {
+            int top = ground(solid, base);
+            boolean wet = solid.cells()[base + top + 1] == unique("minecraft:water") || solid.cells()[base + top + 1] == unique("minecraft:ice");
+            for (int k = top - Underground.ROOF + 1; k <= top; k++) {
+                assertEquals(solid.cells()[base + k], closed.cells()[base + k], "a roof without entrances");
+                if (wet) assertEquals(solid.cells()[base + k], open.cells()[base + k], "a roof under water");
+            }
+            if (open.cells()[base + top] == Blocks.AIR) holes++;
+        }
+        assertTrue(holes > 0, "entrances open somewhere");
+    }
+
+    @Test void oresAtTheirDepthsDeepslateBelow() {
+        PlanetBlueprint bp = bp(96, 16, 5, "minecraft:plains", 0).withUnderground(0, true, 100);
+        PlanetGenerator.Cells c = cells(bp);
+        CubeSphere g = c.grid();
+        int deepTop = (c.depth() - 1) / 3;
+        java.util.Map<Integer, Integer> count = new java.util.HashMap<>();
+        for (int i = 0; i < c.cells().length; i++) {
+            count.merge((int) c.cells()[i], 1, Integer::sum);
+            int k = g.k(i);
+            if (c.cells()[i] == unique("minecraft:deepslate")) assertTrue(k <= deepTop, "deepslate only deep");
+            if (c.cells()[i] == unique("minecraft:diamond_ore") || c.cells()[i] == unique("minecraft:deepslate_diamond_ore"))
+                assertTrue(k <= c.depth() / 3 + 2, "diamonds by the bedrock, not at " + k);
+        }
+        for (String ore : List.of("coal", "iron", "diamond"))
+            assertTrue(count.getOrDefault(unique("minecraft:" + ore + "_ore"), 0) + count.getOrDefault(unique("minecraft:deepslate_" + ore + "_ore"), 0) > 0, ore);
+        assertTrue(count.getOrDefault(unique("minecraft:deepslate_diamond_ore"), 0) > count.getOrDefault(unique("minecraft:diamond_ore"), 0));
+        PlanetGenerator.Cells none = cells(bp.withUnderground(0, true, 0));
+        assertFalse(java.util.Arrays.equals(none.cells(), c.cells()));
+        for (char id : none.cells()) assertNotEquals(unique("minecraft:coal_ore"), (int) id);
     }
 
     @Test void blueprintsSavedBeforeAreLayered() {

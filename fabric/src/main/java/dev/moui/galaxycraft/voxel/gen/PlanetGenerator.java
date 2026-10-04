@@ -54,7 +54,14 @@ public final class PlanetGenerator {
         return cells(bp, noise, table, ids).planet(blocks);
     }
 
-    /** The cells alone: safe off the game's thread when ids only reads (see {@link BiomeSurface#blocks()}). */
+    /** Every block a generated planet can be made of: what ids must know. */
+    public static java.util.Set<String> blocks() {
+        java.util.Set<String> all = new java.util.TreeSet<>(BiomeSurface.blocks());
+        all.addAll(Underground.blocks());
+        return all;
+    }
+
+    /** The cells alone: safe off the game's thread when ids only reads (see {@link #blocks()}). */
     public static Cells cells(PlanetBlueprint bp, TerrainNoise noise, BiomeTable table, ToIntFunction<String> ids) {
         int radius = bp.radius(), air = bp.air(), depth = VoxelPlanet.groundDepth(radius);
         int n = VoxelPlanet.gridSize(radius);
@@ -75,26 +82,34 @@ public final class PlanetGenerator {
         int columns = 6 * n * n;
         int[] height = new int[columns];
         String[] biome = new String[columns];
-        for (int f = 0; f < 6; f++)
+        float[] dirs = new float[3 * columns];
+        Climate.Span fspan = span;
+        java.util.stream.IntStream.range(0, 6).parallel().forEach(f -> {
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++) {
                     int col = (f * n + i) * n + j;
                     Vector3d p = grid.dir(f, i, j).add(grid.dir(f, i + 1, j)).add(grid.dir(f, i, j + 1))
-                            .add(grid.dir(f, i + 1, j + 1)).normalize(radius);
+                            .add(grid.dir(f, i + 1, j + 1)).normalize();
+                    dirs[3 * col] = (float) p.x;
+                    dirs[3 * col + 1] = (float) p.y;
+                    dirs[3 * col + 2] = (float) p.z;
+                    p.mul(radius);
                     double tx = p.x * TERRAIN_SCALE, ty = p.y * TERRAIN_SCALE, tz = p.z * TERRAIN_SCALE;
                     double cx = p.x * climateScale, cy = p.y * climateScale, cz = p.z * climateScale;
-                    Climate c = span.map(new Climate(noise.value(Field.CONTINENTALNESS, tx, ty, tz),
+                    Climate c = fspan.map(new Climate(noise.value(Field.CONTINENTALNESS, tx, ty, tz),
                             noise.value(Field.EROSION, tx, ty, tz), noise.value(Field.RIDGES, tx, ty, tz),
                             noise.value(Field.TEMPERATURE, cx, cy, cz), noise.value(Field.HUMIDITY, cx, cy, cz)));
                     biome[col] = fixed != null ? fixed : table.find(c, water);
                     double h = TerrainShaper.height(c) * relief;
                     height[col] = (int) Math.round(h > 0 ? soft(h, air - 4) : -soft(-h, lowest));
                 }
+        });
 
         Map<String, int[]> palettes = new HashMap<>(); // cover, top, filler, stone ids by biome
         char[] cells = new char[grid.cellCount()];
         int bedrock = ids.applyAsInt("minecraft:bedrock"), waterId = ids.applyAsInt(BiomeSurface.WATER),
-                ice = ids.applyAsInt(BiomeSurface.ICE), sea = depth - 1;
+                ice = ids.applyAsInt(BiomeSurface.ICE), sea = depth - 1, stone = ids.applyAsInt(Underground.STONE),
+                deepslate = ids.applyAsInt(Underground.DEEPSLATE), deepslateTop = (depth - 1) / 3;
         for (int col = 0; col < columns; col++) {
             int[] pal = palettes.computeIfAbsent(biome[col], b -> {
                 BiomeSurface.Palette s = BiomeSurface.of(b);
@@ -106,14 +121,25 @@ public final class PlanetGenerator {
             cells[base] = (char) bedrock;
             for (int k = 1; k <= top; k++) {
                 int below = top - k;
-                cells[base + k] = (char) (below == 0 ? (steep ? pal[3] : wet ? pal[2] : pal[1])
-                        : below <= BiomeSurface.FILLER_DEPTH ? pal[2] : pal[3]);
+                int id = below == 0 ? (steep ? pal[3] : wet ? pal[2] : pal[1]) : below <= BiomeSurface.FILLER_DEPTH ? pal[2] : pal[3];
+                cells[base + k] = (char) (id == stone && k <= deepslateTop ? deepslate : id);
             }
             if (wet) {
                 for (int k = top + 1; k <= sea; k++) cells[base + k] = (char) waterId;
                 if (BiomeSurface.frozen(biome[col])) cells[base + sea] = (char) ice;
             } else if (!steep && top + 1 < grid.layers) cells[base + top + 1] = (char) pal[0];
         }
+        boolean[] keepRoof = new boolean[columns]; // wet, or beside water: caves there would drain it
+        for (int col = 0; col < columns; col++) {
+            if (!water || height[col] >= 0) continue;
+            keepRoof[col] = true;
+            for (int side = CubeSphere.I_MINUS; side <= CubeSphere.J_PLUS; side++) {
+                int nb = grid.neighbor(col * grid.layers, side);
+                if (nb >= 0) keepRoof[nb / grid.layers] = true;
+            }
+        }
+        Underground.carve(grid, depth, cells, height, dirs, keepRoof, noise, bp.caves(), bp.entrances(), radius);
+        Underground.ores(grid, depth, cells, height, bp.seed(), bp.ores(), ids);
         return new Cells(grid, depth, cells);
     }
 

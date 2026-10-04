@@ -16,7 +16,7 @@ public final class BiomeSurface {
     private static final Palette DEFAULT = new Palette(null, "minecraft:grass_block", "minecraft:dirt", "minecraft:stone");
     private static final Palette SNOWY = new Palette("minecraft:snow", "minecraft:grass_block[snowy=true]", "minecraft:dirt", "minecraft:stone");
     private static final Palette BADLANDS = new Palette(null, "minecraft:red_sand", "minecraft:terracotta", "minecraft:terracotta");
-    private static final Palette SANDY = new Palette(null, "minecraft:sand", "minecraft:sand", "minecraft:sandstone");
+    private static final Palette SANDY = new Palette(null, "minecraft:sand", "minecraft:sandstone", "minecraft:stone");
     private static final Palette GRAVELLY = new Palette(null, "minecraft:sand", "minecraft:gravel", "minecraft:stone");
     public static final String WATER = "minecraft:water", ICE = "minecraft:ice";
     private static final java.util.Set<String> FROZEN = java.util.Set.of("minecraft:frozen_ocean", "minecraft:deep_frozen_ocean",
@@ -24,7 +24,7 @@ public final class BiomeSurface {
             "minecraft:ice_spikes", "minecraft:grove", "minecraft:snowy_slopes", "minecraft:frozen_peaks", "minecraft:jagged_peaks");
     private static final Palette PODZOL = new Palette(null, "minecraft:podzol", "minecraft:dirt", "minecraft:stone");
     private static final Map<String, Palette> BY_BIOME = Map.ofEntries(
-            Map.entry("minecraft:desert", new Palette(null, "minecraft:sand", "minecraft:sandstone", "minecraft:sandstone")),
+            Map.entry("minecraft:desert", new Palette(null, "minecraft:sand", "minecraft:sandstone", "minecraft:stone")),
             Map.entry("minecraft:badlands", BADLANDS),
             Map.entry("minecraft:eroded_badlands", BADLANDS),
             Map.entry("minecraft:wooded_badlands", BADLANDS),
@@ -41,7 +41,7 @@ public final class BiomeSurface {
             Map.entry("minecraft:old_growth_spruce_taiga", PODZOL),
             Map.entry("minecraft:mangrove_swamp", new Palette(null, "minecraft:mud", "minecraft:mud", "minecraft:stone")),
             Map.entry("minecraft:beach", SANDY),
-            Map.entry("minecraft:snowy_beach", new Palette("minecraft:snow", "minecraft:sand", "minecraft:sand", "minecraft:sandstone")),
+            Map.entry("minecraft:snowy_beach", new Palette("minecraft:snow", "minecraft:sand", "minecraft:sandstone", "minecraft:stone")),
             Map.entry("minecraft:stony_shore", new Palette(null, "minecraft:stone", "minecraft:gravel", "minecraft:stone")),
             Map.entry("minecraft:river", SANDY),
             Map.entry("minecraft:frozen_river", SANDY),

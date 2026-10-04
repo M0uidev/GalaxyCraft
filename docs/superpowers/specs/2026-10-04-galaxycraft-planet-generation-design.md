@@ -159,3 +159,19 @@ swimming are a later stage.
   (sand). Frozen biomes (`BiomeSurface.frozen`) put ice on their water.
 - Loading any planet now schedules only fluid cells that can change (flowing, or next to air,
   a block without collision or the other fluid), so a still sea costs nothing.
+
+## Addendum 2026-10-04: caves and ores
+
+- Blueprint `caves` (0 none .. 100), `entrances` (caves open to the surface), `ores` (percent of
+  Minecraft's amount, 0..200). Missing → 0/false/0; new generated ones 50/true/100.
+- Caves (`Underground.carve`): a 3-octave Minecraft noise about 32 blocks across, sampled at each
+  ground cell with its radial offset stretched 1.6× (flatter caves), carved where above
+  `0.55 − 0.45·caves/100` (50% leaves 11–18% of the deep ground hollow on real noise). The top 3
+  blocks of ground are carved only with entrances on, and then need the noise 0.12 higher; columns
+  under or beside water always keep that roof. Bedrock and water are never carved. Faces run in
+  parallel: radius 256 with caves takes about 1.9 s.
+- Deepslate replaces stone in the lowest third of the crust. Sandy biomes have sandstone as
+  filler only, stone below, so they get ores too.
+- Ores (`Underground.ores`): veins (random walks through stone/deepslate) per 1000 crust cells:
+  coal 0.05–0.6 of the depth, copper 0.15–0.6, iron 0.2–0.9, lapis 0.5–1, gold 0.6–1, redstone
+  0.7–1, diamond 0.85–1 (0 the top, 1 the bedrock); the deepslate kind in deepslate.

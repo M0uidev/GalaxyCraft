@@ -12,8 +12,9 @@ import java.util.List;
  * bedrock that always seals the bottom; layers past the crust's depth are left out. Saved as JSON
  * by {@link BlueprintStore}; planets are built from it, never edited through it.
  */
-public record PlanetBlueprint(String name, int radius, int air, List<Layer> layers, Mode mode, long seed, String biome, int biomeSize, boolean water) {
-    public static final int MIN_AIR = 4, MAX_AIR = 64, MAX_THICKNESS = 64, MAX_LAYERS = 32, MAX_BIOME_SIZE = 512;
+public record PlanetBlueprint(String name, int radius, int air, List<Layer> layers, Mode mode, long seed, String biome, int biomeSize, boolean water,
+        int caves, boolean entrances, int ores) {
+    public static final int MIN_AIR = 4, MAX_AIR = 64, MAX_THICKNESS = 64, MAX_LAYERS = 32, MAX_BIOME_SIZE = 512, MAX_CAVES = 100, MAX_ORES = 200;
     /** The biome of a one-biome planet picked from its seed. */
     public static final String RANDOM = "random";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -25,7 +26,8 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
      * LAYERS: a smooth ball of the layers. GENERATED: terrain and blocks from Minecraft's noises and
      * a biome (voxel.gen), the layers unused; biomeSize 0 makes it all one biome, more mixes biomes
      * about that many blocks across; water fills what lies below the base surface (shallow seas,
-     * lakes; oceans and rivers among mixed biomes).
+     * lakes; oceans and rivers among mixed biomes); caves 0 (none) to 100 (many), opening to the
+     * surface with entrances; ores percent of Minecraft's amount.
      */
     public enum Mode { LAYERS, GENERATED }
 
@@ -36,7 +38,7 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
     }
 
     public PlanetBlueprint(String name, int radius, int air, List<Layer> layers) {
-        this(name, radius, air, layers, Mode.LAYERS, 0, RANDOM, 0, false);
+        this(name, radius, air, layers, Mode.LAYERS, 0, RANDOM, 0, false, 0, false, 0);
     }
 
     /** What /galaxycraft planet spawn makes: grass, two of dirt, stone. */
@@ -79,6 +81,8 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
         if (air < MIN_AIR || air > MAX_AIR) return "air not in " + MIN_AIR + ".." + MAX_AIR;
         if (biomeSize < 0 || biomeSize > MAX_BIOME_SIZE) return "biome size not in 0.." + MAX_BIOME_SIZE;
         if (biome.isBlank()) return "no biome";
+        if (caves < 0 || caves > MAX_CAVES) return "caves not in 0.." + MAX_CAVES;
+        if (ores < 0 || ores > MAX_ORES) return "ores not in 0.." + MAX_ORES;
         if (layers.isEmpty() || layers.size() > MAX_LAYERS) return "1 to " + MAX_LAYERS + " layers";
         for (Layer l : layers) {
             if (l.block() == null || l.block().isBlank()) return "a layer has no block";
@@ -109,19 +113,23 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
     }
 
     public PlanetBlueprint withMode(Mode m) {
-        return new PlanetBlueprint(name, radius, air, layers, m, seed, biome, biomeSize, water);
+        return new PlanetBlueprint(name, radius, air, layers, m, seed, biome, biomeSize, water, caves, entrances, ores);
     }
 
     public PlanetBlueprint withAir(int air) {
-        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize, water);
+        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize, water, caves, entrances, ores);
     }
 
     public PlanetBlueprint withBiome(long seed, String biome, int biomeSize) {
-        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize, water);
+        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize, water, caves, entrances, ores);
     }
 
     public PlanetBlueprint withWater(boolean water) {
-        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize, water);
+        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize, water, caves, entrances, ores);
+    }
+
+    public PlanetBlueprint withUnderground(int caves, boolean entrances, int ores) {
+        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize, water, caves, entrances, ores);
     }
 
     public String toJson() {

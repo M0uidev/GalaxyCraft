@@ -1,7 +1,6 @@
 package dev.moui.galaxycraft.client;
 
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
-import dev.moui.galaxycraft.voxel.gen.BiomeSurface;
 import dev.moui.galaxycraft.voxel.gen.PlanetGenerator;
 import dev.moui.galaxycraft.voxel.gen.TerrainNoise;
 import dev.moui.galaxycraft.GalaxyCraft;
@@ -106,7 +105,7 @@ public final class PlanetClient {
             return;
         }
         java.util.Map<String, Integer> ids = new java.util.HashMap<>();
-        for (String b : BiomeSurface.blocks()) ids.put(b, blocks.parse(b));
+        for (String b : PlanetGenerator.blocks()) ids.put(b, blocks.parse(b));
         TerrainNoise noise = gen.noise(bp.seed());
         say(player, "Generating " + bp.name() + "...");
         generating = java.util.concurrent.CompletableFuture.supplyAsync(() -> PlanetGenerator.cells(bp, noise, gen.biomes(), ids::get));

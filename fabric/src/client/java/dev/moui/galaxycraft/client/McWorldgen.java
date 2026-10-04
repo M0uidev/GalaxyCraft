@@ -44,7 +44,11 @@ public final class McWorldgen implements Worldgen {
         PositionalRandomFactory random = WorldgenRandom.Algorithm.XOROSHIRO.newInstance(seed).forkPositional();
         Noise[] n = {Noises.instantiate(noises, random, Noises.CONTINENTALNESS), Noises.instantiate(noises, random, Noises.EROSION),
                 Noises.instantiate(noises, random, Noises.RIDGE), Noises.instantiate(noises, random, Noises.TEMPERATURE),
-                Noises.instantiate(noises, random, Noises.VEGETATION)};
+                Noises.instantiate(noises, random, Noises.VEGETATION),
+                // Caves: two octaves of Minecraft's noise, about 32 blocks apart (its cave noises have
+                // many more octaves than a planet's thin crust needs, and cost as much).
+                NormalNoise.builder().setBaseOctave(-5).setOctaveCount(3).build()
+                        .create(random.fromHashOf(net.minecraft.resources.Identifier.fromNamespaceAndPath("galaxycraft", "caves")))};
         return (f, x, y, z) -> n[f.ordinal()].get(x, y, z);
     }
 

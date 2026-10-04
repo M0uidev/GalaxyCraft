@@ -79,9 +79,10 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
                 McWorldgen wg = PlanetClient.worldgen();
                 StringBuilder out = new StringBuilder();
                 for (Object[] c : new Object[][] {{"minecraft:desert", 32, 0, false}, {"minecraft:jagged_peaks", 64, 0, false},
-                        {"minecraft:plains", 96, 96, true}, {PlanetBlueprint.RANDOM, 48, 0, true}, {"minecraft:warm_ocean", 48, 0, true}}) {
+                        {"minecraft:plains", 96, 96, true}, {PlanetBlueprint.RANDOM, 48, 0, true}, {"minecraft:warm_ocean", 48, 0, true},
+                        {"minecraft:forest", 256, 0, true}}) {
                     PlanetBlueprint g = PlanetBlueprint.standard("gen", (int) c[1]).withAir(24)
-                            .withMode(PlanetBlueprint.Mode.GENERATED).withBiome(7, (String) c[0], (int) c[2]).withWater((boolean) c[3]);
+                            .withMode(PlanetBlueprint.Mode.GENERATED).withBiome(7, (String) c[0], (int) c[2]).withWater((boolean) c[3]).withUnderground(50, true, 100);
                     long t0 = System.nanoTime();
                     VoxelPlanet p = g.build(blocks, wg);
                     long ms = (System.nanoTime() - t0) / 1_000_000;
@@ -96,6 +97,7 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
                             for (int j = 0; j < n; j++) {
                                 int c0 = grid.index(f, i, j, 0), k = grid.layers - 1;
                                 while (k > 0 && (p.get(c0 + k) == 0 || blocks.name(p.get(c0 + k)).startsWith("minecraft:snow["))) k--;
+                                if (!blocks.name(p.get(c0)).equals("minecraft:bedrock")) throw new AssertionError(c[0] + ": no bedrock");
                                 String top = blocks.name(p.get(c0 + k));
                                 tops.merge(top.replaceAll("\\[.*", ""), 1, Integer::sum);
                                 lowest = Math.min(lowest, k);
@@ -106,13 +108,39 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
                                 int r = (int) ((rgb >> 16 & 255) * shade), gr = (int) ((rgb >> 8 & 255) * shade), b = (int) ((rgb & 255) * shade);
                                 img.setRGB(at[f][0] * n + i, at[f][1] * n + j, r << 16 | gr << 8 | b);
                             }
-                    if (lowest < 1) throw new AssertionError(c[0] + ": ground down to the bedrock");
                     if ((boolean) c[3] && p.fluids().tick()) throw new AssertionError(c[0] + ": its still water ticks");
                     try {
                         ImageIO.write(img, "png", Path.of("screenshots", "galaxycraft-gen-" + ((String) c[0]).replace("minecraft:", "") + "-" + c[1] + ".png").toFile());
                     } catch (java.io.IOException e) {
                         throw new AssertionError(e);
                     }
+                    // A slice through the center (the plane z = 0): caves and ores by their map colors.
+                    int R = (int) c[1] + 26;
+                    BufferedImage cut = new BufferedImage(2 * R, 2 * R, BufferedImage.TYPE_INT_RGB);
+                    Map<String, Integer> under = new TreeMap<>();
+                    for (int px = 0; px < 2 * R; px++)
+                        for (int py = 0; py < 2 * R; py++) {
+                            int cell = grid.cellAt(new org.joml.Vector3d(px - R + 0.5, R - py - 0.5, 0.25));
+                            int id = cell < 0 ? 0 : p.get(cell);
+                            net.minecraft.world.level.block.state.BlockState st = id == 0 ? null : blocks.state(id);
+                            cut.setRGB(px, py, st == null ? 0x101018 : st.getBlock().defaultMapColor().col);
+                        }
+                    int hollow = 0, solid = 0;
+                    for (int cell = 0; cell < grid.cellCount(); cell++) {
+                        int kk = grid.k(cell);
+                        if (kk > 0 && kk < p.depth - 4) {
+                            if (p.get(cell) == 0) hollow++;
+                            else solid++;
+                        }
+                        String name = blocks.name(p.get(cell));
+                        if (name.contains("_ore")) under.merge(name.replace("minecraft:", ""), 1, Integer::sum);
+                    }
+                    try {
+                        ImageIO.write(cut, "png", Path.of("screenshots", "galaxycraft-cut-" + ((String) c[0]).replace("minecraft:", "") + "-" + c[1] + ".png").toFile());
+                    } catch (java.io.IOException e) {
+                        throw new AssertionError(e);
+                    }
+                    out.append("  caves ").append(100 * hollow / Math.max(1, hollow + solid)).append("% of the deep ground, ores ").append(under).append('\n');
                     out.append(c[0]).append(" r").append(c[1]).append(" size ").append(c[2]).append(": ").append(ms).append(" ms, k ")
                             .append(lowest).append("..").append(highest).append(" of ").append(grid.layers).append(", depth ").append(p.depth)
                             .append(", tops ").append(tops).append('\n');
