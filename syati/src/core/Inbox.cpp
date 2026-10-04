@@ -52,8 +52,9 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   out->type = type;
   if (type == InboxRecord::PLANET)
   {
-    if (len != 36)
+    if (len != 36 && len != 40)
       return false;
+    out->planet.flags = len == 40 ? ReadBE32(p + 36) : 0;
     out->planet.id = ReadBE32(p);
     for (int k = 0; k < 3; k++)
       out->planet.center[k] = ReadF32(p + 4 + 4 * k);
@@ -71,13 +72,16 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
     if (len < HEAD)
       return false;
     InboxChunk& c = out->chunk;
-    c.slot = ReadBE32(p);
+    const u32 word = ReadBE32(p);
+    c.planet = word >> 24;
+    c.far = (word & CHUNK_FAR_VIEW) != 0;
+    c.slot = word & CHUNK_SLOT_MASK;
     c.version = ReadBE32(p + 4);
     c.dl_size = ReadBE32(p + 8);
     c.kcl_size = ReadBE32(p + 12);
     for (int k = 0; k < 4; k++)
       c.sphere[k] = ReadF32(p + 16 + 4 * k);
-    if (c.slot >= max_slots || c.dl_size % 32 != 0 || c.kcl_size % 4 != 0 || c.dl_size > len - HEAD ||
+    if (c.slot >= (c.far ? FAR_VIEW_PARTS : max_slots) || (c.far && c.kcl_size != 0) || c.dl_size % 32 != 0 || c.kcl_size % 4 != 0 || c.dl_size > len - HEAD ||
         c.kcl_size != len - HEAD - c.dl_size || (c.dl_size == 0 && c.kcl_size != 0))
       return false;
     c.dl = p + HEAD;
@@ -174,9 +178,10 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   }
   else if (type == InboxRecord::TELEPORT)
   {
-    if (len != 0 && len != 4)
+    if (len != 0 && len != 4 && len != 8)
       return false;
-    out->teleport.ground = len == 4 ? ReadF32(p) : 0.f;
+    out->teleport.ground = len >= 4 ? ReadF32(p) : 0.f;
+    out->teleport.planet = len == 8 ? ReadBE32(p + 4) : 0;
   }
   else
   {

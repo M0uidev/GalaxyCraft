@@ -216,12 +216,13 @@ static void TestInboxRecords()
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::PLANET);
   CHECK(r.planet.id == 7 && r.planet.center[2] == 3.f && r.planet.surface == 1280.f && r.planet.gravity_range == 4480.f &&
         r.planet.chunk_count == 162 && r.planet.occluder == 640.f &&
-        r.planet.mario_radius == 28.f);
+        r.planet.mario_radius == 28.f && r.planet.flags == 0);
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::CHUNK);
-  CHECK(r.chunk.slot == 5 && r.chunk.version == 2 && r.chunk.dl[0] == 0 && r.chunk.kcl[0] == 32 &&
+  CHECK(r.chunk.slot == 5 && r.chunk.planet == 0 && !r.chunk.far && r.chunk.version == 2 && r.chunk.dl[0] == 0 && r.chunk.kcl[0] == 32 &&
         r.chunk.sphere[1] == 20.f && r.chunk.sphere[3] == 99.f);
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::TELEPORT && r.teleport.ground == 0.f);
-  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::TELEPORT && r.teleport.ground == 1500.f);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::TELEPORT && r.teleport.ground == 1500.f &&
+        r.teleport.planet == 0);
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
   CHECK(off == b.size());
 }
@@ -257,6 +258,35 @@ static void TestInboxRejectsBadChunks()
   Put32(e, 103u << 16), Put32(e, 1000), Put32(e, 1);
   off = 0;
   CHECK(!NextInboxRecord(e.data(), e.size(), &off, 512, &r));  // longer than the inbox
+}
+
+// Several planets: a chunk's slot carries its planet's id in the top byte, a far view's part has
+// bit 23 set (its face below); a planet may come with flags (GONE); a teleport may name its planet.
+static void TestInboxPlanetIdsAndFarView()
+{
+  std::vector<u8> b;
+  Put32(b, 102u << 16), Put32(b, 40), Put32(b, 9), PutF(b, 1.f), PutF(b, 2.f), PutF(b, 3.f), PutF(b, 1280.f),
+      PutF(b, 4480.f), Put32(b, 0), PutF(b, 640.f), PutF(b, 28.f), Put32(b, 1);
+  Put32(b, 103u << 16), Put32(b, 32 + 32), Put32(b, (9u << 24) | 70000), Put32(b, 2), Put32(b, 32), Put32(b, 0);
+  PutF(b, 10.f), PutF(b, 20.f), PutF(b, 30.f), PutF(b, 99.f);
+  b.resize(b.size() + 32);
+  Put32(b, 103u << 16), Put32(b, 32 + 32), Put32(b, (9u << 24) | 0x800000u | 5), Put32(b, 3), Put32(b, 32), Put32(b, 0);
+  PutF(b, 10.f), PutF(b, 20.f), PutF(b, 30.f), PutF(b, 99.f);
+  b.resize(b.size() + 32);
+  Put32(b, 104u << 16), Put32(b, 8), PutF(b, 1500.f), Put32(b, 9);
+  InboxRecord r;
+  u32 off = 0;
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 131072, &r) && r.planet.id == 9 && r.planet.flags == 1 &&
+        r.planet.chunk_count == 0);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 131072, &r) && r.chunk.planet == 9 && !r.chunk.far &&
+        r.chunk.slot == 70000);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 131072, &r) && r.chunk.planet == 9 && r.chunk.far && r.chunk.slot == 5);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 131072, &r) && r.teleport.ground == 1500.f && r.teleport.planet == 9);
+  std::vector<u8> c;  // a far view has six parts
+  Put32(c, 103u << 16), Put32(c, 32), Put32(c, 0x800000u | 6), Put32(c, 1), Put32(c, 0), Put32(c, 0);
+  c.resize(c.size() + 16);
+  off = 0;
+  CHECK(!NextInboxRecord(c.data(), c.size(), &off, 131072, &r));
 }
 
 static void TestPlanetDropAndViewTranslate()
@@ -531,6 +561,7 @@ int main()
 {
   TestInboxRecords();
   TestInboxRejectsBadChunks();
+  TestInboxPlanetIdsAndFarView();
   TestPlanetDropAndViewTranslate();
   TestCodePatch();
   TestInboxOutline();

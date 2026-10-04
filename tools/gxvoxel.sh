@@ -7,6 +7,7 @@
 #   tools/gxvoxel.sh entities EntityTest instead: mobs, TNT and drops drawn by the game (entities-*.png)
 #   tools/gxvoxel.sh perf     PerfProbe instead: what each kind of planet costs the emulator (perf-*.png);
 #                             GXC_PERF_ARGS="-PperfOnly=caves -PperfRadius=128" narrows or changes it
+#   tools/gxvoxel.sh lod      LodProbe instead: a planet seen from 40 to 1200 blocks off (lod-*.png)
 #   tools/gxvoxel.sh walk     WalkProbe instead: Mario walks where the camera looks, also while it turns
 set -u
 : "${JAVA_HOME:=$(ls -d "$HOME"/.local/opt/jdk-25* 2>/dev/null | head -1)}"
@@ -17,6 +18,7 @@ if [ "${1:-}" = held ]; then TEST=HeldItemTest PROP=galaxycraftHeld TAG=held
 elif [ "${1:-}" = entities ]; then TEST=EntityTest PROP=galaxycraftEntities TAG=entities
 elif [ "${1:-}" = perf ]; then TEST=PerfProbe PROP=galaxycraftPerf TAG=perf
 elif [ "${1:-}" = walk ]; then TEST=WalkProbe PROP=galaxycraftWalk TAG=walk
+elif [ "${1:-}" = lod ]; then TEST=LodProbe PROP=galaxycraftLod TAG=lod
 else TEST=VoxelPlanetTest PROP=galaxycraftVoxel TAG=voxel; fi
 # GXC_SAV=<savestate> starts from another one instead (made with the current module; not remade).
 SAV="${GXC_SAV:-$HOME/.local/share/galaxycraft-dev/voxel-intro.sav}"
@@ -45,7 +47,7 @@ $G ctl "load $SAV" --wait 60 | grep -q "ok load" || fail "load $SAV"
 sleep 2
 
 echo "gxvoxel: running $TEST (log: $LOG)"
-(cd fabric && ./gradlew runClientGameTest -P$PROP ${GXC_PERF_ARGS:-} --console=plain) > "$LOG" 2>&1
+(cd fabric && ./gradlew runClientGameTest -P$PROP ${GXC_PERF_ARGS:-} ${GXC_ARGS:-} --console=plain) > "$LOG" 2>&1
 grep "\[GalaxyCraft $TAG\]" "$LOG"
 grep -q "\[GalaxyCraft $TAG\] PASS" "$LOG" || fail "$TEST (see $LOG)"
 [ -n "${GXC_KEEP:-}" ] || $G stop > /dev/null

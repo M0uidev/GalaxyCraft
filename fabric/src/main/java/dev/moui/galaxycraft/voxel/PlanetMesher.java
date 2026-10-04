@@ -276,7 +276,7 @@ public final class PlanetMesher {
     }
 
     /** The sun on a face: its normal against SUN, over the ambient light. */
-    private static double sun(Vector3d[] q) {
+    static double sun(Vector3d[] q) {
         Vector3d n = new Vector3d(q[2]).sub(q[0]).cross(new Vector3d(q[3]).sub(q[1]));
         if (n.lengthSquared() < 1e-18) return AMBIENT;
         n.normalize();

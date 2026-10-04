@@ -46,12 +46,37 @@ struct Slot
 // .pa with no fields and one entry: every triangle gets attribute 0 (plain ground).
 __attribute__((aligned(32))) u8 gPa[20] = {0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 4, 0, 0, 0, 0};
 
-// One slot per chunk of the planet (GxcPlanet.chunk_count), and the slots that have something to
+// A part of a planet's far view (one face of its cube, PlanetLod): drawn instead of its chunks
+// when the camera is far.
+struct FarPart
+{
+  u32 version;
+  u8* dl;  // 32-byte aligned, positions in whole units from the planet's center
+  u32 dl_size;
+  f32 sphere[4];
+};
+
+// The planets of the scene, by the mod's id (0: an unused entry). Each has one slot per chunk
+// (GxcPlanet.chunk_count, 0 if it comes only as its far view) and the slots that have something to
 // draw, so drawing does not walk a big planet's empty chunks.
-Slot* gSlots = 0;
-u32 gSlotCount = 0;
-u32* gDrawn = 0;
-u32 gDrawnCount = 0;
+const u32 MAX_PLANETS = 8;
+struct Planet
+{
+  u32 id;
+  f32 center[3];
+  f32 surface, occluder, mario_radius;
+  PointGravity* gravity;
+  Slot* slots;
+  u32 slot_count;
+  u32* drawn;
+  u32 drawn_count;
+  u32 parts;  // collision parts alive
+  FarPart far[gxc::FAR_VIEW_PARTS];
+};
+Planet gPlanets[MAX_PLANETS];
+// The camera is this far above a planet's surface (or its radius, if more), galaxy units, or
+// farther: its far view is drawn instead of its chunks.
+const f32 FAR_VIEW_ABOVE = 96.f * 80.f;
 
 // Replaced chunks' memory is freed a few frames later: Mario's binder may still read the last
 // triangle it stood on.
@@ -240,12 +265,9 @@ class VoxelPlanetActor : public LiveActor
 {
 public:
   VoxelPlanetActor()
-      : LiveActor("GxcVoxelPlanet"), mGravity(0), mPlanet(0), mParts(0), mOutlineOn(false), mOutlineNext(0),
-        mOutlineDraw(0)
+      : LiveActor("GxcVoxelPlanet"), mOutlineOn(false), mOutlinePlanet(0), mOutlineNext(0), mOutlineDraw(0)
   {
     mOutlineDl[0] = mOutlineDl[1] = 0;
-    mCenter[0] = mCenter[1] = mCenter[2] = 0.f;
-    mSurface = mOccluder = mMarioRadius = 0.f;
   }
 
   virtual void init(const JMapInfoIter&)
@@ -254,12 +276,25 @@ public:
     MR::addHitSensorMapObj(this, "body", 8, 0.f, TVec3f(0.f, 0.f, 0.f));
     MR::connectToScene(this, 0x21, -1, -1, 0x0E);  // MovementType_MapObj, DrawType_ElectricRail
     MR::invalidateClipping(this);
-    mGravity = new PointGravity();
-    mGravity->mRange = 1.f;  // off until a planet arrives
-    mGravity->mPriority = 100;
-    mGravity->updateIdentityMtx();
-    MR::registerGravity(mGravity);
+    for (u32 i = 0; i < MAX_PLANETS; i++)
+    {
+      PointGravity* g = new PointGravity();
+      g->mRange = 1.f;  // off until a planet arrives
+      g->mPriority = 100;
+      g->updateIdentityMtx();
+      MR::registerGravity(g);
+      gPlanets[i].gravity = g;
+    }
     makeActorAppeared();
+  }
+
+  // The planet with this id (0: the first there is), or null.
+  static Planet* Find(u32 id)
+  {
+    for (u32 i = 0; i < MAX_PLANETS; i++)
+      if (gPlanets[i].id && (id == 0 || gPlanets[i].id == id))
+        return &gPlanets[i];
+    return 0;
   }
 
   void Apply(const gxc::InboxRecord& r)
@@ -267,22 +302,15 @@ public:
     gVoxelStats.records++;
     if (r.type == gxc::InboxRecord::PLANET)
     {
-      if (r.planet.id != mPlanet || r.planet.chunk_count != gSlotCount)
-        NewSlots(r.planet.id ? r.planet.chunk_count : 0);
-      mPlanet = r.planet.id;
-      for (int k = 0; k < 3; k++)
-        mCenter[k] = r.planet.center[k];
-      mSurface = r.planet.surface;
-      mOccluder = r.planet.occluder;
-      mMarioRadius = r.planet.mario_radius;
-      mGravity->mLocalPos = TVec3f(mCenter[0], mCenter[1], mCenter[2]);
-      mGravity->mRange = mPlanet ? r.planet.gravity_range : 1.f;
-      mGravity->updateIdentityMtx();
-      mTranslation = mGravity->mLocalPos;
+      ApplyPlanet(r.planet);
     }
-    else if (r.type == gxc::InboxRecord::CHUNK && mPlanet && r.chunk.slot < gSlotCount)
+    else if (r.type == gxc::InboxRecord::CHUNK)
     {
-      Replace(r.chunk);
+      Planet* p = Find(r.chunk.planet);
+      if (p && r.chunk.far)
+        ReplaceFar(*p, r.chunk);
+      else if (p && r.chunk.slot < p->slot_count)
+        Replace(*p, r.chunk);
     }
     else if (r.type == gxc::InboxRecord::OUTLINE)
     {
@@ -316,34 +344,94 @@ public:
     {
       EntityDrawHurt(r.hurt);
     }
-    else if (r.type == gxc::InboxRecord::TELEPORT && mPlanet)
+    else if (r.type == gxc::InboxRecord::TELEPORT)
     {
+      const Planet* p = Find(r.teleport.planet);
+      if (!p)
+        return;
       const TVec3f* mario = MR::getPlayerPos();
       const f32 m[3] = {mario->x, mario->y, mario->z};
       f32 to[3];
       // Onto the ground under him (a hill, something built), not into it.
-      gxc::PlanetDrop(mCenter, r.teleport.ground > 0.f ? r.teleport.ground : mSurface, DROP_ABOVE, m, to);
+      gxc::PlanetDrop(p->center, r.teleport.ground > 0.f ? r.teleport.ground : p->surface, DROP_ABOVE, m, to);
       MR::setPlayerPos(TVec3f(to[0], to[1], to[2]));
     }
   }
 
+  // id 0 drops every planet; GONE drops that one; otherwise it is new or changed (a chunk_count of
+  // 0 keeps only its far view).
+  void ApplyPlanet(const gxc::InboxPlanet& in)
+  {
+    if (in.id == 0 || (in.flags & gxc::PLANET_GONE))
+    {
+      for (u32 i = 0; i < MAX_PLANETS; i++)
+        if (gPlanets[i].id && (in.id == 0 || gPlanets[i].id == in.id))
+          Drop(gPlanets[i]);
+      return;
+    }
+    Planet* p = Find(in.id);
+    for (u32 i = 0; !p && i < MAX_PLANETS; i++)
+      if (!gPlanets[i].id)
+        p = &gPlanets[i];
+    if (!p)
+    {
+      gVoxelStats.alloc_failed++;
+      return;
+    }
+    p->id = in.id;
+    if (in.chunk_count != p->slot_count)
+      NewSlots(*p, in.chunk_count);
+    for (int k = 0; k < 3; k++)
+      p->center[k] = in.center[k];
+    p->surface = in.surface;
+    p->occluder = in.occluder;
+    p->mario_radius = in.mario_radius;
+    p->gravity->mLocalPos = TVec3f(p->center[0], p->center[1], p->center[2]);
+    p->gravity->mRange = in.gravity_range;
+    p->gravity->updateIdentityMtx();
+    mTranslation = p->gravity->mLocalPos;
+  }
+
+  void Drop(Planet& p)
+  {
+    NewSlots(p, 0);
+    for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
+    {
+      Bury(p.far[f].dl);
+      p.far[f].dl = 0;
+      p.far[f].dl_size = 0;
+      p.far[f].version = 0;
+    }
+    p.gravity->mRange = 1.f;
+    p.gravity->updateIdentityMtx();
+    if (mOutlinePlanet == p.id)
+      mOutlineOn = false;
+    p.id = 0;
+  }
+
   bool MarioRadius(const f32 pos[3], f32* radius) const
   {
-    if (!mPlanet || mMarioRadius <= 0.f)
-      return false;
-    const f32 d[3] = {pos[0] - mCenter[0], pos[1] - mCenter[1], pos[2] - mCenter[2]};
-    const f32 range = mGravity->mRange;
-    const f32 dist2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
-    if (dist2 > range * range)
-      return false;
-    // The cells narrow toward the center (a cell at 3/4 of the radius is 3/4 as wide): so does he.
-    const f32 dist = gxc::Sqrt(dist2);
-    *radius = dist < mSurface ? mMarioRadius * dist / mSurface : mMarioRadius;
-    return true;
+    for (u32 i = 0; i < MAX_PLANETS; i++)
+    {
+      const Planet& p = gPlanets[i];
+      if (!p.id || p.mario_radius <= 0.f)
+        continue;
+      const f32 d[3] = {pos[0] - p.center[0], pos[1] - p.center[1], pos[2] - p.center[2]};
+      const f32 range = p.gravity->mRange;
+      const f32 dist2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+      if (dist2 > range * range)
+        continue;
+      // The cells narrow toward the center (a cell at 3/4 of the radius is 3/4 as wide): so does he.
+      const f32 dist = gxc::Sqrt(dist2);
+      *radius = dist < p.surface ? p.mario_radius * dist / p.surface : p.mario_radius;
+      return true;
+    }
+    return false;
   }
 
   // The outline's 12 edges as a display list of lines (vertex format 6: f32 positions from the
-  // planet's center). Two, used in turn: the GPU may still be reading last frame's.
+  // planet's center). Two, used in turn: the GPU may still be reading last frame's. visible is the
+  // planet's id (0: none).
   void SetOutline(const gxc::InboxOutline& o)
   {
     mOutlineOn = false;
@@ -370,17 +458,42 @@ public:
     DCFlushRange(dl, OUTLINE_DL_BYTES);
     mOutlineDraw = dl;
     mOutlineNext ^= 1;
+    mOutlinePlanet = o.visible;
     mOutlineOn = true;
   }
 
-  void Replace(const gxc::InboxChunk& c)
+  void ReplaceFar(Planet& p, const gxc::InboxChunk& c)
   {
-    Slot& s = gSlots[c.slot];
+    FarPart& f = p.far[c.slot];
+    if (c.version <= f.version)
+      return;
+    u8* dl = c.dl_size ? Alloc32(c.dl_size) : 0;
+    if (c.dl_size && !dl)
+    {
+      gVoxelStats.alloc_failed++;
+      return;
+    }
+    Bury(f.dl);
+    f.version = c.version;
+    f.dl = dl;
+    f.dl_size = c.dl_size;
+    for (int k = 0; k < 4; k++)
+      f.sphere[k] = c.sphere[k];
+    if (dl)
+    {
+      memcpy(dl, c.dl, c.dl_size);
+      DCFlushRange(dl, c.dl_size);
+    }
+  }
+
+  void Replace(Planet& p, const gxc::InboxChunk& c)
+  {
+    Slot& s = p.slots[c.slot];
     gVoxelStats.last_slot = c.slot;
     gVoxelStats.last_version = c.version;
     if (c.version <= s.version)
       return;
-    Free(s);
+    Free(p, s);
     s.version = c.version;
     for (int k = 0; k < 4; k++)
       s.sphere[k] = c.sphere[k];
@@ -400,8 +513,8 @@ public:
     DCFlushRange(dl, c.dl_size);
     s.dl = dl;
     s.dl_size = c.dl_size;
-    s.drawn = gDrawnCount;
-    gDrawn[gDrawnCount++] = c.slot;
+    s.drawn = p.drawn_count;
+    p.drawn[p.drawn_count++] = c.slot;
     if (kcl && !MainZoneReady())
     {
       gVoxelStats.no_zone++;
@@ -413,7 +526,7 @@ public:
       memcpy(kcl, c.kcl, c.kcl_size);
       s.kcl = kcl;
       TPos3f m;
-      Identity(&m, mCenter);
+      Identity(&m, p.center);
       s.parts = new CollisionParts();
       // init files the part under the zone being placed, which outside of a stage's placement is
       // stale (a zone with no collision: null); the planet belongs to the main zone.
@@ -423,26 +536,35 @@ public:
       setCurrentPlacementZoneId__2MRFl(zone);
       validateCollisionParts__2MRFP14CollisionParts(s.parts);
       gVoxelStats.parts_made++;
-      mParts++;
+      p.parts++;
     }
-    gVoxelStats.chunks = gDrawnCount;
-    gVoxelStats.parts_live = mParts;
+    CountStats();
+  }
+
+  static void CountStats()
+  {
+    u32 chunks = 0, parts = 0;
+    for (u32 i = 0; i < MAX_PLANETS; i++)
+      if (gPlanets[i].id)
+        chunks += gPlanets[i].drawn_count, parts += gPlanets[i].parts;
+    gVoxelStats.chunks = chunks;
+    gVoxelStats.parts_live = parts;
   }
 
   // The old collision part leaves every zone and stays allocated (a few hundred bytes); its KCL
   // and display list are freed a few frames later.
-  void Free(Slot& s)
+  void Free(Planet& p, Slot& s)
   {
     if (s.parts)
     {
       invalidateCollisionParts__2MRFP14CollisionParts(s.parts);
-      mParts--;
+      p.parts--;
     }
     if (s.dl)
     {
-      const u32 last = gDrawn[--gDrawnCount];
-      gDrawn[s.drawn] = last;
-      gSlots[last].drawn = s.drawn;
+      const u32 last = p.drawn[--p.drawn_count];
+      p.drawn[s.drawn] = last;
+      p.slots[last].drawn = s.drawn;
     }
     Bury(s.dl);
     Bury(s.kcl);
@@ -451,37 +573,41 @@ public:
     s.dl_size = 0;
   }
 
-  void NewSlots(u32 count)
+  void NewSlots(Planet& p, u32 count)
   {
-    for (u32 i = 0; i < gSlotCount; i++)
-      Free(gSlots[i]);
-    if (gSlots)
-      operator delete(gSlots);
-    if (gDrawn)
-      operator delete(gDrawn);
-    gSlots = 0;
-    gDrawn = 0;
-    gSlotCount = gDrawnCount = 0;
+    for (u32 i = 0; i < p.slot_count; i++)
+      Free(p, p.slots[i]);
+    if (p.slots)
+      operator delete(p.slots);
+    if (p.drawn)
+      operator delete(p.drawn);
+    p.slots = 0;
+    p.drawn = 0;
+    p.slot_count = p.drawn_count = 0;
+    CountStats();
     if (count == 0)
       return;
-    gSlots = reinterpret_cast<Slot*>(Alloc32(count * sizeof(Slot)));
-    gDrawn = reinterpret_cast<u32*>(Alloc32(count * sizeof(u32)));
-    if (!gSlots || !gDrawn)
+    p.slots = reinterpret_cast<Slot*>(Alloc32(count * sizeof(Slot)));
+    p.drawn = reinterpret_cast<u32*>(Alloc32(count * sizeof(u32)));
+    if (!p.slots || !p.drawn)
     {
       gVoxelStats.alloc_failed++;
-      Bury(gSlots);
-      Bury(gDrawn);
-      gSlots = 0;
-      gDrawn = 0;
+      Bury(p.slots);
+      Bury(p.drawn);
+      p.slots = 0;
+      p.drawn = 0;
       return;
     }
-    memset(gSlots, 0, count * sizeof(Slot));
-    gSlotCount = count;
+    memset(p.slots, 0, count * sizeof(Slot));
+    p.slot_count = count;
   }
 
   virtual void draw() const
   {
-    if (!mPlanet)
+    bool any = false;
+    for (u32 i = 0; i < MAX_PLANETS; i++)
+      any = any || gPlanets[i].id;
+    if (!any)
       return;
     // The camera's projection: this draw type runs after screen passes (bloom, in the Starship)
     // that leave another projection loaded, and the planet would land off screen.
@@ -489,7 +615,7 @@ public:
     // That projection's sides: chunks wholly beside the view are not drawn.
     f32 proj[7];
     GXGetProjectionv(proj);
-    if (gDrawnCount == 0 || !gAtlas.ready)
+    if (!gAtlas.ready)
     {
       if (gHitboxOn)
         DrawHitbox();
@@ -500,10 +626,14 @@ public:
     GXSetVtxDesc(GX_VA_CLR0, GX_DIRECT);
     GXSetVtxDesc(GX_VA_TEX0, GX_DIRECT);
     // Positions: s16 with 3 fraction bits from the chunk's center (PlanetMesher), color RGB565,
-    // texture coordinates u16 with 15 fraction bits (a texel of a 1024-wide atlas is 32).
+    // texture coordinates u16 with 15 fraction bits (a texel of a 1024-wide atlas is 32). A far
+    // view's (format 5): whole units from the planet's center (PlanetLod).
     GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_POS, GX_POS_XYZ, GX_S16, 3);
     GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
     GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_TEX0, GX_TEX_ST, GX_U16, 15);
+    GXSetVtxAttrFmt(GX_VTXFMT5, GX_VA_POS, GX_POS_XYZ, GX_S16, 0);
+    GXSetVtxAttrFmt(GX_VTXFMT5, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
+    GXSetVtxAttrFmt(GX_VTXFMT5, GX_VA_TEX0, GX_TEX_ST, GX_U16, 15);
     GXSetNumChans(1);
     GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_VTX, 0, GX_DF_NONE, GX_AF_NONE);
     GXSetNumTexGens(1);
@@ -543,24 +673,63 @@ public:
       for (int c = 0; c < 4; c++)
         view[4 * r + c] = cam[r][c];
     GXSetCurrentMtx(GX_PNMTX0);
+    u32 drawn = 0, far = 0;
+    for (u32 i = 0; i < MAX_PLANETS; i++)
+      if (gPlanets[i].id)
+        DrawPlanet(gPlanets[i], view, proj, &drawn, &far);
+    gVoxelStats.drawn_last = drawn;
+    gVoxelStats.far_drawn = far;
+    GXSetZCompLoc(GX_TRUE);
+    GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+    const Planet* outlined = mOutlineOn ? Find(mOutlinePlanet) : 0;
+    if (outlined)
+      DrawOutline(view, outlined->center);
+    if (gHitboxOn)
+      DrawHitbox();
+  }
 
-    // The camera in the planet's frame: chunks behind it, past the horizon or beside the view are skipped. The
-    // bedrock shell (unbreakable) is the ball that hides them.
+  // Its chunks, or its far view when the camera is far from it (or it has no chunks yet).
+  static void DrawPlanet(const Planet& p, const f32 view[12], const f32 proj[7], u32* drawn, u32* far)
+  {
+    // The camera in the planet's frame: chunks behind it, past the horizon or beside the view are
+    // skipped. The bedrock shell (unbreakable) is the ball that hides them.
     // From the view matrix this frame draws with (in first person GalaxyCraft's, not the game
     // camera's): position -Rᵀt, forward -(third row), as GX cameras look down -z.
     f32 eye[3], fwd[3];
     gxc::ViewEye(view, eye, fwd);
-    eye[0] -= mCenter[0], eye[1] -= mCenter[1], eye[2] -= mCenter[2];
+    eye[0] -= p.center[0], eye[1] -= p.center[1], eye[2] -= p.center[2];
     const f32 origin[3] = {0.f, 0.f, 0.f};
     // The planet's matrix once, each chunk's from it: chunk centers are whole units from the
     // planet's center, so neighbors' shared corners come out of the same math and leave no seams.
     f32 planet[12];
-    gxc::ViewTranslate(view, mCenter, planet);
-    u32 drawn = 0;
-    for (u32 i = 0; i < gDrawnCount; i++)
+    gxc::ViewTranslate(view, p.center, planet);
+    bool hasFar = false;
+    for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
+      hasFar = hasFar || p.far[f].dl;
+    const f32 above = gxc::Sqrt(eye[0] * eye[0] + eye[1] * eye[1] + eye[2] * eye[2]) - p.surface;
+    const f32 farAt = p.surface > FAR_VIEW_ABOVE ? p.surface : FAR_VIEW_ABOVE;
+    if (hasFar && (p.drawn_count == 0 || above > farAt))
     {
-      const Slot& s = gSlots[gDrawn[i]];
-      if (gxc::SphereHidden(eye, fwd, origin, mOccluder, s.sphere, s.sphere[3]))
+      GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(planet), GX_PNMTX0);
+      for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
+      {
+        const FarPart& part = p.far[f];
+        if (!part.dl || gxc::SphereHidden(eye, fwd, origin, p.occluder, part.sphere, part.sphere[3]))
+          continue;
+        f32 pos[12];
+        gxc::ViewTranslate(planet, part.sphere, pos);
+        const f32 at[3] = {pos[3], pos[7], pos[11]};
+        if (gxc::SphereOutsideView(proj, at, part.sphere[3]))
+          continue;
+        GXCallDisplayList(part.dl, part.dl_size);
+        (*far)++;
+      }
+      return;
+    }
+    for (u32 i = 0; i < p.drawn_count; i++)
+    {
+      const Slot& s = p.slots[p.drawn[i]];
+      if (gxc::SphereHidden(eye, fwd, origin, p.occluder, s.sphere, s.sphere[3]))
         continue;
       // Each chunk's vertices are relative to its own center.
       f32 pos[12];
@@ -570,15 +739,8 @@ public:
         continue;
       GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(pos), GX_PNMTX0);
       GXCallDisplayList(s.dl, s.dl_size);
-      drawn++;
+      (*drawn)++;
     }
-    gVoxelStats.drawn_last = drawn;
-    GXSetZCompLoc(GX_TRUE);
-    GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
-    if (mOutlineOn)
-      DrawOutline(view);
-    if (gHitboxOn)
-      DrawHitbox();
   }
 
   // Mario's hitbox (gHitbox), seen through the blocks: what he collides with is what he touches.
@@ -691,7 +853,7 @@ public:
   }
 
   // Minecraft's block outline: thin translucent black lines, hidden behind what is in front.
-  void DrawOutline(const f32 view[12]) const
+  void DrawOutline(const f32 view[12], const f32 center[3]) const
   {
     GXClearVtxDesc();
     GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
@@ -708,20 +870,14 @@ public:
     GXSetCullMode(GX_CULL_NONE);
     GXSetLineWidth(12, GX_TO_ZERO);  // sixths of a pixel
     f32 pos[12];
-    gxc::ViewTranslate(view, mCenter, pos);
+    gxc::ViewTranslate(view, center, pos);
     GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(pos), GX_PNMTX0);
     GXCallDisplayList(mOutlineDraw, OUTLINE_DL_BYTES);
   }
 
-  PointGravity* mGravity;
-  u32 mPlanet;
-  u32 mParts;
-  f32 mCenter[3];
-  f32 mSurface;
-  f32 mOccluder;
-  f32 mMarioRadius;
   static const u32 OUTLINE_DL_BYTES = 320;  // 3 + 24 * 12, padded to 32
   bool mOutlineOn;
+  u32 mOutlinePlanet;
   u32 mOutlineNext;
   u8* mOutlineDl[2];
   u8* mOutlineDraw;
@@ -733,9 +889,7 @@ VoxelStats gVoxelStats;
 void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size)
 {
   // A new scene: the old one's heap (chunks, parts, inbox) is gone, so forget it, don't free it.
-  gSlots = 0;
-  gDrawn = 0;
-  gSlotCount = gDrawnCount = 0;
+  memset(gPlanets, 0, sizeof(gPlanets));
   gHitboxDl[0] = gHitboxDl[1] = 0;
   gHitboxOn = false;
   memset(gGraves, 0, sizeof(gGraves));

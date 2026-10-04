@@ -183,7 +183,8 @@ enum {
   /* Voxel planet, forwarded by the host to the module's inbox (GxcMailbox.inbox_addr). */
   GXC_MSG_PLANET = 102,    /* GxcPlanet */
   GXC_MSG_CHUNK = 103,     /* GxcChunk + display list + KCL (both big-endian already) */
-  GXC_MSG_PLANET_TP = 104, /* f32 big-endian: Mario onto the ground at this radius (none: the surface) */
+  GXC_MSG_PLANET_TP = 104, /* f32 big-endian: Mario onto the ground at this radius (none: the surface),
+                              then u32 big-endian: the planet's id (none: the first one) */
   GXC_MSG_OUTLINE = 105,   /* GxcOutline: the block the player can act on */
   GXC_MSG_HELD = 106,      /* GxcHeld: what the player holds, drawn in Steve's right hand */
   GXC_MSG_ATLAS = 107,     /* GxcAtlas + data: a piece of the block atlas */
@@ -211,8 +212,14 @@ typedef struct {
   /* uint8_t data[]; up to GXC_KCL_CHUNK_MAX */
 } GxcKclChunk;
 
+/*
+ * Several planets per scene (8 at most), each by its id (1..255). A GxcPlanet may be followed by a
+ * big-endian u32 of GXC_PLANET_* flags (the host passes it on as is). chunk_count 0: only its far
+ * view, no chunks.
+ */
+#define GXC_PLANET_GONE 1u /* this planet (planet_id) leaves the scene */
 typedef struct {
-  uint32_t planet_id; /* 0: no planet (the module drops it) */
+  uint32_t planet_id; /* 0: no planet (the module drops them all) */
   float center[3];    /* galaxy units */
   float surface;      /* radius of the surface, galaxy units */
   float gravity_range; /* radius of its point gravity, galaxy units */
@@ -225,8 +232,14 @@ typedef struct {
  * Positions in the display list and the KCL are relative to the planet's center. A chunk far from
  * Mario comes without KCL (drawn only): the game's collision zones hold 512 parts at most.
  */
+/*
+ * slot: the planet's id in the top byte; with GXC_CHUNK_FAR_VIEW a part of its far view (a whole
+ * face of its cube, drawn instead of its chunks from afar: positions in whole units from the
+ * planet's center, GX vertex format 5, no KCL) and the face (0..5) below; else the chunk's index.
+ */
+#define GXC_CHUNK_FAR_VIEW 0x800000u
 typedef struct {
-  uint32_t slot;    /* chunk index */
+  uint32_t slot;    /* planet id << 24 | chunk index (or GXC_CHUNK_FAR_VIEW | face) */
   uint32_t version; /* newer replaces older */
   uint32_t dl_size; /* bytes, multiple of 32; 0: the chunk is empty (no KCL either) */
   uint32_t kcl_size; /* 0: no collision */
@@ -239,7 +252,7 @@ typedef struct {
  * Minecraft's block outline. Corners relative to the planet's center, galaxy units, in the order
  * (di, dj, dk) = (m & 1, m >> 1 & 1, m >> 2) for m = 0..7. */
 typedef struct {
-  uint32_t visible; /* 0: none */
+  uint32_t visible; /* the planet's id: corners from its center; 0: none */
   float corners[8][3];
 } GxcOutline;
 

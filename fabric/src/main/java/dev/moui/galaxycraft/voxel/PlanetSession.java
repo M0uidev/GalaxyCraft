@@ -46,6 +46,18 @@ public final class PlanetSession {
     public static final double MARIO_RADIUS = marioRadius(System.getProperty("galaxycraft.marioRadius"));
     /** In the chunk queue: the teleport, once the chunks before it are out. */
     private static final int TP_MARK = -1;
+    /**
+     * A planet's id in the game (GxcPlanet.planet_id): 1..255, as a chunk's slot word carries it in
+     * its top byte; each live session holds one, and a freed one is not given out again right away
+     * (the game may still hold chunks of it).
+     */
+    private static final BitSet usedIds = new BitSet();
+    private static int lastId;
+    /** The slot word of a part of the far view (its face below). */
+    static final int FAR_VIEW = 0x800000;
+    static final int PLANET_GONE = 1;
+    /** Updates between sending again the faces of the far view that edits changed. */
+    static final int FAR_UPDATES = 40;
 
     private final double unitsPerBlock;
     private Blocks blocks = CubeBlocks.INSTANCE;
@@ -56,12 +68,24 @@ public final class PlanetSession {
     private BitSet near = new BitSet();    // chunks with collision (wanted)
     private BitSet withKcl = new BitSet(); // chunks sent with collision
     private Msg built;
+    private boolean builtFar; // built is a part of the far view (farPending's first)
     private int builtChunk = -1;
     private boolean builtStale; // edited again while its message waited for room
     private VoxelPlanet planet;
     private Vector3d center;
     private float tpGround; // galaxy units from the center: where the next teleport lands
     private int id;
+    /** Ids of planets this session had that the game is to drop (its new scene may not have them). */
+    private final Deque<Integer> gone = new ArrayDeque<>();
+    /**
+     * Chunks go to the game only with detail: without it the planet is only its far view (a planet
+     * far from Mario costs no memory for chunks nor time to mesh them).
+     */
+    private boolean detail = true;
+    private final Deque<Integer> farPending = new ArrayDeque<>();
+    private final int[] farVersion = new int[6];
+    private final BitSet farDirty = new BitSet();
+    private int sinceFar;
     private int scene = Integer.MIN_VALUE, host = Integer.MIN_VALUE;
     private int sinceResidency;
     private boolean unsaved;
@@ -131,6 +155,17 @@ public final class PlanetSession {
         unsaved = true;
     }
 
+    /** That planet with its center there (galaxy units): PlanetLayout says where. */
+    public void spawnAt(VoxelPlanet p, Vector3d centerGal) {
+        start(p, new Vector3d(centerGal));
+        unsaved = true;
+    }
+
+    /** How far its gravity reaches from its center, galaxy units. */
+    public double gravityUnits() {
+        return planet == null ? 0 : gravityRadius(planet.surface()) * unitsPerBlock;
+    }
+
     /** A saved planet, as it was (but for what lies below today's crust: see sealBelowCrust). */
     public void load(PlanetStore.Saved s) {
         VoxelPlanet p = VoxelPlanet.of(new CubeSphere(s.n(), s.core(), s.layers()), s.depth(), s.cells(), blocks);
@@ -155,13 +190,15 @@ public final class PlanetSession {
         if (planet == null) return;
         planet = null;
         clearQueues();
-        control.add(new Msg(Layout.MSG_PLANET, planetPayload(0)));
+        release();
     }
 
     /** Forgets the planet without telling the game (it is gone with its scene). */
     public void unload() {
         planet = null;
         clearQueues();
+        release();
+        gone.clear(); // the new scene's game never had it
     }
 
     /**
@@ -180,6 +217,10 @@ public final class PlanetSession {
 
     public void teleport() {
         if (planet == null) return;
+        if (!detail) {
+            detail = true;
+            sendAll();
+        }
         Vector3d land = mario == null || mario.lengthSquared() < 1 ? new Vector3d(0, 1, 0) : new Vector3d(mario);
         tpGround = (float) (ground(land) * unitsPerBlock);
         land.normalize(Math.max(planet.surface(), tpGround / unitsPerBlock));
@@ -211,10 +252,18 @@ public final class PlanetSession {
             sendAll();
         }
         if (planet.fluids().tick()) unsaved = true;
-        for (int c : planet.takeDirty()) queue(c);
+        for (int c : planet.takeDirty()) {
+            if (detail) queue(c);
+            farDirty.set(planet.faceOfChunk(c));
+        }
+        if (++sinceFar >= FAR_UPDATES && !farDirty.isEmpty()) {
+            sinceFar = 0;
+            farDirty.stream().filter(f -> !farPending.contains(f)).forEach(farPending::add);
+            farDirty.clear();
+        }
         if (mario != null) underground(PlanetMesher.covered(planet, planet.grid.cellAt(new Vector3d(mario).normalize(mario.length() + 1.5))));
         if (landing != null && (mario != null && mario.distance(landing) < NEAR || ++landingUpdates > LANDING_UPDATES)) landing = null;
-        if (++sinceResidency >= RESIDENCY_UPDATES && mario != null) {
+        if (detail && ++sinceResidency >= RESIDENCY_UPDATES && mario != null) {
             sinceResidency = 0;
             for (int c : landing != null ? residency(landing, landing) : residency(mario, ahead)) queue(c);
         }
@@ -222,11 +271,22 @@ public final class PlanetSession {
 
     /** Next message to send, or null; {@link #sent()} once the ring took it. */
     public Msg peek() {
+        if (!gone.isEmpty()) return new Msg(Layout.MSG_PLANET, planetPayload(gone.peek(), PLANET_GONE));
         if (!control.isEmpty()) return control.peek();
+        if (built == null && !farPending.isEmpty() && planet != null) {
+            int f = farPending.peek();
+            PlanetLod.Part part = PlanetLod.face(planet, f, unitsPerBlock);
+            ByteBuffer b = ByteBuffer.allocate(32 + part.displayList().length).order(ByteOrder.LITTLE_ENDIAN);
+            b.putInt(id << 24 | FAR_VIEW | f).putInt(++farVersion[f]).putInt(part.displayList().length).putInt(0);
+            for (float x : part.sphere()) b.putFloat(x);
+            b.put(part.displayList());
+            built = new Msg(Layout.MSG_CHUNK, b.array());
+            builtFar = true;
+        }
         while (built == null && !pending.isEmpty()) {
             int c = pending.poll();
             if (c == TP_MARK) {
-                built = new Msg(Layout.MSG_PLANET_TP, ByteBuffer.allocate(4).putFloat(tpGround).array()); // big-endian: passed on as is
+                built = new Msg(Layout.MSG_PLANET_TP, ByteBuffer.allocate(8).putFloat(tpGround).putInt(id).array()); // big-endian: passed on as is
                 break;
             }
             pendingSet.clear(c);
@@ -242,7 +302,7 @@ public final class PlanetSession {
             if (cullDark) hasDark.set(c, m.darkCut());
             if (m.empty() && !onGuest.get(c)) continue;
             ByteBuffer b = ByteBuffer.allocate(32 + m.displayList().length + m.kcl().length).order(ByteOrder.LITTLE_ENDIAN);
-            b.putInt(c).putInt(planet.bump(c)).putInt(m.displayList().length).putInt(m.kcl().length);
+            b.putInt(id << 24 | c).putInt(planet.bump(c)).putInt(m.displayList().length).putInt(m.kcl().length);
             for (float f : m.sphere()) b.putFloat(f);
             b.put(m.displayList()).put(m.kcl());
             built = new Msg(Layout.MSG_CHUNK, b.array());
@@ -254,8 +314,19 @@ public final class PlanetSession {
     }
 
     public void sent() {
+        if (!gone.isEmpty()) {
+            gone.poll();
+            return;
+        }
+        // In peek's order: control messages go ahead of what was built.
         if (!control.isEmpty()) {
             control.poll();
+            return;
+        }
+        if (builtFar) {
+            builtFar = false;
+            built = null;
+            farPending.poll();
             return;
         }
         int c = builtChunk;
@@ -269,7 +340,7 @@ public final class PlanetSession {
 
     /** Messages and chunks still to send (chunks may turn out to have nothing to send). */
     public int queued() {
-        return control.size() + pending.size() + (built != null ? 1 : 0);
+        return gone.size() + control.size() + farPending.size() + pending.size() + (built != null && !builtFar ? 1 : 0);
     }
 
     /** Whether Mario is under cover, and far chunks are sent with their dark cave faces. */
@@ -458,7 +529,7 @@ public final class PlanetSession {
      * planet's center, a little out of it (no z-fighting).
      */
     byte[] outlinePayload(int cell) {
-        ByteBuffer b = ByteBuffer.allocate(100).order(ByteOrder.LITTLE_ENDIAN).putInt(cell >= 0 ? 1 : 0);
+        ByteBuffer b = ByteBuffer.allocate(100).order(ByteOrder.LITTLE_ENDIAN).putInt(cell >= 0 ? id : 0);
         if (cell < 0) return b.array();
         double[] o = planet.info(cell).outline();
         Vector3d mid = CellSpace.point(planet.grid, cell, (o[0] + o[3]) / 2, (o[1] + o[4]) / 2, (o[2] + o[5]) / 2);
@@ -494,14 +565,60 @@ public final class PlanetSession {
     }
 
     private void start(VoxelPlanet p, Vector3d c) {
+        release();
         planet = p;
         center = c;
-        id++;
+        id = newId();
+        java.util.Arrays.fill(farVersion, 0);
         scene = host = Integer.MIN_VALUE; // the next update sends it all
+    }
+
+    /** The game drops this session's planet (if it has one) and its id is free again. */
+    private void release() {
+        if (id == 0) return;
+        gone.add(id);
+        synchronized (usedIds) {
+            usedIds.clear(id);
+        }
+        id = 0;
+    }
+
+    private static int newId() {
+        synchronized (usedIds) {
+            for (int k = 1; k <= 255; k++) {
+                int i = (lastId + k - 1) % 255 + 1;
+                if (!usedIds.get(i)) {
+                    usedIds.set(i);
+                    lastId = i;
+                    return i;
+                }
+            }
+        }
+        throw new IllegalStateException("no planet ids left");
+    }
+
+    /** This planet's id in the game (tests). */
+    public int id() {
+        return id;
+    }
+
+    /** Whether the game gets its chunks (else only its far view). */
+    public boolean detail() {
+        return detail;
+    }
+
+    /** Chunks to the game, or only the far view (the chunks it had are dropped). */
+    public void setDetail(boolean on) {
+        if (on == detail) return;
+        detail = on;
+        scene = host = Integer.MIN_VALUE; // the next update sends it all again, so
     }
 
     private void clearQueues() {
         control.clear();
+        farPending.clear();
+        farDirty.clear();
+        builtFar = false;
         outline = outlineId = -1;
         pending.clear();
         pendingSet.clear();
@@ -518,8 +635,10 @@ public final class PlanetSession {
     /** The game has nothing: the planet, then every chunk that may show, nearest Mario first. */
     private void sendAll() {
         clearQueues();
-        control.add(new Msg(Layout.MSG_PLANET, planetPayload(id)));
+        control.add(new Msg(Layout.MSG_PLANET, planetPayload(id, 0)));
+        for (int f = 0; f < 6; f++) farPending.add(f);
         planet.takeDirty();
+        if (!detail) return;
         if (mario != null) residency(mario, ahead);
         List<double[]> order = new ArrayList<>();
         Vector3d c = new Vector3d();
@@ -596,15 +715,17 @@ public final class PlanetSession {
         return new Vector3d(gal).sub(center).div(unitsPerBlock);
     }
 
-    private byte[] planetPayload(int planetId) {
-        ByteBuffer b = ByteBuffer.allocate(36).order(ByteOrder.LITTLE_ENDIAN).putInt(planetId);
+    /** GxcPlanet (36 bytes the host swaps), then flags big-endian (passed on as is). */
+    private byte[] planetPayload(int planetId, int flags) {
+        ByteBuffer b = ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN).putInt(planetId);
         Vector3d c = center == null ? new Vector3d() : center;
         b.putFloat((float) c.x).putFloat((float) c.y).putFloat((float) c.z);
         double surface = planet == null ? 0 : planet.surface();
         b.putFloat((float) (surface * unitsPerBlock)).putFloat((float) (gravityRadius(surface) * unitsPerBlock));
-        b.putInt(planet == null ? 0 : planet.chunkCount());
+        b.putInt(planet == null || !detail || flags != 0 ? 0 : planet.chunkCount());
         b.putFloat((float) (planet == null ? 0 : planet.occluder() * unitsPerBlock));
         b.putFloat((float) (MARIO_RADIUS * unitsPerBlock));
+        b.order(ByteOrder.BIG_ENDIAN).putInt(flags);
         return b.array();
     }
 

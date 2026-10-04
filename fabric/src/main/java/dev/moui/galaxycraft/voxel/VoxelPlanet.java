@@ -326,6 +326,11 @@ public final class VoxelPlanet {
         return 6 * chunksPerEdge * chunksPerEdge * chunkLayers;
     }
 
+    /** The cube face a chunk is on. */
+    public int faceOfChunk(int chunk) {
+        return chunk / (chunkLayers * chunksPerEdge * chunksPerEdge);
+    }
+
     public int chunkOf(int cell) {
         return ((grid.face(cell) * chunksPerEdge + grid.i(cell) / CHUNK) * chunksPerEdge + grid.j(cell) / CHUNK)
                 * chunkLayers + grid.k(cell) / CHUNK;

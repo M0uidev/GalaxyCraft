@@ -14,10 +14,18 @@ struct InboxPlanet
   u32 chunk_count;
   f32 occluder;
   f32 mario_radius;  // 0: Mario keeps his own collision sphere
+  u32 flags;         // PLANET_GONE: this planet (id) leaves; chunk_count 0: only its far view
 };
+
+const u32 PLANET_GONE = 1;
+// A chunk record's slot word: the planet's id in the top byte, FAR_VIEW for a part of its far view
+// (the slot below is then its face, 0..5), else the chunk's slot.
+const u32 CHUNK_FAR_VIEW = 0x800000u, CHUNK_SLOT_MASK = 0x7FFFFFu, FAR_VIEW_PARTS = 6;
 
 struct InboxChunk
 {
+  u32 planet;  // the planet's id (0: whichever there is, as before several were)
+  bool far;    // a part of the planet's far view: slot is its face
   u32 slot, version, dl_size, kcl_size;
   f32 sphere[4];  // bounding sphere, center relative to the planet's
   const u8* dl;   // dl_size bytes
@@ -77,6 +85,7 @@ struct InboxSeat
 struct InboxTeleport
 {
   f32 ground;
+  u32 planet;  // 0: the first one
 };
 
 struct InboxEntities

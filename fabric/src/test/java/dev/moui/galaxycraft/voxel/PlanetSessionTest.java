@@ -26,6 +26,16 @@ class PlanetSessionTest {
         return ByteBuffer.wrap(m.payload()).order(ByteOrder.LITTLE_ENDIAN);
     }
 
+    /** A chunk message's slot (without the planet's id), -1 for a part of the far view. */
+    static int slot(ByteBuffer chunk) {
+        int w = chunk.getInt(0);
+        return (w & PlanetSession.FAR_VIEW) != 0 ? -1 : w & 0x7FFFFF;
+    }
+
+    static boolean far(PlanetSession.Msg m) {
+        return m.type() == Layout.MSG_CHUNK && (le(m).getInt(0) & PlanetSession.FAR_VIEW) != 0;
+    }
+
     static PlanetSession spawned(int radius) {
         PlanetSession s = new PlanetSession(80);
         s.spawn(radius, MARIO, new Vector3d(0, 1, 0));
@@ -39,8 +49,10 @@ class PlanetSessionTest {
         List<PlanetSession.Msg> msgs = drain(s);
         assertEquals(Layout.MSG_PLANET, msgs.get(0).type());
         ByteBuffer p = le(msgs.get(0));
-        assertEquals(36, p.capacity());
-        assertEquals(1, p.getInt(0));
+        assertEquals(40, p.capacity());
+        assertEquals(s.id(), p.getInt(0));
+        assertEquals(0, p.order(ByteOrder.BIG_ENDIAN).getInt(36), "no flags");
+        p.order(ByteOrder.LITTLE_ENDIAN);
         assertEquals(6400f, p.getFloat(8));
         assertEquals(1280f, p.getFloat(16));
         assertEquals(4480f, p.getFloat(20));
@@ -52,8 +64,15 @@ class PlanetSessionTest {
         // Every grass chunk, nearest to Mario (under the planet) first.
         int grass = (int) java.util.stream.IntStream.range(0, s.planet().chunkCount())
                 .filter(ch -> !PlanetMesher.quads(s.planet(), ch).isEmpty()).count();
-        assertEquals(1 + grass, msgs.size());
-        float first = le(msgs.get(1)).getFloat(20), last = le(msgs.get(msgs.size() - 1)).getFloat(20);
+        // Then the far view, its six faces, before any chunk.
+        for (int f = 0; f < 6; f++) {
+            assertTrue(far(msgs.get(1 + f)));
+            assertEquals(s.id() << 24 | PlanetSession.FAR_VIEW | f, le(msgs.get(1 + f)).getInt(0));
+            assertEquals(0, le(msgs.get(1 + f)).getInt(12), "drawn only");
+        }
+        assertEquals(1 + 6 + grass, msgs.size());
+        assertTrue(msgs.stream().skip(7).allMatch(m -> le(m).getInt(0) >>> 24 == s.id()), "each chunk names its planet");
+        float first = le(msgs.get(7)).getFloat(20), last = le(msgs.get(msgs.size() - 1)).getFloat(20);
         assertTrue(first < last, "nearest first: y " + first + " then " + last);
     }
 
@@ -124,10 +143,12 @@ class PlanetSessionTest {
         int tp = -1;
         for (int i = 0; i < msgs.size(); i++) if (msgs.get(i).type() == Layout.MSG_PLANET_TP) tp = i;
         assertTrue(tp > 0, "teleport sent");
-        long kclBefore = msgs.subList(0, tp).stream().filter(m -> le(m).getInt(12) > 0).count();
+        List<PlanetSession.Msg> before = msgs.subList(0, tp).stream().filter(m -> !far(m)).toList();
+        long kclBefore = before.stream().filter(m -> le(m).getInt(12) > 0).count();
         assertTrue(kclBefore > 4, kclBefore + " chunks with collision before the teleport");
         // They are where he lands: under the planet, the side facing his old position.
-        assertTrue(msgs.subList(0, tp).stream().allMatch(m -> le(m).getFloat(20) < 0));
+        assertTrue(before.stream().allMatch(m -> le(m).getFloat(20) < 0));
+        assertEquals(s.id(), ByteBuffer.wrap(msgs.get(tp).payload()).getInt(4), "the teleport names its planet");
     }
 
     @Test void underCoverFarCavesAreSentWithTheirDarkFaces() {
@@ -214,7 +235,7 @@ class PlanetSessionTest {
         List<PlanetSession.Msg> msgs = drain(s);
         assertFalse(msgs.isEmpty());
         int grassChunk = s.planet().chunkOf(s.planet().grid.cellAt(new Vector3d(0, 15.5, 0)));
-        ByteBuffer c = msgs.stream().map(PlanetSessionTest::le).filter(b -> b.getInt(0) == grassChunk).findFirst().orElseThrow();
+        ByteBuffer c = msgs.stream().map(PlanetSessionTest::le).filter(b -> slot(b) == grassChunk).findFirst().orElseThrow();
         assertEquals(2, c.getInt(4), "the grass chunk again, next version");
         assertEquals(0, c.getInt(8) % 32);
         assertEquals(c.capacity(), 32 + c.getInt(8) + c.getInt(12));
@@ -234,7 +255,7 @@ class PlanetSessionTest {
         int dirtChunk = s.planet().chunkOf(s.planet().grid.cellAt(new Vector3d(0, 13.5, 0)));
         s.update(3, 100, feet);
         List<PlanetSession.Msg> msgs = drain(s);
-        ByteBuffer m = msgs.stream().map(PlanetSessionTest::le).filter(b -> b.getInt(0) == dirtChunk).findFirst().orElseThrow();
+        ByteBuffer m = msgs.stream().map(PlanetSessionTest::le).filter(b -> slot(b) == dirtChunk).findFirst().orElseThrow();
         assertTrue(m.getInt(12) > 0, "with collision right away");
     }
 
@@ -265,7 +286,7 @@ class PlanetSessionTest {
         List<PlanetSession.Msg> msgs = drain(s);
         assertEquals(Layout.MSG_OUTLINE, msgs.get(0).type(), "before the chunks");
         ByteBuffer o = le(msgs.get(0));
-        assertEquals(1, o.getInt(0));
+        assertEquals(s.id(), o.getInt(0), "visible: on this planet");
         Vector3d mid = s.planet().grid.center(cell).mul(80);
         for (int m = 0; m < 8; m++) {
             Vector3d c = new Vector3d(o.getFloat(4 + 12 * m), o.getFloat(8 + 12 * m), o.getFloat(12 + 12 * m));
@@ -298,13 +319,81 @@ class PlanetSessionTest {
         assertEquals(Material.STONE, s.planet().material(s.planet().grid.cellAt(new Vector3d(2, 16.5, 0))));
     }
 
-    @Test void removeSendsPlanetZero() {
+    @Test void removeDropsThisPlanetOnly() {
         PlanetSession s = spawned(16);
+        int id = s.id();
         s.remove();
         List<PlanetSession.Msg> msgs = drain(s);
         assertEquals(1, msgs.size());
-        assertEquals(0, le(msgs.get(0)).getInt(0));
+        assertEquals(id, le(msgs.get(0)).getInt(0));
+        assertEquals(PlanetSession.PLANET_GONE, ByteBuffer.wrap(msgs.get(0).payload()).getInt(36));
         assertFalse(s.active());
+    }
+
+    @Test void planetsHaveIdsOfTheirOwnAndANewOneEachSpawn() {
+        PlanetSession a = spawned(16), b = spawned(16);
+        assertNotEquals(a.id(), b.id());
+        assertTrue(a.id() >= 1 && a.id() <= 255);
+        int old = a.id();
+        a.spawn(16, MARIO, new Vector3d(0, 1, 0));
+        a.update(3, 100, MARIO);
+        List<PlanetSession.Msg> msgs = drain(a);
+        assertNotEquals(old, a.id(), "not the old planet's id: the game may still hold its chunks");
+        assertEquals(old, le(msgs.get(0)).getInt(0), "the old one is dropped first");
+        assertEquals(PlanetSession.PLANET_GONE, ByteBuffer.wrap(msgs.get(0).payload()).getInt(36));
+        assertEquals(a.id(), le(msgs.get(1)).getInt(0));
+    }
+
+    @Test void anOutlineWhileAFarPartWaitsLosesNeither() {
+        PlanetSession s = spawned(16);
+        s.peek();
+        s.sent(); // the planet
+        assertTrue(far(s.peek()), "a part of the far view is built and waits");
+        Vector3d eye = new Vector3d(s.center()).add(0, 17.6 * 80, 0);
+        s.setOutline(s.target(eye, new Vector3d(0, -1, 0), false));
+        List<PlanetSession.Msg> msgs = drain(s);
+        assertEquals(Layout.MSG_OUTLINE, msgs.get(0).type());
+        assertEquals(1, msgs.stream().filter(m -> m.type() == Layout.MSG_OUTLINE).count());
+        assertEquals(6, msgs.stream().filter(PlanetSessionTest::far).count(), "all six faces");
+    }
+
+    @Test void withoutDetailOnlyTheFarViewIsSent() {
+        PlanetSession s = spawned(16);
+        drain(s);
+        s.setDetail(false);
+        s.update(3, 100, MARIO);
+        List<PlanetSession.Msg> msgs = drain(s);
+        assertEquals(1 + 6, msgs.size(), "the planet and its far view");
+        assertEquals(0, le(msgs.get(0)).getInt(24), "no chunk slots: the game drops its chunks");
+        assertTrue(msgs.stream().skip(1).allMatch(PlanetSessionTest::far));
+        // Edits change only the far view, once a while.
+        Vector3d top = new Vector3d(s.center()).add(0, 17.5 * 80, 0);
+        assertTrue(s.breakBlock(top, new Vector3d(0, -1, 0)));
+        List<PlanetSession.Msg> later = new ArrayList<>();
+        for (int i = 0; i < PlanetSession.FAR_UPDATES; i++) {
+            s.update(3, 100, MARIO);
+            later.addAll(drain(s));
+        }
+        assertEquals(1, later.size(), "the face dug into, once");
+        assertTrue(far(later.getFirst()));
+        // Back to detail: chunks again.
+        s.setDetail(true);
+        s.update(3, 100, MARIO);
+        assertTrue(drain(s).stream().anyMatch(m -> m.type() == Layout.MSG_CHUNK && !far(m)));
+    }
+
+    @Test void aStageKeepsSeveralPlanetsEachInItsFile(@TempDir Path dir) throws Exception {
+        PlanetStore store = new PlanetStore(dir);
+        PlanetSession a = spawned(16), b = spawned(20);
+        store.write(PlanetStore.key("BossGalaxy", 0), a.save(), CubeBlocks.INSTANCE);
+        store.write(PlanetStore.key("BossGalaxy", 3), b.save(), CubeBlocks.INSTANCE);
+        store.write(PlanetStore.key("BossGalaxyX", 0), b.save(), CubeBlocks.INSTANCE);
+        assertEquals(List.of(0, 3), store.saved("BossGalaxy", PlanetLayout.MAX_PLANETS));
+        PlanetSession t = new PlanetSession(80);
+        t.load(store.read(PlanetStore.key("BossGalaxy", 3), CubeBlocks.INSTANCE).orElseThrow());
+        assertEquals(20, t.planet().surface(), 1e-9);
+        store.delete(PlanetStore.key("BossGalaxy", 0));
+        assertEquals(List.of(3), store.saved("BossGalaxy", PlanetLayout.MAX_PLANETS));
     }
 
     @Test void savedPlanetComesBackAsItWas(@TempDir Path dir) throws Exception {
