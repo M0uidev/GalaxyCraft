@@ -50,8 +50,9 @@ public final class PlanetGenerator {
     }
 
     /** ids gives the planet's id for a block's text (Blocks.parse in the game). */
-    public static VoxelPlanet build(PlanetBlueprint bp, TerrainNoise noise, BiomeTable table, Blocks blocks, ToIntFunction<String> ids) {
-        return cells(bp, noise, table, ids).planet(blocks);
+    public static VoxelPlanet build(PlanetBlueprint bp, TerrainNoise noise, BiomeTable table, Vegetation.Library plants,
+            Blocks blocks, ToIntFunction<String> ids) {
+        return cells(bp, noise, table, plants, ids).planet(blocks);
     }
 
     /** Every block a generated planet can be made of: what ids must know. */
@@ -62,7 +63,8 @@ public final class PlanetGenerator {
     }
 
     /** The cells alone: safe off the game's thread when ids only reads (see {@link #blocks()}). */
-    public static Cells cells(PlanetBlueprint bp, TerrainNoise noise, BiomeTable table, ToIntFunction<String> ids) {
+    public static Cells cells(PlanetBlueprint bp, TerrainNoise noise, BiomeTable table, Vegetation.Library plants,
+            ToIntFunction<String> ids) {
         int radius = bp.radius(), air = bp.air(), depth = VoxelPlanet.groundDepth(radius);
         int n = VoxelPlanet.gridSize(radius);
         CubeSphere grid = new CubeSphere(n, radius - depth, depth + air);
@@ -140,6 +142,18 @@ public final class PlanetGenerator {
         }
         Underground.carve(grid, depth, cells, height, dirs, keepRoof, noise, bp.caves(), bp.entrances(), radius);
         Underground.ores(grid, depth, cells, height, bp.seed(), bp.ores(), ids);
+        if (bp.plants() > 0) {
+            // Bare ground: its biome's top block, not under water, not a cliff, open above (or snow).
+            boolean[] bare = new boolean[columns];
+            int snow = ids.applyAsInt("minecraft:snow");
+            for (int col = 0; col < columns; col++) {
+                int base = col * grid.layers, top = depth - 1 + height[col];
+                if (top + 1 >= grid.layers || keepRoof[col] && height[col] < 0) continue;
+                int above = cells[base + top + 1];
+                bare[col] = cells[base + top] == palettes.get(biome[col])[1] && (above == Blocks.AIR || above == snow);
+            }
+            Vegetation.plant(grid, depth, cells, height, dirs, biome, bare, plants, bp.seed(), bp.plants(), ids);
+        }
         return new Cells(grid, depth, cells);
     }
 

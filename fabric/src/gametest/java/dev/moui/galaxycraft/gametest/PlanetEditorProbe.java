@@ -74,6 +74,20 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
             ctx.getInput().pressKey(InputConstants.KEY_RETURN);
             ctx.waitTicks(2);
             if (picked[0] == null || !picked[0].contains("snow")) throw new AssertionError("picked biome " + picked[0]);
+            // Every biome's vegetation grown first, on the server's thread (here the server only runs
+            // while the test lets it: waiting on it from the client's thread would hang).
+            String grown = sp.getServer().computeOnServer(server -> {
+                McWorldgen wg = PlanetClient.worldgen();
+                if (wg == null) return "no worldgen";
+                int things = 0, empty = 0;
+                for (String b : wg.biomes().all()) {
+                    int t = wg.vegetation().patches(b).stream().mapToInt(p -> p.things().size()).sum();
+                    things += t;
+                    if (t == 0) empty++;
+                }
+                return wg.biomes().all().size() + " biomes, " + things + " things, " + empty + " biomes with none";
+            });
+            System.out.println("PlanetEditorProbe vegetation: " + grown);
             String gen = ctx.computeOnClient(mc -> {
                 McBlocks blocks = McBlocks.create(mc);
                 McWorldgen wg = PlanetClient.worldgen();
@@ -82,7 +96,7 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
                         {"minecraft:plains", 96, 96, true}, {PlanetBlueprint.RANDOM, 48, 0, true}, {"minecraft:warm_ocean", 48, 0, true},
                         {"minecraft:forest", 256, 0, true}}) {
                     PlanetBlueprint g = PlanetBlueprint.standard("gen", (int) c[1]).withAir(24)
-                            .withMode(PlanetBlueprint.Mode.GENERATED).withBiome(7, (String) c[0], (int) c[2]).withWater((boolean) c[3]).withUnderground(50, true, 100);
+                            .withMode(PlanetBlueprint.Mode.GENERATED).withBiome(7, (String) c[0], (int) c[2]).withWater((boolean) c[3]).withUnderground(50, true, 100).withPlants(100);
                     long t0 = System.nanoTime();
                     VoxelPlanet p = g.build(blocks, wg);
                     long ms = (System.nanoTime() - t0) / 1_000_000;

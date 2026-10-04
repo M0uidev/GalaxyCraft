@@ -26,14 +26,18 @@ import net.minecraft.world.level.levelgen.synth.NormalNoise;
 
 /**
  * Generated planets made with Minecraft's own worldgen, read from the integrated server's
- * registries: the overworld's climate noises (seeded as a world of that seed seeds them) and its
+ * registries (and its trees, {@link McVegetation}): the overworld's climate noises (seeded as a world of that seed seeds them) and its
  * biome table, kept to the biomes found at the surface (with and without the watery ones).
  */
 public final class McWorldgen implements Worldgen {
     private final HolderGetter<NormalNoise> noises;
     private final Table table;
 
-    public McWorldgen(RegistryAccess registries) {
+    private final McVegetation vegetation;
+
+    public McWorldgen(net.minecraft.server.MinecraftServer server) {
+        RegistryAccess registries = server.registryAccess();
+        vegetation = new McVegetation(server);
         noises = registries.lookupOrThrow(Registries.NOISE);
         table = new Table(registries.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
                 .getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD).value().parameters());
@@ -55,6 +59,11 @@ public final class McWorldgen implements Worldgen {
     @Override
     public BiomeTable biomes() {
         return table;
+    }
+
+    @Override
+    public dev.moui.galaxycraft.voxel.gen.Vegetation.Library vegetation() {
+        return vegetation;
     }
 
     /** The name a biome has in the game ("Snowy Taiga"), by its id. */

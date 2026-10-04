@@ -175,3 +175,22 @@ swimming are a later stage.
 - Ores (`Underground.ores`): veins (random walks through stone/deepslate) per 1000 crust cells:
   coal 0.05–0.6 of the depth, copper 0.15–0.6, iron 0.2–0.9, lapis 0.5–1, gold 0.6–1, redstone
   0.7–1, diamond 0.85–1 (0 the top, 1 the bedrock); the deepslate kind in deepslate.
+
+## Addendum 2026-10-04: trees and vegetation
+
+- Blueprint `plants` (percent of Minecraft's amount, 0..200; new generated ones 100).
+- Grown by Minecraft (`client/McVegetation`): on the integrated server, in the shadow dimension's
+  scratch ground (z ≤ `ShadowWorld.SCRATCH_Z`, writable and never mirrored back), a flat floor of
+  the biome's top block gets the biome's VEGETAL_DECORATION placed features with their BiomeFilter
+  removed (the floor's biome is the void). What grew is split into things: every block on the
+  floor is a base, other blocks go to the nearest base they touch (26-neighbors, grown from all
+  bases at once) so meeting crowns stay apart. Leaves are made persistent (the mirror near Mario
+  would decay leaves whose log is past its edge). 4 chunks per biome, cached for the game.
+- Planting (`voxel/gen/Vegetation`): each face is cut in 16×16 squares; each gets a patch of its
+  middle column's biome (two at 200%). A thing is planted where its base column is bare (its
+  biome's top block, dry, not a cliff, open above or snow) and of that biome; its blocks are laid
+  along the column's up and the face's two directions, only into air or snow.
+- Threads: generation runs off the game; McVegetation waits on the server's thread, block ids for
+  states the trees bring are looked up on the client's thread as they come. (In Fabric client game
+  tests the server only runs while the test lets it: the probe grows every biome first with
+  computeOnServer.) 52 surface biomes grow about 7,200 things; oceans grow none (their plants need water).

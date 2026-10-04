@@ -645,9 +645,15 @@ public final class ShadowWorld {
 
     /** Whether Minecraft may change this position: a cell of the running planet, not halo, gaps or other planets. */
     public static boolean writable(BlockPos pos) {
-        if (pos.equals(writingPos)) return true;
+        if (pos.equals(writingPos) || pos.getZ() <= SCRATCH_Z) return true;
         return map != null && map.cell(pos.getX(), pos.getY(), pos.getZ()) >= 0;
     }
+
+    /**
+     * Past this z the shadow is scratch ground, not a mirror: anything may be written there and
+     * nothing goes back to a planet (generated planets grow their trees there, client/McVegetation).
+     */
+    public static final int SCRATCH_Z = -10_000_000;
 
     /** A block of the shadow changed: back to the planet, unless GalaxyCraft itself wrote it there. */
     public static void changed(BlockPos pos, BlockState now) {

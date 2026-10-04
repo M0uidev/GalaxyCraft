@@ -89,7 +89,7 @@ public final class PlanetClient {
         MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
         if (server != worldgenServer) {
             worldgenServer = server;
-            worldgen = server == null ? null : new McWorldgen(server.registryAccess());
+            worldgen = server == null ? null : new McWorldgen(server);
         }
         return worldgen;
     }
@@ -104,11 +104,14 @@ public final class PlanetClient {
             say(player, "Generated planets need a single player world");
             return;
         }
-        java.util.Map<String, Integer> ids = new java.util.HashMap<>();
-        for (String b : PlanetGenerator.blocks()) ids.put(b, blocks.parse(b));
+        java.util.Map<String, Integer> known = new java.util.concurrent.ConcurrentHashMap<>();
+        for (String b : PlanetGenerator.blocks()) known.put(b, blocks.parse(b));
+        // Trees bring states of their own: those are looked up on this thread too, as they come.
+        java.util.function.ToIntFunction<String> ids = name -> known.computeIfAbsent(name,
+                n -> Minecraft.getInstance().submit(() -> blocks.parse(n)).join());
         TerrainNoise noise = gen.noise(bp.seed());
         say(player, "Generating " + bp.name() + "...");
-        generating = java.util.concurrent.CompletableFuture.supplyAsync(() -> PlanetGenerator.cells(bp, noise, gen.biomes(), ids::get));
+        generating = java.util.concurrent.CompletableFuture.supplyAsync(() -> PlanetGenerator.cells(bp, noise, gen.biomes(), gen.vegetation(), ids));
     }
 
     private static void say(LocalPlayer player, String text) {

@@ -69,7 +69,7 @@ class PlanetGeneratorTest {
     }
 
     private static VoxelPlanet build(PlanetBlueprint bp) {
-        return PlanetGenerator.build(bp, waves(bp.seed()), TABLE, B, PlanetGeneratorTest::id);
+        return PlanetGenerator.build(bp, waves(bp.seed()), TABLE, null, B, PlanetGeneratorTest::id);
     }
 
     /** Height of the ground's top in a column, as k. */
@@ -186,7 +186,7 @@ class PlanetGeneratorTest {
     }
 
     private static PlanetGenerator.Cells cells(PlanetBlueprint bp) {
-        return PlanetGenerator.cells(bp, waves(bp.seed()), TABLE, PlanetGeneratorTest::unique);
+        return PlanetGenerator.cells(bp, waves(bp.seed()), TABLE, LIBRARY, PlanetGeneratorTest::unique);
     }
 
     /** Index of the highest ground cell (not air, not water) in a column. */
@@ -249,6 +249,53 @@ class PlanetGeneratorTest {
         PlanetGenerator.Cells none = cells(bp.withUnderground(0, true, 0));
         assertFalse(java.util.Arrays.equals(none.cells(), c.cells()));
         for (char id : none.cells()) assertNotEquals(unique("minecraft:coal_ore"), (int) id);
+    }
+
+    /** A tree (a trunk of 4 logs, leaves around its top) and a flower, on every biome but the desert. */
+    private static final Vegetation.Thing TREE, FLOWER = new Vegetation.Thing(7, 2, new int[] {0}, new int[] {1}, new int[] {0},
+            new String[] {"minecraft:poppy"});
+
+    static {
+        List<int[]> at = new java.util.ArrayList<>();
+        for (int y = 1; y <= 4; y++) at.add(new int[] {0, y, 0});
+        for (int x = -1; x <= 1; x++)
+            for (int z = -1; z <= 1; z++)
+                if (x != 0 || z != 0) at.add(new int[] {x, 4, z});
+        at.add(new int[] {0, 5, 0});
+        String[] names = new String[at.size()];
+        for (int i = 0; i < names.length; i++) names[i] = i < 4 ? "minecraft:oak_log" : "minecraft:oak_leaves";
+        TREE = new Vegetation.Thing(3, 3, at.stream().mapToInt(a -> a[0]).toArray(), at.stream().mapToInt(a -> a[1]).toArray(),
+                at.stream().mapToInt(a -> a[2]).toArray(), names);
+    }
+
+    private static final Vegetation.Library LIBRARY = biome -> biome.equals("minecraft:desert") ? List.of()
+            : List.of(new Vegetation.Patch(List.of(TREE, FLOWER, new Vegetation.Thing(11, 12, TREE.dx(), TREE.dy(), TREE.dz(), TREE.blocks()))),
+                    new Vegetation.Patch(List.of(new Vegetation.Thing(8, 7, TREE.dx(), TREE.dy(), TREE.dz(), TREE.blocks()))));
+
+    private static int count(PlanetGenerator.Cells c, String name) {
+        int n = 0;
+        for (char id : c.cells()) if (id == unique(name)) n++;
+        return n;
+    }
+
+    @Test void treesStandOnGrassAndOnlyFillAir() {
+        PlanetBlueprint bp = bp(64, 16, 9, "minecraft:plains", 0).withWater(true);
+        PlanetGenerator.Cells bare = cells(bp), grown = cells(bp.withPlants(100));
+        CubeSphere g = bare.grid();
+        int logs = 0;
+        for (int i = 0; i < bare.cells().length; i++) {
+            if (bare.cells()[i] == grown.cells()[i]) continue;
+            assertTrue(bare.cells()[i] == Blocks.AIR || bare.cells()[i] == unique("minecraft:snow"), "only into air");
+            if (grown.cells()[i] != unique("minecraft:oak_log")) continue;
+            logs++;
+            int below = i - 1;
+            while (grown.cells()[below] == unique("minecraft:oak_log")) below--;
+            assertEquals(unique("minecraft:grass_block"), (int) grown.cells()[below], "a trunk stands on grass, k " + g.k(below));
+        }
+        assertTrue(logs > 100, logs + " logs");
+        assertTrue(count(grown, "minecraft:poppy") > 0, "flowers");
+        assertTrue(count(cells(bp.withPlants(200)), "minecraft:oak_log") > logs, "more at 200%");
+        assertEquals(0, count(cells(bp(64, 16, 9, "minecraft:desert", 0).withPlants(100)), "minecraft:oak_log"), "nothing grows on the desert");
     }
 
     @Test void blueprintsSavedBeforeAreLayered() {

@@ -5,4 +5,7 @@ public interface Worldgen {
     TerrainNoise noise(long seed);
 
     BiomeTable biomes();
+
+    /** What grows on each biome; null for nothing. */
+    Vegetation.Library vegetation();
 }

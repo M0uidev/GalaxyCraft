@@ -46,7 +46,7 @@ public final class PlanetEditorScreen extends Screen {
     private int radius, air, biomeSize;
     private PlanetBlueprint.Mode mode;
     private boolean water, entrances;
-    private int caves, ores;
+    private int caves, ores, plants;
     private String seed, biome;
     private final List<Row> rows = new ArrayList<>();
     private List<String> saved = List.of();
@@ -92,6 +92,7 @@ public final class PlanetEditorScreen extends Screen {
         caves = b.caves();
         entrances = b.entrances();
         ores = b.ores();
+        plants = b.plants();
         rows.clear();
         for (PlanetBlueprint.Layer l : b.layers()) rows.add(new Row(l.block(), l.thickness()));
         fit();
@@ -240,7 +241,7 @@ public final class PlanetEditorScreen extends Screen {
                 seed = Long.toString(new java.util.Random().nextLong());
                 water = entrances = true;
                 caves = 50;
-                ores = 100;
+                ores = plants = 100;
             }
             rebuildWidgets();
         }).bounds(x, 44, MODE_W, 20).tooltip(Tooltip.create(Component.literal(
@@ -254,7 +255,7 @@ public final class PlanetEditorScreen extends Screen {
             PlanetBlueprint.Mode kind = mode;
             edit(PlanetBlueprint.standard("My planet", PlanetClient.DEFAULT_RADIUS).withMode(kind)
                     .withBiome(kind == PlanetBlueprint.Mode.GENERATED ? new java.util.Random().nextLong() : 0, PlanetBlueprint.RANDOM, 0)
-                    .withWater(true).withUnderground(50, true, 100));
+                    .withWater(true).withUnderground(50, true, 100).withPlants(100));
             say("", WHITE);
             rebuildWidgets();
         }).bounds(x, by, bw, 20).build());
@@ -330,6 +331,9 @@ public final class PlanetEditorScreen extends Screen {
         addRenderableWidget(new IntSlider(x + 44 + half, TOP + 4 * ROW, half, v -> v == 0 ? "Ores: none" : "Ores: " + v + "%",
                 0, PlanetBlueprint.MAX_ORES, 10, ores, v -> ores = v))
                 .setTooltip(Tooltip.create(Component.literal("Coal to diamonds, at Minecraft's depths\n100%: as many as Minecraft")));
+        addRenderableWidget(new IntSlider(x + 40, TOP + 5 * ROW, half, v -> v == 0 ? "Plants: none" : "Plants: " + v + "%",
+                0, PlanetBlueprint.MAX_PLANTS, 10, plants, v -> plants = v))
+                .setTooltip(Tooltip.create(Component.literal("Trees, flowers and grass, grown by Minecraft for the biome\n100%: as many as Minecraft")));
     }
 
     /** The biome's name, red when this game has no such land biome. */
@@ -387,7 +391,7 @@ public final class PlanetEditorScreen extends Screen {
             say("Unknown biome: " + biome, RED);
             return null;
         }
-        PlanetBlueprint b = new PlanetBlueprint(name.trim(), radius, air, layers, mode, s, biome, biomeSize, water, caves, entrances, ores);
+        PlanetBlueprint b = new PlanetBlueprint(name.trim(), radius, air, layers, mode, s, biome, biomeSize, water, caves, entrances, ores, plants);
         String problem = b.problem();
         if (problem != null) {
             say(problem, RED);
