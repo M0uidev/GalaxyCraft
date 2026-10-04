@@ -698,7 +698,7 @@ public:
 
 VoxelStats gVoxelStats;
 
-void VoxelPlanetCreate()
+void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size)
 {
   // A new scene: the old one's heap (chunks, parts, inbox) is gone, so forget it, don't free it.
   gSlots = 0;
@@ -712,6 +712,8 @@ void VoxelPlanetCreate()
   memset(gInbox, 0, sizeof(GxcInboxHeader));
   gActor = new VoxelPlanetActor();
   gActor->initWithoutIter();
+  *inbox_addr = reinterpret_cast<u32>(gInbox);
+  *inbox_size = INBOX_BYTES;
 }
 
 void VoxelPlanetHitbox(const MarioHitbox* box)

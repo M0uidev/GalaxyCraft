@@ -312,7 +312,7 @@ void MarioInit(void* self, const void* iter)
   init__10MarioActorFRC12JMapInfoIter(self, iter);
   gOut.mbx.scene_id++;  // a new Mario means a new stage: the host republishes everything
   gOwnBinderRadius = 0.f;
-  VoxelPlanetCreate();
+  VoxelPlanetCreate(&gOut.mbx.inbox_addr, &gOut.mbx.inbox_size);
   HeldItemCreate();
   // The stage's name, so the mod keeps one planet per galaxy.
   const char* stage = MR::getCurrentStageName();

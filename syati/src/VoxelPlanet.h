@@ -3,7 +3,9 @@
 
 // Voxel planet (VoxelPlanet.cpp). Create once per scene, while actors are initialized (Mario's
 // init); Frame once per frame: applies the inbox the host filled and says where it is.
-void VoxelPlanetCreate();
+// A new scene: its inbox goes to the mailbox at once, before the host can fill the old one (gone
+// with the old scene's heap) with records meant for this scene.
+void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size);
 void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_size);
 // The collision sphere Mario should have at pos (galaxy units) in the planet's gravity, if the
 // mod gave one (GxcPlanet.mario_radius): his own is 1.5 blocks wide and fits no tunnel.
