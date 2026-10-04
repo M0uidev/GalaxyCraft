@@ -140,6 +140,13 @@ Qué mirar con un planeta de radio 128 (generado y plano):
 
 ## Para seguir en el computador (checklist para Claude Code)
 
+**Verificado en el computador (2026-10-04):** los puntos 1 a 3 están hechos. Todo compila;
+`gxvoxel`, `lod`, `perf`, `walk` y `gxfit` pasan. Dos arreglos salieron de ahí: desde lejos un
+planeta vuelve a ser solo su vista lejana (también donde las baldosas de Mario son chunks), y
+`WalkProbe` lee el mailbox mientras Minecraft corre. Entre ticks de un test Minecraft está quieto;
+con la red de seguridad el juego lo esperaba y pasado el timeout del heartbeat dejaba de seguirlo
+(ángulos NaN). No era un problema del juego. Queda el punto 4, a ojo, jugando.
+
 Lo que no se pudo verificar en la sesión en la nube donde se hizo, porque la red no llegaba a
 Fabric ni a Mojang y no había CodeWarrior ni juego:
 
