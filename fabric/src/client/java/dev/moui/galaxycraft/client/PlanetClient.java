@@ -147,7 +147,9 @@ public final class PlanetClient {
                 used.stream().forEach(b::info);
                 return null;
             }).join();
-            return cells.planet(b);
+            VoxelPlanet planet = cells.planet(b);
+            planet.sphere(0, new Vector3d(), new double[1]); // every chunk's bounding sphere, worked out here too
+            return planet;
         });
     }
 
