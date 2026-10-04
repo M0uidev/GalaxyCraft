@@ -91,6 +91,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 });
         ClientTickEvents.START_CLIENT_TICK.register(GalaxyCraftClient::beforeTick);
         ClientTickEvents.END_CLIENT_TICK.register(GalaxyCraftClient::afterTick);
+        ClientTickEvents.END_CLIENT_TICK.register(PlanetEditorScreen::openIfRequested);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> resetFrame());
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             if (Boolean.getBoolean("galaxycraft.hidden")) { // Dolphin shows the overlay instead
@@ -105,7 +106,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             return 1;
         })));
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(
-                literal("galaxycraft").then(literal("status").executes(c -> {
+                literal("galaxycraft").executes(c -> {
+                    PlanetEditorScreen.requestOpen();
+                    return 1;
+                }).then(literal("status").executes(c -> {
                     c.getSource().sendFeedback(Component.literal(status(c.getSource().getPlayer())));
                     return 1;
                 })).then(literal("planet")

@@ -94,7 +94,11 @@ public final class PlanetSession {
 
     /** A new planet of this radius above the player, just out of its gravity's reach. */
     public void spawn(int radius, Vector3d feetGal, Vector3d upGal) {
-        VoxelPlanet p = VoxelPlanet.ofRadius(radius, blocks);
+        spawn(VoxelPlanet.ofRadius(radius, blocks), feetGal, upGal);
+    }
+
+    /** That planet above the player, just out of its gravity's reach. */
+    public void spawn(VoxelPlanet p, Vector3d feetGal, Vector3d upGal) {
         double above = (gravityRadius(p.surface()) + 24) * unitsPerBlock;
         start(p, new Vector3d(upGal).normalize().mul(above).add(feetGal));
         unsaved = true;

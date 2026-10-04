@@ -45,6 +45,10 @@ loom {
 				vmArg "-Dgalaxycraft.blocks=true"
 				vmArg "-Dgalaxycraft.hidden=true"
 			}
+			if (project.hasProperty("galaxycraftEditor")) { // PlanetEditorProbe: the /galaxycraft editor, no game
+				vmArg "-Dgalaxycraft.editor=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+			}
 			if (project.hasProperty("galaxycraftFloorGrow")) { // floors' collision wider, blocks
 				vmArg "-Dgalaxycraft.floorGrow=${project.property("galaxycraftFloorGrow")}"
 			}

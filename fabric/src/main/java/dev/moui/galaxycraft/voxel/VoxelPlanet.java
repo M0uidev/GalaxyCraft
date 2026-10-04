@@ -73,13 +73,33 @@ public final class VoxelPlanet {
     }
 
     public static VoxelPlanet ofRadius(int radius, Blocks blocks) {
+        int[] surfaceDown = {blocks.id(Material.GRASS), blocks.id(Material.DIRT), blocks.id(Material.DIRT), blocks.id(Material.STONE)};
+        return layered(radius, defaultAir(radius), surfaceDown, blocks);
+    }
+
+    /**
+     * A planet of that radius with air blocks of room above the surface, its crust as
+     * {@link #ofRadius} has it: surfaceDown[i] is the block i blocks below the surface (the top
+     * block at 0), the last one down to the bedrock that seals the bottom.
+     */
+    public static VoxelPlanet layered(int radius, int air, int[] surfaceDown, Blocks blocks) {
         if (radius < MIN_RADIUS || radius > MAX_RADIUS)
             throw new IllegalArgumentException("radius " + radius + " not in " + MIN_RADIUS + ".." + MAX_RADIUS);
+        if (surfaceDown.length == 0) throw new IllegalArgumentException("no layers");
         // -Dgalaxycraft.crustDepth: deeper crusts, as planets saved before had (tools/gxfit.sh).
         int depth = Math.min(radius - 2, Integer.getInteger("galaxycraft.crustDepth", crustDepth(radius)));
-        int air = Math.max(8, Math.min(32, radius / 4));
         int n = (int) Math.round(Math.PI * radius / 2);
-        return generate(new CubeSphere(n, radius - depth, depth + air), depth, blocks);
+        CubeSphere grid = new CubeSphere(n, radius - depth, depth + air);
+        char[] column = new char[grid.layers];
+        for (int k = 0; k < grid.layers; k++)
+            column[k] = (char) (k == 0 ? blocks.id(Material.BEDROCK) : k >= depth ? Blocks.AIR
+                    : surfaceDown[Math.min(depth - 1 - k, surfaceDown.length - 1)]);
+        return fill(grid, depth, column, blocks);
+    }
+
+    /** Room to build above a planet of that radius: a quarter of it, 8 to 32 blocks. */
+    public static int defaultAir(int radius) {
+        return Math.max(8, Math.min(32, radius / 4));
     }
 
     /** How deep a planet of that radius can be dug, bedrock included (blocks). */
@@ -107,13 +127,17 @@ public final class VoxelPlanet {
     }
 
     private static VoxelPlanet generate(CubeSphere grid, int depth, Blocks blocks) {
-        char[] cells = new char[grid.cellCount()];
         char[] column = new char[grid.layers];
         for (int k = 0; k < grid.layers; k++) {
             Material m = k == 0 ? Material.BEDROCK : k == depth - 1 ? Material.GRASS
                     : k >= depth - 3 && k < depth ? Material.DIRT : k < depth ? Material.STONE : Material.AIR;
             column[k] = (char) blocks.id(m);
         }
+        return fill(grid, depth, column, blocks);
+    }
+
+    private static VoxelPlanet fill(CubeSphere grid, int depth, char[] column, Blocks blocks) {
+        char[] cells = new char[grid.cellCount()];
         for (int c = 0; c < cells.length; c += grid.layers) System.arraycopy(column, 0, cells, c, grid.layers);
         return new VoxelPlanet(grid, depth, cells, blocks);
     }

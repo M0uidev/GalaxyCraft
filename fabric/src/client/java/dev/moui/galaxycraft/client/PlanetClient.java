@@ -11,6 +11,8 @@ import dev.moui.galaxycraft.voxel.AtlasLink;
 import dev.moui.galaxycraft.voxel.CellSpace;
 import dev.moui.galaxycraft.voxel.Material;
 import dev.moui.galaxycraft.voxel.PlanetSession;
+import dev.moui.galaxycraft.voxel.BlueprintStore;
+import dev.moui.galaxycraft.voxel.PlanetBlueprint;
 import dev.moui.galaxycraft.voxel.PlanetStore;
 import java.io.IOException;
 import java.util.Optional;
@@ -60,6 +62,8 @@ public final class PlanetClient {
     private static String stage;
     private static boolean autoSpawn;
     private static int spawnRadius; // > 0: spawn next tick
+    private static PlanetBlueprint spawnBlueprint; // non-null: spawn next tick
+    static final BlueprintStore blueprints = new BlueprintStore(planetDir().resolveSibling("blueprints"));
     private static int lastButtons;
     private static boolean lastP;
     private static int sinceSave;
@@ -101,6 +105,11 @@ public final class PlanetClient {
         spawnRadius = radius;
     }
 
+    /** A planet built from that blueprint, next tick, as {@link #requestSpawn(int)} puts one. */
+    public static void requestSpawn(PlanetBlueprint blueprint) {
+        spawnBlueprint = blueprint;
+    }
+
     public static void teleport() {
         session.teleport();
     }
@@ -136,9 +145,11 @@ public final class PlanetClient {
         for (byte[] piece; (piece = atlasLink.peek(world.sceneId(), bridge.hostPid())) != null
                 && bridge.send(Layout.MSG_ATLAS, piece); ) atlasLink.sent();
         if (!bridge.stage().equals(stage)) enterStage(bridge.stage());
-        if (frame != null && world.hasGravity() && (spawnRadius > 0 || (autoSpawn && world.follow()))) {
-            session.spawn(spawnRadius > 0 ? spawnRadius : autoRadius, world.queryPos(), frame.upGal());
+        if (frame != null && world.hasGravity() && (spawnRadius > 0 || spawnBlueprint != null || (autoSpawn && world.follow()))) {
+            if (spawnBlueprint != null) session.spawn(spawnBlueprint.build(blocks), world.queryPos(), frame.upGal());
+            else session.spawn(spawnRadius > 0 ? spawnRadius : autoRadius, world.queryPos(), frame.upGal());
             spawnRadius = 0;
+            spawnBlueprint = null;
             autoSpawn = false;
             sinceSave = SAVE_TICKS; // saved right away
             GalaxyCraft.LOG.info("Voxel planet of radius {} at {}", session.planet().surface(), session.center());
