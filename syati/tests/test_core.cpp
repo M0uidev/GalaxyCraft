@@ -210,6 +210,7 @@ static void TestInboxRecords()
   for (int k = 0; k < 40; k++)
     b.push_back(static_cast<u8>(k));
   Put32(b, 104u << 16), Put32(b, 0);
+  Put32(b, 104u << 16), Put32(b, 4), PutF(b, 1500.f);
   InboxRecord r;
   u32 off = 0;
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::PLANET);
@@ -219,7 +220,8 @@ static void TestInboxRecords()
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::CHUNK);
   CHECK(r.chunk.slot == 5 && r.chunk.version == 2 && r.chunk.dl[0] == 0 && r.chunk.kcl[0] == 32 &&
         r.chunk.sphere[1] == 20.f && r.chunk.sphere[3] == 99.f);
-  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::TELEPORT);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::TELEPORT && r.teleport.ground == 0.f);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::TELEPORT && r.teleport.ground == 1500.f);
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
   CHECK(off == b.size());
 }

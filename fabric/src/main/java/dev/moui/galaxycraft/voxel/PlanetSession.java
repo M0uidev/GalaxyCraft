@@ -54,6 +54,7 @@ public final class PlanetSession {
     private boolean builtStale; // edited again while its message waited for room
     private VoxelPlanet planet;
     private Vector3d center;
+    private float tpGround; // galaxy units from the center: where the next teleport lands
     private int id;
     private int scene = Integer.MIN_VALUE, host = Integer.MIN_VALUE;
     private int sinceResidency;
@@ -141,9 +142,20 @@ public final class PlanetSession {
      * Mario onto the surface, where the game puts him: on the line from the center through him.
      * The collision there goes first, then the teleport, so he never lands where nothing is solid.
      */
+    /** Radius of the top of the highest block in the column through p (blocks); the surface if it is all air. */
+    double ground(Vector3d p) {
+        CubeSphere g = planet.grid;
+        int c0 = g.cellAt(new Vector3d(p).normalize(g.core + 0.5));
+        if (c0 >= 0)
+            for (int k = g.layers - 1; k >= 0; k--)
+                if (planet.get(c0 + k) != Blocks.AIR) return g.radius(k + 1);
+        return planet.surface();
+    }
+
     public void teleport() {
         if (planet == null) return;
         Vector3d land = mario == null || mario.lengthSquared() < 1 ? new Vector3d(0, 1, 0) : new Vector3d(mario);
+        tpGround = (float) (ground(land) * unitsPerBlock);
         land.normalize(planet.surface());
         List<Integer> first = residency(land);
         pending.removeIf(first::contains);
@@ -180,7 +192,7 @@ public final class PlanetSession {
         while (built == null && !pending.isEmpty()) {
             int c = pending.poll();
             if (c == TP_MARK) {
-                built = new Msg(Layout.MSG_PLANET_TP, new byte[0]);
+                built = new Msg(Layout.MSG_PLANET_TP, ByteBuffer.allocate(4).putFloat(tpGround).array()); // big-endian: passed on as is
                 break;
             }
             pendingSet.clear(c);

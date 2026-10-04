@@ -174,8 +174,9 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   }
   else if (type == InboxRecord::TELEPORT)
   {
-    if (len != 0)
+    if (len != 0 && len != 4)
       return false;
+    out->teleport.ground = len == 4 ? ReadF32(p) : 0.f;
   }
   else
   {

@@ -73,6 +73,12 @@ struct InboxSeat
   u32 riding;
 };
 
+// Mario onto the planet (GXC_MSG_PLANET_TP): the ground's radius where he lands, 0 for the surface.
+struct InboxTeleport
+{
+  f32 ground;
+};
+
 struct InboxEntities
 {
   u32 count;
@@ -110,6 +116,7 @@ struct InboxRecord
   InboxEntities entities;
   InboxHurt hurt;
   InboxSeat seat;
+  InboxTeleport teleport;
 };
 
 u32 ReadBE32(const u8* p);

@@ -110,6 +110,19 @@ class PlanetSessionTest {
         assertTrue(msgs.subList(0, tp).stream().allMatch(m -> le(m).getFloat(20) < 0));
     }
 
+    @Test void teleportLandsOnTopOfWhatIsThere() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(32, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, MARIO);
+        VoxelPlanet p = s.planet();
+        Vector3d mario = new Vector3d(MARIO).sub(s.center()).div(80);
+        int c0 = p.grid.cellAt(new Vector3d(mario).normalize(p.grid.core + 0.5));
+        for (int k = p.depth; k < p.depth + 5; k++) p.set(c0 + k, Material.STONE); // a tower where he lands
+        s.teleport();
+        PlanetSession.Msg tp = drain(s).stream().filter(m -> m.type() == Layout.MSG_PLANET_TP).findFirst().orElseThrow();
+        assertEquals((p.surface() + 5) * 80, java.nio.ByteBuffer.wrap(tp.payload()).getFloat(), 1e-2);
+    }
+
     @Test void newSceneResendsEverything() {
         PlanetSession s = spawned(16);
         int all = drain(s).size();

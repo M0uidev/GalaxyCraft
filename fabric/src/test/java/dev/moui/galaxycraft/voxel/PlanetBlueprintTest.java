@@ -67,6 +67,11 @@ class PlanetBlueprintTest {
         assertTrue(store.read("nope").isEmpty());
         Files.writeString(store.file("bad"), "{");
         assertThrows(java.io.IOException.class, () -> store.read("bad"));
+        assertTrue(store.readLast().isEmpty());
+        PlanetBlueprint gen = bp.withMode(PlanetBlueprint.Mode.GENERATED).withBiome(5, "minecraft:desert", 0);
+        store.writeLast(gen);
+        assertEquals(gen, store.readLast().orElseThrow());
+        assertFalse(store.list().contains("last-blueprint"), "not one of the saved ones");
         store.delete("alpha");
         assertEquals(List.of("bad", "Moon_base_1"), store.list());
     }

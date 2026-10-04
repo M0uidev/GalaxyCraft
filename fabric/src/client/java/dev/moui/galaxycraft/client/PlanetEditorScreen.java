@@ -73,7 +73,9 @@ public final class PlanetEditorScreen extends Screen {
     public static void openIfRequested(Minecraft mc) {
         if (!openNextTick || mc.gui.screen() != null) return;
         openNextTick = false;
-        mc.gui.setScreen(new PlanetEditorScreen());
+        // On the planet it had last (generated ones stay generated), or a new one.
+        mc.gui.setScreen(new PlanetEditorScreen(PlanetClient.blueprints.readLast()
+                .filter(b -> b.problem() == null).orElse(PlanetBlueprint.standard("My planet", PlanetClient.DEFAULT_RADIUS))));
     }
 
     private void edit(PlanetBlueprint b) {
@@ -237,7 +239,10 @@ public final class PlanetEditorScreen extends Screen {
         // Actions.
         int bw = Math.min(70, (right - x - 16) / 5), by = height - 26;
         addRenderableWidget(Button.builder(Component.literal("New"), b -> {
-            edit(PlanetBlueprint.standard("My planet", PlanetClient.DEFAULT_RADIUS));
+            // A new one of the same kind: generated ones get a seed of their own.
+            PlanetBlueprint.Mode kind = mode;
+            edit(PlanetBlueprint.standard("My planet", PlanetClient.DEFAULT_RADIUS).withMode(kind)
+                    .withBiome(kind == PlanetBlueprint.Mode.GENERATED ? new java.util.Random().nextLong() : 0, PlanetBlueprint.RANDOM, 0));
             say("", WHITE);
             rebuildWidgets();
         }).bounds(x, by, bw, 20).build());
@@ -389,6 +394,22 @@ public final class PlanetEditorScreen extends Screen {
         }
         refreshSaved();
         rebuildWidgets();
+    }
+
+    /** Remembers what is open (if it is a whole blueprint) for the next time the editor opens. */
+    @Override
+    public void removed() {
+        String s = status;
+        int c = statusColor;
+        PlanetBlueprint b = blueprint();
+        status = s;
+        statusColor = c;
+        if (b == null) return;
+        try {
+            PlanetClient.blueprints.writeLast(b);
+        } catch (IOException e) {
+            GalaxyCraft.LOG.warn("Could not remember the last blueprint: {}", e.toString());
+        }
     }
 
     private void spawn() {

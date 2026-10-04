@@ -183,7 +183,7 @@ enum {
   /* Voxel planet, forwarded by the host to the module's inbox (GxcMailbox.inbox_addr). */
   GXC_MSG_PLANET = 102,    /* GxcPlanet */
   GXC_MSG_CHUNK = 103,     /* GxcChunk + display list + KCL (both big-endian already) */
-  GXC_MSG_PLANET_TP = 104, /* no payload: Mario onto the planet's surface */
+  GXC_MSG_PLANET_TP = 104, /* f32 big-endian: Mario onto the ground at this radius (none: the surface) */
   GXC_MSG_OUTLINE = 105,   /* GxcOutline: the block the player can act on */
   GXC_MSG_HELD = 106,      /* GxcHeld: what the player holds, drawn in Steve's right hand */
   GXC_MSG_ATLAS = 107,     /* GxcAtlas + data: a piece of the block atlas */

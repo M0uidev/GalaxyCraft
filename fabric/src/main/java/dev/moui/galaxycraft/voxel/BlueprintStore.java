@@ -9,7 +9,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-/** Planet blueprints on disk: one JSON file per name, written whole and atomically. */
+/**
+ * Planet blueprints on disk: one JSON file per name, written whole and atomically. Beside them, the
+ * last one the editor had open (not one of the saved ones), so it opens on it again.
+ */
 public final class BlueprintStore {
     private static final String EXT = ".json";
     private final Path dir;
@@ -32,8 +35,29 @@ public final class BlueprintStore {
     }
 
     public void write(PlanetBlueprint b) throws IOException {
-        Files.createDirectories(dir);
-        Path f = file(b.name()), tmp = f.resolveSibling(f.getFileName() + ".tmp");
+        write(file(b.name()), b);
+    }
+
+    private Path last() {
+        return dir.resolveSibling("last-blueprint" + EXT);
+    }
+
+    public void writeLast(PlanetBlueprint b) throws IOException {
+        write(last(), b);
+    }
+
+    /** The last one the editor had open; empty if none or unreadable (it is only a convenience). */
+    public Optional<PlanetBlueprint> readLast() {
+        try {
+            return Files.exists(last()) ? Optional.of(PlanetBlueprint.fromJson(Files.readString(last(), StandardCharsets.UTF_8))) : Optional.empty();
+        } catch (IOException | RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static void write(Path f, PlanetBlueprint b) throws IOException {
+        Files.createDirectories(f.getParent());
+        Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
         Files.writeString(tmp, b.toJson(), StandardCharsets.UTF_8);
         Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }

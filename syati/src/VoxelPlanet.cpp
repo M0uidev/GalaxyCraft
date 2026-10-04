@@ -320,7 +320,8 @@ public:
       const TVec3f* mario = MR::getPlayerPos();
       const f32 m[3] = {mario->x, mario->y, mario->z};
       f32 to[3];
-      gxc::PlanetDrop(mCenter, mSurface, DROP_ABOVE, m, to);
+      // Onto the ground under him (a hill, something built), not into it.
+      gxc::PlanetDrop(mCenter, r.teleport.ground > 0.f ? r.teleport.ground : mSurface, DROP_ABOVE, m, to);
       MR::setPlayerPos(TVec3f(to[0], to[1], to[2]));
     }
   }
