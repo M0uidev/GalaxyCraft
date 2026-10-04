@@ -12,15 +12,30 @@ import java.util.List;
  * bedrock that always seals the bottom; layers past the crust's depth are left out. Saved as JSON
  * by {@link BlueprintStore}; planets are built from it, never edited through it.
  */
-public record PlanetBlueprint(String name, int radius, int air, List<Layer> layers) {
-    public static final int MIN_AIR = 4, MAX_AIR = 64, MAX_THICKNESS = 64, MAX_LAYERS = 32;
+public record PlanetBlueprint(String name, int radius, int air, List<Layer> layers, Mode mode, long seed, String biome, int biomeSize) {
+    public static final int MIN_AIR = 4, MAX_AIR = 64, MAX_THICKNESS = 64, MAX_LAYERS = 32, MAX_BIOME_SIZE = 512;
+    /** The biome of a one-biome planet picked from its seed. */
+    public static final String RANDOM = "random";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     /** A block (Minecraft's text for a block state, as in /setblock) this many blocks thick. */
     public record Layer(String block, int thickness) {}
 
+    /**
+     * LAYERS: a smooth ball of the layers. GENERATED: terrain and blocks from Minecraft's noises and
+     * a biome (voxel.gen), the layers unused; biomeSize 0 makes it all one biome, more mixes biomes
+     * about that many blocks across.
+     */
+    public enum Mode { LAYERS, GENERATED }
+
     public PlanetBlueprint {
         layers = List.copyOf(layers);
+        if (mode == null) mode = Mode.LAYERS; // saved before there were modes
+        if (biome == null) biome = RANDOM;
+    }
+
+    public PlanetBlueprint(String name, int radius, int air, List<Layer> layers) {
+        this(name, radius, air, layers, Mode.LAYERS, 0, RANDOM, 0);
     }
 
     /** What /galaxycraft planet spawn makes: grass, two of dirt, stone. */
@@ -61,6 +76,8 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
         if (radius < VoxelPlanet.MIN_RADIUS || radius > VoxelPlanet.MAX_RADIUS)
             return "radius not in " + VoxelPlanet.MIN_RADIUS + ".." + VoxelPlanet.MAX_RADIUS;
         if (air < MIN_AIR || air > MAX_AIR) return "air not in " + MIN_AIR + ".." + MAX_AIR;
+        if (biomeSize < 0 || biomeSize > MAX_BIOME_SIZE) return "biome size not in 0.." + MAX_BIOME_SIZE;
+        if (biome.isBlank()) return "no biome";
         if (layers.isEmpty() || layers.size() > MAX_LAYERS) return "1 to " + MAX_LAYERS + " layers";
         for (Layer l : layers) {
             if (l.block() == null || l.block().isBlank()) return "a layer has no block";
@@ -69,16 +86,37 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
         return null;
     }
 
-    /** The planet it describes, in blocks' ids (a block blocks cannot read is air). */
-    public VoxelPlanet build(Blocks blocks) {
+    /** The planet it describes, in blocks' ids (a block blocks cannot read is air); gen makes generated ones. */
+    public VoxelPlanet build(Blocks blocks, dev.moui.galaxycraft.voxel.gen.Worldgen gen) {
         String p = problem();
         if (p != null) throw new IllegalArgumentException(name + ": " + p);
+        if (mode == Mode.GENERATED) {
+            if (gen == null) throw new IllegalArgumentException(name + ": generated, and no worldgen to make it");
+            return dev.moui.galaxycraft.voxel.gen.PlanetGenerator.build(this, gen.noise(seed), gen.biomes(), blocks, blocks::parse);
+        }
         List<Integer> down = new ArrayList<>();
         for (Layer l : layers) {
             int id = blocks.parse(l.block());
             for (int i = 0; i < l.thickness() && down.size() < crustDepth(); i++) down.add(id);
         }
         return VoxelPlanet.layered(radius, air, down.stream().mapToInt(Integer::intValue).toArray(), blocks);
+    }
+
+    /** A layered one only. */
+    public VoxelPlanet build(Blocks blocks) {
+        return build(blocks, null);
+    }
+
+    public PlanetBlueprint withMode(Mode m) {
+        return new PlanetBlueprint(name, radius, air, layers, m, seed, biome, biomeSize);
+    }
+
+    public PlanetBlueprint withAir(int air) {
+        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize);
+    }
+
+    public PlanetBlueprint withBiome(long seed, String biome, int biomeSize) {
+        return new PlanetBlueprint(name, radius, air, layers, mode, seed, biome, biomeSize);
     }
 
     public String toJson() {

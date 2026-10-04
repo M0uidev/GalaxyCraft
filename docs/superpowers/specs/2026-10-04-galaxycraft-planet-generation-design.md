@@ -57,7 +57,8 @@ For each column `(face, i, j)`, with `d` its unit direction and `p = d × radius
    erosion, ridges (weirdness), temperature, humidity. Being 3D noise at a point in space, columns
    next to each other get nearly the same values on any face: that is the whole seam story.
    - One biome: each value is mapped into that biome's range in the overworld table
-     (`v = lo + (n + 1) / 2 × (hi − lo)`). A biome with several ranges uses one picked by the seed.
+     (`v = lo + (n + 1) / 2 × (hi − lo)`). A biome with several ranges uses their union (built: more
+     varied ground than one range picked by the seed).
    - Several biomes: temperature and humidity are sampled at `p × (vanillaBiomeScale / biomeSize)`;
      `BiomeTable.find(climate)` names the biome per column. Continentalness is kept inland
      (≥ the table's coast value) until water exists.
@@ -113,6 +114,9 @@ Generation runs on a background thread (it is about 970,000 columns × 5 noises 
 second or two); the editor closes, the status line of `/galaxycraft planet status` (and a chat
 line) says "Generating…", and the planet is spawned on the client thread when it is ready, the
 same way `requestSpawn(PlanetBlueprint)` does today. Layered blueprints keep building inline.
+(Built: `PlanetGenerator.cells` runs off the thread with block ids looked up beforehand, since
+McBlocks adds ids as it meets states; the `VoxelPlanet` is made on the game's thread. A
+generated planet of radius 96 takes about half a second.)
 
 ## Tests
 

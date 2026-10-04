@@ -150,7 +150,7 @@ public final class McBlocks implements Blocks {
         return tiles.get(tile);
     }
 
-    BlockState state(int id) {
+    public BlockState state(int id) {
         BlockState s = id >= 0 && id < count ? Block.stateById(id) : null;
         return s == null ? net.minecraft.world.level.block.Blocks.AIR.defaultBlockState() : s;
     }

@@ -1,0 +1,117 @@
+package dev.moui.galaxycraft.voxel.gen;
+
+import dev.moui.galaxycraft.voxel.Blocks;
+import dev.moui.galaxycraft.voxel.CubeSphere;
+import dev.moui.galaxycraft.voxel.PlanetBlueprint;
+import dev.moui.galaxycraft.voxel.VoxelPlanet;
+import dev.moui.galaxycraft.voxel.gen.TerrainNoise.Field;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.function.ToIntFunction;
+import org.joml.Vector3d;
+
+/**
+ * Builds a generated planet: per column of the cube-sphere, Minecraft's noises sampled in 3D at
+ * where that column points give a climate, the climate a biome and a height, the biome the
+ * blocks. Neighboring columns sample neighboring points whatever face they are on, so the terrain
+ * has no seams on the cube's edges or corners.
+ */
+public final class PlanetGenerator {
+    /** Noise space per block for the terrain: eight times Minecraft's (blocks / 4), planets being small. */
+    static final double TERRAIN_SCALE = 2;
+    /** Rise from a neighbor that makes a column a cliff, its top bare stone. */
+    static final int STEEP = 3;
+    /** Below this a planet's relief is scaled down with its radius. */
+    static final double FULL_RELIEF_RADIUS = 64;
+    /** Continentalness from the coast inland: what several-biome planets use until there is water. */
+    static final Climate.Span INLAND = new Climate.Span(new Climate(-0.11, -1, -1, -1, -1), new Climate(1, 1, 1, 1, 1));
+
+    private PlanetGenerator() {}
+
+    /** The biome a one-biome blueprint gets: its own, or for "random" one of the land biomes by its seed. */
+    public static String biome(PlanetBlueprint bp, BiomeTable table) {
+        if (!PlanetBlueprint.RANDOM.equals(bp.biome())) return bp.biome();
+        List<String> land = table.land();
+        return land.get(new Random(bp.seed()).nextInt(land.size()));
+    }
+
+    /** A generated planet's cells, before they are a VoxelPlanet (that is made on the game's thread). */
+    public record Cells(CubeSphere grid, int depth, char[] cells) {
+        public VoxelPlanet planet(Blocks blocks) {
+            return VoxelPlanet.of(grid, depth, cells, blocks);
+        }
+    }
+
+    /** ids gives the planet's id for a block's text (Blocks.parse in the game). */
+    public static VoxelPlanet build(PlanetBlueprint bp, TerrainNoise noise, BiomeTable table, Blocks blocks, ToIntFunction<String> ids) {
+        return cells(bp, noise, table, ids).planet(blocks);
+    }
+
+    /** The cells alone: safe off the game's thread when ids only reads (see {@link BiomeSurface#blocks()}). */
+    public static Cells cells(PlanetBlueprint bp, TerrainNoise noise, BiomeTable table, ToIntFunction<String> ids) {
+        int radius = bp.radius(), air = bp.air(), depth = VoxelPlanet.groundDepth(radius);
+        int n = VoxelPlanet.gridSize(radius);
+        CubeSphere grid = new CubeSphere(n, radius - depth, depth + air);
+        String fixed = bp.biomeSize() == 0 ? biome(bp, table) : null;
+        Climate.Span span = fixed == null ? INLAND : table.span(fixed);
+        if (span == null) throw new IllegalArgumentException("no land biome " + fixed);
+        double climateScale = bp.biomeSize() == 0 ? 0 : 256.0 / bp.biomeSize();
+        double relief = Math.min(1, radius / FULL_RELIEF_RADIUS);
+
+        int columns = 6 * n * n;
+        int[] height = new int[columns];
+        String[] biome = new String[columns];
+        for (int f = 0; f < 6; f++)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++) {
+                    int col = (f * n + i) * n + j;
+                    Vector3d p = grid.dir(f, i, j).add(grid.dir(f, i + 1, j)).add(grid.dir(f, i, j + 1))
+                            .add(grid.dir(f, i + 1, j + 1)).normalize(radius);
+                    double tx = p.x * TERRAIN_SCALE, ty = p.y * TERRAIN_SCALE, tz = p.z * TERRAIN_SCALE;
+                    double cx = p.x * climateScale, cy = p.y * climateScale, cz = p.z * climateScale;
+                    Climate c = span.map(new Climate(noise.value(Field.CONTINENTALNESS, tx, ty, tz),
+                            noise.value(Field.EROSION, tx, ty, tz), noise.value(Field.RIDGES, tx, ty, tz),
+                            noise.value(Field.TEMPERATURE, cx, cy, cz), noise.value(Field.HUMIDITY, cx, cy, cz)));
+                    biome[col] = fixed != null ? fixed : table.find(c);
+                    double h = TerrainShaper.height(c) * relief;
+                    height[col] = (int) Math.round(h > 0 ? soft(h, air - 4) : -soft(-h, depth - 2));
+                }
+
+        Map<String, int[]> palettes = new HashMap<>(); // cover, top, filler, stone ids by biome
+        char[] cells = new char[grid.cellCount()];
+        int bedrock = ids.applyAsInt("minecraft:bedrock");
+        for (int col = 0; col < columns; col++) {
+            int[] pal = palettes.computeIfAbsent(biome[col], b -> {
+                BiomeSurface.Palette s = BiomeSurface.of(b);
+                return new int[] {s.cover() == null ? Blocks.AIR : ids.applyAsInt(s.cover()), ids.applyAsInt(s.top()),
+                        ids.applyAsInt(s.filler()), ids.applyAsInt(s.stone())};
+            });
+            int base = col * grid.layers, top = depth - 1 + height[col];
+            boolean steep = steep(grid, n, height, col);
+            cells[base] = (char) bedrock;
+            for (int k = 1; k <= top; k++) {
+                int below = top - k;
+                cells[base + k] = (char) (below == 0 ? (steep ? pal[3] : pal[1]) : below <= BiomeSurface.FILLER_DEPTH ? pal[2] : pal[3]);
+            }
+            if (!steep && top + 1 < grid.layers) cells[base + top + 1] = (char) pal[0];
+        }
+        return new Cells(grid, depth, cells);
+    }
+
+    /** lim·tanh(h/lim): h itself near 0, never past lim. */
+    private static double soft(double h, int lim) {
+        return lim <= 0 ? 0 : lim * Math.tanh(h / lim);
+    }
+
+    /** Whether a column stands STEEP or more above any of its four neighbors (on its face or past an edge). */
+    private static boolean steep(CubeSphere grid, int n, int[] height, int col) {
+        int cell = col * grid.layers;
+        for (int side = CubeSphere.I_MINUS; side <= CubeSphere.J_PLUS; side++) {
+            int nb = grid.neighbor(cell, side);
+            if (nb >= 0 && height[nb / grid.layers] <= height[col] - STEEP) return true;
+        }
+        return false;
+    }
+}

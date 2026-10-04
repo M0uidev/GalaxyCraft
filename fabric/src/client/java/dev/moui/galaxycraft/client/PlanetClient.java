@@ -1,5 +1,9 @@
 package dev.moui.galaxycraft.client;
 
+import dev.moui.galaxycraft.voxel.VoxelPlanet;
+import dev.moui.galaxycraft.voxel.gen.BiomeSurface;
+import dev.moui.galaxycraft.voxel.gen.PlanetGenerator;
+import dev.moui.galaxycraft.voxel.gen.TerrainNoise;
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.bridge.BridgeClient;
 import dev.moui.galaxycraft.gravity.GravityFrame;
@@ -20,6 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -63,6 +68,10 @@ public final class PlanetClient {
     private static boolean autoSpawn;
     private static int spawnRadius; // > 0: spawn next tick
     private static PlanetBlueprint spawnBlueprint; // non-null: spawn next tick
+    private static java.util.concurrent.CompletableFuture<PlanetGenerator.Cells> generating; // off the game's thread
+    private static VoxelPlanet generated; // non-null: generated, spawn next tick
+    private static McWorldgen worldgen;
+    private static MinecraftServer worldgenServer;
     static final BlueprintStore blueprints = new BlueprintStore(planetDir().resolveSibling("blueprints"));
     private static int lastButtons;
     private static boolean lastP;
@@ -75,6 +84,37 @@ public final class PlanetClient {
     private static AtlasLink atlasLink;
 
     private PlanetClient() {}
+
+    /** Minecraft's worldgen of the integrated server, for generated planets (null without one). */
+    public static McWorldgen worldgen() {
+        MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
+        if (server != worldgenServer) {
+            worldgenServer = server;
+            worldgen = server == null ? null : new McWorldgen(server.registryAccess());
+        }
+        return worldgen;
+    }
+
+    /**
+     * Generates bp's cells on another thread, its blocks' ids looked up first on this one (McBlocks
+     * adds ids as it meets new states); the planet is spawned when they are done.
+     */
+    private static void generate(PlanetBlueprint bp, LocalPlayer player) {
+        McWorldgen gen = worldgen();
+        if (gen == null) {
+            say(player, "Generated planets need a single player world");
+            return;
+        }
+        java.util.Map<String, Integer> ids = new java.util.HashMap<>();
+        for (String b : BiomeSurface.blocks()) ids.put(b, blocks.parse(b));
+        TerrainNoise noise = gen.noise(bp.seed());
+        say(player, "Generating " + bp.name() + "...");
+        generating = java.util.concurrent.CompletableFuture.supplyAsync(() -> PlanetGenerator.cells(bp, noise, gen.biomes(), ids::get));
+    }
+
+    private static void say(LocalPlayer player, String text) {
+        if (player != null) player.sendSystemMessage(Component.literal("GalaxyCraft: " + text));
+    }
 
     /** Minecraft's blocks for the planets, once its models are loaded (null before the first tick). */
     static McBlocks blocks() {
@@ -145,11 +185,26 @@ public final class PlanetClient {
         for (byte[] piece; (piece = atlasLink.peek(world.sceneId(), bridge.hostPid())) != null
                 && bridge.send(Layout.MSG_ATLAS, piece); ) atlasLink.sent();
         if (!bridge.stage().equals(stage)) enterStage(bridge.stage());
-        if (frame != null && world.hasGravity() && (spawnRadius > 0 || spawnBlueprint != null || (autoSpawn && world.follow()))) {
-            if (spawnBlueprint != null) session.spawn(spawnBlueprint.build(blocks), world.queryPos(), frame.upGal());
+        if (spawnBlueprint != null && spawnBlueprint.mode() == PlanetBlueprint.Mode.GENERATED) {
+            if (generating == null) generate(spawnBlueprint, player);
+            spawnBlueprint = null;
+        }
+        if (generating != null && generating.isDone()) {
+            try {
+                generated = generating.join().planet(blocks);
+            } catch (RuntimeException e) {
+                GalaxyCraft.LOG.warn("Could not generate the planet: {}", e.toString());
+                say(player, "Could not generate the planet: " + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage()));
+            }
+            generating = null;
+        }
+        if (frame != null && world.hasGravity() && (spawnRadius > 0 || spawnBlueprint != null || generated != null || (autoSpawn && world.follow()))) {
+            if (generated != null) session.spawn(generated, world.queryPos(), frame.upGal());
+            else if (spawnBlueprint != null) session.spawn(spawnBlueprint.build(blocks), world.queryPos(), frame.upGal());
             else session.spawn(spawnRadius > 0 ? spawnRadius : autoRadius, world.queryPos(), frame.upGal());
             spawnRadius = 0;
             spawnBlueprint = null;
+            generated = null;
             autoSpawn = false;
             sinceSave = SAVE_TICKS; // saved right away
             GalaxyCraft.LOG.info("Voxel planet of radius {} at {}", session.planet().surface(), session.center());

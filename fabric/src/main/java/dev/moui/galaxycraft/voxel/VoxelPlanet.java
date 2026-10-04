@@ -86,15 +86,24 @@ public final class VoxelPlanet {
         if (radius < MIN_RADIUS || radius > MAX_RADIUS)
             throw new IllegalArgumentException("radius " + radius + " not in " + MIN_RADIUS + ".." + MAX_RADIUS);
         if (surfaceDown.length == 0) throw new IllegalArgumentException("no layers");
-        // -Dgalaxycraft.crustDepth: deeper crusts, as planets saved before had (tools/gxfit.sh).
-        int depth = Math.min(radius - 2, Integer.getInteger("galaxycraft.crustDepth", crustDepth(radius)));
-        int n = (int) Math.round(Math.PI * radius / 2);
-        CubeSphere grid = new CubeSphere(n, radius - depth, depth + air);
+        int depth = groundDepth(radius);
+        CubeSphere grid = new CubeSphere(gridSize(radius), radius - depth, depth + air);
         char[] column = new char[grid.layers];
         for (int k = 0; k < grid.layers; k++)
             column[k] = (char) (k == 0 ? blocks.id(Material.BEDROCK) : k >= depth ? Blocks.AIR
                     : surfaceDown[Math.min(depth - 1 - k, surfaceDown.length - 1)]);
         return fill(grid, depth, column, blocks);
+    }
+
+    /** The crust a new planet of that radius gets (blocks, bedrock included). */
+    public static int groundDepth(int radius) {
+        // -Dgalaxycraft.crustDepth: deeper crusts, as planets saved before had (tools/gxfit.sh).
+        return Math.min(radius - 2, Integer.getInteger("galaxycraft.crustDepth", crustDepth(radius)));
+    }
+
+    /** Cells along a face's edge for a planet of that radius: about a block wide at the surface. */
+    public static int gridSize(int radius) {
+        return (int) Math.round(Math.PI * radius / 2);
     }
 
     /** Room to build above a planet of that radius: a quarter of it, 8 to 32 blocks. */

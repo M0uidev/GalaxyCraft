@@ -18,24 +18,28 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * Chooses a block for a planet layer: every Minecraft block with its icon and the name the
- * inventory gives it, narrowed by what is typed (words of the name or of the id). Text with a
- * state, as in /setblock (minecraft:oak_log[axis=x]), is offered as it is. Clicking one, or Enter
- * on the highlighted one, hands its text back and returns to the editor.
+ * Chooses one of a list (blocks for a planet layer, biomes for a generated planet), each with an
+ * icon and the name the game shows for it, narrowed by what is typed (words of the name or of the
+ * id). Clicking one, or Enter on the highlighted one, hands its text back and returns to the editor.
  */
-public final class BlockPickerScreen extends Screen {
+public final class PickerScreen extends Screen {
     private static final int WHITE = 0xFFFFFFFF, GRAY = 0xFFA0A0A0, HOVER = 0x40FFFFFF, PICKED = 0x60FFFFFF;
     private static final int ROW = 20, TOP = 44;
 
-    /** A block as listed: the text it is saved as and what the search looks in. */
-    private record Entry(String text, BlockState state, String name, String haystack) {
-        static Entry of(String text, BlockState state) {
-            String name = state.getBlock().getName().getString();
-            return new Entry(text, state, name, (name + " " + text).toLowerCase(Locale.ROOT));
+    /** One as listed: the text it is saved as, its name and icon, and what the search looks in. */
+    private record Entry(String text, String name, ItemStack icon, String haystack) {
+        static Entry of(String text, String name, ItemStack icon) {
+            return new Entry(text, name, icon, (name + " " + text).toLowerCase(Locale.ROOT));
+        }
+
+        static Entry block(String text, BlockState state) {
+            return of(text, state.getBlock().getName().getString(), new ItemStack(state.getBlock().asItem()));
         }
     }
 
-    private static List<Entry> all;
+    private static List<Entry> allBlocks;
+    private final List<Entry> all;
+    private final boolean states; // blocks: text with a state is offered as typed
     private final Screen parent;
     private final Consumer<String> pick;
     private final String current;
@@ -44,35 +48,49 @@ public final class BlockPickerScreen extends Screen {
     private int scroll, selected;
     private EditBox search;
 
-    public BlockPickerScreen(Screen parent, String current, Consumer<String> pick) {
-        super(Component.literal("Choose a block"));
+    private PickerScreen(String title, List<Entry> all, boolean states, Screen parent, String current, Consumer<String> pick) {
+        super(Component.literal(title));
+        this.all = all;
+        this.states = states;
         this.parent = parent;
         this.current = current;
         this.pick = pick;
     }
 
-    private static List<Entry> all() {
-        if (all == null) {
-            all = new ArrayList<>();
+    /** Every Minecraft block; text with a state, as in /setblock (minecraft:oak_log[axis=x]), is offered as it is. */
+    public static PickerScreen blocks(Screen parent, String current, Consumer<String> pick) {
+        if (allBlocks == null) {
+            allBlocks = new ArrayList<>();
             for (Block b : BuiltInRegistries.BLOCK)
                 if (!b.defaultBlockState().isAir())
-                    all.add(Entry.of(BuiltInRegistries.BLOCK.getKey(b).toString(), b.defaultBlockState()));
+                    allBlocks.add(Entry.block(BuiltInRegistries.BLOCK.getKey(b).toString(), b.defaultBlockState()));
         }
-        return all;
+        return new PickerScreen("Choose a block", allBlocks, true, parent, current, pick);
+    }
+
+    /** The land biomes, each with its ground's top block as icon; "Random" (from the seed) first. */
+    public static PickerScreen biomes(Screen parent, List<String> biomes, String current, Consumer<String> pick) {
+        List<Entry> all = new ArrayList<>();
+        all.add(Entry.of(dev.moui.galaxycraft.voxel.PlanetBlueprint.RANDOM, "Random (from the seed)", new ItemStack(net.minecraft.world.item.Items.COMPASS)));
+        for (String b : biomes) {
+            BlockState top = PlanetEditorScreen.state(dev.moui.galaxycraft.voxel.gen.BiomeSurface.of(b).top());
+            all.add(Entry.of(b, McWorldgen.name(b), top == null ? ItemStack.EMPTY : new ItemStack(top.getBlock().asItem())));
+        }
+        return new PickerScreen("Choose a biome", all, false, parent, current, pick);
     }
 
     private void filter() {
         String[] words = query.toLowerCase(Locale.ROOT).trim().split("\\s+");
         List<Entry> out = new ArrayList<>();
         // A block with its state typed out goes first, as it is.
-        if (query.contains("[")) {
+        if (states && query.contains("[")) {
             try {
-                out.add(Entry.of(query.trim(), BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, query.trim(), false).blockState()));
+                out.add(Entry.block(query.trim(), BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, query.trim(), false).blockState()));
             } catch (Exception ignored) {
                 // Not one yet: the list below still narrows by its words.
             }
         }
-        for (Entry e : all()) {
+        for (Entry e : all) {
             boolean match = true;
             for (String w : words) if (!e.haystack.contains(w.replace("[", " ").split(" ")[0])) match = false;
             if (match) out.add(e);
@@ -97,7 +115,7 @@ public final class BlockPickerScreen extends Screen {
     @Override
     protected void init() {
         search = new EditBox(font, listX(), 20, listW(), 20, Component.literal("Search"));
-        search.setHint(Component.literal("Search: name or id (grass, oak log, minecraft:stone...)"));
+        search.setHint(Component.literal("Search by name or id"));
         search.setMaxLength(256);
         search.setValue(query);
         search.setResponder(v -> {
@@ -178,8 +196,8 @@ public final class BlockPickerScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
         super.extractRenderState(g, mouseX, mouseY, a);
         int x = listX(), w = listW();
-        g.text(font, "Choose a block", x, 8, WHITE);
-        String count = shown.size() + " blocks";
+        g.text(font, title, x, 8, WHITE);
+        String count = shown.size() + " found";
         g.text(font, count, x + w - font.width(count), 8, GRAY);
         int hovered = at(mouseX, mouseY);
         g.enableScissor(x, TOP, x + w, TOP + rows() * ROW);
@@ -188,13 +206,12 @@ public final class BlockPickerScreen extends Screen {
             Entry e = shown.get(r);
             if (r == selected) g.fill(x, y, x + w, y + ROW, PICKED);
             else if (r == hovered) g.fill(x, y, x + w, y + ROW, HOVER);
-            ItemStack icon = new ItemStack(e.state.getBlock().asItem());
-            if (!icon.isEmpty()) g.item(icon, x + 2, y + 2);
+            if (!e.icon.isEmpty()) g.item(e.icon, x + 2, y + 2);
             g.text(font, e.name, x + 22, y + 6, WHITE);
             String id = font.plainSubstrByWidth(e.text, Math.max(0, w - 30 - font.width(e.name)));
             g.text(font, id, x + w - 4 - font.width(id), y + 6, GRAY);
         }
         g.disableScissor();
-        if (shown.isEmpty()) g.centeredText(font, "No block matches", width / 2, TOP + 8, GRAY);
+        if (shown.isEmpty()) g.centeredText(font, "Nothing matches", width / 2, TOP + 8, GRAY);
     }
 }

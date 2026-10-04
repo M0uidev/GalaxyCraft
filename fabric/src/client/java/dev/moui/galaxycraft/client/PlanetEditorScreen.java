@@ -28,7 +28,7 @@ import net.minecraft.world.level.block.state.BlockState;
  */
 public final class PlanetEditorScreen extends Screen {
     private static final int WHITE = 0xFFFFFFFF, GRAY = 0xFFA0A0A0, RED = 0xFFFF5555, GREEN = 0xFF55FF55;
-    private static final int ROW = 22, LIST_W = 120, TOP = 60;
+    private static final int ROW = 22, LIST_W = 120, TOP = 70, MODE_W = 110;
     private static boolean openNextTick;
 
     /** One layer as edited. */
@@ -43,7 +43,9 @@ public final class PlanetEditorScreen extends Screen {
     }
 
     private String name;
-    private int radius, air;
+    private int radius, air, biomeSize;
+    private PlanetBlueprint.Mode mode;
+    private String seed, biome;
     private final List<Row> rows = new ArrayList<>();
     private List<String> saved = List.of();
     private int layerScroll, listScroll;
@@ -53,8 +55,13 @@ public final class PlanetEditorScreen extends Screen {
     private Button addLayer;
 
     private PlanetEditorScreen() {
+        this(PlanetBlueprint.standard("My planet", PlanetClient.DEFAULT_RADIUS));
+    }
+
+    /** The editor on that blueprint (tests). */
+    public PlanetEditorScreen(PlanetBlueprint b) {
         super(Component.literal("GalaxyCraft planets"));
-        edit(PlanetBlueprint.standard("My planet", PlanetClient.DEFAULT_RADIUS));
+        edit(b);
         refreshSaved();
     }
 
@@ -73,6 +80,10 @@ public final class PlanetEditorScreen extends Screen {
         name = b.name();
         radius = Math.clamp(b.radius(), VoxelPlanet.MIN_RADIUS, VoxelPlanet.MAX_RADIUS);
         air = Math.clamp(b.air(), PlanetBlueprint.MIN_AIR, PlanetBlueprint.MAX_AIR);
+        mode = b.mode();
+        seed = Long.toString(b.seed());
+        biome = b.biome();
+        biomeSize = b.biomeSize();
         rows.clear();
         for (PlanetBlueprint.Layer l : b.layers()) rows.add(new Row(l.block(), l.thickness()));
         fit();
@@ -139,18 +150,24 @@ public final class PlanetEditorScreen extends Screen {
         }
     }
 
-    /** An int on a slider: radius, air. */
+    /** An int on a slider (radius, air, biome size), moving by step. */
     private final class IntSlider extends AbstractSliderButton {
-        private final String label;
-        private final int min, max;
+        private final java.util.function.IntFunction<String> label;
+        private final int min, max, step;
         private final java.util.function.IntConsumer to;
         private int n;
 
         IntSlider(int x, int y, int w, String label, int min, int max, int n, java.util.function.IntConsumer to) {
+            this(x, y, w, v -> label + ": " + v, min, max, 1, n, to);
+        }
+
+        IntSlider(int x, int y, int w, java.util.function.IntFunction<String> label, int min, int max, int step, int n,
+                java.util.function.IntConsumer to) {
             super(x, y, w, 20, Component.empty(), (n - min) / (double) (max - min));
             this.label = label;
             this.min = min;
             this.max = max;
+            this.step = step;
             this.n = n;
             this.to = to;
             updateMessage();
@@ -158,12 +175,12 @@ public final class PlanetEditorScreen extends Screen {
 
         @Override
         protected void updateMessage() {
-            setMessage(Component.literal(label + ": " + n));
+            setMessage(Component.literal(label.apply(n)));
         }
 
         @Override
         protected void applyValue() {
-            n = min + (int) Math.round(value * (max - min));
+            n = min + (int) Math.round(value * (max - min) / step) * step;
             value = (n - min) / (double) (max - min);
             to.accept(n);
         }
@@ -188,6 +205,7 @@ public final class PlanetEditorScreen extends Screen {
     @Override
     protected void init() {
         sliders.clear();
+        addLayer = null;
         int x = LIST_W + 20, right = width - 10;
         // The saved blueprints.
         int listRows = Math.max(1, (height - 40 - 24) / ROW);
@@ -208,13 +226,35 @@ public final class PlanetEditorScreen extends Screen {
         addRenderableWidget(new IntSlider(x + nameW + radiusW + 8, 20, Math.min(90, w - nameW - radiusW - 8), "Air",
                 PlanetBlueprint.MIN_AIR, PlanetBlueprint.MAX_AIR, air, v -> air = v))
                 .setTooltip(Tooltip.create(Component.literal("Room to build above the surface")));
+        addRenderableWidget(Button.builder(Component.literal("Mode: " + (mode == PlanetBlueprint.Mode.LAYERS ? "Layers" : "Generated")), b -> {
+            mode = mode == PlanetBlueprint.Mode.LAYERS ? PlanetBlueprint.Mode.GENERATED : PlanetBlueprint.Mode.LAYERS;
+            if (mode == PlanetBlueprint.Mode.GENERATED && seed.equals("0")) seed = Long.toString(new java.util.Random().nextLong());
+            rebuildWidgets();
+        }).bounds(x, 44, MODE_W, 20).tooltip(Tooltip.create(Component.literal(
+                "Layers: a smooth ball of your layers\nGenerated: terrain and blocks of a Minecraft biome"))).build());
+        if (mode == PlanetBlueprint.Mode.LAYERS) layerWidgets(x, right);
+        else generatedWidgets(x, right);
+        // Actions.
+        int bw = Math.min(70, (right - x - 16) / 5), by = height - 26;
+        addRenderableWidget(Button.builder(Component.literal("New"), b -> {
+            edit(PlanetBlueprint.standard("My planet", PlanetClient.DEFAULT_RADIUS));
+            say("", WHITE);
+            rebuildWidgets();
+        }).bounds(x, by, bw, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Save"), b -> save()).bounds(x + (bw + 4), by, bw, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Delete"), b -> delete()).bounds(x + 2 * (bw + 4), by, bw, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Spawn"), b -> spawn()).bounds(x + 3 * (bw + 4), by, bw, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose()).bounds(x + 4 * (bw + 4), by, bw, 20).build());
+    }
+
+    private void layerWidgets(int x, int right) {
         int visible = Math.max(1, (height - TOP - 48) / ROW);
         layerScroll = Math.clamp(layerScroll, 0, Math.max(0, rows.size() - visible));
         int sliderW = 70, blockW = Math.max(80, right - x - 20 - sliderW - 4 - 54 - PREVIEW_W);
         for (int i = 0; i < visible && layerScroll + i < rows.size(); i++) {
             int r = layerScroll + i, y = TOP + i * ROW;
             Row row = rows.get(r);
-            addRenderableWidget(Button.builder(Component.empty(), b -> minecraft.gui.setScreen(new BlockPickerScreen(this, row.block, v -> row.block = v)))
+            addRenderableWidget(Button.builder(Component.empty(), b -> minecraft.gui.setScreen(PickerScreen.blocks(this, row.block, v -> row.block = v)))
                     .bounds(x + 20, y, blockW, 20).tooltip(Tooltip.create(Component.literal(row.block + "\nClick to choose another block"))).build());
             sliders.add(addRenderableWidget(new Thickness(x + 24 + blockW, y, sliderW, row)));
             int bx = x + 28 + blockW + sliderW;
@@ -229,22 +269,39 @@ public final class PlanetEditorScreen extends Screen {
         addLayer = null;
         if (addY + 20 <= height - 48)
             addLayer = addRenderableWidget(Button.builder(Component.literal("+ Layer"), b -> minecraft.gui.setScreen(
-                    new BlockPickerScreen(this, "", v -> {
+                    PickerScreen.blocks(this, "", v -> {
                         rows.add(new Row(v, 1));
                         fit();
                         layerScroll = Math.max(0, rows.size() - visible);
                     }))).bounds(x + 20, addY, 60, 20).build());
-        // Actions.
-        int bw = Math.min(70, (right - x - 16) / 5), by = height - 26;
+    }
+
+    private void generatedWidgets(int x, int right) {
+        int w = Math.min(220, right - x - 20);
+        addRenderableWidget(Button.builder(Component.empty(), b -> {
+            McWorldgen gen = PlanetClient.worldgen();
+            if (gen == null) say("Biomes need a single player world", RED);
+            else minecraft.gui.setScreen(PickerScreen.biomes(this, gen.biomes().land(), biome, v -> biome = v));
+        }).bounds(x + 40, TOP, w, 20).tooltip(Tooltip.create(Component.literal(biome + "\nClick to choose another biome"))).build());
+        EditBox seedBox = box(x + 40, TOP + ROW, Math.min(140, w - 40), seed, 20, v -> seed = v);
+        seedBox.setResponder(v -> {
+            seed = v;
+            seedBox.setTextColor(v.matches("-?\\d{0,18}") ? WHITE : RED);
+        });
         addRenderableWidget(Button.builder(Component.literal("New"), b -> {
-            edit(PlanetBlueprint.standard("My planet", PlanetClient.DEFAULT_RADIUS));
-            say("", WHITE);
+            seed = Long.toString(new java.util.Random().nextLong());
             rebuildWidgets();
-        }).bounds(x, by, bw, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Save"), b -> save()).bounds(x + (bw + 4), by, bw, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Delete"), b -> delete()).bounds(x + 2 * (bw + 4), by, bw, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Spawn"), b -> spawn()).bounds(x + 3 * (bw + 4), by, bw, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose()).bounds(x + 4 * (bw + 4), by, bw, 20).build());
+        }).bounds(x + 44 + Math.min(140, w - 40), TOP + ROW, 34, 20).tooltip(Tooltip.create(Component.literal("Another seed"))).build());
+        addRenderableWidget(new IntSlider(x + 40, TOP + 2 * ROW, w,
+                v -> v == 0 ? "Biomes: one per planet" : "Biomes: about " + v + " blocks across",
+                0, PlanetBlueprint.MAX_BIOME_SIZE, 16, biomeSize, v -> biomeSize = v))
+                .setTooltip(Tooltip.create(Component.literal("One per planet: all of it the biome above\nMore: Minecraft's biomes mixed, this big")));
+    }
+
+    /** The biome's name, red when this game has no such land biome. */
+    private boolean biomeKnown() {
+        McWorldgen gen = PlanetClient.worldgen();
+        return PlanetBlueprint.RANDOM.equals(biome) || gen == null || gen.biomes().span(biome) != null;
     }
 
     private EditBox box(int x, int y, int w, String value, int max, java.util.function.Consumer<String> to) {
@@ -267,7 +324,7 @@ public final class PlanetEditorScreen extends Screen {
     }
 
     /** The block state that text names, or null if Minecraft has none by it. */
-    private static BlockState state(String text) {
+    static BlockState state(String text) {
         try {
             return BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, text, false).blockState();
         } catch (Exception e) {
@@ -285,7 +342,18 @@ public final class PlanetEditorScreen extends Screen {
             }
             layers.add(new PlanetBlueprint.Layer(row.block.trim(), row.thickness));
         }
-        PlanetBlueprint b = new PlanetBlueprint(name.trim(), radius, air, layers);
+        long s;
+        try {
+            s = Long.parseLong(seed.isEmpty() || seed.equals("-") ? "0" : seed);
+        } catch (NumberFormatException e) {
+            say("The seed must be a whole number", RED);
+            return null;
+        }
+        if (mode == PlanetBlueprint.Mode.GENERATED && biomeSize == 0 && !biomeKnown()) {
+            say("Unknown biome: " + biome, RED);
+            return null;
+        }
+        PlanetBlueprint b = new PlanetBlueprint(name.trim(), radius, air, layers, mode, s, biome, biomeSize);
         String problem = b.problem();
         if (problem != null) {
             say(problem, RED);
@@ -368,12 +436,26 @@ public final class PlanetEditorScreen extends Screen {
         g.text(font, "Saved planets", 10, 10, WHITE);
         if (saved.isEmpty()) g.text(font, "None yet", 10, 28, GRAY);
         g.text(font, "Name", x, 10, GRAY);
-        int room = room(), used = used(), right = width - 10;
+        int right = width - 10, infoX = x + MODE_W + 6;
+        if (mode == PlanetBlueprint.Mode.GENERATED) {
+            g.text(font, font.plainSubstrByWidth("From Minecraft's worldgen", right - infoX), infoX, 50, GRAY);
+            g.text(font, "Biome", x, TOP + 6, GRAY);
+            g.text(font, "Seed", x, TOP + ROW + 6, GRAY);
+            String shown = PlanetBlueprint.RANDOM.equals(biome) ? "Random (from the seed)" : McWorldgen.name(biome);
+            if (biomeSize > 0) shown = "Mixed (" + shown + " unused)";
+            BlockState top = PlanetBlueprint.RANDOM.equals(biome) ? null : state(dev.moui.galaxycraft.voxel.gen.BiomeSurface.of(biome).top());
+            if (top != null) g.item(new ItemStack(top.getBlock().asItem()), x + 42, TOP + 2);
+            g.text(font, font.plainSubstrByWidth(shown, Math.min(220, right - x - 20) - 28), x + 62, TOP + 6,
+                    biomeKnown() ? biomeSize > 0 ? GRAY : WHITE : RED);
+            g.text(font, status, x, height - 40, statusColor);
+            return;
+        }
+        int room = room(), used = used();
         String crust = used < room ? "Crust " + used + "/" + room + ", the last layer fills " + (room - used) + " more"
                 : rows.size() > room ? "Crust full: " + (rows.size() - room) + " layer(s) do not fit"
                 : "Crust " + room + "/" + room + " blocks, then bedrock";
         int color = rows.size() > room ? RED : GRAY;
-        g.text(font, font.plainSubstrByWidth(crust, right - x), x, 46, color);
+        g.text(font, font.plainSubstrByWidth(crust, right - infoX), infoX, 50, color);
         if (addLayer != null) addLayer.active = canAdd();
         for (int i = 0; i < sliders.size(); i++) {
             int r = layerScroll + i, y = TOP + i * ROW;

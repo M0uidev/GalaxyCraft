@@ -1,7 +1,16 @@
 package dev.moui.galaxycraft.gametest;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import dev.moui.galaxycraft.client.BlockPickerScreen;
+import dev.moui.galaxycraft.client.McWorldgen;
+import dev.moui.galaxycraft.client.PickerScreen;
+import dev.moui.galaxycraft.client.PlanetClient;
+import dev.moui.galaxycraft.voxel.CubeSphere;
+import dev.moui.galaxycraft.voxel.gen.PlanetGenerator;
+import java.awt.image.BufferedImage;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.TreeMap;
+import javax.imageio.ImageIO;
 import dev.moui.galaxycraft.client.McBlocks;
 import dev.moui.galaxycraft.client.PlanetEditorScreen;
 import dev.moui.galaxycraft.voxel.PlanetBlueprint;
@@ -15,7 +24,8 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
  * The planet editor without the game, only with -Dgalaxycraft.editor=true
  * (./gradlew runClientGameTest -PgalaxycraftEditor): /galaxycraft opens it, and a blueprint of
  * Minecraft's blocks builds a planet with them, top to bottom. Its block picker finds a block by
- * the name the inventory gives it.
+ * the name the inventory gives it. Generated planets are built with Minecraft's real noises and
+ * biome table; maps of their tops (the cube unfolded) are saved next to the screenshots.
  */
 public final class PlanetEditorProbe implements FabricClientGameTest {
     @Override
@@ -30,7 +40,7 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
             if (!open) throw new AssertionError("/galaxycraft did not open the editor");
             ctx.takeScreenshot("galaxycraft-planet-editor");
             // The block picker: "+ Layer" opens it, typing narrows it by name, Enter adds the first.
-            ctx.runOnClient(mc -> mc.gui.setScreen(new BlockPickerScreen(mc.gui.screen(), "", v -> picked[0] = v)));
+            ctx.runOnClient(mc -> mc.gui.setScreen(PickerScreen.blocks(mc.gui.screen(), "", v -> picked[0] = v)));
             ctx.waitTicks(2);
             ctx.getInput().typeChars("oak log");
             ctx.waitTicks(2);
@@ -51,6 +61,68 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
             });
             if (!result.equals("minecraft:sand|minecraft:oak_log[axis=y]|minecraft:bedrock"))
                 throw new AssertionError("built " + result);
+            // Generated planets.
+            ctx.runOnClient(mc -> mc.gui.setScreen(new PlanetEditorScreen(PlanetBlueprint.standard("Dunes", 32)
+                    .withMode(PlanetBlueprint.Mode.GENERATED).withBiome(42, "minecraft:desert", 0))));
+            ctx.waitTicks(2);
+            ctx.takeScreenshot("galaxycraft-planet-editor-generated");
+            ctx.runOnClient(mc -> mc.gui.setScreen(PickerScreen.biomes(mc.gui.screen(), PlanetClient.worldgen().biomes().land(), "", v -> picked[0] = v)));
+            ctx.waitTicks(2);
+            ctx.getInput().typeChars("snow");
+            ctx.waitTicks(2);
+            ctx.takeScreenshot("galaxycraft-biome-picker");
+            ctx.getInput().pressKey(InputConstants.KEY_RETURN);
+            ctx.waitTicks(2);
+            if (picked[0] == null || !picked[0].contains("snow")) throw new AssertionError("picked biome " + picked[0]);
+            String gen = ctx.computeOnClient(mc -> {
+                McBlocks blocks = McBlocks.create(mc);
+                McWorldgen wg = PlanetClient.worldgen();
+                StringBuilder out = new StringBuilder();
+                for (Object[] c : new Object[][] {{"minecraft:desert", 32, 0}, {"minecraft:jagged_peaks", 64, 0},
+                        {"minecraft:plains", 96, 96}, {PlanetBlueprint.RANDOM, 48, 0}}) {
+                    PlanetBlueprint g = PlanetBlueprint.standard("gen", (int) c[1]).withAir(24)
+                            .withMode(PlanetBlueprint.Mode.GENERATED).withBiome(7, (String) c[0], (int) c[2]);
+                    long t0 = System.nanoTime();
+                    VoxelPlanet p = g.build(blocks, wg);
+                    long ms = (System.nanoTime() - t0) / 1_000_000;
+                    Map<String, Integer> tops = new TreeMap<>();
+                    int lowest = Integer.MAX_VALUE, highest = 0;
+                    CubeSphere grid = p.grid;
+                    int n = grid.n;
+                    BufferedImage img = new BufferedImage(4 * n, 3 * n, BufferedImage.TYPE_INT_RGB);
+                    int[][] at = {{2, 1}, {0, 1}, {1, 0}, {1, 2}, {1, 1}, {3, 1}}; // where each face goes (columns, rows of n)
+                    for (int f = 0; f < 6; f++)
+                        for (int i = 0; i < n; i++)
+                            for (int j = 0; j < n; j++) {
+                                int c0 = grid.index(f, i, j, 0), k = grid.layers - 1;
+                                while (k > 0 && (p.get(c0 + k) == 0 || blocks.name(p.get(c0 + k)).startsWith("minecraft:snow["))) k--;
+                                String top = blocks.name(p.get(c0 + k));
+                                tops.merge(top.replaceAll("\\[.*", ""), 1, Integer::sum);
+                                lowest = Math.min(lowest, k);
+                                highest = Math.max(highest, k);
+                                net.minecraft.world.level.block.state.BlockState st = blocks.state(p.get(c0 + k));
+                                int rgb = st == null ? 0xFF00FF : st.getBlock().defaultMapColor().col;
+                                double shade = 0.55 + 0.45 * k / grid.layers;
+                                int r = (int) ((rgb >> 16 & 255) * shade), gr = (int) ((rgb >> 8 & 255) * shade), b = (int) ((rgb & 255) * shade);
+                                img.setRGB(at[f][0] * n + i, at[f][1] * n + j, r << 16 | gr << 8 | b);
+                            }
+                    if (lowest < 1) throw new AssertionError(c[0] + ": ground down to the bedrock");
+                    try {
+                        ImageIO.write(img, "png", Path.of("screenshots", "galaxycraft-gen-" + ((String) c[0]).replace("minecraft:", "") + "-" + c[1] + ".png").toFile());
+                    } catch (java.io.IOException e) {
+                        throw new AssertionError(e);
+                    }
+                    out.append(c[0]).append(" r").append(c[1]).append(" size ").append(c[2]).append(": ").append(ms).append(" ms, k ")
+                            .append(lowest).append("..").append(highest).append(" of ").append(grid.layers).append(", depth ").append(p.depth)
+                            .append(", tops ").append(tops).append('\n');
+                }
+                return out.toString();
+            });
+            System.out.println("PlanetEditorProbe generated:\n" + gen);
+            if (!gen.lines().filter(l -> l.startsWith("minecraft:desert")).allMatch(l -> l.contains("minecraft:sand=")))
+                throw new AssertionError("the desert is not sand");
+            if (gen.lines().filter(l -> l.startsWith("minecraft:plains")).allMatch(l -> l.split("=").length < 3))
+                throw new AssertionError("several biomes gave one top");
             System.out.println("PlanetEditorProbe passed: " + result);
         }
     }
