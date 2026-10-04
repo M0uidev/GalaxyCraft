@@ -94,6 +94,52 @@ class PlanetMesherTest {
         assertTrue(t.n().dot(t.a()) > 0);
     }
 
+    /**
+     * A corner that several chunks draw is the same point in each of their display lists (center
+     * plus vertex, in 1/8 units), across chunk borders and cube edges alike: no seams to see through.
+     */
+    @Test void chunksMeetWithoutSeams() {
+        VoxelPlanet p = VoxelPlanet.ofRadius(61);
+        // A trench across chunk borders and a cube edge, so their sides are drawn too.
+        int n = p.grid.n, k = p.depth - 1;
+        for (int i = 0; i < n; i++) p.set(p.grid.index(0, i, n / 2, k), Material.AIR);
+        for (int j = 0; j < n; j++) p.set(p.grid.index(0, n - 1, j, k), Material.AIR);
+        Map<String, String> seen = new HashMap<>();
+        int shared = 0;
+        for (int c = 0; c < p.chunkCount(); c++) {
+            var m = PlanetMesher.mesh(p, c, 80, false);
+            if (m.empty()) continue;
+            float[] s = m.sphere();
+            for (float f : new float[] {s[0], s[1], s[2]}) assertEquals(Math.rint(f), f, 0, "center in whole units");
+            ByteBuffer dl = ByteBuffer.wrap(m.displayList());
+            int v = 0;
+            for (PlanetMesher.Quad q : PlanetMesher.quads(p, c))
+                for (Vector3d corner : q.corners()) {
+                    int o = 3 + PlanetMesher.VERTEX_BYTES * v++;
+                    String at = "";
+                    for (int a = 0; a < 3; a++) at += ((long) s[a] * 8 + dl.getShort(o + 2 * a)) + ",";
+                    String before = seen.putIfAbsent(key(corner), at);
+                    if (before == null) continue;
+                    assertEquals(before, at, "corner " + key(corner) + " drawn apart");
+                    shared++;
+                }
+        }
+        assertTrue(shared > 0);
+    }
+
+    @Test void cubeEdgesShareTheirDirectionsExactly() {
+        CubeSphere g = new CubeSphere(37, 20, 4);
+        Map<String, Vector3d> dirs = new HashMap<>();
+        for (int f = 0; f < 6; f++)
+            for (int i = 0; i <= g.n; i++)
+                for (int j = 0; j <= g.n; j++) {
+                    if (i != 0 && i != g.n && j != 0 && j != g.n) continue;
+                    Vector3d d = g.dir(f, i, j);
+                    Vector3d before = dirs.putIfAbsent(key(d), d);
+                    if (before != null) assertEquals(before, d, "face " + f + " at " + i + "," + j);
+                }
+    }
+
     @Test void emptyChunkHasNoBytes() {
         VoxelPlanet p = VoxelPlanet.standard();
         int top = p.chunkOf(p.grid.index(0, 0, 0, 16));

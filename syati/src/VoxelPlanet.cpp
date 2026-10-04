@@ -547,6 +547,10 @@ public:
     gxc::ViewEye(view, eye, fwd);
     eye[0] -= mCenter[0], eye[1] -= mCenter[1], eye[2] -= mCenter[2];
     const f32 origin[3] = {0.f, 0.f, 0.f};
+    // The planet's matrix once, each chunk's from it: chunk centers are whole units from the
+    // planet's center, so neighbors' shared corners come out of the same math and leave no seams.
+    f32 planet[12];
+    gxc::ViewTranslate(view, mCenter, planet);
     u32 drawn = 0;
     for (u32 i = 0; i < gDrawnCount; i++)
     {
@@ -554,9 +558,8 @@ public:
       if (gxc::SphereHidden(eye, fwd, origin, mOccluder, s.sphere, s.sphere[3]))
         continue;
       // Each chunk's vertices are relative to its own center.
-      const f32 at[3] = {mCenter[0] + s.sphere[0], mCenter[1] + s.sphere[1], mCenter[2] + s.sphere[2]};
       f32 pos[12];
-      gxc::ViewTranslate(view, at, pos);
+      gxc::ViewTranslate(planet, s.sphere, pos);
       GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(pos), GX_PNMTX0);
       GXCallDisplayList(s.dl, s.dl_size);
       drawn++;

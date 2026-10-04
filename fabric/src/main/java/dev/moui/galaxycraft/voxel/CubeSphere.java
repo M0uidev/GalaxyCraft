@@ -76,10 +76,20 @@ public final class CubeSphere {
     }
 
     private Vector3d computeDir(int face, int i, int j) {
-        double x = Math.tan((-1 + 2.0 * i / n) * Math.PI / 4), y = Math.tan((-1 + 2.0 * j / n) * Math.PI / 4);
+        // Exactly ±1 on the cube's edges (tan(π/4) is not quite 1 in doubles): the faces meeting
+        // there then compute the same direction bit for bit, and their corners meet without a seam.
+        double x = tanGrid(i), y = tanGrid(j);
         double[][] b = BASIS[face];
         return new Vector3d(b[0][0] + x * b[1][0] + y * b[2][0], b[0][1] + x * b[1][1] + y * b[2][1],
                 b[0][2] + x * b[1][2] + y * b[2][2]).normalize();
+    }
+
+    /** tan of grid line i's angle, odd about the middle exactly (faces may run either way along an edge). */
+    private double tanGrid(int i) {
+        if (2 * i > n) return -tanGrid(n - i);
+        if (i == 0) return -1;
+        if (2 * i == n) return 0;
+        return Math.tan((-1 + 2.0 * i / n) * Math.PI / 4);
     }
 
     /** Corner (di, dj, dk ∈ {0, 1}) of a cell. */

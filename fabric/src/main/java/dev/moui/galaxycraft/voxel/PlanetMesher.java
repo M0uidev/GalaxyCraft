@@ -274,8 +274,11 @@ public final class PlanetMesher {
         Vector3d origin = new Vector3d();
         double[] radius = new double[1];
         p.sphere(chunk, origin, radius);
-        origin.mul(unitsPerBlock);
-        float[] sphere = {(float) origin.x, (float) origin.y, (float) origin.z, (float) (radius[0] * unitsPerBlock)};
+        // Whole units: every chunk's 1/8-unit vertex grid is then the same one, so a corner two
+        // chunks share is the same point in both (rounded from each one's own center, they parted
+        // by up to 1/8 unit and showed the background through the seam). The radius covers the shift.
+        origin.mul(unitsPerBlock).round();
+        float[] sphere = {(float) origin.x, (float) origin.y, (float) origin.z, (float) (radius[0] * unitsPerBlock + 1)};
         List<Quad> quads = quads(p, chunk);
         if (quads.isEmpty()) return new ChunkMesh(new byte[0], new byte[0], sphere);
         if (quads.size() * 4 > 0xFFFF) throw new IllegalStateException("chunk too detailed for one draw");
