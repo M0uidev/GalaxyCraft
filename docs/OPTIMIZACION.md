@@ -57,8 +57,11 @@ llega tarde al juego, Mario sale caminando del suelo con colisión y cae. Llegab
 - **Distancia de render.** La vista lejana (`PlanetLod.tile`) ahora va en baldosas de 4×4 columnas
   de chunks (hasta 16×16 por cara). Las baldosas a menos de **64 bloques** de Mario, o de donde va,
   se mandan como chunks; el resto, como su baldosa de vista lejana. Una baldosa que pasa a chunks
-  manda primero sus chunks y después oculta su vista lejana. Una que vuelve a ser lejana muestra
-  primero su vista lejana y después suelta sus chunks. Hay histéresis de 16 bloques
+  manda primero sus chunks y después **cubre** su vista lejana (`FAR_COVERED`: el juego la guarda,
+  pero solo la dibuja con la cámara lejos del planeta). Una que vuelve a ser lejana muestra
+  primero su vista lejana y después suelta sus chunks. Las baldosas de chunks también reciben su
+  vista lejana, cubierta, y las ediciones en ellas la actualizan cada `FAR_UPDATES`, para que de
+  lejos se vea lo que se cavó o construyó. Hay histéresis de 16 bloques
   (`RENDER_KEEP`). `-Dgalaxycraft.renderDistance=N` la cambia; `0` manda todos los chunks, como
   antes. `/galaxycraft status` muestra "N/M tiles near".
 
@@ -84,8 +87,10 @@ llega tarde al juego, Mario sale caminando del suelo con colisión y cae. Llegab
 
 - Hasta 6×16×16 partes de vista lejana por planeta (`FAR_VIEW_PARTS`, también
   `GXC_FAR_VIEW_PARTS` en el protocolo). El arreglo se reserva en el heap de la escena con la
-  primera parte que llega. Se dibujan **las baldosas y los chunks a la vez**: ya no es "vista lejana
-  o chunks según la distancia de la cámara", porque el mod decide qué baldosa es qué.
+  primera parte que llega. Cerca del planeta se dibujan **las baldosas no cubiertas y los chunks a
+  la vez** (el mod decide qué baldosa es qué). Con la cámara a más de max(96 bloques, el radio)
+  sobre la superficie se dibuja **solo la vista lejana**, cubiertas incluidas, sin chunks, como
+  antes de la distancia de render (`GXC_CHUNK_FAR_COVERED` en el protocolo).
 - **Memoria liberada a tiempo.** Los chunks reemplazados liberaban su memoria (display list y KCL)
   8 frames después para que el binder de Mario no lea un triángulo ya liberado. Pero solo había 64
   lugares: con 20 a 60 chunks reemplazados por frame mientras llega un planeta, se liberaba antes
