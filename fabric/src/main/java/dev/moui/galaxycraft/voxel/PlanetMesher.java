@@ -59,7 +59,8 @@ public final class PlanetMesher {
     private static final double[][] SIDE_UV = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
 
     /** sphere: the chunk's bounding sphere (center from the planet's center, radius), galaxy units. */
-    public record ChunkMesh(byte[] displayList, byte[] kcl, float[] sphere) {
+    /** darkCut: faces of a dark cave were left out (see {@link #mesh}). */
+    public record ChunkMesh(byte[] displayList, byte[] kcl, float[] sphere, boolean darkCut) {
         public boolean empty() {
             return displayList.length == 0;
         }
@@ -112,6 +113,17 @@ public final class PlanetMesher {
     }
 
     /**
+     * Something solid (not leaves: a tree is no roof) somewhere straight above cell: a viewer there
+     * is in a cave, a tunnel or a house, where a dark cave's faces can show. False for -1.
+     */
+    public static boolean covered(VoxelPlanet p, int cell) {
+        if (cell < 0) return false;
+        for (int c = p.grid.neighbor(cell, CubeSphere.TOP); c >= 0; c = p.grid.neighbor(c, CubeSphere.TOP))
+            if (p.occludes(c) && !p.blocks.leaves(p.get(c))) return true;
+        return false;
+    }
+
+    /**
      * A leaf's face toward leaves that have leaves behind them too: deep in a crown, where the
      * holes of the leaves in front hardly show it. Minecraft draws every face between leaves, and
      * a forest planet would then draw several times more faces than all its ground.
@@ -137,10 +149,14 @@ public final class PlanetMesher {
             this.p = p;
         }
 
+        /** Some face was left out because of in. */
+        boolean cut;
+
         boolean in(int cell) {
             if (cell < 0) return false;
             Boolean d = dark.get(cell);
             if (d == null) dark.put(cell, d = !lit(cell));
+            cut |= d;
             return d;
         }
 
@@ -352,6 +368,14 @@ public final class PlanetMesher {
      * inside a dark cave, as the ground over it hides it from afar.
      */
     public static ChunkMesh mesh(VoxelPlanet p, int chunk, double unitsPerBlock, boolean near) {
+        return mesh(p, chunk, unitsPerBlock, near, !near);
+    }
+
+    /**
+     * With collision if near; cullDark leaves out what shows only from inside a dark cave, hidden
+     * from a viewer outside by the ground over it (not from one in a cave).
+     */
+    public static ChunkMesh mesh(VoxelPlanet p, int chunk, double unitsPerBlock, boolean near, boolean cullDark) {
         boolean withKcl = near;
         Vector3d origin = new Vector3d();
         double[] radius = new double[1];
@@ -361,8 +385,10 @@ public final class PlanetMesher {
         // by up to 1/8 unit and showed the background through the seam). The radius covers the shift.
         origin.mul(unitsPerBlock).round();
         float[] sphere = {(float) origin.x, (float) origin.y, (float) origin.z, (float) (radius[0] * unitsPerBlock + 1)};
-        List<Quad> quads = quads(p, chunk, near ? null : new Dark(p));
-        if (quads.isEmpty()) return new ChunkMesh(new byte[0], new byte[0], sphere);
+        Dark dark = cullDark ? new Dark(p) : null;
+        List<Quad> quads = quads(p, chunk, dark);
+        boolean darkCut = dark != null && dark.cut;
+        if (quads.isEmpty()) return new ChunkMesh(new byte[0], new byte[0], sphere, darkCut);
         if (quads.size() * 4 > 0xFFFF) throw new IllegalStateException("chunk too detailed for one draw");
         int size = 3 + quads.size() * 4 * VERTEX_BYTES;
         ByteBuffer dl = ByteBuffer.allocate((size + 31) & ~31).order(ByteOrder.BIG_ENDIAN);
@@ -385,7 +411,7 @@ public final class PlanetMesher {
                 tris.add(Tri.of(k[0], k[1], k[2]));
                 tris.add(Tri.of(k[0], k[2], k[3]));
             }
-        return new ChunkMesh(dl.array(), tris.isEmpty() ? new byte[0] : KclWriter.write(tris), sphere);
+        return new ChunkMesh(dl.array(), tris.isEmpty() ? new byte[0] : KclWriter.write(tris), sphere, darkCut);
     }
 
     /** A texture coordinate: f (0..1) across tile t of n tiles, kept half a texel inside it. */

@@ -77,6 +77,17 @@ public final class PlanetSession {
     private Vector3d landing;
     private int landingUpdates;
     static final int LANDING_UPDATES = 200;
+    /**
+     * Far chunks leave out the faces only a dark cave shows (PlanetMesher.Dark), hidden from a
+     * viewer outside by the ground over them. With Mario under cover (something solid over his
+     * head) they would show as holes in the cave around him: the chunks that left some out are
+     * sent whole again, nearest first, and stay whole until he has been out OUTSIDE_UPDATES.
+     */
+    private boolean underground;
+    private int outsideUpdates;
+    static final int OUTSIDE_UPDATES = 100;
+    private BitSet darkCut = new BitSet(); // chunks the game has without their dark faces
+    private BitSet hasDark = new BitSet(); // chunks that had dark faces when last meshed without them
 
     public PlanetSession(double unitsPerBlock) {
         this.unitsPerBlock = unitsPerBlock;
@@ -201,6 +212,7 @@ public final class PlanetSession {
         }
         if (planet.fluids().tick()) unsaved = true;
         for (int c : planet.takeDirty()) queue(c);
+        if (mario != null) underground(PlanetMesher.covered(planet, planet.grid.cellAt(new Vector3d(mario).normalize(mario.length() + 1.5))));
         if (landing != null && (mario != null && mario.distance(landing) < NEAR || ++landingUpdates > LANDING_UPDATES)) landing = null;
         if (++sinceResidency >= RESIDENCY_UPDATES && mario != null) {
             sinceResidency = 0;
@@ -224,7 +236,10 @@ public final class PlanetSession {
                 near.set(c);
             boolean kcl = near.get(c);
             if (!onGuest.get(c) && !planet.mayShow(c)) continue;
-            PlanetMesher.ChunkMesh m = PlanetMesher.mesh(planet, c, unitsPerBlock, kcl);
+            boolean cullDark = !kcl && !underground;
+            PlanetMesher.ChunkMesh m = PlanetMesher.mesh(planet, c, unitsPerBlock, kcl, cullDark);
+            darkCut.set(c, m.darkCut());
+            if (cullDark) hasDark.set(c, m.darkCut());
             if (m.empty() && !onGuest.get(c)) continue;
             ByteBuffer b = ByteBuffer.allocate(32 + m.displayList().length + m.kcl().length).order(ByteOrder.LITTLE_ENDIAN);
             b.putInt(c).putInt(planet.bump(c)).putInt(m.displayList().length).putInt(m.kcl().length);
@@ -255,6 +270,49 @@ public final class PlanetSession {
     /** Messages and chunks still to send (chunks may turn out to have nothing to send). */
     public int queued() {
         return control.size() + pending.size() + (built != null ? 1 : 0);
+    }
+
+    /** Whether Mario is under cover, and far chunks are sent with their dark cave faces. */
+    public boolean underground() {
+        return underground;
+    }
+
+    /** Whether the game has a chunk without its dark cave faces. */
+    public boolean darkCut(int chunk) {
+        return darkCut.get(chunk);
+    }
+
+    private void underground(boolean covered) {
+        if (covered) {
+            outsideUpdates = 0;
+            if (underground) return;
+            underground = true;
+            queueFirst(darkCut);
+        } else if (underground && ++outsideUpdates > OUTSIDE_UPDATES) {
+            underground = false;
+            BitSet whole = (BitSet) hasDark.clone();
+            whole.andNot(darkCut);
+            whole.andNot(near);
+            whole.and(onGuest);
+            whole.stream().forEach(this::queue);
+        }
+    }
+
+    /** These chunks before any other waiting, nearest Mario first. */
+    private void queueFirst(BitSet chunks) {
+        List<double[]> order = new ArrayList<>();
+        chunks.stream().forEach(ch -> order.add(new double[] {mario == null ? 0 : distance(ch, mario), ch}));
+        order.sort((a, b) -> Double.compare(b[0], a[0]));
+        for (double[] o : order) {
+            int ch = (int) o[1];
+            if (ch == builtChunk) {
+                builtStale = true;
+                continue;
+            }
+            if (pendingSet.get(ch)) pending.removeFirstOccurrence(ch);
+            pendingSet.set(ch);
+            pending.addFirst(ch);
+        }
     }
 
     /** Whether a chunk carries collision now. */
@@ -453,6 +511,8 @@ public final class PlanetSession {
         onGuest = new BitSet();
         withKcl = new BitSet();
         near = new BitSet();
+        darkCut = new BitSet();
+        hasDark = new BitSet();
     }
 
     /** The game has nothing: the planet, then every chunk that may show, nearest Mario first. */

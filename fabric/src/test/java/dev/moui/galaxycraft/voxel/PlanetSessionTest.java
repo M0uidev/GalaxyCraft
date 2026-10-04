@@ -130,6 +130,34 @@ class PlanetSessionTest {
         assertTrue(msgs.subList(0, tp).stream().allMatch(m -> le(m).getFloat(20) < 0));
     }
 
+    @Test void underCoverFarCavesAreSentWithTheirDarkFaces() {
+        VoxelPlanet p = VoxelPlanet.standard();
+        // Two sealed pockets deep under the grass, on opposite faces of the cube.
+        int[] here = {p.grid.index(2, 12, 12, 2), p.grid.index(2, 12, 13, 2)};
+        int[] there = {p.grid.index(5, 12, 12, 2), p.grid.index(5, 12, 13, 2)};
+        for (int c : here) p.set(c, Material.AIR);
+        for (int c : there) p.set(c, Material.AIR);
+        p.takeDirty();
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(p, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, MARIO);
+        drain(s);
+        int far = p.chunkOf(there[0]);
+        assertFalse(s.underground());
+        assertTrue(s.darkCut(far), "seen from outside, the far pocket's walls are left out");
+        // Mario in the near pocket: the far one is sent whole.
+        Vector3d inPocket = new Vector3d(p.grid.center(here[0])).mul(80).add(s.center());
+        s.update(3, 100, inPocket);
+        drain(s);
+        assertTrue(s.underground());
+        assertFalse(s.darkCut(far), "from inside a cave, other caves show their walls");
+        // Out again for a while: left out again.
+        for (int i = 0; i <= PlanetSession.OUTSIDE_UPDATES; i++) s.update(3, 100, MARIO);
+        drain(s);
+        assertFalse(s.underground());
+        assertTrue(s.darkCut(far));
+    }
+
     @Test void theLandingKeepsItsCollisionUntilMarioIsThere() {
         PlanetSession s = new PlanetSession(80);
         s.spawn(64, MARIO, new Vector3d(0, 1, 0));
