@@ -25,6 +25,7 @@ public final class VoxelPlanet {
     private final int chunksPerEdge, chunkLayers;
     private float[] spheres; // per chunk: center x y z (blocks), radius; computed on first use
     private Listener listener; // told of every change but those set quietly
+    private final java.util.Map<Long, Boolean> sameLook = new java.util.HashMap<>();
 
     public VoxelPlanet(CubeSphere grid, int depth) {
         this(grid, depth, new char[grid.cellCount()], CubeBlocks.INSTANCE);
@@ -248,6 +249,10 @@ public final class VoxelPlanet {
         char was = cells[cell];
         if (was == b) return;
         cells[cell] = b;
+        if (sameLook(was, b)) { // nothing to draw or collide anew
+            if (listener != null) listener.changed(cell, b);
+            return;
+        }
         int chunk = chunkOf(cell);
         filled[chunk] += (b != Blocks.AIR ? 1 : 0) - (was != Blocks.AIR ? 1 : 0);
         solid[chunk] += (blocks.info(b).occludes() ? 1 : 0) - (blocks.info(was).occludes() ? 1 : 0);
@@ -262,6 +267,24 @@ public final class VoxelPlanet {
 
     public interface Listener {
         void changed(int cell, int id);
+    }
+
+    /**
+     * Whether a and b are states of one block that look and collide the same, so a change from
+     * one to the other leaves the meshes as they are. Minecraft's own updates on the planet (a
+     * leaf's distance to its log) would otherwise mesh and send its chunk again and again.
+     */
+    private boolean sameLook(char a, char b) {
+        if (a == Blocks.AIR || b == Blocks.AIR) return false;
+        long key = (long) Math.min(a, b) << 16 | Math.max(a, b);
+        Boolean same = sameLook.get(key);
+        if (same == null) {
+            String na = blocks.name(a), nb = blocks.name(b);
+            int ia = na.indexOf('['), ib = nb.indexOf('[');
+            same = (ia < 0 ? na : na.substring(0, ia)).equals(ib < 0 ? nb : nb.substring(0, ib)) && blocks.info(a).sameAs(blocks.info(b));
+            sameLook.put(key, same);
+        }
+        return same;
     }
 
     /** Told (cell, id) of every change to a cell except those made by {@link #setQuietly}. */

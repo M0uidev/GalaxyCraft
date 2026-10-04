@@ -16,7 +16,10 @@ import org.joml.Vector3d;
 public final class Vegetation {
     public static final int CHUNK = 16;
 
-    /** One thing that grew: its base in the chunk (ax, az), then its blocks above the floor (dy ≥ 1). */
+    /**
+     * One thing that grew: its base in the chunk (ax, az), then its blocks above the floor (dy ≥
+     * 1) and the floor it changed under them (dy 0: dirt under a trunk).
+     */
     public record Thing(int ax, int az, int[] dx, int[] dy, int[] dz, String[] blocks) {}
 
     /** What grew on one chunk. */
@@ -73,7 +76,7 @@ public final class Vegetation {
                     .add(e2.x * t.dz()[b], e2.y * t.dz()[b], e2.z * t.dz()[b]);
             int cell = grid.cellAt(p);
             if (cell < 0 || grid.k(cell) == 0) continue;
-            if (cells[cell] != Blocks.AIR && !snowCover(cells[cell], ids)) continue;
+            if (t.dy()[b] == 0 ? cells[cell] == Blocks.AIR : cells[cell] != Blocks.AIR && !snowCover(cells[cell], ids)) continue;
             cells[cell] = (char) ids.applyAsInt(t.blocks()[b]);
         }
     }

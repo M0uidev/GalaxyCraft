@@ -92,7 +92,7 @@ final class McVegetation implements Vegetation.Library {
                     GalaxyCraft.LOG.debug("{} on {}: {}", f, biome, e.toString());
                 }
             }
-            out.add(new Vegetation.Patch(things(level, x0, z0)));
+            out.add(new Vegetation.Patch(things(level, x0, z0, top)));
             for (int x = -MARGIN; x < 16 + MARGIN; x++)
                 for (int z = -MARGIN; z < 16 + MARGIN; z++)
                     for (int y = FLOOR_Y - 3; y <= FLOOR_Y + HEIGHT; y++)
@@ -108,7 +108,7 @@ final class McVegetation implements Vegetation.Library {
      * one, and every other block goes with the nearest of them it touches (sides or corners), so
      * trees whose crowns meet stay apart. Things standing outside the chunk belong to its neighbors.
      */
-    private static List<Vegetation.Thing> things(ServerLevel level, int x0, int z0) {
+    private static List<Vegetation.Thing> things(ServerLevel level, int x0, int z0, BlockState top) {
         Map<Long, BlockState> grown = new HashMap<>();
         BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
         for (int x = -MARGIN; x < 16 + MARGIN; x++)
@@ -137,6 +137,17 @@ final class McVegetation implements Vegetation.Library {
                         todo.add(r);
                     }
         }
+        // The floor a thing changed right under its blocks (dirt under a trunk, as a tree leaves
+        // it): goes with that thing, or grass under a log would turn to dirt later on the planet.
+        for (int x = -MARGIN; x < 16 + MARGIN; x++)
+            for (int z = -MARGIN; z < 16 + MARGIN; z++) {
+                BlockState s = level.getBlockState(at.set(x0 + x, FLOOR_Y, z0 + z));
+                Long base = baseOf.get(BlockPos.asLong(x, FLOOR_Y + 1, z));
+                if (s.equals(top) || base == null) continue;
+                long q = BlockPos.asLong(x, FLOOR_Y, z);
+                grown.put(q, s);
+                baseOf.put(q, base);
+            }
         Map<Long, List<Long>> parts = new HashMap<>();
         for (Map.Entry<Long, Long> e : baseOf.entrySet()) parts.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
         List<Vegetation.Thing> things = new ArrayList<>();

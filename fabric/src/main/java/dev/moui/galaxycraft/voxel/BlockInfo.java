@@ -40,4 +40,24 @@ public record BlockInfo(int fluid, int level, boolean collides, boolean fullColl
     public boolean isFluid() {
         return fluid != Blocks.NO_FLUID;
     }
+
+    /** Whether the two look, collide and are aimed at the same (leaves at another distance from their log). */
+    public boolean sameAs(BlockInfo o) {
+        if (fluid != o.fluid || level != o.level || collides != o.collides || fullCollision != o.fullCollision || occludes != o.occludes
+                || targetable != o.targetable || breakable != o.breakable || replaceable != o.replaceable || tile != o.tile || tint != o.tint
+                || !java.util.Arrays.equals(outline, o.outline) || !sameBoxes(boxes, o.boxes) || !sameBoxes(shape, o.shape)
+                || quads.size() != o.quads.size()) return false;
+        for (int i = 0; i < quads.size(); i++) {
+            ModelQuad a = quads.get(i), b = o.quads.get(i);
+            if (a.tile() != b.tile() || a.tint() != b.tint() || a.cull() != b.cull() || !java.util.Arrays.equals(a.pos(), b.pos())
+                    || !java.util.Arrays.equals(a.uv(), b.uv())) return false;
+        }
+        return true;
+    }
+
+    private static boolean sameBoxes(List<double[]> a, List<double[]> b) {
+        if (a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) if (!java.util.Arrays.equals(a.get(i), b.get(i))) return false;
+        return true;
+    }
 }

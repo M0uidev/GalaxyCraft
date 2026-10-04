@@ -192,6 +192,32 @@ class BlockShapesTest {
         assertEquals(CubeBlocks.GLASS, q.get(a));
     }
 
+    @Test void aChangeThatLooksTheSameMeshesNothing() {
+        // Id 60 is glass at another distance (a leaf's): same block, same look; 61 another block.
+        Blocks rules = new Blocks() {
+            final CubeBlocks b = CubeBlocks.INSTANCE;
+            int real(int id) { return id == 60 || id == 61 ? CubeBlocks.GLASS : id; }
+            public BlockInfo info(int id) { return b.info(real(id)); }
+            public int id(Material m) { return b.id(m); }
+            public Material material(int id) { return b.material(real(id)); }
+            public int fluidState(int fluid, int level) { return b.fluidState(fluid, level); }
+            public boolean faceVisible(int id, int n, int side) { return b.faceVisible(real(id), real(n), side); }
+            public String name(int id) { return id == 60 ? b.name(CubeBlocks.GLASS) + "[distance=2]" : id == 61 ? "other:glass" : b.name(id); }
+            public int parse(String name) { return b.parse(name); }
+            public int atlasColumns() { return 4; }
+            public int atlasRows() { return 4; }
+        };
+        VoxelPlanet q = VoxelPlanet.standard(rules);
+        int a = q.grid.index(0, 12, 12, 9);
+        q.set(a, CubeBlocks.GLASS);
+        q.takeDirty();
+        q.set(a, 60);
+        assertEquals(60, q.get(a), "kept");
+        assertEquals(0, q.takeDirty().length, "nothing to mesh again");
+        q.set(a, 61);
+        assertTrue(q.takeDirty().length > 0, "another block is meshed again");
+    }
+
     @Test void savesKeepAPaletteAndReadOldOnes(@TempDir Path dir) throws Exception {
         PlanetStore store = new PlanetStore(dir);
         int c = at(12, 12, 9);
