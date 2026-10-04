@@ -662,6 +662,37 @@ TEST(inbox_dropped_on_scene_change)
   CHECK(f.bridge.PendingInbox() == 0);
 }
 
+// A savestate rolls the game's RAM back (planet, atlas and all) but not the mod: the game gets a
+// scene id neither the mod nor the bridge has seen, so everything is sent again.
+TEST(state_load_starts_a_new_scene)
+{
+  Fixture f;
+  f.Tick();
+  f.mem.PutU32(MBX + offsetof(GxcMailbox, scene_id), 5);
+  f.Tick();
+  f.Drain();
+  f.mem.PutU32(MBX + offsetof(GxcMailbox, scene_id), 4);  // the state was saved in scene 4
+  f.bridge.OnStateLoaded();
+  f.Tick();
+  CHECK(f.mem.GetU32(MBX + offsetof(GxcMailbox, scene_id)) == 6);
+  const std::vector<Msg> msgs = f.Drain();
+  CHECK(!msgs.empty() && msgs[0].type == GXC_MSG_SCENE_CHANGE && PayloadU32(msgs[0], 0) == 6);
+  f.Tick();
+  CHECK(f.mem.GetU32(MBX + offsetof(GxcMailbox, scene_id)) == 6);  // only once
+}
+
+TEST(state_load_waits_for_the_mailbox)
+{
+  Fixture f;
+  f.mem.PutBytes(MBX, "xxxxxxxx", 8);  // saved before the module was loaded
+  f.bridge.OnStateLoaded();
+  f.Tick();
+  WriteMailbox(f.mem, MBX, 3, {});
+  for (int i = 0; i < 61; i++)  // the next scan
+    f.Tick();
+  CHECK(f.mem.GetU32(MBX + offsetof(GxcMailbox, scene_id)) == 4);
+}
+
 TEST(scene_change_carries_the_stage_name)
 {
   Fixture f;

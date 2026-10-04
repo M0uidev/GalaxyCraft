@@ -57,6 +57,9 @@ public:
   }
   // /fly: the player flies away from Mario, who stays put.
   bool Flying() const { return m_following && m_player && (m_player->flags & GXC_PLAYER_FLYING) != 0; }
+  // A savestate was loaded (CPU thread): the game's RAM went back in time, the mod did not. At the
+  // next tick the game gets a scene id never seen before, so the mod sends everything again.
+  void OnStateLoaded() { m_state_loaded = true; }
   // Voxel planet records waiting for the module's inbox.
   size_t PendingInbox() const { return m_inbox.size(); }
 
@@ -103,5 +106,7 @@ private:
   std::deque<std::vector<u8>> m_inbox;  // big-endian records, ready for the guest
   std::optional<u32> m_inbox_scene;
   u64 m_frame = 0;
+  bool m_state_loaded = false;
+  std::optional<u32> m_last_scene;  // the newest scene id seen, kept across mailbox losses
 };
 }  // namespace gxc

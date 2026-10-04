@@ -145,7 +145,17 @@ void HostBridge::Tick(GuestMemory& mem)
     return;
   }
 
-  const Mailbox mbx = Mailbox::Parse(raw.data());
+  Mailbox mbx = Mailbox::Parse(raw.data());
+  if (m_state_loaded)
+  {
+    m_state_loaded = false;
+    mbx.scene_id = std::max(mbx.scene_id, m_last_scene.value_or(0)) + 1;
+    std::array<u8, 4> be;
+    PutBE32(be.data(), mbx.scene_id);
+    mem.Write(*m_mailbox + offsetof(GxcMailbox, scene_id), be.data(), 4);
+    m_game_seq.reset();
+  }
+  m_last_scene = m_last_scene ? std::max(*m_last_scene, mbx.scene_id) : mbx.scene_id;
   if (m_inbox_scene && *m_inbox_scene != mbx.scene_id)
     m_inbox.clear();  // meant for the old scene; the mod resends when it sees the new one
   m_inbox_scene = mbx.scene_id;

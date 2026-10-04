@@ -460,6 +460,9 @@ public:
   {
     if (!mPlanet)
       return;
+    // The camera's projection: this draw type runs after screen passes (bloom, in the Starship)
+    // that leave another projection loaded, and the planet would land off screen.
+    MR::loadProjectionMtx();
     if (gDrawnCount == 0 || !gAtlas.ready)
     {
       if (gHitboxOn)

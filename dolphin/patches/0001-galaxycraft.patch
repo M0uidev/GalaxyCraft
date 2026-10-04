@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..c41109d
+index 0000000..767182c
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,489 @@
+@@ -0,0 +1,496 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -441,6 +441,13 @@ index 0000000..c41109d
 +  // sees s_state == nullptr if it runs concurrently.
 +}
 +
++void OnStateLoaded()
++{
++  std::lock_guard lock(s_mutex);
++  if (s_state)
++    s_state->bridge->OnStateLoaded();
++}
++
 +bool InputActive()
 +{
 +  std::lock_guard lock(s_mutex);
@@ -544,10 +551,10 @@ index 0000000..c41109d
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..4c0180e
+index 0000000..3a7ca77
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,57 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -586,6 +593,9 @@ index 0000000..4c0180e
 +void OnText(u32 keysym);
 +// Same as OnXInput2's result: the mouse turns Minecraft's view (cursor hidden).
 +bool MouseCaptured();
++
++// CPU thread, after a savestate is loaded: the bridge has the mod send the game everything again.
++void OnStateLoaded();
 +
 +// Mario mode: Escape is the + button, so it must not stop emulation.
 +bool BlocksStopHotkey();
@@ -708,6 +718,30 @@ index 6a1b754..662cd8f 100644
  
    HK_NEXT_WIIMOTE_PROFILE_1,
    HK_PREV_WIIMOTE_PROFILE_1,
+diff --git a/Source/Core/Core/State.cpp b/Source/Core/Core/State.cpp
+index 2dcd2ca..86390ea 100644
+--- a/Source/Core/Core/State.cpp
++++ b/Source/Core/Core/State.cpp
+@@ -39,6 +39,7 @@
+ #include "Core/ConfigManager.h"
+ #include "Core/Core.h"
+ #include "Core/CoreTiming.h"
++#include "Core/GalaxyCraft.h"
+ #include "Core/GeckoCode.h"
+ #include "Core/HW/HW.h"
+ #include "Core/HW/Memmap.h"
+@@ -226,7 +227,10 @@ static bool LoadFromBuffer(Core::System& system, std::span<u8> buffer)
+   u8* ptr = buffer.data();
+   PointerWrap p(&ptr, buffer.size(), PointerWrap::Mode::Read);
+   DoState(system, p);
+-  return p.IsReadMode();
++  if (!p.IsReadMode())
++    return false;
++  GalaxyCraft::OnStateLoaded();  // the game's RAM went back in time, the mod's did not
++  return true;
+ }
+ 
+ // Returns the required size, or 0 on failure.
 diff --git a/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp b/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp
 index b0ebaac..a091c69 100644
 --- a/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp

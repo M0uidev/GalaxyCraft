@@ -42,6 +42,7 @@ public:
   {
     if (!gDraw || !gShown || !gMario)
       return;
+    MR::loadProjectionMtx();  // as VoxelPlanet's draw: another pass may have left its own
     const MtxPtr joint = MR::getJointMtx(gMario, GXC_HELD_JOINT);
     if (!joint)
       return;
