@@ -43,9 +43,11 @@ public final class PlanetGenerator {
     }
 
     /** A generated planet's cells, before they are a VoxelPlanet (that is made on the game's thread). */
-    public record Cells(CubeSphere grid, int depth, char[] cells) {
+    public record Cells(CubeSphere grid, int depth, char[] cells, dev.moui.galaxycraft.voxel.PlanetBiomes biomes) {
         public VoxelPlanet planet(Blocks blocks) {
-            return VoxelPlanet.of(grid, depth, cells, blocks);
+            VoxelPlanet p = VoxelPlanet.of(grid, depth, cells, blocks);
+            p.setBiomes(biomes);
+            return p;
         }
     }
 
@@ -167,7 +169,7 @@ public final class PlanetGenerator {
             }
             Vegetation.plant(grid, depth, cells, height, biome, bare, plants, bp.seed(), bp.plants(), ids);
         }
-        return new Cells(grid, depth, cells);
+        return new Cells(grid, depth, cells, dev.moui.galaxycraft.voxel.PlanetBiomes.of(biome));
     }
 
     /** lim·tanh(h/lim): h itself near 0, never past lim. */

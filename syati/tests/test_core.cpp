@@ -261,6 +261,32 @@ static void TestInboxRejectsBadChunks()
   CHECK(!NextInboxRecord(e.data(), e.size(), &off, 512, &r));  // longer than the inbox
 }
 
+// Water: a chunk's translucent faces are a second display list after the first (CHUNK_TRANSLUCENT
+// in the slot word, then a word: where it starts).
+static void TestInboxTranslucentChunks()
+{
+  InboxRecord r;
+  u32 off = 0;
+  std::vector<u8> b;
+  Put32(b, 103u << 16), Put32(b, 36 + 64 + 8), Put32(b, 0x200000u | 5), Put32(b, 2), Put32(b, 64), Put32(b, 8);
+  PutF(b, 10.f), PutF(b, 20.f), PutF(b, 30.f), PutF(b, 99.f), Put32(b, 32);
+  b.resize(b.size() + 64 + 8);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.chunk.slot == 5 && r.chunk.dl_size == 64 &&
+        r.chunk.solid_size == 32 && r.chunk.kcl_size == 8 && r.chunk.dl == b.data() + 8 + 36);
+  std::vector<u8> c;  // no flag: all of it opaque
+  Put32(c, 103u << 16), Put32(c, 32 + 32), Put32(c, 5), Put32(c, 2), Put32(c, 32), Put32(c, 0);
+  PutF(c, 10.f), PutF(c, 20.f), PutF(c, 30.f), PutF(c, 99.f);
+  c.resize(c.size() + 32);
+  off = 0;
+  CHECK(NextInboxRecord(c.data(), c.size(), &off, 512, &r) && r.chunk.solid_size == 32);
+  std::vector<u8> d;  // the split past the end
+  Put32(d, 103u << 16), Put32(d, 36 + 32), Put32(d, 0x200000u | 5), Put32(d, 2), Put32(d, 32), Put32(d, 0);
+  PutF(d, 10.f), PutF(d, 20.f), PutF(d, 30.f), PutF(d, 99.f), Put32(d, 64);
+  d.resize(d.size() + 32);
+  off = 0;
+  CHECK(!NextInboxRecord(d.data(), d.size(), &off, 512, &r));
+}
+
 // Several planets: a chunk's slot carries its planet's id in the top byte, a far view's part has
 // bit 23 set (its tile below, bit 22 if covered); a planet may come with flags (GONE); a teleport may name its planet.
 static void TestInboxPlanetIdsAndFarView()
@@ -608,6 +634,7 @@ int main()
 {
   TestInboxRecords();
   TestInboxRejectsBadChunks();
+  TestInboxTranslucentChunks();
   TestInboxPlanetIdsAndFarView();
   TestPlanetDropAndViewTranslate();
   TestCodePatch();

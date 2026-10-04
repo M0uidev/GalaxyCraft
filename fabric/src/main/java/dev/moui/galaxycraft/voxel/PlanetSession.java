@@ -71,6 +71,8 @@ public final class PlanetSession {
      * the planet (then it draws the far view alone); without a display list, it keeps the one it has.
      */
     static final int FAR_COVERED = 0x400000;
+    /** A chunk whose display list ends with a translucent one (water): its offset follows the header. */
+    static final int TRANSLUCENT = 0x200000;
     /**
      * Tiles within this many blocks of Mario (or where he is headed) are chunks; the others, their
      * far view. One that is chunks stays so until RENDER_KEEP blocks farther. -Dgalaxycraft.renderDistance
@@ -210,6 +212,7 @@ public final class PlanetSession {
     /** A saved planet, as it was (but for what lies below today's crust: see sealBelowCrust). */
     public void load(PlanetStore.Saved s) {
         VoxelPlanet p = VoxelPlanet.of(new CubeSphere(s.n(), s.core(), s.layers()), s.depth(), s.cells(), blocks);
+        p.setBiomes(s.biomes());
         boolean sealed = p.sealBelowCrust() > 0;
         start(p, s.center());
         unsaved = sealed;
@@ -218,7 +221,8 @@ public final class PlanetSession {
     public PlanetStore.Saved save() {
         unsaved = false;
         CubeSphere g = planet.grid;
-        return new PlanetStore.Saved(g.n, g.core, g.layers, planet.depth, new Vector3d(center), planet.cells().clone());
+        return new PlanetStore.Saved(g.n, g.core, g.layers, planet.depth, new Vector3d(center), planet.cells().clone(),
+                planet.biomes());
     }
 
     /** Edited (or new) since the last {@link #save()}. */
@@ -399,9 +403,11 @@ public final class PlanetSession {
         darkCut.set(c, m.darkCut());
         if (cullDark) hasDark.set(c, m.darkCut());
         if (m.empty() && !onGuest.get(c)) return;
-        ByteBuffer b = ByteBuffer.allocate(32 + m.displayList().length + m.kcl().length).order(ByteOrder.LITTLE_ENDIAN);
-        b.putInt(id << 24 | c).putInt(planet.bump(c)).putInt(m.displayList().length).putInt(m.kcl().length);
+        boolean split = m.translucentAt() < m.displayList().length;
+        ByteBuffer b = ByteBuffer.allocate((split ? 36 : 32) + m.displayList().length + m.kcl().length).order(ByteOrder.LITTLE_ENDIAN);
+        b.putInt(id << 24 | (split ? TRANSLUCENT : 0) | c).putInt(planet.bump(c)).putInt(m.displayList().length).putInt(m.kcl().length);
         for (float f : m.sphere()) b.putFloat(f);
+        if (split) b.putInt(m.translucentAt());
         b.put(m.displayList()).put(m.kcl());
         built = new Msg(Layout.MSG_CHUNK, b.array());
         builtChunk = c;

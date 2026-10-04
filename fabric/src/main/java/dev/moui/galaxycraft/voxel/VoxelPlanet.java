@@ -26,6 +26,11 @@ public final class VoxelPlanet {
     private float[] spheres; // per chunk: center x y z (blocks), radius; computed on first use
     private Listener listener; // told of every change but those set quietly
     private final java.util.Map<Long, Boolean> sameLook = new java.util.HashMap<>();
+    private PlanetBiomes biomes = PlanetBiomes.uniform(PlanetBiomes.PLAINS);
+    /** Per biome color kind, per column: the color blended over the columns around (0: not yet). */
+    private final int[][] blended = new int[PlanetBiomes.KINDS][];
+    /** Columns each way a biome color is averaged over (Minecraft's biome blend, 5 x 5 by default). */
+    public static final int BIOME_BLEND = Integer.getInteger("galaxycraft.biomeBlend", 2);
 
     public VoxelPlanet(CubeSphere grid, int depth) {
         this(grid, depth, new char[grid.cellCount()], CubeBlocks.INSTANCE);
@@ -176,6 +181,67 @@ public final class VoxelPlanet {
     /** A planet as saved by {@link #cells()}, its ids those of blocks. */
     public static VoxelPlanet of(CubeSphere grid, int depth, char[] cells, Blocks blocks) {
         return new VoxelPlanet(grid, depth, cells, blocks);
+    }
+
+    public PlanetBiomes biomes() {
+        return biomes;
+    }
+
+    public void setBiomes(PlanetBiomes b) {
+        if (b == null) b = PlanetBiomes.uniform(PlanetBiomes.PLAINS);
+        if (!b.uniform() && b.columns().length != 6 * grid.n * grid.n) throw new IllegalArgumentException("biomes do not fit the grid");
+        biomes = b;
+        java.util.Arrays.fill(blended, null);
+    }
+
+    /** The biome of a cell's column. */
+    public String biome(int cell) {
+        return biomes.at(cell / grid.layers);
+    }
+
+    /**
+     * The color a quad of cell's tinted tint is drawn with: a biome color (see {@link PlanetBiomes})
+     * as the biomes around that column blend it, as Minecraft blends them; any other as it is.
+     */
+    public int tint(int cell, int tint) {
+        int kind = PlanetBiomes.kind(tint);
+        if (kind == PlanetBiomes.FIXED || kind >= PlanetBiomes.KINDS) return tint & 0xFFFFFF;
+        int col = cell / grid.layers;
+        int[] cache = blended[kind];
+        if (cache == null) blended[kind] = cache = new int[6 * grid.n * grid.n];
+        int c = cache[col];
+        if (c == 0) cache[col] = c = 0x1000000 | blend(col, kind, tint & 0xFFFFFF);
+        return c & 0xFFFFFF;
+    }
+
+    private int blend(int col, int kind, int fallback) {
+        if (biomes.uniform() && kind != PlanetBiomes.GRASS) return color(biomes.at(0), kind, col, fallback);
+        int r = 0, g = 0, b = 0, n = 0;
+        int start = col * grid.layers;
+        for (int a = -BIOME_BLEND; a <= BIOME_BLEND; a++) {
+            int row = walk(start, a < 0 ? CubeSphere.I_MINUS : CubeSphere.I_PLUS, Math.abs(a));
+            for (int d = -BIOME_BLEND; d <= BIOME_BLEND && row >= 0; d++) {
+                int c = walk(row, d < 0 ? CubeSphere.J_MINUS : CubeSphere.J_PLUS, Math.abs(d));
+                if (c < 0) continue;
+                int rgb = color(biomes.at(c / grid.layers), kind, c / grid.layers, fallback);
+                r += rgb >> 16 & 0xFF;
+                g += rgb >> 8 & 0xFF;
+                b += rgb & 0xFF;
+                n++;
+            }
+        }
+        return n == 0 ? fallback : (r / n) << 16 | (g / n) << 8 | b / n;
+    }
+
+    private int walk(int cell, int side, int steps) {
+        for (int s = 0; s < steps && cell >= 0; s++) cell = grid.neighbor(cell, side);
+        return cell;
+    }
+
+    private int color(String biome, int kind, int col, int fallback) {
+        int face = col / (grid.n * grid.n), i = col / grid.n % grid.n, j = col % grid.n;
+        int c = blocks.biomeColor(biome, kind, face * 1024 + j, i);
+        return c < 0 ? fallback : c & 0xFFFFFF;
     }
 
     /** The cells as stored (block ids): what gets saved. */

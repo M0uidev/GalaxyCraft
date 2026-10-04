@@ -68,20 +68,25 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   }
   else if (type == InboxRecord::CHUNK)
   {
-    const u32 HEAD = 32;
+    // With CHUNK_TRANSLUCENT (chunks only) a word after the header: where the translucent list starts.
+    const u32 word = len >= 4 ? ReadBE32(p) : 0;
+    const bool split = (word & CHUNK_FAR_VIEW) == 0 && (word & CHUNK_TRANSLUCENT) != 0;
+    const u32 HEAD = split ? 36 : 32;
     if (len < HEAD)
       return false;
     InboxChunk& c = out->chunk;
-    const u32 word = ReadBE32(p);
     c.planet = word >> 24;
     c.far = (word & CHUNK_FAR_VIEW) != 0;
     c.covered = c.far && (word & CHUNK_FAR_COVERED) != 0;
-    c.slot = word & (c.far ? CHUNK_SLOT_MASK & ~CHUNK_FAR_COVERED : CHUNK_SLOT_MASK);
+    c.slot = word & (c.far ? CHUNK_SLOT_MASK & ~CHUNK_FAR_COVERED : CHUNK_SLOT_MASK & ~CHUNK_TRANSLUCENT);
     c.version = ReadBE32(p + 4);
     c.dl_size = ReadBE32(p + 8);
     c.kcl_size = ReadBE32(p + 12);
     for (int k = 0; k < 4; k++)
       c.sphere[k] = ReadF32(p + 16 + 4 * k);
+    c.solid_size = split ? ReadBE32(p + 32) : c.dl_size;
+    if (c.solid_size > c.dl_size || c.solid_size % 32 != 0)
+      return false;
     if (c.slot >= (c.far ? FAR_VIEW_PARTS : max_slots) || (c.far && c.kcl_size != 0) || c.dl_size % 32 != 0 || c.kcl_size % 4 != 0 || c.dl_size > len - HEAD ||
         c.kcl_size != len - HEAD - c.dl_size || (c.dl_size == 0 && c.kcl_size != 0))
       return false;

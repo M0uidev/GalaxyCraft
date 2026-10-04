@@ -228,6 +228,16 @@ class BlockShapesTest {
                 CubeBlocks.INSTANCE);
         PlanetStore.Saved back = store.read("G", CubeBlocks.INSTANCE).orElseThrow();
         assertArrayEquals(p.cells(), back.cells());
+        assertNull(back.biomes(), "saved without biomes: none (plains)");
+        // Biomes per column come back as they were.
+        String[] cols = new String[6 * grid.n * grid.n];
+        for (int k = 0; k < cols.length; k++) cols[k] = k % 7 == 0 ? "minecraft:swamp" : "minecraft:desert";
+        PlanetBiomes biomes = PlanetBiomes.of(cols);
+        store.write("B", new PlanetStore.Saved(grid.n, grid.core, grid.layers, p.depth, new Vector3d(), p.cells(), biomes),
+                CubeBlocks.INSTANCE);
+        PlanetStore.Saved withBiomes = store.read("B", CubeBlocks.INSTANCE).orElseThrow();
+        assertEquals(biomes, withBiomes.biomes());
+        assertEquals("minecraft:swamp", withBiomes.biomes().at(14));
         // A GXP1 file: a byte per cell, Material ordinal and a fluid's level in the high nibble.
         Path old = store.file("Old");
         int n = 2, layers = 3, len = 6 * n * n * layers;

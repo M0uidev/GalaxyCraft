@@ -43,6 +43,19 @@ public interface Blocks {
         return false;
     }
 
+    /**
+     * A biome's color of one kind ({@link PlanetBiomes#GRASS} ...) at (x, z) blocks (swamp grass
+     * varies across), 0xRRGGBB; -1 if unknown (the tint's own color is kept).
+     */
+    default int biomeColor(String biome, int kind, double x, double z) {
+        return -1;
+    }
+
+    /** The atlas tile of a fluid's flowing texture; -1: its still one serves. */
+    default int flowTile(int fluid) {
+        return -1;
+    }
+
     default int updateShape(VoxelPlanet p, int cell) {
         return p.get(cell);
     }

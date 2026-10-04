@@ -109,8 +109,37 @@ class FluidsTest {
         int before = PlanetMesher.collision(p, chunk).size();
         p.set(at(12, 12, 9), Material.AIR);
         assertEquals(before, PlanetMesher.collision(p, chunk).size(), "water adds no collision");
+        // A lone source: Minecraft's corners average it (weight 10) with the air beside it (1 each).
         double top = water.stream().filter(q -> q.side() == CubeSphere.TOP).findFirst().orElseThrow().corners()[0].length();
-        assertEquals(g.radius(9) + 8 / 9.0, top, 1e-6);
+        assertEquals(g.radius(9) + (8 / 9.0 * 10) / 12, top, 1e-6);
+        assertTrue(water.stream().allMatch(PlanetMesher.Quad::translucent), "water is drawn translucent");
+    }
+
+    @Test
+    void aLakeIsOneFlatSheet() {
+        for (int i = 10; i <= 14; i++)
+            for (int j = 10; j <= 14; j++) p.set(at(i, j, 9), Material.WATER, Fluids.SOURCE);
+        int c = at(12, 12, 9);
+        var quads = PlanetMesher.quads(p, p.chunkOf(c)).stream().filter(q -> q.tile() == p.info(c).tile()).toList();
+        var tops = quads.stream().filter(q -> q.side() == CubeSphere.TOP).toList();
+        assertEquals(25, tops.size());
+        // Inside the lake every corner is a source's height; no faces between its cells.
+        for (var q : tops)
+            for (var v : q.corners()) {
+                double h = v.length() - g.radius(9);
+                assertTrue(h <= 8 / 9.0 + 1e-6 && h > 0.7, "corner at " + h);
+            }
+        var mid = PlanetMesher.quads(p, p.chunkOf(c)).stream().filter(q -> q.side() >= CubeSphere.I_MINUS)
+                .filter(q -> q.translucent()).count();
+        assertEquals(20, mid, "sides only around the lake, against the air");
+    }
+
+    @Test
+    void flowingWaterSlopesDownstream() {
+        p.set(at(12, 12, 9), Material.WATER, Fluids.SOURCE);
+        p.set(at(13, 12, 9), Material.WATER, 3);
+        double[] f = PlanetMesher.flow(p, Blocks.WATER, at(13, 12, 9));
+        assertTrue(f[0] > 0, "flows away from the source, along +i");
     }
 
     @Test

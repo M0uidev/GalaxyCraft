@@ -52,7 +52,11 @@ public final class PlanetMesher {
      * cell), the brightness at each corner (sun and ambient occlusion), each corner's texture
      * coordinate within the tile (u, v from 0 to 1) and its tint (0xRRGGBB).
      */
-    public record Quad(Vector3d[] corners, int tile, int side, double[] light, double[][] uv, int tint) {}
+    public record Quad(Vector3d[] corners, int tile, int side, double[] light, double[][] uv, int tint, boolean translucent) {
+        public Quad(Vector3d[] corners, int tile, int side, double[] light, double[][] uv, int tint) {
+            this(corners, tile, side, light, uv, tint, false);
+        }
+    }
 
     private static final int[] LATERAL = {CubeSphere.I_MINUS, CubeSphere.I_PLUS, CubeSphere.J_MINUS, CubeSphere.J_PLUS};
     /** A side's texture coordinates, corners as {@link CubeSphere#side} orders them. */
@@ -60,7 +64,12 @@ public final class PlanetMesher {
 
     /** sphere: the chunk's bounding sphere (center from the planet's center, radius), galaxy units. */
     /** darkCut: faces of a dark cave were left out (see {@link #mesh}). */
-    public record ChunkMesh(byte[] displayList, byte[] kcl, float[] sphere, boolean darkCut) {
+    /** translucentAt: where in displayList the translucent faces' own list starts (its length: none). */
+    public record ChunkMesh(byte[] displayList, byte[] kcl, float[] sphere, boolean darkCut, int translucentAt) {
+        public ChunkMesh(byte[] displayList, byte[] kcl, float[] sphere, boolean darkCut) {
+            this(displayList, kcl, sphere, darkCut, displayList.length);
+        }
+
         public boolean empty() {
             return displayList.length == 0;
         }
@@ -106,7 +115,7 @@ public final class PlanetMesher {
                     light[v] = sun * (ao == null ? 1 : trilinear(ao, pos[3 * v + 2], pos[3 * v], pos[3 * v + 1]));
                 double[][] uv = new double[4][];
                 for (int v = 0; v < 4; v++) uv[v] = new double[] {mq.uv()[2 * v], mq.uv()[2 * v + 1]};
-                out.add(new Quad(q, mq.tile(), mq.cull(), light, uv, mq.tint()));
+                out.add(new Quad(q, mq.tile(), mq.cull(), light, uv, p.tint(c, mq.tint())));
             }
         }
         return out;
@@ -195,27 +204,167 @@ public final class PlanetMesher {
     }
 
     /**
-     * A fluid's faces: those facing anything but an opaque cube or itself (or itself lower down,
-     * above its surface), as high as its level.
+     * A fluid's faces as Minecraft's FluidRenderer makes them: the top sloped, each corner as high
+     * as the fluid around it (sources weigh more), so a lake is one flat sheet and a stream runs
+     * down smoothly; flowing water's top drawn with the flowing texture turned along the flow. No
+     * face between the same fluid, none against an opaque cube. Water is translucent.
      */
     private static void fluidQuads(VoxelPlanet p, int c, BlockInfo b, List<Quad> out, Dark dark) {
-        double top = Fluids.height(p, c);
-        for (int s = 0; s < 6; s++) {
-            int nb = p.grid.neighbor(c, s);
-            if (s == CubeSphere.BOTTOM && nb < 0) continue; // faces the sealed center
-            if (p.occludes(nb)) continue;
-            if (dark != null && nb >= 0 && dark.in(nb)) continue;
-            double bottom = 0; // of a side: a fluid shows only above its own fluid next to it
-            if (p.fluid(nb) == b.fluid()) {
-                if (s == CubeSphere.TOP || s == CubeSphere.BOTTOM) continue;
-                bottom = Fluids.height(p, nb);
-                if (bottom >= top) continue;
-            }
-            Vector3d[] q = p.grid.side(c, s);
-            double[] light = light(p, c, s, nb, q);
-            if (top < 1 || bottom > 0) lower(q, p.grid.radius(p.grid.k(c)), bottom, top);
-            out.add(new Quad(q, b.tile(), s, light, SIDE_UV, b.tint()));
+        CubeSphere g = p.grid;
+        int f = b.fluid();
+        boolean translucent = f == Blocks.WATER;
+        int tint = p.tint(c, b.tint());
+        int still = b.tile(), flowing = p.blocks.flowTile(f);
+        if (flowing < 0) flowing = still;
+        double self = cornerSource(p, f, c);
+        double[][] h = new double[2][2]; // corner heights by [di][dj]
+        if (self >= 1) {
+            for (double[] row : h) java.util.Arrays.fill(row, 1);
+        } else {
+            for (int di = 0; di < 2; di++)
+                for (int dj = 0; dj < 2; dj++) {
+                    int si = di == 0 ? CubeSphere.I_MINUS : CubeSphere.I_PLUS, sj = dj == 0 ? CubeSphere.J_MINUS : CubeSphere.J_PLUS;
+                    int ni = g.neighbor(c, si), nj = g.neighbor(c, sj);
+                    int diag = ni >= 0 ? g.neighbor(ni, sj) : nj >= 0 ? g.neighbor(nj, si) : -1;
+                    h[di][dj] = averageHeight(p, f, self, cornerSource(p, f, nj), cornerSource(p, f, ni), diag);
+                }
         }
+        double r0 = g.radius(g.k(c));
+        Vector3d center = g.center(c);
+
+        int up = g.neighbor(c, CubeSphere.TOP);
+        double lowest = Math.min(Math.min(h[0][0], h[0][1]), Math.min(h[1][0], h[1][1]));
+        if (p.fluid(up) != f && !(lowest >= 1 && p.occludes(up)) && !(dark != null && up >= 0 && dark.in(up))) {
+            int[][] k = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+            Vector3d[] q = new Vector3d[4];
+            double[][] uv = new double[4][];
+            double[] flow = flow(p, f, c);
+            boolean moving = Math.abs(flow[0]) > 1e-6 || Math.abs(flow[1]) > 1e-6;
+            // Minecraft's model x is j, z is i (CellSpace): its flow (x, z) is (along j, along i).
+            double angle = Math.atan2(flow[0], flow[1]) - Math.PI / 2, sn = Math.sin(angle) * 0.25, cs = Math.cos(angle) * 0.25;
+            for (int v = 0; v < 4; v++) {
+                int di = k[v][0], dj = k[v][1];
+                q[v] = point(g, c, di, dj, r0 + h[di][dj]);
+                if (!moving) uv[v] = new double[] {dj, di};
+                else if (di == 0 && dj == 0) uv[v] = new double[] {0.5 - cs - sn, 0.5 - cs + sn};
+                else if (di == 1 && dj == 0) uv[v] = new double[] {0.5 - cs + sn, 0.5 + cs + sn};
+                else if (di == 1) uv[v] = new double[] {0.5 + cs + sn, 0.5 + cs - sn};
+                else uv[v] = new double[] {0.5 + cs - sn, 0.5 - cs - sn};
+            }
+            addFluid(out, q, uv, center, moving ? flowing : still, CubeSphere.TOP, tint, translucent);
+        }
+        int down = g.neighbor(c, CubeSphere.BOTTOM);
+        if (down >= 0 && p.fluid(down) != f && !p.occludes(down) && !(dark != null && dark.in(down))) {
+            Vector3d[] q = {point(g, c, 0, 0, r0), point(g, c, 1, 0, r0), point(g, c, 1, 1, r0), point(g, c, 0, 1, r0)};
+            addFluid(out, q, new double[][] {{0, 0}, {0, 1}, {1, 1}, {1, 0}}, center, still, CubeSphere.BOTTOM, tint, translucent);
+        }
+        for (int s : LATERAL) {
+            int nb = g.neighbor(c, s);
+            if (nb < 0 || p.fluid(nb) == f || p.occludes(nb) || dark != null && dark.in(nb)) continue;
+            // The side's two corners (di, dj), bottom then top at each.
+            int[] a = switch (s) {
+                case CubeSphere.I_MINUS -> new int[] {0, 0, 0, 1};
+                case CubeSphere.I_PLUS -> new int[] {1, 0, 1, 1};
+                case CubeSphere.J_MINUS -> new int[] {0, 0, 1, 0};
+                default -> new int[] {0, 1, 1, 1};
+            };
+            double h0 = h[a[0]][a[1]], h1 = h[a[2]][a[3]];
+            Vector3d[] q = {point(g, c, a[0], a[1], r0), point(g, c, a[2], a[3], r0), point(g, c, a[2], a[3], r0 + h1),
+                    point(g, c, a[0], a[1], r0 + h0)};
+            double[][] uv = {{0, 0.5}, {0.5, 0.5}, {0.5, (1 - h1) * 0.5}, {0, (1 - h0) * 0.5}};
+            addFluid(out, q, uv, center, flowing, s, tint, translucent);
+        }
+    }
+
+    /** Corner (di, dj) of cell's column at radius r. */
+    private static Vector3d point(CubeSphere g, int cell, int di, int dj, double r) {
+        return g.dir(g.face(cell), g.i(cell) + di, g.j(cell) + dj).mul(r);
+    }
+
+    /** A fluid face, turned to face away from the cell's center, lit by the sun alone (no ambient occlusion on fluids). */
+    private static void addFluid(List<Quad> out, Vector3d[] q, double[][] uv, Vector3d center, int tile, int side, int tint,
+            boolean translucent) {
+        Vector3d n = new Vector3d(q[1]).sub(q[0]).cross(new Vector3d(q[2]).sub(q[0]));
+        Vector3d mid = new Vector3d(q[0]).add(q[1]).add(q[2]).add(q[3]).mul(0.25);
+        if (n.dot(mid.sub(center)) < 0) {
+            Vector3d t = q[1];
+            q[1] = q[3];
+            q[3] = t;
+            double[] u = uv[1];
+            uv[1] = uv[3];
+            uv[3] = u;
+        }
+        double sun = sun(q);
+        out.add(new Quad(q, tile, side, new double[] {sun, sun, sun, sun}, uv, tint, translucent));
+    }
+
+    /**
+     * FluidRenderer.getHeight: the fluid's height in cell (1 with the same fluid above it), 0 for
+     * anything it could flow into, -1 for something solid (left out of the averages).
+     */
+    static double cornerSource(VoxelPlanet p, int f, int cell) {
+        if (cell < 0) return 0;
+        if (p.fluid(cell) == f) return Fluids.height(p, cell);
+        return p.info(cell).collides() ? -1 : 0;
+    }
+
+    /** FluidRenderer.calculateAverageHeight: a corner's height from the three cells around it and this one. */
+    static double averageHeight(VoxelPlanet p, int f, double self, double h2, double h1, int corner) {
+        if (h1 >= 1 || h2 >= 1) return 1;
+        double[] w = new double[2];
+        if (h1 > 0 || h2 > 0) {
+            double hc = cornerSource(p, f, corner);
+            if (hc >= 1) return 1;
+            weigh(w, hc);
+        }
+        weigh(w, self);
+        weigh(w, h1);
+        weigh(w, h2);
+        return w[1] == 0 ? self : w[0] / w[1];
+    }
+
+    private static void weigh(double[] w, double h) {
+        if (h >= 0.8) {
+            w[0] += h * 10;
+            w[1] += 10;
+        } else if (h >= 0) {
+            w[0] += h;
+            w[1] += 1;
+        }
+    }
+
+    /** A fluid's own height (FlowingFluid.getOwnHeight): its amount / 9, falling counting full. */
+    private static double ownHeight(VoxelPlanet p, int f, int cell) {
+        if (cell < 0 || p.fluid(cell) != f) return 0;
+        int l = p.level(cell);
+        return (l == 0 || l >= 8 ? 8 : 8 - l) / 9.0;
+    }
+
+    /** FlowingFluid.getFlow, across the cell: (along i, along j), not normalized; 0 for still fluid. */
+    static double[] flow(VoxelPlanet p, int f, int c) {
+        double own = ownHeight(p, f, c), fi = 0, fj = 0;
+        for (int s : LATERAL) {
+            int nb = p.grid.neighbor(c, s);
+            if (nb < 0) continue;
+            int nf = p.fluid(nb);
+            if (nf != f && nf != Blocks.NO_FLUID) continue;
+            double nh = ownHeight(p, f, nb), d = 0;
+            if (nh == 0) {
+                if (!p.info(nb).collides()) {
+                    int below = p.grid.neighbor(nb, CubeSphere.BOTTOM);
+                    double bh = ownHeight(p, f, below);
+                    if (bh > 0) d = own - (bh - 8 / 9.0);
+                }
+            } else d = own - nh;
+            if (d == 0) continue;
+            switch (s) {
+                case CubeSphere.I_MINUS -> fi -= d;
+                case CubeSphere.I_PLUS -> fi += d;
+                case CubeSphere.J_MINUS -> fj -= d;
+                default -> fj += d;
+            }
+        }
+        return new double[] {fi, fj};
     }
 
     /**
@@ -292,14 +441,6 @@ public final class PlanetMesher {
         for (int m = 0; m < 8; m++)
             out += v[m] * ((m & 1) == 1 ? fi : 1 - fi) * ((m >> 1 & 1) == 1 ? fj : 1 - fj) * ((m >> 2) == 1 ? fk : 1 - fk);
         return out;
-    }
-
-    /** Corners on the inner radius r0 go to r0 + bottom, those on the outer one to r0 + top. */
-    private static void lower(Vector3d[] q, double r0, double bottom, double top) {
-        for (Vector3d v : q) {
-            double r = v.length();
-            v.mul((r < r0 + 0.5 ? r0 + bottom : r0 + top) / r);
-        }
     }
 
     public static ChunkMesh mesh(VoxelPlanet p, int chunk, double unitsPerBlock) {
@@ -389,6 +530,25 @@ public final class PlanetMesher {
         List<Quad> quads = quads(p, chunk, dark);
         boolean darkCut = dark != null && dark.cut;
         if (quads.isEmpty()) return new ChunkMesh(new byte[0], new byte[0], sphere, darkCut);
+        List<Quad> solid = new ArrayList<>(), clear = new ArrayList<>();
+        for (Quad q : quads) (q.translucent() ? clear : solid).add(q);
+        byte[] first = displayList(p, solid, unitsPerBlock, origin), second = displayList(p, clear, unitsPerBlock, origin);
+        byte[] dl = java.util.Arrays.copyOf(first, first.length + second.length);
+        System.arraycopy(second, 0, dl, first.length, second.length);
+        List<Tri> tris = new ArrayList<>();
+        if (withKcl)
+            for (Vector3d[] c : collision(p, chunk)) {
+                Vector3d[] k = new Vector3d[4];
+                for (int i = 0; i < 4; i++) k[i] = new Vector3d(c[i]).mul(unitsPerBlock);
+                tris.add(Tri.of(k[0], k[1], k[2]));
+                tris.add(Tri.of(k[0], k[2], k[3]));
+            }
+        return new ChunkMesh(dl, tris.isEmpty() ? new byte[0] : KclWriter.write(tris), sphere, darkCut, first.length);
+    }
+
+    /** One GX draw of quads, padded to 32 bytes; empty for none. */
+    private static byte[] displayList(VoxelPlanet p, List<Quad> quads, double unitsPerBlock, Vector3d origin) {
+        if (quads.isEmpty()) return new byte[0];
         if (quads.size() * 4 > 0xFFFF) throw new IllegalStateException("chunk too detailed for one draw");
         int size = 3 + quads.size() * 4 * VERTEX_BYTES;
         ByteBuffer dl = ByteBuffer.allocate((size + 31) & ~31).order(ByteOrder.BIG_ENDIAN);
@@ -403,15 +563,7 @@ public final class PlanetMesher {
                 dl.putShort(st(tx, q.uv()[k][0], cols)).putShort(st(ty, q.uv()[k][1], rows));
             }
         }
-        List<Tri> tris = new ArrayList<>();
-        if (withKcl)
-            for (Vector3d[] c : collision(p, chunk)) {
-                Vector3d[] k = new Vector3d[4];
-                for (int i = 0; i < 4; i++) k[i] = new Vector3d(c[i]).mul(unitsPerBlock);
-                tris.add(Tri.of(k[0], k[1], k[2]));
-                tris.add(Tri.of(k[0], k[2], k[3]));
-            }
-        return new ChunkMesh(dl.array(), tris.isEmpty() ? new byte[0] : KclWriter.write(tris), sphere, darkCut);
+        return dl.array();
     }
 
     /** A texture coordinate: f (0..1) across tile t of n tiles, kept half a texel inside it. */

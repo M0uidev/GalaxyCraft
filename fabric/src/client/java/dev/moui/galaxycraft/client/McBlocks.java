@@ -9,6 +9,7 @@ import dev.moui.galaxycraft.voxel.BoxModel;
 import dev.moui.galaxycraft.voxel.CellSpace;
 import dev.moui.galaxycraft.voxel.CubeSphere;
 import dev.moui.galaxycraft.voxel.Material;
+import dev.moui.galaxycraft.voxel.PlanetBiomes;
 import dev.moui.galaxycraft.voxel.ModelQuad;
 import dev.moui.galaxycraft.voxel.Placer;
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
@@ -70,6 +71,8 @@ public final class McBlocks implements Blocks {
     private static final int WHITE = 0xFFFFFF, WATER_TINT = 0x3F76E4;
     private static final Identifier WATER_STILL = Identifier.withDefaultNamespace("block/water_still");
     private static final Identifier LAVA_STILL = Identifier.withDefaultNamespace("block/lava_still");
+    private static final Identifier WATER_FLOW = Identifier.withDefaultNamespace("block/water_flow");
+    private static final Identifier LAVA_FLOW = Identifier.withDefaultNamespace("block/lava_flow");
     private static final Direction[] DIRECTIONS = Direction.values();
     /** Where in the client level a neighborhood goes: this far under the top, above the player. */
     private static final int SCRATCH_BELOW_TOP = 4;
@@ -99,6 +102,8 @@ public final class McBlocks implements Blocks {
         LinkedHashMap<Identifier, Integer> sprites = new LinkedHashMap<>();
         sprites.put(WATER_STILL, 0);
         sprites.put(LAVA_STILL, 1);
+        sprites.put(WATER_FLOW, 2);
+        sprites.put(LAVA_FLOW, 3);
         for (int id = 0; id < count; id++) {
             BlockState state = Block.stateById(id);
             if (state == null) continue;
@@ -172,7 +177,7 @@ public final class McBlocks implements Blocks {
             boolean water = state.getFluidState().is(FluidTags.WATER);
             return new BlockInfo(water ? WATER : LAVA, state.getValue(LiquidBlock.LEVEL), false, false, false, false, false,
                     true, List.of(), List.of(), BlockInfo.FULL, tileOf.get(water ? WATER_STILL : LAVA_STILL),
-                    water ? WATER_TINT : WHITE);
+                    water ? PlanetBiomes.tint(PlanetBiomes.WATER, WATER_TINT) : WHITE);
         }
         VoxelShape collision = shape(() -> state.getCollisionShape(none, BlockPos.ZERO));
         VoxelShape outline = shape(() -> state.getShape(none, BlockPos.ZERO));
@@ -230,9 +235,94 @@ public final class McBlocks implements Blocks {
         int tint = WHITE;
         if (q.materialInfo().isTinted()) {
             BlockTintSource source = colors.getTintSource(state, q.materialInfo().tintIndex());
-            if (source != null) tint = source.color(state) & 0xFFFFFF;
+            if (source != null) tint = PlanetBiomes.tint(TintProbe.kind(source, state), source.color(state));
         }
         return new ModelQuad(pos, uv, tileOf.getOrDefault(sprite.contents().name(), 0), tint, cull);
+    }
+
+    @Override public int flowTile(int fluid) {
+        return fluid == WATER ? tileOf.get(WATER_FLOW) : fluid == LAVA ? tileOf.get(LAVA_FLOW) : -1;
+    }
+
+    /** Biomes by name, for their colors (looked up once each). */
+    private final Map<String, java.util.Optional<net.minecraft.world.level.biome.Biome>> biomes = new java.util.concurrent.ConcurrentHashMap<>();
+
+    @Override public int biomeColor(String biome, int kind, double x, double z) {
+        var b = biomes.computeIfAbsent(biome, name -> {
+            var level = mc.level;
+            Identifier id = Identifier.tryParse(name);
+            if (level == null || id == null) return java.util.Optional.empty();
+            return level.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.BIOME)
+                    .getOptional(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BIOME, id));
+        });
+        if (b.isEmpty()) return -1;
+        return switch (kind) {
+            case PlanetBiomes.GRASS -> b.get().getGrassColor(x, z);
+            case PlanetBiomes.FOLIAGE -> b.get().getFoliageColor();
+            case PlanetBiomes.DRY_FOLIAGE -> b.get().getDryFoliageColor();
+            case PlanetBiomes.WATER -> b.get().getWaterColor();
+            default -> -1;
+        } & 0xFFFFFF;
+    }
+
+    /**
+     * Which biome color a block's tint asks Minecraft for: its tint source is run against a level
+     * that answers every biome color with a marker and notes which one was asked. A source that
+     * answers anything but that marker (a constant, redstone's power) is no biome color.
+     */
+    static final class TintProbe implements net.minecraft.client.renderer.block.BlockAndTintGetter {
+        private static final int MARKER = 0x123457;
+        private net.minecraft.world.level.ColorResolver asked;
+
+        static int kind(BlockTintSource source, BlockState state) {
+            TintProbe probe = new TintProbe();
+            int c;
+            try {
+                c = source.colorInWorld(state, probe, BlockPos.ZERO);
+            } catch (RuntimeException e) {
+                return PlanetBiomes.FIXED;
+            }
+            if ((c & 0xFFFFFF) != MARKER || probe.asked == null) return PlanetBiomes.FIXED;
+            var r = probe.asked;
+            if (r == net.minecraft.client.renderer.BiomeColors.GRASS_COLOR_RESOLVER) return PlanetBiomes.GRASS;
+            if (r == net.minecraft.client.renderer.BiomeColors.FOLIAGE_COLOR_RESOLVER) return PlanetBiomes.FOLIAGE;
+            if (r == net.minecraft.client.renderer.BiomeColors.DRY_FOLIAGE_COLOR_RESOLVER) return PlanetBiomes.DRY_FOLIAGE;
+            if (r == net.minecraft.client.renderer.BiomeColors.WATER_COLOR_RESOLVER) return PlanetBiomes.WATER;
+            return PlanetBiomes.FIXED;
+        }
+
+        @Override public net.minecraft.world.level.CardinalLighting cardinalLighting() {
+            return net.minecraft.world.level.CardinalLighting.DEFAULT;
+        }
+
+        @Override public net.minecraft.world.level.lighting.LevelLightEngine getLightEngine() {
+            return net.minecraft.world.level.lighting.LevelLightEngine.EMPTY;
+        }
+
+        @Override public int getBlockTint(BlockPos pos, net.minecraft.world.level.ColorResolver color) {
+            asked = color;
+            return MARKER;
+        }
+
+        @Override public net.minecraft.world.level.block.entity.BlockEntity getBlockEntity(BlockPos pos) {
+            return null;
+        }
+
+        @Override public BlockState getBlockState(BlockPos pos) {
+            return net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        }
+
+        @Override public net.minecraft.world.level.material.FluidState getFluidState(BlockPos pos) {
+            return net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState();
+        }
+
+        @Override public int getHeight() {
+            return 0;
+        }
+
+        @Override public int getMinY() {
+            return 0;
+        }
     }
 
     /** Whether a right click can do something to the block itself (its class has a use): doors, levers, chests. */

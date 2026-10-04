@@ -24,7 +24,7 @@ public final class PlanetLod {
     /** A face's display list and its bounding sphere (center from the planet's, radius; units). */
     public record Part(byte[] displayList, float[] sphere) {}
 
-    private record Patch(int height, int block) {}
+    private record Patch(int height, int block, int cell) {}
 
     private PlanetLod() {}
 
@@ -116,7 +116,7 @@ public final class PlanetLod {
                 int i0 = i0r + a * s, i1 = Math.min(i1r, i0 + s), j0 = j0r + b * s, j1 = Math.min(j1r, j0 + s);
                 double r = g.radius(t.height);
                 Vector3d mid = g.dir(face, i0, j0).add(g.dir(face, i1, j1)).normalize();
-                quads.add(top(p, t.block, new Vector3d[] {g.dir(face, i0, j0).mul(r), g.dir(face, i1, j0).mul(r),
+                quads.add(top(p, t.block, t.cell, new Vector3d[] {g.dir(face, i0, j0).mul(r), g.dir(face, i1, j0).mul(r),
                         g.dir(face, i1, j1).mul(r), g.dir(face, i0, j1).mul(r)}, mid));
                 // Walls toward lower neighbors (+i and +j here, -i and -j by those), skirts at the region's edges.
                 wall(p, quads, t, a + 1 < ma ? patch[a + 1][b] : null, g.dir(face, i1, j0), g.dir(face, i1, j1), mid, skirt);
@@ -157,18 +157,18 @@ public final class PlanetLod {
                     best = block;
                 }
             }
-        return new Patch((int) Math.round((double) sum / cols), best);
+        return new Patch((int) Math.round((double) sum / cols), best, g.index(face, (i0 + i1) / 2, (j0 + j1) / 2, 0));
     }
 
     /** A patch's top quad, counter-clockwise seen from outside. */
-    private static PlanetMesher.Quad top(VoxelPlanet p, int block, Vector3d[] q, Vector3d outward) {
+    private static PlanetMesher.Quad top(VoxelPlanet p, int block, int cell, Vector3d[] q, Vector3d outward) {
         Vector3d n = new Vector3d(q[1]).sub(q[0]).cross(new Vector3d(q[2]).sub(q[0]));
         if (n.dot(outward) < 0) {
             Vector3d t = q[1];
             q[1] = q[3];
             q[3] = t;
         }
-        return quad(p, block, q, CubeSphere.TOP, new double[][] {{0, 0}, {1, 0}, {1, 1}, {0, 1}});
+        return quad(p, block, cell, q, CubeSphere.TOP, new double[][] {{0, 0}, {1, 0}, {1, 1}, {0, 1}});
     }
 
     /**
@@ -194,11 +194,11 @@ public final class PlanetLod {
             q[3] = tmp;
         }
         // Inner corners first, so the texture's top edge (v 0) runs along the outer ones.
-        out.add(quad(p, t.block, q, CubeSphere.I_MINUS, new double[][] {{0, 1}, {1, 1}, {1, 0}, {0, 0}}));
+        out.add(quad(p, t.block, t.cell, q, CubeSphere.I_MINUS, new double[][] {{0, 1}, {1, 1}, {1, 0}, {0, 0}}));
     }
 
     /** A quad with the block's texture for that side (its top, or a side), lit by the sun. */
-    private static PlanetMesher.Quad quad(VoxelPlanet p, int block, Vector3d[] q, int side, double[][] uv) {
+    private static PlanetMesher.Quad quad(VoxelPlanet p, int block, int cell, Vector3d[] q, int side, double[][] uv) {
         BlockInfo b = p.blocks.info(block);
         int tile = b.tile(), tint = b.tint();
         ModelQuad pick = null;
@@ -215,7 +215,7 @@ public final class PlanetLod {
             tint = pick.tint();
         }
         double sun = PlanetMesher.sun(q);
-        return new PlanetMesher.Quad(q, tile, side, new double[] {sun, sun, sun, sun}, uv, tint);
+        return new PlanetMesher.Quad(q, tile, side, new double[] {sun, sun, sun, sun}, uv, p.tint(cell, tint));
     }
 
     private static byte[] displayList(VoxelPlanet p, List<PlanetMesher.Quad> quads, double unitsPerBlock) {

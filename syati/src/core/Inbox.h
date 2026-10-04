@@ -22,6 +22,7 @@ const u32 PLANET_GONE = 1;
 // (the slot below is then its tile: face, then up to 16 × 16 tiles of it, PlanetLod.tile, and
 // FAR_COVERED if the tile is chunks in the game), else the chunk's slot.
 const u32 CHUNK_FAR_VIEW = 0x800000u, CHUNK_FAR_COVERED = 0x400000u, CHUNK_SLOT_MASK = 0x7FFFFFu,
+          CHUNK_TRANSLUCENT = 0x200000u,
           FAR_VIEW_PARTS = 6 * 16 * 16;
 
 struct InboxChunk
@@ -31,6 +32,7 @@ struct InboxChunk
   bool covered;  // and its tile is chunks: drawn only from afar (no display list: keep the last one)
   u32 slot, version, dl_size, kcl_size;
   f32 sphere[4];  // bounding sphere, center relative to the planet's
+  u32 solid_size;  // bytes of dl drawn opaque; the rest is translucent (drawn after, blended)
   const u8* dl;   // dl_size bytes
   const u8* kcl;  // kcl_size bytes (0: drawn only)
 };

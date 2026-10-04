@@ -38,6 +38,7 @@ struct Slot
   u32 version;
   u8* dl;  // 32-byte aligned, from the scene's MEM2 heap
   u32 dl_size;
+  u32 solid_size;  // bytes of dl drawn opaque; the rest (water) is drawn after every planet, blended
   u8* kcl;
   CollisionParts* parts;
   f32 sphere[4];  // bounding sphere, center relative to the planet's
@@ -513,6 +514,7 @@ public:
     DCFlushRange(dl, c.dl_size);
     s.dl = dl;
     s.dl_size = c.dl_size;
+    s.solid_size = c.solid_size;
     s.drawn = p.drawn_count;
     p.drawn[p.drawn_count++] = c.slot;
     if (kcl && !MainZoneReady())
@@ -571,6 +573,7 @@ public:
     s.dl = s.kcl = 0;
     s.parts = 0;
     s.dl_size = 0;
+    s.solid_size = 0;
   }
 
   void NewSlots(Planet& p, u32 count)
@@ -676,7 +679,19 @@ public:
     u32 drawn = 0, far = 0;
     for (u32 i = 0; i < MAX_PLANETS; i++)
       if (gPlanets[i].id)
-        DrawPlanet(gPlanets[i], view, proj, &drawn, &far);
+        DrawPlanet(gPlanets[i], view, proj, &drawn, &far, false);
+    // Water, over everything opaque: blended by its texture's alpha, hiding nothing behind it (no
+    // depth written), seen from both sides (from under the surface too).
+    GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
+    GXSetZMode(GX_TRUE, GX_LEQUAL, GX_FALSE);
+    GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+    GXSetCullMode(GX_CULL_NONE);
+    for (u32 i = 0; i < MAX_PLANETS; i++)
+      if (gPlanets[i].id)
+        DrawPlanet(gPlanets[i], view, proj, &drawn, &far, true);
+    GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_NOOP);
+    GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
+    GXSetCullMode(GX_CULL_FRONT);
     gVoxelStats.drawn_last = drawn;
     gVoxelStats.far_drawn = far;
     GXSetZCompLoc(GX_TRUE);
@@ -691,7 +706,7 @@ public:
   // Its far view's tiles and its chunks: the mod sends each tile as one or the other (chunks within
   // its render distance of Mario), so whatever the planet has is drawn. From afar, its far view
   // alone: the covered parts stand in for the chunks.
-  static void DrawPlanet(const Planet& p, const f32 view[12], const f32 proj[7], u32* drawn, u32* far)
+  static void DrawPlanet(const Planet& p, const f32 view[12], const f32 proj[7], u32* drawn, u32* far, bool translucent)
   {
     // The camera in the planet's frame: chunks behind it, past the horizon or beside the view are
     // skipped. The bedrock shell (unbreakable) is the ball that hides them.
@@ -707,7 +722,7 @@ public:
     gxc::ViewTranslate(view, p.center, planet);
     const f32 above = gxc::Sqrt(eye[0] * eye[0] + eye[1] * eye[1] + eye[2] * eye[2]) - p.surface;
     const bool afar = p.far && above > (p.surface > FAR_VIEW_ABOVE ? p.surface : FAR_VIEW_ABOVE);
-    if (p.far)
+    if (p.far && !translucent)
     {
       GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(planet), GX_PNMTX0);
       for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
@@ -729,6 +744,9 @@ public:
     for (u32 i = 0; i < p.drawn_count; i++)
     {
       const Slot& s = p.slots[p.drawn[i]];
+      const u32 size = translucent ? s.dl_size - s.solid_size : s.solid_size;
+      if (size == 0)
+        continue;
       if (gxc::SphereHidden(eye, fwd, origin, p.occluder, s.sphere, s.sphere[3]))
         continue;
       // Each chunk's vertices are relative to its own center.
@@ -738,8 +756,9 @@ public:
       if (gxc::SphereOutsideView(proj, at, s.sphere[3]))
         continue;
       GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(pos), GX_PNMTX0);
-      GXCallDisplayList(s.dl, s.dl_size);
-      (*drawn)++;
+      GXCallDisplayList(translucent ? s.dl + s.solid_size : s.dl, size);
+      if (!translucent)
+        (*drawn)++;
     }
   }
 

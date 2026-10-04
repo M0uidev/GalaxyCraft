@@ -243,6 +243,9 @@ typedef struct {
 /* With GXC_CHUNK_FAR_VIEW: the tile is chunks in the game. The part is drawn only for a camera far
  * from the planet (instead of its chunks); without a display list, the last one is kept. */
 #define GXC_CHUNK_FAR_COVERED 0x400000u
+/* A chunk (not a far view part) whose display list is two: its opaque faces, then from the offset
+ * in a uint32_t after GxcChunk its translucent ones (water), drawn after every opaque one, blended. */
+#define GXC_CHUNK_TRANSLUCENT 0x200000u
 #define GXC_FAR_VIEW_PARTS (6 * 16 * 16)
 typedef struct {
   uint32_t slot;    /* planet id << 24 | chunk index (or GXC_CHUNK_FAR_VIEW | tile) */

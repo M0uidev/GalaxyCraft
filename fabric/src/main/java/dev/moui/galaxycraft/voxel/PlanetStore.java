@@ -21,7 +21,14 @@ public final class PlanetStore {
     private static final int MAGIC_V1 = 0x47585031, MAGIC = 0x47585032; // "GXP1", "GXP2"
 
     /** A planet as saved: its grid, crust depth, center (galaxy units) and cells (block ids). */
-    public record Saved(int n, double core, int layers, int depth, Vector3d center, char[] cells) {}
+    public record Saved(int n, double core, int layers, int depth, Vector3d center, char[] cells, PlanetBiomes biomes) {
+        public Saved(int n, double core, int layers, int depth, Vector3d center, char[] cells) {
+            this(n, core, layers, depth, center, cells, null);
+        }
+    }
+
+    /** After the cells, optional ("BIOM"): the biomes' names and, for more than one, a byte per column. */
+    private static final int BIOMES = 0x42494F4D;
 
     private final Path dir;
 
@@ -80,6 +87,12 @@ public final class PlanetStore {
             for (String name : names) out.writeUTF(name);
             out.writeInt(cells.length);
             out.write(packed);
+            if (s.biomes() != null) {
+                out.writeInt(BIOMES);
+                out.writeInt(s.biomes().names().size());
+                for (String name : s.biomes().names()) out.writeUTF(name);
+                if (!s.biomes().uniform()) out.write(s.biomes().columns());
+            }
         }
         Files.move(tmp, file(stage), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
@@ -106,7 +119,29 @@ public final class PlanetStore {
                 if (i >= palette.length) throw new IOException(f + ": bad cell");
                 cells[c] = (char) palette[i];
             }
-            return Optional.of(new Saved(n, core, layers, depth, center, cells));
+            return Optional.of(new Saved(n, core, layers, depth, center, cells, biomes(in, 6 * n * n)));
+        }
+    }
+
+    /** The biomes after the cells; null for a planet saved before planets had them. */
+    private static PlanetBiomes biomes(DataInputStream in, int columns) throws IOException {
+        int magic;
+        try {
+            magic = in.readInt();
+        } catch (java.io.EOFException e) {
+            return null;
+        }
+        if (magic != BIOMES) throw new IOException("bad biomes");
+        int count = in.readInt();
+        if (count < 1 || count > 256) throw new IOException("bad biomes");
+        String[] names = new String[count];
+        for (int i = 0; i < count; i++) names[i] = in.readUTF();
+        byte[] cols = count == 1 ? null : in.readNBytes(columns);
+        if (cols != null && cols.length != columns) throw new IOException("truncated biomes");
+        try {
+            return PlanetBiomes.of(names, cols);
+        } catch (IllegalArgumentException e) {
+            throw new IOException(e.getMessage());
         }
     }
 
