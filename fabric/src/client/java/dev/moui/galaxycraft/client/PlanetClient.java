@@ -16,6 +16,7 @@ import dev.moui.galaxycraft.voxel.Material;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.BlueprintStore;
 import dev.moui.galaxycraft.voxel.PlanetBlueprint;
+import dev.moui.galaxycraft.voxel.PlanetLayout;
 import dev.moui.galaxycraft.voxel.PlanetStore;
 import java.io.IOException;
 import java.util.Optional;
@@ -37,9 +38,14 @@ import org.joml.Vector3d;
  * The voxel planet in Minecraft's hands: /galaxycraft planet, the clicks that break and place
  * blocks (any of Minecraft's, by its placement rules; and pour and fill buckets of water and lava)
  * while something is in the main hand and no screen is open (Dolphin then keeps them from Mario), P
- * to land on the planet, and the messages that carry it to the game, the block atlas first. One planet per stage (galaxy), saved in
- * ~/.local/share/galaxycraft/planets (see planetDir) and loaded again when the stage is. -Dgalaxycraft.planet=true
- * (or a radius) spawns one in a stage that has none as soon as the player follows Mario.
+ * to land on the planet, and the messages that carry it to the game, the block atlas first. Up to
+ * PlanetLayout.MAX_PLANETS planets per stage (galaxy), each saved in ~/.local/share/galaxycraft/planets
+ * (see planetDir, PlanetStore.key) and loaded again when the stage is; /galaxycraft planet add puts
+ * another one up (PlanetLayout.place), spawn replaces the one in focus. The planet nearest Mario
+ * is the one in focus: the clicks, the outline, P and Minecraft's running of the blocks are its;
+ * the game gets the chunks of that one and of those Mario nears, the others' far view only.
+ * -Dgalaxycraft.planet=true (or a radius) spawns one in a stage that has none as soon as the
+ * player follows Mario.
  *
  * Minecraft runs the blocks around Mario ({@link ShadowLink}): a right click uses the block it is
  * on (doors, levers, chests) or the held item on it before placing anything, and aiming at such a
@@ -55,7 +61,14 @@ public final class PlanetClient {
     public static final int DEFAULT_RADIUS = 32;
     /** Ticks between saves of an edited planet. */
     private static final int SAVE_TICKS = 200;
+    /** The stage's first planet (index 0): the same session all along, which tests hold on to. */
     private static final PlanetSession session = new PlanetSession(1 / GravityFrame.SCALE);
+    /** The stage's other planets, each with the index of its file (PlanetStore.key). */
+    private record Extra(PlanetSession s, int index) {}
+    private static final java.util.List<Extra> extras = new java.util.ArrayList<>();
+    /** The planet nearest Mario (session when there is none). */
+    private static PlanetSession focus = session;
+    private static boolean spawnAdds; // the next spawn adds a planet instead of replacing the one in focus
     private static final PlanetStore store = new PlanetStore(planetDir());
     private static final ExecutorService saver = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "GalaxyCraft planet saver");
@@ -75,10 +88,10 @@ public final class PlanetClient {
     private static int lastButtons;
     private static boolean lastP;
     private static int sinceSave;
-    private static final ShadowLink shadow = new ShadowLink(session);
+    private static final ShadowLink shadow = new ShadowLink(() -> focus);
     private static boolean aimUsable; // an empty hand aims at a block a click uses
-    private static final DropsClient drops = new DropsClient(session);
-    private static final EntityClient entities = new EntityClient(session, drops);
+    private static final DropsClient drops = new DropsClient(() -> focus);
+    private static final EntityClient entities = new EntityClient(() -> focus, drops);
     private static McBlocks blocks;
     private static AtlasLink atlasLink;
 
@@ -125,44 +138,81 @@ public final class PlanetClient {
 
     /** Places a block item as a right click would (end-to-end tests). */
     public static boolean placeItem(Vector3d eyeGal, Vector3d lookGal, ItemStack stack, Vector3d marioFeetGal) {
-        return blocks != null && session.placeBlock(eyeGal, lookGal, blocks.placer(stack), marioFeetGal);
+        return blocks != null && focus.placeBlock(eyeGal, lookGal, blocks.placer(stack), marioFeetGal);
     }
 
     /** Minecraft's text for the block in a cell of the planet (end-to-end tests). */
     public static String blockName(int cell) {
-        return blocks == null || !session.active() ? "" : blocks.name(session.planet().get(cell));
+        return blocks == null || !focus.active() ? "" : blocks.name(focus.planet().get(cell));
     }
 
-    /** The planet itself (end-to-end tests edit it directly). */
+    /** The stage's first planet (end-to-end tests edit it directly). */
     public static PlanetSession session() {
         return session;
+    }
+
+    /** The planet in focus, nearest Mario. */
+    public static PlanetSession focus() {
+        return focus;
+    }
+
+    /** Every planet slot of the stage, the first first (some may be empty). */
+    public static java.util.List<PlanetSession> planets() {
+        java.util.List<PlanetSession> all = new java.util.ArrayList<>();
+        all.add(session);
+        for (Extra e : extras) all.add(e.s());
+        return all;
+    }
+
+    private static int indexOf(PlanetSession s) {
+        for (Extra e : extras) if (e.s() == s) return e.index();
+        return 0;
     }
 
     public static boolean itemActive(LocalPlayer player) {
         return player != null && (!player.getMainHandItem().isEmpty() || aimUsable);
     }
 
-    /** /galaxycraft planet spawn [radius]: next tick, above the player, replacing this stage's. */
+    /** /galaxycraft planet spawn [radius]: next tick, above the player, replacing the one in focus. */
     public static void requestSpawn(int radius) {
         spawnRadius = radius;
+        spawnAdds = false;
     }
 
     /** A planet built from that blueprint, next tick, as {@link #requestSpawn(int)} puts one. */
     public static void requestSpawn(PlanetBlueprint blueprint) {
         spawnBlueprint = blueprint;
+        spawnAdds = false;
     }
 
+    /** /galaxycraft planet add [radius]: next tick, another planet (PlanetLayout.place), the others kept. */
+    public static void requestAdd(int radius) {
+        spawnRadius = radius;
+        spawnAdds = true;
+    }
+
+    /** Another planet built from that blueprint, as {@link #requestAdd(int)} puts one. */
+    public static void requestAdd(PlanetBlueprint blueprint) {
+        spawnBlueprint = blueprint;
+        spawnAdds = true;
+    }
+
+    /** Mario onto the planet in focus. */
     public static void teleport() {
-        session.teleport();
+        focus.teleport();
     }
 
-    /** Removes this stage's planet, from the game and from disk. */
+    /** Removes the planet in focus, from the game and from disk. */
     public static void remove() {
-        session.remove();
+        PlanetSession gone = focus;
+        int index = indexOf(gone);
+        gone.remove();
+        if (gone != session) extras.removeIf(e -> e.s() == gone);
+        focus = session;
         String s = stage;
         if (s != null && !s.isEmpty()) saver.execute(() -> {
             try {
-                store.delete(s);
+                store.delete(PlanetStore.key(s, index));
             } catch (IOException e) {
                 GalaxyCraft.LOG.warn("Could not delete the planet of {}: {}", s, e.toString());
             }
@@ -171,10 +221,66 @@ public final class PlanetClient {
 
     public static String status() {
         String where = stage == null || stage.isEmpty() ? "" : " in " + stage;
-        if (!session.active()) return "no planet" + where;
-        Vector3d c = session.center();
-        return String.format("planet of radius %.0f%s at (%.0f, %.0f, %.0f), %d to send, %d chunks with collision",
-                session.planet().surface(), where, c.x, c.y, c.z, session.queued(), session.collisionChunks());
+        StringBuilder out = new StringBuilder();
+        for (PlanetSession p : planets()) {
+            if (!p.active()) continue;
+            Vector3d c = p.center();
+            out.append(out.isEmpty() ? "" : "; ").append(String.format("%splanet of radius %.0f%s at (%.0f, %.0f, %.0f), %d to send, %d chunks with collision%s",
+                    p == focus ? "* " : "", p.planet().surface(), where, c.x, c.y, c.z, p.queued(), p.collisionChunks(),
+                    p.detail() ? "" : ", far view only"));
+        }
+        return out.isEmpty() ? "no planet" + where : out.toString();
+    }
+
+    /**
+     * Puts p up: replacing the planet in focus (or the first slot), or with spawnAdds as another
+     * one, where PlanetLayout finds room for its gravity among the others'. It is then in focus.
+     */
+    private static void spawnPlanet(VoxelPlanet p, Vector3d feet, Vector3d up, LocalPlayer player) {
+        java.util.List<PlanetSession> all = planets();
+        PlanetSession target = !spawnAdds || !session.active() ? (focus.active() ? focus : session) : null;
+        if (target == null && all.stream().filter(PlanetSession::active).count() >= PlanetLayout.MAX_PLANETS) {
+            say(player, "A stage holds " + PlanetLayout.MAX_PLANETS + " planets at most");
+            return;
+        }
+        java.util.List<PlanetLayout.Sphere> others = new java.util.ArrayList<>();
+        for (PlanetSession s : all) if (s.active() && s != target) others.add(new PlanetLayout.Sphere(s.center(), s.gravityUnits()));
+        double units = 1 / GravityFrame.SCALE;
+        Vector3d c = PlanetLayout.place(others, PlanetSession.gravityRadius(p.surface()) * units, feet, up, units);
+        if (c == null) {
+            say(player, "No room for another planet here");
+            return;
+        }
+        if (target == null) {
+            target = new PlanetSession(units);
+            target.setBlocks(blocks);
+            extras.add(new Extra(target, freeIndex()));
+        }
+        target.spawnAt(p, c);
+        focus = target;
+    }
+
+    /** The lowest file index no planet of the stage has. */
+    private static int freeIndex() {
+        for (int i = 1; ; i++) {
+            int k = i;
+            if (extras.stream().noneMatch(e -> e.index() == k)) return i;
+        }
+    }
+
+    /** The planet whose surface is nearest Mario (session if there is none). */
+    private static PlanetSession nearest(Vector3d mario) {
+        PlanetSession best = session;
+        double bestD = Double.MAX_VALUE;
+        for (PlanetSession p : planets()) {
+            if (!p.active() || mario == null) continue;
+            double d = p.center().distance(mario) - p.planet().surface() / GravityFrame.SCALE;
+            if (d < bestD) {
+                bestD = d;
+                best = p;
+            }
+        }
+        return mario == null ? focus : best;
     }
 
     /** Client tick, after the gravity frame is up to date. */
@@ -183,6 +289,7 @@ public final class PlanetClient {
             blocks = McBlocks.create(Minecraft.getInstance());
             atlasLink = new AtlasLink(blocks.atlas, 1);
             session.setBlocks(blocks);
+            for (Extra e : extras) e.s().setBlocks(blocks);
         }
         for (byte[] piece; (piece = atlasLink.peek(world.sceneId(), bridge.hostPid())) != null
                 && bridge.send(Layout.MSG_ATLAS, piece); ) atlasLink.sent();
@@ -201,20 +308,28 @@ public final class PlanetClient {
             generating = null;
         }
         if (frame != null && world.hasGravity() && (spawnRadius > 0 || spawnBlueprint != null || generated != null || (autoSpawn && world.follow()))) {
-            if (generated != null) session.spawn(generated, world.queryPos(), frame.upGal());
-            else if (spawnBlueprint != null) session.spawn(spawnBlueprint.build(blocks), world.queryPos(), frame.upGal());
-            else session.spawn(spawnRadius > 0 ? spawnRadius : autoRadius, world.queryPos(), frame.upGal());
+            VoxelPlanet p = generated != null ? generated : spawnBlueprint != null ? spawnBlueprint.build(blocks)
+                    : VoxelPlanet.ofRadius(spawnRadius > 0 ? spawnRadius : autoRadius, blocks);
+            spawnPlanet(p, world.queryPos(), frame.upGal(), player);
             spawnRadius = 0;
             spawnBlueprint = null;
             generated = null;
             autoSpawn = false;
             sinceSave = SAVE_TICKS; // saved right away
-            GalaxyCraft.LOG.info("Voxel planet of radius {} at {}", session.planet().surface(), session.center());
+            if (focus.active()) GalaxyCraft.LOG.info("Voxel planet of radius {} at {}", focus.planet().surface(), focus.center());
         }
         Optional<Seqlock.InputState> in = bridge.input();
         int buttons = in.map(Seqlock.InputState::buttons).orElse(0);
         boolean p = in.map(i -> (i.keys()[SC_P / 8] >> (SC_P % 8) & 1) != 0).orElse(false);
         boolean screen = Minecraft.getInstance().gui.screen() != null; // the clicks are the screen's
+        PlanetSession was = focus;
+        focus = nearest(world.queryPos());
+        if (focus != was) was.setOutline(-1);
+        for (PlanetSession s : planets())
+            if (s.active() && world.queryPos() != null)
+                s.setDetail(PlanetLayout.detail(s.detail(), s == focus, s.center().distance(world.queryPos()), s.gravityUnits(),
+                        1 / GravityFrame.SCALE));
+        PlanetSession session = focus; // the clicks, the outline and Minecraft's running of the blocks are its
         if (session.active() && frame != null && player != null) {
             if (p && !lastP && !screen) session.teleport();
             Vector3d eye = frame.toGal(vec(player.getEyePosition()));
@@ -252,7 +367,7 @@ public final class PlanetClient {
             }
         }
         else ShadowWorld.mario(null);
-        shadow.tick(stage == null ? "" : stage, world.queryPos());
+        shadow.tick(stage == null ? "" : PlanetStore.key(stage, indexOf(focus)), world.queryPos());
         drops.tick(Minecraft.getInstance(), frame, frame == null ? null : world.queryPos());
         entities.tick();
         // The player hurt by the shadow: Mario reels in the game too.
@@ -264,8 +379,14 @@ public final class PlanetClient {
             }
         lastButtons = buttons;
         lastP = p;
-        session.update(world.sceneId(), bridge.hostPid(), world.queryPos());
-        for (PlanetSession.Msg m; (m = session.peek()) != null && bridge.send(m.type(), m.payload()); ) session.sent();
+        // The planet in focus first: its chunks before the others' when the ring is full.
+        java.util.List<PlanetSession> order = planets();
+        order.remove(focus);
+        order.addFirst(focus);
+        for (PlanetSession s : order) {
+            s.update(world.sceneId(), bridge.hostPid(), world.queryPos());
+            for (PlanetSession.Msg m; (m = s.peek()) != null && bridge.send(m.type(), m.payload()); ) s.sent();
+        }
         if (++sinceSave >= SAVE_TICKS) {
             sinceSave = 0;
             saveNow();
@@ -276,7 +397,7 @@ public final class PlanetClient {
     public static void useHeld(LocalPlayer player, GravityFrame frame, Vector3d marioFeetGal) {
         Vector3d eye = frame.toGal(vec(player.getEyePosition()));
         Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
-        use(player, eye, look, marioFeetGal, session.aim(eye, look));
+        use(player, eye, look, marioFeetGal, focus.aim(eye, look));
     }
 
     /** Particles alive on the planet (tests). */
@@ -298,9 +419,10 @@ public final class PlanetClient {
     public static void frame(BridgeClient bridge, float partialTick) {
         bridge.world().ifPresent(w -> entities.frame(bridge, w.sceneId(), w.queryPos(), partialTick));
         ShadowWorld.Seat s = ShadowWorld.seat();
-        boolean on = s != null && session.active() && s.planet() == session.planet();
+        PlanetSession f = focus;
+        boolean on = s != null && f.active() && s.planet() == f.planet();
         if (on || riding) {
-            Vector3d at = on ? session.galOf(s.pos()) : new Vector3d();
+            Vector3d at = on ? f.galOf(s.pos()) : new Vector3d();
             if (bridge.send(Layout.MSG_SEAT, java.nio.ByteBuffer.allocate(16).putFloat((float) at.x).putFloat((float) at.y)
                     .putFloat((float) at.z).putInt(on ? 1 : 0).array()))
                 riding = on;
@@ -323,35 +445,45 @@ public final class PlanetClient {
     private static void enterStage(String next) {
         saveNow();
         session.unload();
+        for (Extra e : extras) e.s().unload();
+        extras.clear();
+        focus = session;
         stage = next;
         autoSpawn = false;
         if (next.isEmpty()) return;
-        try {
-            Optional<PlanetStore.Saved> saved = store.read(next, blocks);
-            if (saved.isPresent()) {
-                session.load(saved.get());
-                GalaxyCraft.LOG.info("Voxel planet of {} loaded", next);
-            } else {
-                // Levels only: not the title, the file select or the world map.
-                autoSpawn = autoRadius > 0 && next.endsWith("Galaxy");
+        java.util.List<Integer> saved = store.saved(next, PlanetLayout.MAX_PLANETS);
+        for (int index : saved) {
+            try {
+                Optional<PlanetStore.Saved> s = store.read(PlanetStore.key(next, index), blocks);
+                if (s.isEmpty()) continue;
+                PlanetSession p = index == 0 ? session : new PlanetSession(1 / GravityFrame.SCALE);
+                p.setBlocks(blocks);
+                p.load(s.get());
+                if (index != 0) extras.add(new Extra(p, index));
+                GalaxyCraft.LOG.info("Voxel planet {} of {} loaded", index, next);
+            } catch (IOException e) {
+                GalaxyCraft.LOG.warn("Could not load planet {} of {}: {}", index, next, e.toString());
             }
-        } catch (IOException e) {
-            GalaxyCraft.LOG.warn("Could not load the planet of {}: {}", next, e.toString());
         }
+        // Levels only: not the title, the file select or the world map.
+        if (saved.isEmpty()) autoSpawn = autoRadius > 0 && next.endsWith("Galaxy");
     }
 
     private static void saveNow() {
-        if (!session.unsaved() || stage == null || stage.isEmpty()) return;
-        PlanetStore.Saved s = session.save();
-        String where = stage;
-        McBlocks b = blocks;
-        saver.execute(() -> {
-            try {
-                store.write(where, s, b);
-            } catch (IOException e) {
-                GalaxyCraft.LOG.warn("Could not save the planet of {}: {}", where, e.toString());
-            }
-        });
+        if (stage == null || stage.isEmpty()) return;
+        for (PlanetSession p : planets()) {
+            if (!p.unsaved()) continue;
+            PlanetStore.Saved s = p.save();
+            String where = PlanetStore.key(stage, indexOf(p));
+            McBlocks b = blocks;
+            saver.execute(() -> {
+                try {
+                    store.write(where, s, b);
+                } catch (IOException e) {
+                    GalaxyCraft.LOG.warn("Could not save the planet {}: {}", where, e.toString());
+                }
+            });
+        }
     }
 
     /**
@@ -395,18 +527,18 @@ public final class PlanetClient {
         ItemStack stack = player.getMainHandItem();
         boolean creative = player.getAbilities().instabuild;
         if (stack.is(Items.BUCKET)) {
-            Material got = session.scoop(eye, look);
+            Material got = focus.scoop(eye, look);
             if (got != null && !creative) setMainHand(player, got == Material.WATER ? Items.WATER_BUCKET : Items.LAVA_BUCKET);
         } else if (stack.is(Items.WATER_BUCKET) || stack.is(Items.LAVA_BUCKET)) {
-            if (session.pour(eye, look, stack.is(Items.WATER_BUCKET) ? Material.WATER : Material.LAVA) && !creative)
+            if (focus.pour(eye, look, stack.is(Items.WATER_BUCKET) ? Material.WATER : Material.LAVA) && !creative)
                 setMainHand(player, Items.BUCKET);
         } else {
             ItemStack held = stack.copy();
             Runnable place = () -> {
-                if (session.placeBlock(eye, look, blocks.placer(held), feet) && !creative) useUp(player, held);
+                if (focus.placeBlock(eye, look, blocks.placer(held), feet) && !creative) useUp(player, held);
             };
             if (aim == null || !shadow.available()) place.run();
-            else ShadowWorld.use(session.planet(), aim.cell(), aim.face(),
+            else ShadowWorld.use(focus.planet(), aim.cell(), aim.face(),
                     new net.minecraft.world.phys.Vec3(aim.hit().x, aim.hit().y, aim.hit().z), player.getUUID(), place);
         }
     }
@@ -416,9 +548,9 @@ public final class PlanetClient {
      * tool worn); otherwise the block just goes.
      */
     private static void breakBlock(LocalPlayer player, Vector3d eye, Vector3d look, PlanetSession.Aim aim) {
-        if (!shadow.available()) session.breakBlock(eye, look, player.getAbilities().instabuild);
-        else if (aim != null && session.planet().info(aim.cell()).breakable())
-            ShadowWorld.destroy(session.planet(), aim.cell(), player.getUUID());
+        if (!shadow.available()) focus.breakBlock(eye, look, player.getAbilities().instabuild);
+        else if (aim != null && focus.planet().info(aim.cell()).breakable())
+            ShadowWorld.destroy(focus.planet(), aim.cell(), player.getUUID());
     }
 
     /** A block placed outside creative: one fewer of it in the main hand (on the server, which syncs back). */

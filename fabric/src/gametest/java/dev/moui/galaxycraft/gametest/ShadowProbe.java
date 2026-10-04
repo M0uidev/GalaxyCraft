@@ -46,8 +46,8 @@ public final class ShadowProbe implements FabricClientGameTest {
                 s = new PlanetSession(1);
                 s.setBlocks(blocks);
                 s.spawn(32, new Vector3d(), new Vector3d(0, 1, 0));
-                link = new ShadowLink(s);
-                drops = new DropsClient(s);
+                link = new ShadowLink(() -> s);
+                drops = new DropsClient(() -> s);
                 mario = new Vector3d(0, s.planet().surface() + 0.5, 0).add(s.center());
                 feet = mario;
                 frame = new GravityFrame(mario, new Vector3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()),

@@ -33,6 +33,22 @@ public final class PlanetStore {
         return dir.resolve(stage.replaceAll("[^A-Za-z0-9_.-]", "_") + ".gxplanet");
     }
 
+    /**
+     * A stage's planets each have a file: the first (index 0) the one a stage always had, the others
+     * <stage>.p<index>.gxplanet. Stage names are the game's (letters and digits), so no stage's
+     * first file ends like another's.
+     */
+    public static String key(String stage, int index) {
+        return index == 0 ? stage : stage + ".p" + index;
+    }
+
+    /** The indexes (below max) of a stage's planets on disk, in order. */
+    public java.util.List<Integer> saved(String stage, int max) {
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        for (int i = 0; i < max; i++) if (Files.isRegularFile(file(key(stage, i)))) out.add(i);
+        return out;
+    }
+
     public void write(String stage, Saved s, Blocks blocks) throws IOException {
         Files.createDirectories(dir);
         Path tmp = file(stage).resolveSibling(file(stage).getFileName() + ".tmp");

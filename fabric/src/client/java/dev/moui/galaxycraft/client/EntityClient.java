@@ -51,7 +51,8 @@ final class EntityClient {
     static final int HURT = 0xFF000066;
     private static final Object CUBE = new Object();
 
-    private final PlanetSession session;
+    /** The planet in focus (the one nearest Mario): it can change from one tick to the next. */
+    private final java.util.function.Supplier<PlanetSession> focus;
     private final DropsClient drops;
     private final Map<Object, Integer> modelIds = new HashMap<>(), skinIds = new HashMap<>();
     private final Map<ModelPart, Integer> partIds = new IdentityHashMap<>();
@@ -73,8 +74,8 @@ final class EntityClient {
     private int scene = Integer.MIN_VALUE, host = Integer.MIN_VALUE;
     private boolean wasEmpty = true;
 
-    EntityClient(PlanetSession session, DropsClient drops) {
-        this.session = session;
+    EntityClient(java.util.function.Supplier<PlanetSession> focus, DropsClient drops) {
+        this.focus = focus;
         this.drops = drops;
         camera.orientation = new org.joml.Quaternionf(); // renderers that face the camera (thrown items) need one
         camera.pos = net.minecraft.world.phys.Vec3.ZERO;
@@ -86,7 +87,7 @@ final class EntityClient {
 
     /** Client tick: the particles move. */
     void tick() {
-        particles.tick(session.active() ? session.planet() : null);
+        particles.tick(session().active() ? session().planet() : null);
     }
 
     /**
@@ -126,12 +127,12 @@ final class EntityClient {
         }
         List<EntityWire.Piece> pieces = new ArrayList<>();
         seen.clear();
-        if (session.active() && marioFeetGal != null) {
-            Vector3d mario = session.localOf(marioFeetGal);
+        if (session().active() && marioFeetGal != null) {
+            Vector3d mario = session().localOf(marioFeetGal);
             for (PlanetDrops.Drop<ItemStack> d : drops.all())
                 if (d.pos.distance(mario) < RANGE) drop(d, pt, pieces);
             ShadowWorld.Entities shadow = ShadowWorld.entities();
-            if (shadow != null && shadow.planet() == session.planet())
+            if (shadow != null && shadow.planet() == session().planet())
                 for (Entity e : shadow.list()) shadowEntity(shadow, e, mario, pt, pieces);
             for (ParticleClient.Live l : particles.all()) particle(l, mario, pt, pieces);
         }
@@ -178,8 +179,8 @@ final class EntityClient {
 
     /** Planet blocks to galaxy units, then 3x4 row-major. */
     double[] toGal(Matrix4d planet) {
-        Vector3d c = session.galOf(new Vector3d());
-        double u = session.galOf(new Vector3d(1, 0, 0)).sub(c).x;
+        Vector3d c = session().galOf(new Vector3d());
+        double u = session().galOf(new Vector3d(1, 0, 0)).sub(c).x;
         Matrix4d g = new Matrix4d().translation(c).scale(u).mul(planet);
         return new double[] {g.m00(), g.m10(), g.m20(), g.m30(), g.m01(), g.m11(), g.m21(), g.m31(), g.m02(), g.m12(),
                 g.m22(), g.m32()};
@@ -442,5 +443,9 @@ final class EntityClient {
         if (skins.size() >= Layout.ENT_MAX_SKINS) return -1;
         skins.add(EntityWire.skin(skins.size(), w, h, argb));
         return skins.size() - 1;
+    }
+
+    private PlanetSession session() {
+        return focus.get();
     }
 }

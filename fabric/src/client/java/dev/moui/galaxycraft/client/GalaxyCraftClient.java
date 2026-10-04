@@ -118,6 +118,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                                 .then(argument("radius", IntegerArgumentType.integer(VoxelPlanet.MIN_RADIUS, VoxelPlanet.MAX_RADIUS))
                                         .executes(c -> planetCommand(c.getSource(),
                                                 () -> PlanetClient.requestSpawn(IntegerArgumentType.getInteger(c, "radius"))))))
+                        .then(literal("add")
+                                .executes(c -> planetCommand(c.getSource(), () -> PlanetClient.requestAdd(PlanetClient.DEFAULT_RADIUS)))
+                                .then(argument("radius", IntegerArgumentType.integer(VoxelPlanet.MIN_RADIUS, VoxelPlanet.MAX_RADIUS))
+                                        .executes(c -> planetCommand(c.getSource(),
+                                                () -> PlanetClient.requestAdd(IntegerArgumentType.getInteger(c, "radius"))))))
                         .then(literal("tp").executes(c -> planetCommand(c.getSource(), PlanetClient::teleport)))
                         .then(literal("remove").executes(c -> planetCommand(c.getSource(), PlanetClient::remove)))
                         .executes(c -> planetCommand(c.getSource(), () -> {})))));
