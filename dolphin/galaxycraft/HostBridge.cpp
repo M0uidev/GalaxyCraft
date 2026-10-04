@@ -4,7 +4,11 @@
 #include <bit>
 #include <cmath>
 #include <cstddef>
+#include <chrono>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <thread>
 #include <unistd.h>
 
 #include "galaxycraft_protocol.h"
@@ -90,10 +94,14 @@ struct HostBridge::Mailbox
   }
 };
 
-HostBridge::HostBridge(Shm& shm, std::function<u64()> clock_ms)
-    : m_shm(shm), m_clock(std::move(clock_ms)), m_s2m(shm, GXC_OFF_RING_S2M),
-      m_m2s(shm, GXC_OFF_RING_M2S)
+HostBridge::HostBridge(Shm& shm, std::function<u64()> clock_ms, std::function<void(u32)> sleep_ms)
+    : m_shm(shm), m_clock(std::move(clock_ms)), m_sleep(std::move(sleep_ms)),
+      m_s2m(shm, GXC_OFF_RING_S2M), m_m2s(shm, GXC_OFF_RING_M2S)
 {
+  if (!m_sleep)
+    m_sleep = [](u32 ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); };
+  if (const char* no_wait = std::getenv("GALAXYCRAFT_NO_WAIT"); no_wait && *no_wait == '1')
+    m_sleep = {};
   m_shm.SetU32(offsetof(GxcHeader, magic), GXC_MAGIC);
   m_shm.SetU32(offsetof(GxcHeader, version), GXC_VERSION);
   m_shm.SetU32(offsetof(GxcHeader, host_pid), static_cast<u32>(getpid()));
@@ -114,15 +122,9 @@ void HostBridge::Tick(GuestMemory& mem)
   const u64 now = m_clock();
   m_frame++;
   m_shm.SetU64(offsetof(GxcHeader, host_heartbeat_ms), now);
+  WaitForMod();
 
-  bool republish = false;
-  while (auto msg = m_m2s.Pop())
-  {
-    if (msg->type == GXC_MSG_HELLO)
-      republish = true;
-    else
-      QueueInbox(*msg);
-  }
+  bool republish = PopMessages(INBOX_BACKLOG);
 
   std::array<u8, MBX_SIZE> raw;
   if (m_mailbox && (!mem.Read(*m_mailbox, raw.data(), MBX_SIZE) ||
@@ -157,7 +159,15 @@ void HostBridge::Tick(GuestMemory& mem)
   }
   m_last_scene = m_last_scene ? std::max(*m_last_scene, mbx.scene_id) : mbx.scene_id;
   if (m_inbox_scene && *m_inbox_scene != mbx.scene_id)
-    m_inbox.clear();  // meant for the old scene; the mod resends when it sees the new one
+  {
+    // Meant for the old scene, and so is all the ring holds (the mod hears of the new one below):
+    // it resends everything when it does.
+    m_inbox.clear();
+    m_inbox_bytes = 0;
+    republish |= PopMessages(SIZE_MAX);
+    m_inbox.clear();
+    m_inbox_bytes = 0;
+  }
   m_inbox_scene = mbx.scene_id;
   FlushInbox(mem, mbx);
   if (m_game_seq != mbx.game_seq)
@@ -238,6 +248,58 @@ void HostBridge::Tick(GuestMemory& mem)
   WriteFollow(mem, m_following && m_player ? &*m_player : nullptr);
 }
 
+// Takes the mod's messages while fewer than limit bytes wait for the module's inbox; true if one
+// was HELLO (the mod (re)started: republish the scene).
+bool HostBridge::PopMessages(size_t limit)
+{
+  bool hello = false;
+  while (m_inbox_bytes < limit)
+  {
+    auto msg = m_m2s.Pop();
+    if (!msg)
+      break;
+    if (msg->type == GXC_MSG_HELLO)
+      hello = true;
+    else
+      QueueInbox(*msg);
+  }
+  return hello;
+}
+
+// The game and Minecraft run side by side: Minecraft decides, tick by tick, which of a planet's
+// chunks around Mario collide. When its tick stalls (a big planet being made, a garbage
+// collection) Mario would walk on past the ground it last gave him and fall through the planet.
+// So while he plays, the game waits for a stalled Minecraft, as if the emulator lagged; never more
+// than MOD_WAIT_MAX_MS a stall, and not at all for one that is gone (closed, or a heartbeat past
+// the protocol's timeout).
+void HostBridge::WaitForMod()
+{
+  if (!m_sleep || !m_minecraft_mode || !m_following || !m_in_game || m_dev_follow)
+    return;
+  u64 waited = 0;
+  for (;;)
+  {
+    const u64 now = m_clock();
+    const u64 hb = m_shm.GetU64(offsetof(GxcHeader, mod_heartbeat_ms));
+    const u64 age = hb != 0 && now > hb ? now - hb : 0;
+    if (age < MOD_STALL_MS)
+    {
+      m_waited_out = false;
+      return;
+    }
+    if (m_waited_out || age >= GXC_HEARTBEAT_TIMEOUT_MS)
+      return;
+    if (waited >= MOD_WAIT_MAX_MS)
+    {
+      m_waited_out = true;
+      return;
+    }
+    m_sleep(1);
+    waited++;
+    m_mod_wait_ms++;
+  }
+}
+
 // Voxel planet messages from the mod become big-endian inbox records: the header and the fixed
 // fields swapped, the display list and KCL copied as they are (built big-endian by the mod).
 void HostBridge::QueueInbox(const Msg& msg)
@@ -249,7 +311,12 @@ void HostBridge::QueueInbox(const Msg& msg)
     return;
   // Entity frames say where everything is now: an older one still waiting is stale.
   if (msg.type == GXC_MSG_ENTITIES)
-    std::erase_if(m_inbox, [](const std::vector<u8>& r) { return (BE32(r.data()) >> 16) == GXC_MSG_ENTITIES; });
+    std::erase_if(m_inbox, [this](const std::vector<u8>& r) {
+      const bool stale = (BE32(r.data()) >> 16) == GXC_MSG_ENTITIES;
+      if (stale)
+        m_inbox_bytes -= r.size();
+      return stale;
+    });
   // The held item's sprite and the atlas' texels are GX textures already: only the words before
   // them are swapped. Entity messages come big-endian whole (fixed 0).
   const u32 fixed = msg.type == GXC_MSG_PLANET  ? sizeof(GxcPlanet) :
@@ -271,6 +338,7 @@ void HostBridge::QueueInbox(const Msg& msg)
     std::memcpy(&v, msg.payload.data() + k, 4);
     PutBE32(rec.data() + 8 + k, v);
   }
+  m_inbox_bytes += rec.size();
   m_inbox.push_back(std::move(rec));
 }
 
@@ -291,6 +359,7 @@ void HostBridge::FlushInbox(GuestMemory& mem, const Mailbox& mbx)
     const std::vector<u8>& rec = m_inbox.front();
     if (rec.size() > room)
     {
+      m_inbox_bytes -= rec.size();
       m_inbox.pop_front();  // can never fit
       continue;
     }
@@ -298,6 +367,7 @@ void HostBridge::FlushInbox(GuestMemory& mem, const Mailbox& mbx)
       break;
     out.insert(out.end(), rec.begin(), rec.end());
     count++;
+    m_inbox_bytes -= rec.size();
     m_inbox.pop_front();
   }
   if (count == 0)

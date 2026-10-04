@@ -59,6 +59,17 @@ public final class PlanetClient {
     private static final int SC_W = 26, SC_A = 4, SC_S = 22, SC_D = 7, SC_LSHIFT = 225, SC_RSHIFT = 229;
     private static final int SC_P = 19, MOUSE_LEFT = 1 << 1, MOUSE_RIGHT = 1 << 3;
     public static final int DEFAULT_RADIUS = 32;
+    /**
+     * Time a tick may spend building the planets' far views and chunks, ms (-Dgalaxycraft.meshBudgetMs):
+     * a planet streams in over more ticks instead of stalling Minecraft. Mario's collision is built
+     * whatever it costs (PlanetSession's urgent lane).
+     */
+    static final long MESH_BUDGET_NANOS = (long) (Math.max(0.5, Double.parseDouble(System.getProperty("galaxycraft.meshBudgetMs", "6"))) * 1e6);
+    /**
+     * No more of the planet's bulk while the host has this much of ours untaken, bytes: what is sent
+     * waits in line for the game, and Mario's collision would wait behind it.
+     */
+    static final int BULK_BACKLOG = 256 * 1024;
     /** Ticks between saves of an edited planet. */
     private static final int SAVE_TICKS = 200;
     /** The stage's first planet (index 0): the same session all along, which tests hold on to. */
@@ -80,7 +91,7 @@ public final class PlanetClient {
     private static boolean autoSpawn;
     private static int spawnRadius; // > 0: spawn next tick
     private static PlanetBlueprint spawnBlueprint; // non-null: spawn next tick
-    private static java.util.concurrent.CompletableFuture<PlanetGenerator.Cells> generating; // off the game's thread
+    private static java.util.concurrent.CompletableFuture<VoxelPlanet> generating; // off the game's thread
     private static VoxelPlanet generated; // non-null: generated, spawn next tick
     private static McWorldgen worldgen;
     private static MinecraftServer worldgenServer;
@@ -124,7 +135,20 @@ public final class PlanetClient {
                 n -> Minecraft.getInstance().submit(() -> blocks.parse(n)).join());
         TerrainNoise noise = gen.noise(bp.seed());
         say(player, "Generating " + bp.name() + "...");
-        generating = java.util.concurrent.CompletableFuture.supplyAsync(() -> PlanetGenerator.cells(bp, noise, gen.biomes(), gen.vegetation(), ids));
+        McBlocks b = blocks;
+        generating = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            PlanetGenerator.Cells cells = PlanetGenerator.cells(bp, noise, gen.biomes(), gen.vegetation(), ids);
+            // The planet reads every cell's block info as it is put together (millions of cells for a
+            // big one): that is done here, not in a tick, once the game's thread has worked out the
+            // info of each block it uses (McBlocks makes it from Minecraft's models, lazily).
+            java.util.BitSet used = new java.util.BitSet();
+            for (char c : cells.cells()) used.set(c);
+            Minecraft.getInstance().submit(() -> {
+                used.stream().forEach(b::info);
+                return null;
+            }).join();
+            return cells.planet(b);
+        });
     }
 
     private static void say(LocalPlayer player, String text) {
@@ -300,7 +324,7 @@ public final class PlanetClient {
         }
         if (generating != null && generating.isDone()) {
             try {
-                generated = generating.join().planet(blocks);
+                generated = generating.join();
             } catch (RuntimeException e) {
                 GalaxyCraft.LOG.warn("Could not generate the planet: {}", e.toString());
                 say(player, "Could not generate the planet: " + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage()));
@@ -379,13 +403,17 @@ public final class PlanetClient {
             }
         lastButtons = buttons;
         lastP = p;
-        // The planet in focus first: its chunks before the others' when the ring is full.
+        // The planet in focus first: its chunks before the others' when the ring is full. Mario's
+        // collision goes whatever it costs; the rest only within this tick's budget, and while the
+        // host keeps up with what it has been sent.
         java.util.List<PlanetSession> order = planets();
         order.remove(focus);
         order.addFirst(focus);
+        long end = System.nanoTime() + MESH_BUDGET_NANOS;
+        java.util.function.BooleanSupplier bulk = () -> System.nanoTime() - end < 0 && bridge.backlog() < BULK_BACKLOG;
         for (PlanetSession s : order) {
             s.update(world.sceneId(), bridge.hostPid(), world.queryPos());
-            for (PlanetSession.Msg m; (m = s.peek()) != null && bridge.send(m.type(), m.payload()); ) s.sent();
+            for (PlanetSession.Msg m; (m = s.peek(bulk)) != null && bridge.send(m.type(), m.payload()); ) s.sent();
         }
         if (++sinceSave >= SAVE_TICKS) {
             sinceSave = 0;

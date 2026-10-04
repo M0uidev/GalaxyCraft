@@ -17,7 +17,18 @@ namespace gxc
 class HostBridge
 {
 public:
-  HostBridge(Shm& shm, std::function<u64()> clock_ms);
+  // sleep_ms: how the bridge waits for a stalled Minecraft (see WaitForMod); tests pass one that
+  // moves their clock. GALAXYCRAFT_NO_WAIT=1 turns the wait off.
+  HostBridge(Shm& shm, std::function<u64()> clock_ms, std::function<void(u32)> sleep_ms = {});
+
+  // The mod's records taken from the ring and not yet in the module's inbox, at most this many
+  // bytes: the rest stays in the ring, so the mod sees the game is behind and holds back the bulk
+  // of a planet instead of queuing it here in front of Mario's collision.
+  static constexpr size_t INBOX_BACKLOG = 512 * 1024;
+  // Minecraft builds Mario's collision as he moves on a planet: a heartbeat older than this while
+  // he plays means its tick stalled, and the game waits for it (at most MOD_WAIT_MAX_MS a stall).
+  static constexpr u64 MOD_STALL_MS = 250;
+  static constexpr u64 MOD_WAIT_MAX_MS = 1500;
 
   void Tick(GuestMemory& mem);
 
@@ -62,6 +73,9 @@ public:
   void OnStateLoaded() { m_state_loaded = true; }
   // Voxel planet records waiting for the module's inbox.
   size_t PendingInbox() const { return m_inbox.size(); }
+  size_t PendingInboxBytes() const { return m_inbox_bytes; }
+  // Milliseconds the game has waited for a stalled Minecraft, all told.
+  u64 ModWaitMs() const { return m_mod_wait_ms; }
 
 private:
   struct PartState
@@ -77,11 +91,16 @@ private:
   void PublishParts(GuestMemory& mem, const Mailbox& mbx, bool republish);
   bool SendPart(GuestMemory& mem, u32 id, const PartState& p, bool with_kcl);
   void WriteFollow(GuestMemory& mem, const PlayerState* player);
+  bool PopMessages(size_t limit);
+  void WaitForMod();
   void QueueInbox(const Msg& msg);
   void FlushInbox(GuestMemory& mem, const Mailbox& mbx);
 
   Shm& m_shm;
   std::function<u64()> m_clock;
+  std::function<void(u32)> m_sleep;  // empty: never wait for the mod
+  bool m_waited_out = false;         // gave up on this stall: no more waiting until the mod is back
+  u64 m_mod_wait_ms = 0;
   Ring m_s2m;
   Ring m_m2s;
   std::optional<u32> m_mailbox;
@@ -104,6 +123,7 @@ private:
   bool m_on_title = true;
   u32 m_host_seq = 0;
   std::deque<std::vector<u8>> m_inbox;  // big-endian records, ready for the guest
+  size_t m_inbox_bytes = 0;
   std::optional<u32> m_inbox_scene;
   u64 m_frame = 0;
   bool m_state_loaded = false;

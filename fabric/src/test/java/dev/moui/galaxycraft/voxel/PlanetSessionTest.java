@@ -114,6 +114,80 @@ class PlanetSessionTest {
         assertTrue(s.collisionChunks() < 80, s.collisionChunks() + " collision parts");
     }
 
+    /** Mario on the planet's face toward him, a block over the grass (radius r). */
+    static Vector3d onTop(PlanetSession s, int r) {
+        return new Vector3d(s.center()).add(0, -(r + 1) * 80, 0);
+    }
+
+    static boolean kcl(PlanetSession.Msg m) {
+        return m.type() == Layout.MSG_CHUNK && le(m).getInt(12) > 0;
+    }
+
+    @Test void withoutBudgetOnlyMariosCollisionIsBuilt() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, onTop(s, 64));
+        List<PlanetSession.Msg> got = new ArrayList<>();
+        for (PlanetSession.Msg m; (m = s.peek(() -> false)) != null; s.sent()) got.add(m);
+        assertEquals(Layout.MSG_PLANET, got.get(0).type());
+        assertTrue(got.size() > 1, "the ground under Mario");
+        assertTrue(got.stream().skip(1).allMatch(PlanetSessionTest::kcl), "nothing but collision: no far view, no far chunks");
+        assertEquals(got.size() - 1, s.collisionChunks());
+        assertTrue(s.queued() > 100, "the rest of the planet waits for time: " + s.queued());
+        // With time, the rest comes.
+        List<PlanetSession.Msg> rest = drain(s);
+        assertTrue(rest.stream().anyMatch(PlanetSessionTest::far));
+        assertTrue(rest.stream().noneMatch(PlanetSessionTest::kcl), "the collision was all there already");
+    }
+
+    @Test void collisionWhereMarioWalksJumpsAheadOfAStreamingPlanet() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = onTop(s, 64);
+        s.update(3, 100, top);
+        // A few chunks a tick, as a budget allows: most of the planet still waits.
+        for (int n = 0; n < 40 && s.peek() != null; n++) s.sent();
+        assertTrue(s.queued() > 100, s.queued() + " waiting");
+        // Mario runs to ground the planet has not sent yet (a quarter of the way around).
+        Vector3d side = new Vector3d(s.center()).add(65 * 80, 0, 0);
+        for (int i = 0; i < PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, side);
+        int ground = s.planet().chunkOf(s.cellAt(new Vector3d(s.center()).add(63.5 * 80, 0, 0)));
+        assertFalse(s.collides(ground));
+        // Out of time this tick: still, the ground under him is what comes.
+        for (PlanetSession.Msg m; (m = s.peek(() -> false)) != null; s.sent()) assertTrue(kcl(m) || le(m).getInt(12) == 0 && !far(m));
+        assertTrue(s.collides(ground), "his ground collides before the rest of the planet is sent");
+    }
+
+    @Test void anEditUnderMarioGoesOutAheadOfTheRest() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(32, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = onTop(s, 32);
+        s.update(3, 100, top);
+        while (s.peek(() -> false) != null) s.sent(); // the planet and Mario's collision
+        assertTrue(s.queued() > 10, "the rest waits");
+        int under = s.cellAt(new Vector3d(s.center()).add(0, -31.5 * 80, 0));
+        int chunk = s.planet().chunkOf(under);
+        assertTrue(s.collides(chunk));
+        s.planet().set(under, Blocks.AIR);
+        s.update(3, 100, top);
+        // It (and the neighbors whose faces it changed) goes now, out of budget or not.
+        List<PlanetSession.Msg> now = new ArrayList<>();
+        for (PlanetSession.Msg m; (m = s.peek(() -> false)) != null; s.sent()) now.add(m);
+        assertTrue(now.stream().anyMatch(m -> slot(le(m)) == chunk && kcl(m)), "the dug chunk, with its collision");
+        assertTrue(now.size() < 8, now.size() + ": nothing else");
+    }
+
+    @Test void teleportLandsOnItsGroundEvenOutOfBudget() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, MARIO);
+        s.teleport();
+        List<PlanetSession.Msg> got = new ArrayList<>();
+        for (PlanetSession.Msg m; (m = s.peek(() -> false)) != null; s.sent()) got.add(m);
+        assertEquals(Layout.MSG_PLANET_TP, got.get(got.size() - 1).type(), "the teleport, last");
+        assertTrue(got.stream().anyMatch(PlanetSessionTest::kcl), "after the ground where he lands");
+    }
+
     @Test void biggestPlanetFitsTheGameAndSendsInSeconds() {
         long t0 = System.nanoTime();
         PlanetSession s = new PlanetSession(80);

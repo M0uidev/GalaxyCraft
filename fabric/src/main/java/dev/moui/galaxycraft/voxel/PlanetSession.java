@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Deque;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import org.joml.Vector3d;
 
 /**
@@ -18,6 +19,11 @@ import org.joml.Vector3d;
  * Every chunk with something to show is drawn; only those near Mario carry collision (the game's
  * collision zones hold 512 parts, its own stage's included). Chunks are meshed as they are sent,
  * nearest to Mario first, so a big planet arrives over a few seconds without stalling a tick.
+ *
+ * Two lanes: what Mario stands on goes first (the chunks whose collision changes, edits near him,
+ * a teleport's landing), always; the rest of the planet only while {@link #peek(BooleanSupplier)}
+ * is allowed to build more (a time budget per tick, room in the ring). A planet streaming in never
+ * holds back the ground under Mario.
  */
 public final class PlanetSession {
     public record Msg(int type, byte[] payload) {}
@@ -63,7 +69,11 @@ public final class PlanetSession {
     private Blocks blocks = CubeBlocks.INSTANCE;
     private final Deque<Msg> control = new ArrayDeque<>();
     private final Deque<Integer> pending = new ArrayDeque<>();
+    /** Chunks waiting in pending or urgent (an entry in pending without it was sent since: skipped). */
     private final BitSet pendingSet = new BitSet();
+    /** Chunks sent before any in pending, whatever the budget: Mario's collision (and TP_MARK). */
+    private final Deque<Integer> urgent = new ArrayDeque<>();
+    private final BitSet urgentSet = new BitSet();
     private BitSet onGuest = new BitSet(); // chunks the game has something of
     private BitSet near = new BitSet();    // chunks with collision (wanted)
     private BitSet withKcl = new BitSet(); // chunks sent with collision
@@ -71,6 +81,7 @@ public final class PlanetSession {
     private boolean builtFar; // built is a part of the far view (farPending's first)
     private int builtChunk = -1;
     private boolean builtStale; // edited again while its message waited for room
+    private boolean builtUrgent; // and wanted in the urgent lane
     private VoxelPlanet planet;
     private Vector3d center;
     private float tpGround; // galaxy units from the center: where the next teleport lands
@@ -226,13 +237,8 @@ public final class PlanetSession {
         land.normalize(Math.max(planet.surface(), tpGround / unitsPerBlock));
         landing = land;
         landingUpdates = 0;
-        List<Integer> first = residency(land, land);
-        pending.removeIf(first::contains);
-        pending.addFirst(TP_MARK);
-        for (int i = first.size() - 1; i >= 0; i--) {
-            pending.addFirst(first.get(i));
-            pendingSet.set(first.get(i));
-        }
+        for (int c : residency(land, land)) queueUrgent(c);
+        urgent.add(TP_MARK);
     }
 
     /**
@@ -253,7 +259,8 @@ public final class PlanetSession {
         }
         if (planet.fluids().tick()) unsaved = true;
         for (int c : planet.takeDirty()) {
-            if (detail) queue(c);
+            if (detail && near.get(c)) queueUrgent(c); // an edit under Mario: its collision now
+            else if (detail) queue(c);
             farDirty.set(planet.faceOfChunk(c));
         }
         if (++sinceFar >= FAR_UPDATES && !farDirty.isEmpty()) {
@@ -265,15 +272,36 @@ public final class PlanetSession {
         if (landing != null && (mario != null && mario.distance(landing) < NEAR || ++landingUpdates > LANDING_UPDATES)) landing = null;
         if (detail && ++sinceResidency >= RESIDENCY_UPDATES && mario != null) {
             sinceResidency = 0;
-            for (int c : landing != null ? residency(landing, landing) : residency(mario, ahead)) queue(c);
+            for (int c : landing != null ? residency(landing, landing) : residency(mario, ahead))
+                if (near.get(c)) queueUrgent(c);
+                else queue(c); // only loses its collision: no hurry
         }
     }
 
-    /** Next message to send, or null; {@link #sent()} once the ring took it. */
+    /** Next message to send, or null; {@link #sent()} once the ring took it. No budget: tests. */
     public Msg peek() {
+        return peek(() -> true);
+    }
+
+    /**
+     * Next message to send, or null; {@link #sent()} once the ring took it. Control messages and
+     * the urgent lane (Mario's collision, a teleport) are built whatever happens; the far view and
+     * the rest of the chunks only while bulk says there is time and room for more.
+     */
+    public Msg peek(BooleanSupplier bulk) {
         if (!gone.isEmpty()) return new Msg(Layout.MSG_PLANET, planetPayload(gone.peek(), PLANET_GONE));
         if (!control.isEmpty()) return control.peek();
-        if (built == null && !farPending.isEmpty() && planet != null) {
+        while (built == null && !urgent.isEmpty()) {
+            int c = urgent.poll();
+            if (c == TP_MARK) {
+                built = new Msg(Layout.MSG_PLANET_TP, ByteBuffer.allocate(8).putFloat(tpGround).putInt(id).array()); // big-endian: passed on as is
+                break;
+            }
+            urgentSet.clear(c);
+            pendingSet.clear(c);
+            build(c);
+        }
+        if (built == null && !farPending.isEmpty() && planet != null && bulk.getAsBoolean()) {
             int f = farPending.peek();
             PlanetLod.Part part = PlanetLod.face(planet, f, unitsPerBlock);
             ByteBuffer b = ByteBuffer.allocate(32 + part.displayList().length).order(ByteOrder.LITTLE_ENDIAN);
@@ -283,34 +311,36 @@ public final class PlanetSession {
             built = new Msg(Layout.MSG_CHUNK, b.array());
             builtFar = true;
         }
-        while (built == null && !pending.isEmpty()) {
+        while (built == null && !pending.isEmpty() && bulk.getAsBoolean()) {
             int c = pending.poll();
-            if (c == TP_MARK) {
-                built = new Msg(Layout.MSG_PLANET_TP, ByteBuffer.allocate(8).putFloat(tpGround).putInt(id).array()); // big-endian: passed on as is
-                break;
-            }
+            if (!pendingSet.get(c)) continue; // went in the urgent lane since
             pendingSet.clear(c);
-            // A chunk that just got something to show (dug into) may be under Mario already:
-            // whether it is near is decided now, not at the next residency pass.
-            if (!near.get(c) && mario != null && near.cardinality() < MAX_PARTS && distance(c, mario, ahead) < NEAR)
-                near.set(c);
-            boolean kcl = near.get(c);
-            if (!onGuest.get(c) && !planet.mayShow(c)) continue;
-            boolean cullDark = !kcl && !underground;
-            PlanetMesher.ChunkMesh m = PlanetMesher.mesh(planet, c, unitsPerBlock, kcl, cullDark);
-            darkCut.set(c, m.darkCut());
-            if (cullDark) hasDark.set(c, m.darkCut());
-            if (m.empty() && !onGuest.get(c)) continue;
-            ByteBuffer b = ByteBuffer.allocate(32 + m.displayList().length + m.kcl().length).order(ByteOrder.LITTLE_ENDIAN);
-            b.putInt(id << 24 | c).putInt(planet.bump(c)).putInt(m.displayList().length).putInt(m.kcl().length);
-            for (float f : m.sphere()) b.putFloat(f);
-            b.put(m.displayList()).put(m.kcl());
-            built = new Msg(Layout.MSG_CHUNK, b.array());
-            builtChunk = c;
-            onGuest.set(c, !m.empty());
-            withKcl.set(c, kcl && !m.empty());
+            build(c);
         }
         return built;
+    }
+
+    /** Meshes a chunk into built, unless it has nothing to send. */
+    private void build(int c) {
+        // A chunk that just got something to show (dug into) may be under Mario already:
+        // whether it is near is decided now, not at the next residency pass.
+        if (!near.get(c) && mario != null && near.cardinality() < MAX_PARTS && distance(c, mario, ahead) < NEAR)
+            near.set(c);
+        boolean kcl = near.get(c);
+        if (!onGuest.get(c) && !planet.mayShow(c)) return;
+        boolean cullDark = !kcl && !underground;
+        PlanetMesher.ChunkMesh m = PlanetMesher.mesh(planet, c, unitsPerBlock, kcl, cullDark);
+        darkCut.set(c, m.darkCut());
+        if (cullDark) hasDark.set(c, m.darkCut());
+        if (m.empty() && !onGuest.get(c)) return;
+        ByteBuffer b = ByteBuffer.allocate(32 + m.displayList().length + m.kcl().length).order(ByteOrder.LITTLE_ENDIAN);
+        b.putInt(id << 24 | c).putInt(planet.bump(c)).putInt(m.displayList().length).putInt(m.kcl().length);
+        for (float f : m.sphere()) b.putFloat(f);
+        b.put(m.displayList()).put(m.kcl());
+        built = new Msg(Layout.MSG_CHUNK, b.array());
+        builtChunk = c;
+        onGuest.set(c, !m.empty());
+        withKcl.set(c, kcl && !m.empty());
     }
 
     public void sent() {
@@ -334,13 +364,15 @@ public final class PlanetSession {
         builtChunk = -1;
         if (builtStale) {
             builtStale = false;
-            queue(c);
+            if (builtUrgent) queueUrgent(c);
+            else queue(c);
         }
+        builtUrgent = false;
     }
 
     /** Messages and chunks still to send (chunks may turn out to have nothing to send). */
     public int queued() {
-        return gone.size() + control.size() + farPending.size() + pending.size() + (built != null && !builtFar ? 1 : 0);
+        return gone.size() + control.size() + farPending.size() + urgent.size() + pending.size() + (built != null && !builtFar ? 1 : 0);
     }
 
     /** Whether Mario is under cover, and far chunks are sent with their dark cave faces. */
@@ -622,9 +654,12 @@ public final class PlanetSession {
         outline = outlineId = -1;
         pending.clear();
         pendingSet.clear();
+        urgent.clear();
+        urgentSet.clear();
         built = null;
         builtChunk = -1;
         builtStale = false;
+        builtUrgent = false;
         onGuest = new BitSet();
         withKcl = new BitSet();
         near = new BitSet();
@@ -648,7 +683,9 @@ public final class PlanetSession {
             order.add(new double[] {mario == null ? 0 : c.distance(mario) - r[0], ch});
         }
         order.sort((a, b) -> Double.compare(a[0], b[0]));
-        for (double[] o : order) queue((int) o[1]);
+        for (double[] o : order)
+            if (near.get((int) o[1])) queueUrgent((int) o[1]); // what Mario stands on, before the rest
+            else queue((int) o[1]);
     }
 
     /**
@@ -687,13 +724,30 @@ public final class PlanetSession {
 
     /** From a chunk's bounding sphere to the segment from a to b, blocks (0 or less: it touches). */
     private double distance(int chunk, Vector3d a, Vector3d b) {
-        Vector3d c = new Vector3d();
-        double[] r = new double[1];
-        planet.sphere(chunk, c, r);
-        Vector3d ab = new Vector3d(b).sub(a);
-        double len2 = ab.lengthSquared();
-        double t = len2 < 1e-9 ? 0 : Math.clamp(new Vector3d(c).sub(a).dot(ab) / len2, 0, 1);
-        return c.distance(new Vector3d(a).fma(t, ab)) - r[0];
+        // Every chunk of a big planet goes through here each residency pass: no allocations.
+        Vector3d c = scratchCenter;
+        planet.sphere(chunk, c, scratchRadius);
+        double abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+        double len2 = abx * abx + aby * aby + abz * abz;
+        double t = len2 < 1e-9 ? 0 : Math.clamp(((c.x - a.x) * abx + (c.y - a.y) * aby + (c.z - a.z) * abz) / len2, 0, 1);
+        double dx = c.x - (a.x + t * abx), dy = c.y - (a.y + t * aby), dz = c.z - (a.z + t * abz);
+        return Math.sqrt(dx * dx + dy * dy + dz * dz) - scratchRadius[0];
+    }
+
+    private final Vector3d scratchCenter = new Vector3d();
+    private final double[] scratchRadius = new double[1];
+
+    /** A chunk in the urgent lane: sent before anything else waiting, whatever the budget. */
+    private void queueUrgent(int chunk) {
+        if (chunk == builtChunk) {
+            builtStale = true;
+            builtUrgent = true;
+            return;
+        }
+        if (urgentSet.get(chunk)) return;
+        urgentSet.set(chunk);
+        pendingSet.set(chunk);
+        urgent.add(chunk);
     }
 
     private void queue(int chunk) {

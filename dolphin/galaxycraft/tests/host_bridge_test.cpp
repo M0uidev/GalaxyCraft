@@ -70,7 +70,13 @@ struct Fixture
   std::string path = "/tmp/gxc_host_test_" + std::to_string(getpid());
   std::unique_ptr<Shm> shm = Shm::Create(path);
   u64 now = 10'000;
-  HostBridge bridge{*shm, [this] { return now; }};
+  u64 slept = 0;
+  std::function<void()> on_sleep;  // what happens meanwhile (the mod ticks)
+  HostBridge bridge{*shm, [this] { return now; }, [this](u32 ms) {
+                      now += ms, slept += ms;
+                      if (on_sleep)
+                        on_sleep();
+                    }};
   FakeGuestMemory mem;
 
   Fixture()
@@ -660,6 +666,112 @@ TEST(inbox_dropped_on_scene_change)
   f.mem.PutU32(MBX + offsetof(GxcMailbox, scene_id), 4);
   f.Tick();
   CHECK(f.bridge.PendingInbox() == 0);
+}
+
+// Minecraft's chunks wait in the ring while the module is behind: the mod sees its backlog and
+// holds back the bulk of a planet, instead of it all queuing here in front of Mario's collision.
+TEST(inbox_takes_from_the_ring_only_what_the_game_can_soon_use)
+{
+  Fixture f;
+  InboxInMailbox(f, 1024);
+  f.mem.PutU32(INBOX, 1);  // the module is busy
+  Ring ring(*f.shm, GXC_OFF_RING_M2S);
+  std::vector<u8> chunk(sizeof(GxcChunk) + 64 * 1024);
+  GxcChunk c{5, 2, 64 * 1024, 0, {1.f, 2.f, 3.f, 4.f}};
+  std::memcpy(chunk.data(), &c, sizeof(c));
+  int pushed = 0;
+  while (ring.Push(GXC_MSG_CHUNK, chunk.data(), static_cast<u32>(chunk.size())))
+    pushed++;
+  f.Tick();
+  CHECK(f.bridge.PendingInboxBytes() >= HostBridge::INBOX_BACKLOG);
+  CHECK(f.bridge.PendingInboxBytes() < HostBridge::INBOX_BACKLOG + chunk.size() + 16);
+  CHECK(static_cast<int>(f.bridge.PendingInbox()) < pushed);
+  while (ring.Push(GXC_MSG_CHUNK, chunk.data(), static_cast<u32>(chunk.size())))
+    ;  // the mod fills the room again
+  f.Tick();
+  CHECK(f.bridge.PendingInboxBytes() < HostBridge::INBOX_BACKLOG + chunk.size() + 16);  // no more taken
+  CHECK(!ring.Push(GXC_MSG_CHUNK, chunk.data(), static_cast<u32>(chunk.size())));  // the mod sees the game is behind
+}
+
+TEST(a_scene_change_drops_what_the_ring_held_for_the_old_one)
+{
+  Fixture f;
+  InboxInMailbox(f, 1024);
+  f.mem.PutU32(INBOX, 1);
+  f.Tick();
+  Ring ring(*f.shm, GXC_OFF_RING_M2S);
+  std::vector<u8> chunk(sizeof(GxcChunk) + 64 * 1024);
+  while (ring.Push(GXC_MSG_CHUNK, chunk.data(), static_cast<u32>(chunk.size())))
+    ;
+  f.Tick();
+  CHECK(f.bridge.PendingInbox() > 0);
+  f.mem.PutU32(MBX + offsetof(GxcMailbox, scene_id), 4);
+  f.Tick();
+  CHECK(f.bridge.PendingInbox() == 0 && f.bridge.PendingInboxBytes() == 0);
+  CHECK(!ring.Pop());  // the ring is empty for the new scene's records
+}
+
+namespace
+{
+// In a level, Minecraft mode, the mod alive and following.
+void Playing(Fixture& f)
+{
+  f.ModReports(1, {1, 2, 3});
+  for (int i = 0; i < 2; i++)
+    f.Tick();
+  CHECK(f.bridge.InGame() && f.bridge.Following());
+}
+}  // namespace
+
+TEST(the_game_waits_for_a_stalled_minecraft)
+{
+  Fixture f;
+  Playing(f);
+  f.now += 100;  // a tick late: nothing to wait for
+  f.Tick();
+  CHECK(f.slept == 0);
+  f.now += 300;  // stalled: the game waits, up to the most a stall may cost it
+  f.Tick();
+  CHECK(f.slept == HostBridge::MOD_WAIT_MAX_MS);
+  f.Tick();  // still stalled: it does not wait again for the same stall
+  CHECK(f.slept == HostBridge::MOD_WAIT_MAX_MS);
+  f.ModReports(2, {1, 2, 3});  // back
+  f.Tick();
+  f.now += 300;  // and stalled again: a new wait
+  f.Tick();
+  CHECK(f.slept == 2 * HostBridge::MOD_WAIT_MAX_MS);
+  CHECK(f.bridge.ModWaitMs() == f.slept);
+}
+
+TEST(the_wait_ends_as_soon_as_minecraft_ticks)
+{
+  Fixture f;
+  Playing(f);
+  f.now += 300;
+  const u64 back = f.now + 40;  // Minecraft's next tick, 40 ms into the wait
+  f.on_sleep = [&f, back] {
+    if (f.now >= back)
+      f.shm->SetU64(offsetof(GxcHeader, mod_heartbeat_ms), f.now);
+  };
+  f.Tick();
+  CHECK(f.slept == 40);
+}
+
+TEST(no_wait_for_a_minecraft_that_is_gone_or_in_menus)
+{
+  Fixture f;
+  Playing(f);
+  f.now += GXC_HEARTBEAT_TIMEOUT_MS;  // gone
+  f.Tick();
+  CHECK(f.slept == 0);
+  Fixture g;
+  g.ModReports(1, {1, 2, 3});
+  g.bridge.SetMinecraftMode(false);  // the Wii Remote plays
+  for (int i = 0; i < 2; i++)
+    g.Tick();
+  g.now += 300;
+  g.Tick();
+  CHECK(g.slept == 0);
 }
 
 // A savestate rolls the game's RAM back (planet, atlas and all) but not the mod: the game gets a
