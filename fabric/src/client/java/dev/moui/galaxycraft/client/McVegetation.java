@@ -4,9 +4,7 @@ import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.voxel.gen.BiomeSurface;
 import dev.moui.galaxycraft.voxel.gen.Vegetation;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -41,7 +39,7 @@ import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 final class McVegetation implements Vegetation.Library {
     /** Chunks grown per biome. */
     static final int SAMPLES = 4;
-    private static final int FLOOR_Y = 40, HEIGHT = 48, MARGIN = 8;
+    private static final int FLOOR_Y = 40, HEIGHT = 48, MARGIN = 12;
     /** Far from the shadow's mirror (which is at z ≥ ShadowMap.Z_BASE): its scratch ground. */
     private static final int X0 = 0, Z0 = -20_000_000;
     private final MinecraftServer server;
@@ -92,7 +90,7 @@ final class McVegetation implements Vegetation.Library {
                     GalaxyCraft.LOG.debug("{} on {}: {}", f, biome, e.toString());
                 }
             }
-            out.add(new Vegetation.Patch(things(level, x0, z0, top)));
+            out.add(new Vegetation.Patch(things(level, x0, z0, top, biome)));
             for (int x = -MARGIN; x < 16 + MARGIN; x++)
                 for (int z = -MARGIN; z < 16 + MARGIN; z++)
                     for (int y = FLOOR_Y - 3; y <= FLOOR_Y + HEIGHT; y++)
@@ -104,75 +102,27 @@ final class McVegetation implements Vegetation.Library {
     }
 
     /**
-     * What grew above the floor, as things: each block on the floor (a trunk, a flower, a tuft) is
-     * one, and every other block goes with the nearest of them it touches (sides or corners), so
-     * trees whose crowns meet stay apart. Things standing outside the chunk belong to its neighbors.
+     * What grew above the floor (and the floor it changed), as things: {@link Vegetation#things}
+     * splits it. Leaves stay: on the planet only the blocks near Mario are mirrored, and leaves
+     * whose log is past that edge would decay.
      */
-    private static List<Vegetation.Thing> things(ServerLevel level, int x0, int z0, BlockState top) {
-        Map<Long, BlockState> grown = new HashMap<>();
+    private static List<Vegetation.Thing> things(ServerLevel level, int x0, int z0, BlockState top, String biome) {
+        int w = 16 + 2 * MARGIN;
+        String[][][] grown = new String[w][HEIGHT + 1][w];
+        int clipped = 0;
         BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
-        for (int x = -MARGIN; x < 16 + MARGIN; x++)
-            for (int z = -MARGIN; z < 16 + MARGIN; z++)
-                for (int y = FLOOR_Y + 1; y <= FLOOR_Y + HEIGHT; y++) {
-                    BlockState s = level.getBlockState(at.set(x0 + x, y, z0 + z));
-                    if (!s.isAir()) grown.put(BlockPos.asLong(x, y, z), s);
+        for (int x = 0; x < w; x++)
+            for (int z = 0; z < w; z++)
+                for (int y = 0; y <= HEIGHT; y++) {
+                    BlockState s = level.getBlockState(at.set(x0 - MARGIN + x, FLOOR_Y + y, z0 - MARGIN + z));
+                    if (s.isAir() || y == 0 && s.equals(top)) continue;
+                    if (s.hasProperty(BlockStateProperties.PERSISTENT)) s = s.setValue(BlockStateProperties.PERSISTENT, true);
+                    grown[x][y][z] = BlockStateParser.serialize(s);
+                    if (y > 0 && (x == 0 || z == 0 || x == w - 1 || z == w - 1 || y == HEIGHT)) clipped++;
                 }
-        // Grown out from every base at once: each block is its nearest base's.
-        Map<Long, Long> baseOf = new HashMap<>();
-        ArrayDeque<Long> todo = new ArrayDeque<>();
-        for (long q : grown.keySet())
-            if (BlockPos.getY(q) == FLOOR_Y + 1) {
-                baseOf.put(q, q);
-                todo.add(q);
-            }
-        while (!todo.isEmpty()) {
-            long q = todo.poll();
-            int x = BlockPos.getX(q), y = BlockPos.getY(q), z = BlockPos.getZ(q);
-            for (int dx = -1; dx <= 1; dx++)
-                for (int dy = -1; dy <= 1; dy++)
-                    for (int dz = -1; dz <= 1; dz++) {
-                        long r = BlockPos.asLong(x + dx, y + dy, z + dz);
-                        if (!grown.containsKey(r) || baseOf.containsKey(r)) continue;
-                        baseOf.put(r, baseOf.get(q));
-                        todo.add(r);
-                    }
-        }
-        // The floor a thing changed right under its blocks (dirt under a trunk, as a tree leaves
-        // it): goes with that thing, or grass under a log would turn to dirt later on the planet.
-        for (int x = -MARGIN; x < 16 + MARGIN; x++)
-            for (int z = -MARGIN; z < 16 + MARGIN; z++) {
-                BlockState s = level.getBlockState(at.set(x0 + x, FLOOR_Y, z0 + z));
-                Long base = baseOf.get(BlockPos.asLong(x, FLOOR_Y + 1, z));
-                if (s.equals(top) || base == null) continue;
-                long q = BlockPos.asLong(x, FLOOR_Y, z);
-                grown.put(q, s);
-                baseOf.put(q, base);
-            }
-        Map<Long, List<Long>> parts = new HashMap<>();
-        for (Map.Entry<Long, Long> e : baseOf.entrySet()) parts.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
-        List<Vegetation.Thing> things = new ArrayList<>();
-        for (Map.Entry<Long, List<Long>> e : parts.entrySet()) {
-            int bx = BlockPos.getX(e.getKey()), bz = BlockPos.getZ(e.getKey());
-            if (bx < 0 || bx >= 16 || bz < 0 || bz >= 16) continue;
-            List<Long> part = e.getValue();
-            int[] dx = new int[part.size()], dy = new int[part.size()], dz = new int[part.size()];
-            String[] blocks = new String[part.size()];
-            for (int i = 0; i < part.size(); i++) {
-                long q = part.get(i);
-                dx[i] = BlockPos.getX(q) - bx;
-                dy[i] = BlockPos.getY(q) - FLOOR_Y;
-                dz[i] = BlockPos.getZ(q) - bz;
-                BlockState s = grown.get(q);
-                // Leaves stay: on the planet only the blocks near Mario are mirrored, and leaves
-                // whose log is past that edge would decay.
-                if (s.hasProperty(BlockStateProperties.PERSISTENT)) s = s.setValue(BlockStateProperties.PERSISTENT, true);
-                blocks[i] = BlockStateParser.serialize(s);
-            }
-            things.add(new Vegetation.Thing(bx, bz, dx, dy, dz, blocks));
-        }
-        // In a fixed order: the same seed plants the same planet.
-        things.sort(java.util.Comparator.comparingInt((Vegetation.Thing t) -> t.ax()).thenComparingInt(Vegetation.Thing::az));
-        return things;
+        // Something reached the box's walls or roof: a tree there may be cut short.
+        if (clipped > 0) GalaxyCraft.LOG.warn("{} grew {} blocks against the edge of its room: some may be cut off", biome, clipped);
+        return Vegetation.things(grown, MARGIN);
     }
 
     private static BlockState state(String text) {

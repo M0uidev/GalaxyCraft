@@ -165,7 +165,7 @@ public final class PlanetGenerator {
                 int above = cells[base + top + 1];
                 bare[col] = cells[base + top] == palettes.get(biome[col])[1] && (above == Blocks.AIR || above == snow);
             }
-            Vegetation.plant(grid, depth, cells, height, dirs, biome, bare, plants, bp.seed(), bp.plants(), ids);
+            Vegetation.plant(grid, depth, cells, height, biome, bare, plants, bp.seed(), bp.plants(), ids);
         }
         return new Cells(grid, depth, cells);
     }

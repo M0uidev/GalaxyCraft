@@ -121,6 +121,30 @@ public final class CubeSphere {
         return index(face, grid(dot(b[1], p) / best), grid(dot(b[2], p) / best), k);
     }
 
+    /**
+     * Cell (i, j) of a face's grid carried on past its edges, one for one: past one edge it
+     * crosses there and goes straight on along the next face's rows, which meet this face's
+     * exactly. -1 outside the layers, a face or more away, or past two edges at once: round a
+     * corner three faces meet, and there is no room for a fourth.
+     */
+    public int cellBeyond(int face, int i, int j, int k) {
+        if (k < 0 || k >= layers) return -1;
+        boolean inI = i >= 0 && i < n, inJ = j >= 0 && j < n;
+        if (inI && inJ) return index(face, i, j, k);
+        if (!inI && !inJ) return -1;
+        int side = !inI ? (i < 0 ? I_MINUS : I_PLUS) : j < 0 ? J_MINUS : J_PLUS;
+        int past = !inI ? (i < 0 ? -i : i - n + 1) : j < 0 ? -j : j - n + 1;
+        if (past >= n) return -1;
+        int edge = index(face, Math.max(0, Math.min(n - 1, i)), Math.max(0, Math.min(n - 1, j)), k);
+        int cell = neighbor(edge, side);
+        // On the next face, "on" is away from the side that leads back.
+        int on = -1;
+        for (int s = I_MINUS; s <= J_PLUS; s++) if (neighbor(cell, s) == edge) on = s ^ 1;
+        if (on < 0) return -1;
+        for (int step = 1; step < past; step++) cell = neighbor(cell, on);
+        return cell;
+    }
+
     /** Neighbor across a side, or -1 past the innermost or outermost layer. */
     public int neighbor(int cell, int side) {
         int k = k(cell);
