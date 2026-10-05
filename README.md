@@ -123,6 +123,7 @@ syati/test.sh                                     # the module's pure logic
 (cd fabric && ./gradlew test)                     # the mod
 dolphin/galaxycraft/build/galaxycraft_host_tests  # the Dolphin bridge (built by its CMake)
 tools/gxvoxel.sh                                  # end to end in the real game: planets
+tools/gxvoxel.sh movement                         # end to end: pause menu, Minecraft movement, /skin
 tools/gxfit.sh                                    # end to end: Mario's fit and stillness
 ```
 
