@@ -39,6 +39,8 @@ class SettingsTest {
         assertEquals(Movement.MINECRAFT, m.get());
         assertEquals("Minecraft", m.display());
         m.cycle();
+        assertEquals(Movement.MARIO_MC, m.get());
+        m.cycle();
         assertEquals(Movement.MARIO, m.get());
     }
 
@@ -58,7 +60,7 @@ class SettingsTest {
         Settings a = new Settings(file);
         Setting.Choice<Movement> m = a.add(movement());
         Setting.Text skin = a.add(new Setting.Text("skin", "Skin", "", "", 16));
-        m.set(Movement.MINECRAFT);
+        m.set(Movement.MARIO_MC);
         skin.set("jeb_");
         assertTrue(Files.isRegularFile(file));
 
@@ -66,7 +68,7 @@ class SettingsTest {
         List<Movement> heard = new ArrayList<>();
         Setting.Choice<Movement> m2 = b.add(movement());
         m2.onChange(heard::add);
-        assertEquals(Movement.MINECRAFT, m2.get());
+        assertEquals(Movement.MARIO_MC, m2.get());
         assertEquals("jeb_", b.add(new Setting.Text("skin", "Skin", "", "", 16)).get());
         assertTrue(heard.isEmpty()); // loading is not a change
     }

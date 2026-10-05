@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..2f5f643
+index 0000000..06544c2
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,518 @@
+@@ -0,0 +1,525 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -260,7 +260,8 @@ index 0000000..2f5f643
 +    const u8* keys = state.dev_keys ? state.dev_keys->first.data() : screen ? none : state.keys;
 +    const u32 buttons = state.dev_keys ? state.dev_keys->second : screen ? 0u : state.buttons;
 +    pad = state.mario.Update(keys, buttons, state.bridge->InGame(), state.bridge->GalaxyView(),
-+                             state.bridge->ItemActive());
++                             state.bridge->ItemActive(), state.bridge->McFeel());
++    state.bridge->SetGait(pad.sprint, pad.sneak, pad.walking);
 +    // Minecraft's pause menu opens SMG2's own: the mod holds + for a few frames.
 +    pad.plus = pad.plus || state.bridge->PlusHeld();
 +  }
@@ -315,7 +316,9 @@ index 0000000..2f5f643
 +    {
 +      const auto& v = cmd.pose;
 +      gxc::PlayerState pose{0, 0, {}, {v[0], v[1], v[2]}, {v[3], v[4], v[5]}, 70.f, 162.f};
-+      if (cmd.addr == 1)  // third person: 4 blocks (320 units) behind the eyes
++      if (cmd.addr & 2)
++        pose.flags |= GXC_PLAYER_MC_FEEL;
++      if (cmd.addr & 1)  // third person: 4 blocks (320 units) behind the eyes
 +      {
 +        pose.cam_offset = {-v[0] * 320.f, 130.f - v[1] * 320.f, -v[2] * 320.f};
 +        pose.view = GXC_VIEW_BACK;
@@ -347,6 +350,10 @@ index 0000000..2f5f643
 +    case gxc::DevCommand::Keys:
 +      SetDevKeys(state, cmd.arg);
 +      AppendCtlOut("ok keys " + cmd.arg + "\n");
++      break;
++    case gxc::DevCommand::Lean:
++      state.mario.SetLeans(cmd.pose[0], cmd.pose[1], cmd.pose[2]);
++      AppendCtlOut("ok lean\n");
 +      break;
 +    case gxc::DevCommand::Text:
 +      for (const char c : cmd.arg)

@@ -614,6 +614,20 @@ public final class PlanetSession {
         return planet == null ? -1 : planet.grid.cellAt(local(gal));
     }
 
+    /**
+     * The block grid at a point of the galaxy: {an edge along the cell's i, its first corner, its
+     * up (unit, out of the planet through the cell's middle), an edge along its j}, galaxy space; null outside the planet.
+     */
+    public Vector3d[] gridAt(Vector3d gal) {
+        int cell = cellAt(gal);
+        if (cell < 0) return null;
+        Vector3d corner = galOf(planet.grid.corner(cell, 0, 0, 0));
+        Vector3d up = galOf(CellSpace.point(planet.grid, cell, 0.5, 1, 0.5))
+                .sub(galOf(CellSpace.point(planet.grid, cell, 0.5, 0, 0.5))).normalize();
+        return new Vector3d[] {galOf(planet.grid.corner(cell, 1, 0, 0)).sub(corner), corner, up,
+                galOf(planet.grid.corner(cell, 0, 1, 0)).sub(corner)};
+    }
+
     /** Chunks of the planet within range blocks of a point in the galaxy. */
     public List<Integer> chunksNear(Vector3d gal, double range) {
         List<Integer> out = new ArrayList<>();

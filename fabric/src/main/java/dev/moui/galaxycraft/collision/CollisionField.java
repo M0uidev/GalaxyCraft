@@ -19,7 +19,27 @@ public final class CollisionField {
     private static final double MAX_QUERY = 8.0; // blocks per side
 
     private final TriangleIndex index = new TriangleIndex(200);
+    /** The parts that are a voxel planet's blocks (also in index): collided as exact block faces. */
+    private final TriangleIndex blocks = new TriangleIndex(200);
+    private java.util.function.Predicate<double[]> isBlocks = m -> false;
     private GravityFrame frame;
+
+    /** Boxes of blocks overlapping a query (Minecraft space), through the frame: a voxel planet's. */
+    public interface BlockSource {
+        void boxes(GravityFrame frame, double[] query, List<double[]> out);
+    }
+
+    private BlockSource blockSource = (f, q, out) -> {};
+
+    /** Where a voxel planet's blocks collide from (its parts' triangles are then left out). */
+    public synchronized void setBlockSource(BlockSource source) {
+        blockSource = source;
+    }
+
+    /** Tells a voxel planet's parts by their matrix (3x4 row-major, as upsertPart takes it). */
+    public synchronized void setBlockParts(java.util.function.Predicate<double[]> test) {
+        isBlocks = test;
+    }
 
     /** mtx is 3x4 row-major, part local -> galaxy. A bad KCL clears the part and is reported. */
     public synchronized void upsertPart(int id, double[] mtx, byte[] kcl) {
@@ -31,14 +51,18 @@ public final class CollisionField {
         List<Tri> tris = new ArrayList<>();
         for (Tri t : KclParser.parse(kcl)) tris.add(t.transform(m));
         index.put(id, tris);
+        if (isBlocks.test(mtx)) blocks.put(id, tris);
+        else blocks.remove(id);
     }
 
     public synchronized void removePart(int id) {
         index.remove(id);
+        blocks.remove(id);
     }
 
     public synchronized void clear() {
         index.clear();
+        blocks.clear();
     }
 
     /** Stores a copy, so later changes to the caller's frame need another setFrame. */
@@ -69,9 +93,62 @@ public final class CollisionField {
             min.min(c);
             max.max(c);
         }
+        java.util.Set<Tri> block = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        block.addAll(blocks.query(min, max));
         List<Tri> mc = new ArrayList<>();
-        for (Tri t : index.query(min, max)) mc.add(Tri.of(frame.toMc(t.a()), frame.toMc(t.b()), frame.toMc(t.c())));
-        return Voxelizer.voxelize(mc, q);
+        for (Tri t : index.query(min, max))
+            if (!block.contains(t)) mc.add(Tri.of(frame.toMc(t.a()), frame.toMc(t.b()), frame.toMc(t.c())));
+        List<double[]> out = new ArrayList<>(Voxelizer.voxelize(mc, q));
+        blockSource.boxes(frame, q, out);
+        return out;
+    }
+
+    /**
+     * The least moves that take a player's box (Minecraft space, {minX, minY, minZ, maxX, maxY,
+     * maxZ}) out of the galaxy's boxes it overlaps, one box at a time, the smallest first: up onto
+     * it (at most maxUp) or sideways out of it (at most maxSide). Zero if it overlaps nothing, or
+     * no such moves free it. The boxes turn and snap with the frame every tick, and one can come
+     * to overlap the player a little; Minecraft lets a box the player starts in pass, so it would
+     * fall through the floor or walk through the wall.
+     */
+    public Vector3d pushOut(double[] player, double maxUp, double maxSide) {
+        double[] p = player.clone();
+        Vector3d total = new Vector3d();
+        for (int round = 0; round < 8; round++) {
+            List<double[]> in = overlapping(p);
+            if (in.isEmpty()) return total;
+            double[] best = null;
+            double bestLen = Double.MAX_VALUE;
+            for (double[] b : in) {
+                double[][] moves = {{0, b[4] - p[1], 0}, {b[3] - p[0], 0, 0}, {b[0] - p[3], 0, 0},
+                        {0, 0, b[5] - p[2]}, {0, 0, b[2] - p[5]}};
+                for (double[] m : moves) {
+                    double len = Math.abs(m[0]) + Math.abs(m[1]) + Math.abs(m[2]);
+                    if (m[1] > maxUp || Math.abs(m[0]) > maxSide || Math.abs(m[2]) > maxSide || len >= bestLen) continue;
+                    bestLen = len;
+                    best = m;
+                }
+            }
+            if (best == null) return new Vector3d();
+            p = moved(p, best);
+            total.add(best[0], best[1], best[2]);
+        }
+        return overlapping(p).isEmpty() ? total : new Vector3d();
+    }
+
+    private static final double TOUCH = 1e-7;
+
+    private List<double[]> overlapping(double[] p) {
+        List<double[]> out = new ArrayList<>();
+        for (double[] b : boxesFor(p))
+            if (b[0] < p[3] - TOUCH && b[3] > p[0] + TOUCH && b[1] < p[4] - TOUCH && b[4] > p[1] + TOUCH
+                    && b[2] < p[5] - TOUCH && b[5] > p[2] + TOUCH)
+                out.add(b);
+        return out;
+    }
+
+    private static double[] moved(double[] p, double[] m) {
+        return new double[] {p[0] + m[0], p[1] + m[1], p[2] + m[2], p[3] + m[0], p[4] + m[1], p[5] + m[2]};
     }
 
     /**

@@ -31,7 +31,8 @@ public final class GalaxyOptions {
 
     public static final Setting.Choice<Movement> MOVEMENT = SETTINGS.add(new Setting.Choice<>("movement", "Movement",
             "Mario: SMG2 moves Mario (his jumps, spins and long jumps), drawn as Mario with Steve's skin.\n"
-                    + "Minecraft: Minecraft moves you as in Minecraft, drawn as Steve; Mario goes with you.\n"
+                    + "Minecraft: Minecraft's own physics move you, as Steve; Mario goes with you.\n"
+                    + "Mario at Minecraft's speeds: Mario moves at Minecraft's speeds (Ctrl sprints, Shift sneaks) and jumps 1.25 blocks.\n"
                     + "F6 switches them while playing.",
             Movement.class, Movement.MARIO, Movement::label));
     public static final Setting.Text SKIN = SETTINGS.add(new Setting.Text("skin", "Skin",

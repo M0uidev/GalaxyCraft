@@ -61,6 +61,7 @@ public final class MovementProbe implements FabricClientGameTest {
             log(String.format("Mario movement, landed: Mario %.0f units from the player", marioToPlayer(ctx)));
 
             pauseMenu(ctx);
+            minecraftFeel(ctx, s);
             minecraftMovement(ctx, s);
             skin(ctx);
 
@@ -119,6 +120,66 @@ public final class MovementProbe implements FabricClientGameTest {
                 }
             throw new AssertionError("no " + label + " button");
         });
+    }
+
+    // ---- Minecraft's feel: SMG2 moves Mario at Minecraft's speeds, with its jump ----
+
+    private void minecraftFeel(ClientGameTestContext ctx, PlanetSession s) {
+        ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MARIO_MC));
+        ctx.runOnClient(mc -> mc.player.setXRot(10));
+        ctx.runOnClient(mc -> PlanetClient.teleport());
+        ctx.waitTicks(100);
+        long mbx = mailbox();
+        // Minecraft: 4.317 blocks/s walking, 5.612 sprinting, 1.31 sneaking. D, not W: the prologue's
+        // storybook keeps Mario's stick to one axis, even on the planet.
+        double walk = marioSpeed(ctx, mbx, "d"), sprint = marioSpeed(ctx, mbx, "a ctrl"),
+                sneak = marioSpeed(ctx, mbx, "d shift");
+        log(String.format("Minecraft's feel: walk %.2f, sprint %.2f, sneak %.2f blocks/s", walk, sprint, sneak));
+        check(walk > 3.8 && walk < 4.8, "walks at Minecraft's speed");
+        check(sprint > 5.0 && sprint < 6.3, "Ctrl sprints at Minecraft's speed");
+        check(sneak > 0.8 && sneak < 1.9, "Shift sneaks at Minecraft's speed");
+        double base = marioHeight(ctx, s, mbx), top = base;
+        gxdev("ctl", "keys space");
+        long end = System.currentTimeMillis() + 1200;
+        boolean released = false;
+        while (System.currentTimeMillis() < end) {
+            ctx.waitTicks(1);
+            if (!released && System.currentTimeMillis() > end - 1000) {
+                gxdev("ctl", "keys");
+                released = true;
+            }
+            top = Math.max(top, marioHeight(ctx, s, mbx));
+        }
+        gxdev("ctl", "keys");
+        log(String.format("Minecraft's feel: jump %.2f blocks", top - base));
+        check(top - base > 1.0 && top - base < 1.45, "jumps Minecraft's 1.25 blocks");
+        gxdev("ctl", "shot move-feel");
+        ctx.waitTicks(5);
+    }
+
+    /** Mario's speed with these keys held (ctl keys), blocks/s, once he is under way. */
+    private static double marioSpeed(ClientGameTestContext ctx, long mbx, String keys) {
+        gxdev("ctl", "keys " + keys);
+        waitReal(ctx, 700);
+        Vector3d a = peekAt(mbx + MBX_MARIO);
+        long ta = System.nanoTime();
+        waitReal(ctx, 800);
+        Vector3d b = peekAt(mbx + MBX_MARIO);
+        long tb = System.nanoTime();
+        gxdev("ctl", "keys");
+        waitReal(ctx, 600);
+        return a.distance(b) / units(1) / ((tb - ta) / 1e9);
+    }
+
+    /** Mario's feet from the planet's center, blocks. */
+    private static double marioHeight(ClientGameTestContext ctx, PlanetSession s, long mbx) {
+        return peekAt(mbx + MBX_MARIO).distance(s.center()) / units(1);
+    }
+
+    /** Lets Minecraft tick for this much real time: the game runs in real time, game tests do not. */
+    private static void waitReal(ClientGameTestContext ctx, long ms) {
+        long end = System.currentTimeMillis() + ms;
+        while (System.currentTimeMillis() < end) ctx.waitTicks(1);
     }
 
     // ---- Minecraft's movement ----

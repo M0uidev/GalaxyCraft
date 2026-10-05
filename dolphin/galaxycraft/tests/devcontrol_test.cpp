@@ -81,6 +81,22 @@ TEST(bad_and_host_commands_are_errors_here)
   CHECK(RunMemoryCommand(c[1], mem, std::nullopt).starts_with("error: "));
 }
 
+TEST(follow_feel_is_minecrafts_feel)
+{
+  auto c = ParseDevCommands("follow 0 0 -1 feel\nfollow 0 0 -1 back feel\nfollow 0 0 -1 feel back");
+  CHECK(c.size() == 3);
+  CHECK(c[0].kind == DevCommand::Follow && c[0].addr == 2u);
+  CHECK(c[1].kind == DevCommand::Follow && c[1].addr == 3u);
+  CHECK(c[2].kind == DevCommand::Follow && c[2].addr == 3u);
+}
+
+TEST(lean_sets_three_leans)
+{
+  auto c = ParseDevCommands("lean 0.3 0.33 0.19\nlean 0.3 0.33\nlean 0.3 2 0.1");
+  CHECK(c[0].kind == DevCommand::Lean && c[0].pose[1] == 0.33f);
+  CHECK(c[1].kind == DevCommand::Bad && c[2].kind == DevCommand::Bad);
+}
+
 TEST(follow_back_is_third_person)
 {
   auto c = ParseDevCommands("follow 0 0 -1 back\nfollow 0 0 -1 0 1 0\nfollow 0 0 back 1");

@@ -237,6 +237,11 @@ u32 Word(u32 addr)
   return *reinterpret_cast<const u32*>(addr);
 }
 
+f32 Dot3(const f32* a, const f32* b)
+{
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
 void Copy3(f32* dst, const f32* src)
 {
   dst[0] = src[0], dst[1] = src[1], dst[2] = src[2];
@@ -362,10 +367,89 @@ void MarioInit(void* self, const void* iter)
   gOut.dbg.voxel_stats = reinterpret_cast<u32>(&gVoxelStats);
 }
 
+// Minecraft's feel on Mario (GXC_MBX_MC_FEEL): his jumps from the ground rise 1.25 blocks, as
+// Minecraft's does, not his 2.2 to 3.5. His velocity is Mario + 0x160, with copies at + 0x1A8 and
+// + 0x1B4; + 0x2D4 is the next frame's, which his jump keeps slowing (measured on Starship
+// Mario). Each rising frame, after his movement, the rise left is capped so the jump tops out at
+// the height; A is let go after a few frames (MarioInput's pulse), when his rise slows by
+// MC_JUMP_GRAVITY a frame.
+const f32 MC_JUMP_HEIGHT = 100.f;  // 1.25 blocks of 80 units
+const f32 MC_JUMP_GRAVITY = 2.1f;
+const u32 MARIO_VELOCITIES[] = {0x160, 0x1A8, 0x1B4, 0x2D4};
+const u32 MARIO_NEXT_VELOCITY = 0x2D4;
+bool gMcWasOnGround = false;
+bool gMcRising = false;
+f32 gMcTakeoff[3];
+
+// His speed as a share of his top one (13 units a frame) is Mario + 0x278; held there before his
+// movement, he walks at it from the first frame (measured: 0.443 -> 4.32 blocks/s, at once).
+// Minecraft walks 4.317 blocks/s, sprints 5.612 and sneaks 1.31: at 80 units a block, these
+// shares of 13 units a frame. The stick's lean (MarioInput) only picks his gait, a step above.
+const u32 MARIO_SPEED_SHARE = 0x278;
+const f32 MC_WALK_SHARE = 4.317f * 80.f / 60.f / 13.f, MC_SPRINT_SHARE = 5.612f * 80.f / 60.f / 13.f,
+          MC_SNEAK_SHARE = 1.31f * 80.f / 60.f / 13.f;
+
+void McFeelSpeed(void* self)
+{
+  u8* mb = reinterpret_cast<u8*>(reinterpret_cast<MarioActor*>(self)->mMario);
+  const u32 flags = gOut.mbx.host_flags;
+  if (!(flags & GXC_MBX_MC_FEEL) || !gFollowing || gDemo || !IsRam(reinterpret_cast<u32>(mb)))
+    return;
+  // Keys let go: he slows down on his own. Held up while he still moved, he never stopped.
+  if (!(flags & GXC_MBX_MC_WALK))
+    return;
+  f32* share = reinterpret_cast<f32*>(mb + MARIO_SPEED_SHARE);
+  if (*share <= 0.f)  // standing (or not walking): nothing to hold
+    return;
+  *share = (flags & GXC_MBX_MC_SNEAK) ? MC_SNEAK_SHARE : (flags & GXC_MBX_MC_SPRINT) ? MC_SPRINT_SHARE : MC_WALK_SHARE;
+}
+
+void McFeelJump(void* self, const f32 before[3])
+{
+  u8* mb = reinterpret_cast<u8*>(reinterpret_cast<MarioActor*>(self)->mMario);
+  const bool ground = MR::isOnGroundPlayer();
+  const f32 up[3] = {-gOut.mbx.gravity[0], -gOut.mbx.gravity[1], -gOut.mbx.gravity[2]};
+  const bool on = (gOut.mbx.host_flags & GXC_MBX_MC_FEEL) && gFollowing && !gDemo &&
+                  IsRam(reinterpret_cast<u32>(mb)) && Dot3(up, up) > 0.25f;
+  if (!on)
+  {
+    gMcRising = false;
+    gMcWasOnGround = ground;
+    return;
+  }
+  f32* next = reinterpret_cast<f32*>(mb + MARIO_NEXT_VELOCITY);
+  const f32 rising = Dot3(next, up);
+  if (gMcWasOnGround && !ground && rising > 0)
+  {
+    gMcRising = true;
+    Copy3(gMcTakeoff, before);
+  }
+  if (gMcRising && (ground || rising <= 0))
+    gMcRising = false;
+  if (gMcRising)
+  {
+    const TVec3f* at = MR::getPlayerPos();
+    const f32 moved[3] = {at->x - gMcTakeoff[0], at->y - gMcTakeoff[1], at->z - gMcTakeoff[2]};
+    const f32 cap = gxc::JumpCeiling(Dot3(moved, up), MC_JUMP_HEIGHT, MC_JUMP_GRAVITY);
+    if (rising > cap)
+    {
+      const f32 cut = rising - cap;
+      for (u32 i = 0; i < sizeof(MARIO_VELOCITIES) / sizeof(MARIO_VELOCITIES[0]); i++)
+      {
+        f32* v = reinterpret_cast<f32*>(mb + MARIO_VELOCITIES[i]);
+        for (int k = 0; k < 3; k++)
+          v[k] -= up[k] * cut;
+      }
+    }
+  }
+  gMcWasOnGround = ground;
+}
+
 void MarioMovement(void* self)
 {
   const TVec3f* at = MR::getPlayerPos();
   const f32 before[3] = {at->x, at->y, at->z};
+  McFeelSpeed(self);
   movement__10MarioActorFv(self);
   EntityDrawAfterMario();
   {
@@ -495,6 +579,7 @@ void MarioMovement(void* self)
                              &gravity, 0, 0))
     gravity = TVec3f(0.f, 0.f, 0.f);
   gOut.mbx.gravity[0] = gravity.x, gOut.mbx.gravity[1] = gravity.y, gOut.mbx.gravity[2] = gravity.z;
+  McFeelJump(self, before);
 
   TVec3f front(0.f, 0.f, 0.f);
   MR::getPlayerFrontVec(&front);

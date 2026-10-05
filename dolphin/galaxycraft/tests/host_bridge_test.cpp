@@ -853,6 +853,32 @@ TEST(f3_b_draws_marios_hitbox)
   CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_HITBOXES) != 0);
 }
 
+TEST(mc_feel_reaches_the_game)
+{
+  Fixture f;
+  f.Tick();
+  f.shm->SetU64(offsetof(GxcHeader, mod_heartbeat_ms), f.now);
+  WritePlayer(*f.shm, {0, 1, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {}, GXC_VIEW_FIRST, 3});
+  f.Tick();
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_MC_FEEL) == 0);
+  CHECK(!f.bridge.McFeel());
+  WritePlayer(*f.shm, {GXC_PLAYER_MC_FEEL, 2, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {}, GXC_VIEW_FIRST, 3});
+  f.Tick();
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_MC_FEEL) != 0);
+  CHECK(f.bridge.McFeel() && !f.bridge.Walking());
+  f.bridge.SetGait(true, false, true);
+  f.Tick();
+  CHECK((f.mem.GetU32(MBX + 52) & (GXC_MBX_MC_SPRINT | GXC_MBX_MC_SNEAK | GXC_MBX_MC_WALK)) ==
+        (GXC_MBX_MC_SPRINT | GXC_MBX_MC_WALK));
+  f.bridge.SetGait(false, false, false);  // keys let go: no walk bit, Mario stops
+  f.Tick();
+  CHECK((f.mem.GetU32(MBX + 52) & (GXC_MBX_MC_SPRINT | GXC_MBX_MC_WALK)) == 0);
+  // Without Minecraft's feel the gait is not the game's business.
+  WritePlayer(*f.shm, {0, 3, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {}, GXC_VIEW_FIRST, 3});
+  f.Tick();
+  CHECK((f.mem.GetU32(MBX + 52) & (GXC_MBX_MC_FEEL | GXC_MBX_MC_SPRINT)) == 0);
+}
+
 TEST(walking_hides_mario_and_takes_his_keys)
 {
   Fixture f;

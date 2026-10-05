@@ -23,6 +23,9 @@ public final class GravityFrame {
     private static final double REBASE_MIN_Y = 36, REBASE_MAX_Y = 164, REBASE_Y = 100;
     private static final Vector3d UP = new Vector3d(0, 1, 0);
 
+    /** An alignGrid: the turn about Minecraft's Y (radians) and the shift it made, Minecraft space. */
+    public record Align(double yaw, Vector3d shift) {}
+
     /** deltaMc = r'·r⁻¹: rotate Minecraft-space velocities and look vectors by it after a re-aim. */
     public record Update(boolean rotated, Quaterniond deltaMc) {}
 
@@ -123,6 +126,29 @@ public final class GravityFrame {
         Vector3d np = new Vector3d(playerMc.x, REBASE_Y, playerMc.z);
         t.set(np).sub(r.transform(gal.mul(SCALE)));
         return Optional.of(np);
+    }
+
+    /**
+     * Lines Minecraft's axes up with a planet's block grid at the player: turns about Minecraft's
+     * Y (the least turn that takes axisGal, a grid edge, onto X or Z), then shifts so cornerGal, a
+     * grid corner, lands on whole blocks. The player's galaxy position stays where it was until
+     * the caller moves it by the shift; looks and velocities fixed in the galaxy turn by
+     * yaw, as Ry(yaw) turns a vector at angle φ from +X (toward +Z) to φ - yaw.
+     */
+    public Align alignGrid(Vector3d axisGal, Vector3d cornerGal, Vector3d playerMc) {
+        Vector3d a = dirToMc(axisGal);
+        if (a.x * a.x + a.z * a.z < 1e-12) return new Align(0, new Vector3d());
+        double phi = Math.atan2(a.z, a.x);
+        double yaw = phi - Math.round(phi / (Math.PI / 2)) * (Math.PI / 2);
+        Vector3d gal = toGal(playerMc);
+        Quaterniond q = new Quaterniond().rotationY(yaw);
+        r.premul(q).normalize();
+        rPrev.premul(q).normalize();
+        t.set(playerMc).sub(r.transform(gal.mul(SCALE)));
+        Vector3d c = toMc(cornerGal);
+        Vector3d shift = new Vector3d(Math.round(c.x) - c.x, Math.round(c.y) - c.y, Math.round(c.z) - c.z);
+        t.add(shift);
+        return new Align(yaw, shift);
     }
 
     /** Shortest rotation taking unit vector from onto unit vector to (180° about a stable axis). */

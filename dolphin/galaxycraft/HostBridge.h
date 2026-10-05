@@ -71,6 +71,17 @@ public:
   bool Flying() const { return m_following && m_player && (m_player->flags & GXC_PLAYER_FLYING) != 0; }
   // Minecraft movement: the player walks on its own and Mario goes with it, the keys are not his.
   bool Walking() const { return m_following && m_player && (m_player->flags & GXC_PLAYER_WALKING) != 0; }
+  // Minecraft's feel on Mario: Minecraft's speeds and jump, none of Mario's moves.
+  bool McFeel() const
+  {
+    const PlayerState* p = m_dev_follow ? &*m_dev_follow : m_player ? &*m_player : nullptr;
+    return m_following && p && (p->flags & GXC_PLAYER_MC_FEEL) != 0;
+  }
+  // Minecraft's feel: sprinting (Ctrl) or sneaking (Shift), told to the game (GXC_MBX_MC_*).
+  void SetGait(bool sprint, bool sneak, bool walking)
+  {
+    m_gait = (sprint ? GXC_MBX_MC_SPRINT : 0u) | (sneak ? GXC_MBX_MC_SNEAK : 0u) | (walking ? GXC_MBX_MC_WALK : 0u);
+  }
   // The mod holds SMG2's + button (its pause menu), as Escape opens Minecraft's own instead.
   bool PlusHeld() const { return m_following && m_player && (m_player->flags & GXC_PLAYER_PLUS) != 0; }
   // Copies of Mario's skin texture written by the last GXC_MSG_MARIO_SKIN, for the dev harness.
@@ -124,6 +135,7 @@ private:
   std::optional<u32> m_game_seq;
   int m_ticks_since_game_frame = 0;
   std::optional<PlayerState> m_dev_follow;
+  u32 m_gait = 0;  // GXC_MBX_MC_SPRINT / GXC_MBX_MC_SNEAK / GXC_MBX_MC_WALK
   bool m_minecraft_mode = true;
   bool m_relink = false;
   bool m_link_on_save = false;

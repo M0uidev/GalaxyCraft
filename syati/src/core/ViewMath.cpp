@@ -99,4 +99,13 @@ void Mul34(const float a[12], const float b[12], float out[12])
     for (int c = 0; c < 4; c++)
       out[4 * r + c] = a[4 * r] * b[c] + a[4 * r + 1] * b[4 + c] + a[4 * r + 2] * b[8 + c] + (c == 3 ? a[4 * r + 3] : 0.f);
 }
+float JumpCeiling(float rose, float height, float gravity)
+{
+  // Steps of v, v - g, v - 2g... add up to v^2 / 2g + v / 2: the v that adds up to what is left.
+  const float left = height - rose;
+  if (left <= 0 || gravity <= 0)
+    return 0.f;
+  const float v = Sqrt(gravity * gravity / 4 + 2 * gravity * left) - gravity / 2;
+  return v < left ? v : left;
+}
 }  // namespace gxc

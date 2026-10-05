@@ -62,6 +62,8 @@ public final class Layout {
     public static final int PLAYER_HITBOXES = 16;
     /** PlayerState.flags: Minecraft movement, the player walks on its own and Mario goes with it. */
     public static final int PLAYER_WALKING = 32;
+    /** Minecraft's feel on Mario: SMG2 moves him at Minecraft's speeds, with its 1.25-block jump. */
+    public static final int PLAYER_MC_FEEL = 128;
     /** PlayerState.flags: hold SMG2's + button (its own pause menu). */
     public static final int PLAYER_PLUS = 64;
     /** WorldState.flags: queryPos is the host's anchor (where the player is). */

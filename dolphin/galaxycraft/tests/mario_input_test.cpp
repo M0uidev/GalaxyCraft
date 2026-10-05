@@ -141,3 +141,44 @@ TEST(f_spins_even_with_an_item)
     s = in.Update(Keys{}.bits, 0, true, false, true);
   CHECK(!s.shake);
 }
+
+TEST(mc_feel_leans_the_stick_to_minecraft_speeds)
+{
+  MarioInput in;
+  WiimoteState s = in.Update(Keys{SC_W}.bits, 0, true, false, false, true);
+  CHECK(Near(s.stick_y, MarioInput::WALK_LEAN) && Near(s.stick_x, 0));
+  CHECK(!s.sprint && !s.sneak && s.walking);
+  CHECK(!in.Update(Keys{}.bits, 0, true, false, false, true).walking);
+  CHECK(!in.Update(Keys{SC_LCTRL}.bits, 0, true, false, false, true).walking);
+  s = in.Update(Keys{SC_W, SC_LCTRL}.bits, 0, true, false, false, true);
+  CHECK(Near(s.stick_y, MarioInput::SPRINT_LEAN) && !s.c && s.sprint && !s.sneak);
+  s = in.Update(Keys{SC_W, SC_LSHIFT}.bits, 0, true, false, false, true);
+  CHECK(Near(s.stick_y, MarioInput::SNEAK_LEAN) && !s.z && s.sneak && !s.sprint);
+  s = in.Update(Keys{SC_W, SC_LSHIFT, SC_LCTRL}.bits, 0, true, false, false, true);
+  CHECK(s.sneak && !s.sprint);  // sneaking wins, as in Minecraft
+  s = in.Update(Keys{SC_W, SC_D}.bits, 0, true, false, false, true);
+  CHECK(Near(std::hypot(s.stick_x, s.stick_y), MarioInput::WALK_LEAN));
+  // Menus keep the full stick and the clicks.
+  s = in.Update(Keys{SC_W}.bits, MOUSE_LEFT, false, false, false, true);
+  CHECK(Near(s.stick_y, 1) && s.a);
+}
+
+TEST(mc_feel_has_no_spin_and_held_space_keeps_jumping)
+{
+  MarioInput in;
+  WiimoteState s = in.Update(Keys{SC_F}.bits, MOUSE_LEFT | MOUSE_RIGHT, true, false, false, true);
+  CHECK(!s.shake && !s.b);
+  int presses = 0;
+  bool was = false;
+  for (int f = 0; f < 4 * MarioInput::JUMP_PULSE_FRAMES; f++)
+  {
+    s = in.Update(Keys{SC_SPACE}.bits, 0, true, false, false, true);
+    if (f == 0)
+      CHECK(s.a);  // at once
+    presses += s.a && !was;
+    was = s.a;
+  }
+  CHECK(presses == 2);
+  s = in.Update(Keys{}.bits, 0, true, false, false, true);
+  CHECK(!s.a);
+}

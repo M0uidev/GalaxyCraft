@@ -16,6 +16,7 @@ import dev.moui.galaxycraft.proto.Seqlock;
 import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.view.CameraMath;
 import dev.moui.galaxycraft.view.View;
+import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -70,6 +71,16 @@ public final class GalaxyCraftClient implements ClientModInitializer {
      * and a player that starts inside a box falls through it.
      */
     private static final double WALK_LIFT = 0.25;
+    /** At most this far (blocks) the player is pushed up (Minecraft's step) or sideways out of the galaxy's boxes. */
+    private static final double PUSH_UP_MAX = 0.6, PUSH_SIDE_MAX = 0.25;
+    /**
+     * Minecraft movement: Steve's width, a share of the planet's block where he is. Cells narrow
+     * toward the core (half a block and less deep down), and a 0.6-wide box does not fit a hole
+     * dug one block wide there: it wedges, or is pushed out through the floor. Only the box is
+     * narrower, as Mario's radius is (VoxelPlanet), never wider than Minecraft's 0.6.
+     */
+    private static final double STEVE_WIDTH = 0.6;
+    private static double walkWidth = STEVE_WIDTH;
     /** Last tick's following: the tick Mario lets go, the player is lifted (WALK_LIFT). */
     private static boolean wasFollowing;
     private static final Vector3d GALAXY_UP = new Vector3d(0, 1, 0);
@@ -105,6 +116,15 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                         resetFrame();
                     }
                 });
+        // A voxel planet's chunks arrive unrotated, placed at its center: their faces collide exactly.
+        GalaxyCraft.FIELD.setBlockParts(m -> m[0] == 1 && m[5] == 1 && m[10] == 1 && m[1] == 0 && m[2] == 0
+                && m[4] == 0 && m[6] == 0 && m[8] == 0 && m[9] == 0 && PlanetClient.planets().stream().anyMatch(
+                        s -> s != null && s.center() != null && s.center().distance(m[3], m[7], m[11]) < 1));
+        GalaxyCraft.FIELD.setBlockSource((f, q, out) -> {
+            for (PlanetSession s : PlanetClient.planets())
+                if (s != null && s.planet() != null && s.center() != null)
+                    dev.moui.galaxycraft.voxel.PlanetCollision.boxes(s.planet(), s::galOf, s::localOf, f, q, out);
+        });
         ClientTickEvents.START_CLIENT_TICK.register(GalaxyCraftClient::beforeTick);
         ClientTickEvents.END_CLIENT_TICK.register(GalaxyCraftClient::afterTick);
         ClientTickEvents.END_CLIENT_TICK.register(PlanetEditorScreen::openIfRequested);
@@ -228,9 +248,14 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         return bridge.linked();
     }
 
-    /** Minecraft movement chosen (the player walks on its own, Mario goes with it). */
+    /** Minecraft's physics chosen (the player walks on its own, Mario goes with it). */
     public static boolean walking() {
         return GalaxyOptions.MOVEMENT.get() == Movement.MINECRAFT;
+    }
+
+    /** Minecraft's feel chosen: SMG2 moves Mario at Minecraft's speeds, with its jump. */
+    public static boolean mcFeel() {
+        return GalaxyOptions.MOVEMENT.get() == Movement.MARIO_MC;
     }
 
     /** F6: Mario's movement or Minecraft's. */
@@ -320,8 +345,12 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 frame.update(up.negate(), pos);
             } else {
                 // Minecraft movement: the player walks by Minecraft's physics, so its up is the
-                // gravity's right away (gravity where Mario is, and Mario goes where it is).
-                frame.update(gravity, pos);
+                // gravity's right away (gravity where Mario is, and Mario goes where it is). On a
+                // voxel planet, the blocks' own up where the player is: SMG2's gravity there can
+                // lean off it (deep down, by the core), and leaning blocks collide as wider boxes
+                // that close one-wide shafts and tunnels.
+                Vector3d[] grid = planetGrid(player);
+                frame.update(grid != null ? new Vector3d(grid[2]).negate() : gravity, pos);
             }
         }
         following = world.get().follow() && !flying && !walking();
@@ -350,8 +379,26 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 player.setPos(np.x, np.y, np.z);
                 player.setOldPosAndRot();
             });
+            if (walking() && !flying) alignToBlocks(player);
         }
+        fitWidth(player, walking() && !flying && !following);
         GalaxyCraft.FIELD.setFrame(frame);
+        if (walking() && !flying && !following) {
+            // The galaxy's boxes turned and snapped with the frame; one overlapping the player
+            // would let it through (Minecraft passes a box it starts in): out by the least move.
+            var b = player.getBoundingBox();
+            Vector3d out = GalaxyCraft.FIELD.pushOut(new double[] {b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ},
+                    PUSH_UP_MAX, PUSH_SIDE_MAX);
+            if (out.lengthSquared() > 0) {
+                player.setPos(player.getX() + out.x, player.getY() + out.y, player.getZ() + out.z);
+                player.xo += out.x;
+                player.yo += out.y;
+                player.zo += out.z;
+                player.xOld += out.x;
+                player.yOld += out.y;
+                player.zOld += out.z;
+            }
+        }
         PlanetClient.tick(player, bridge, frame, world.get());
         HeldClient.tick(player, bridge, world.get().sceneId());
         if (following) {
@@ -368,6 +415,75 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                     SETTLE_DEPTH_BLOCKS) ? 0 : settleTicks - 1;
         }
         hold(player, settleTicks > 0);
+    }
+
+    /**
+     * Minecraft movement on a planet: Minecraft's X and Z run along the blocks where the player
+     * is, and their edges fall on whole blocks. The player's box is square to Minecraft's axes, so
+     * otherwise it meets a planet's blocks at an angle and the 1/8 grid they are collided on
+     * narrows a one-block tunnel below its width; a two-high one below its height. The look and
+     * the momentum keep their direction in the galaxy.
+     */
+    private static void alignToBlocks(LocalPlayer player) {
+        Vector3d[] grid = planetGrid(player);
+        if (grid != null) {
+            GravityFrame.Align a = frame.alignGrid(grid[0], grid[1], vec(player.position()));
+            float turn = (float) Math.toDegrees(a.yaw());
+            player.setYRot(player.getYRot() - turn);
+            player.yRotO -= turn;
+            player.yHeadRot -= turn;
+            player.yHeadRotO -= turn;
+            player.yBodyRot -= turn;
+            player.yBodyRotO -= turn;
+            Vector3d v = new org.joml.Quaterniond().rotationY(a.yaw()).transform(vec(player.getDeltaMovement()));
+            player.setDeltaMovement(v.x, v.y, v.z);
+            Vec3 d = new Vec3(a.shift().x, a.shift().y, a.shift().z);
+            player.setPos(player.position().add(d));
+            player.xo += d.x;
+            player.yo += d.y;
+            player.zo += d.z;
+            player.xOld += d.x;
+            player.yOld += d.y;
+            player.zOld += d.z;
+        }
+    }
+
+    /** Steve's collision width now (Minecraft space): narrower deep in a planet (STEVE_WIDTH). */
+    public static double walkWidth() {
+        return walkWidth;
+    }
+
+    /**
+     * Minecraft movement: Steve's box as wide as the block he is in allows (STEVE_WIDTH of a
+     * block, the narrower of its two sides at its bottom). Narrowing is at once; widening (climbing
+     * out) waits until the wider box overlaps nothing, so it never pushes him into a wall.
+     */
+    private static void fitWidth(LocalPlayer player, boolean on) {
+        double want = STEVE_WIDTH;
+        Vector3d[] grid = on ? planetGrid(player) : null;
+        if (grid != null) {
+            double block = Math.min(grid[0].length(), grid[3].length()) * GravityFrame.SCALE;
+            want = Math.min(STEVE_WIDTH, STEVE_WIDTH * block);
+        }
+        if (Math.abs(want - walkWidth) < 1e-4) return;
+        if (on && want > walkWidth) {
+            Vec3 p = player.position();
+            double h = want / 2, top = player.getBoundingBox().maxY;
+            if (!GalaxyCraft.FIELD.boxesFor(new double[] {p.x - h, p.y + 0.01, p.z - h, p.x + h, top, p.z + h}).isEmpty()) return;
+        }
+        walkWidth = want;
+        player.setPos(player.getX(), player.getY(), player.getZ()); // its box, at the new width
+    }
+
+    /** The block grid of the planet the player is in (PlanetSession.gridAt), if any. */
+    private static Vector3d[] planetGrid(LocalPlayer player) {
+        Vector3d feetGal = frame.toGal(vec(player.position().add(0, 0.5, 0)));
+        for (PlanetSession s : PlanetClient.planets()) {
+            if (s == null || s.planet() == null) continue;
+            Vector3d[] grid = s.gridAt(feetGal);
+            if (grid != null) return grid;
+        }
+        return null;
     }
 
     /** Creative flight while /fly is on (set every tick: the server may resend the abilities). */
@@ -448,7 +564,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
                 client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene,
                 PlanetClient.itemActive(player), client.gui.screen() != null, flying,
-                client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES), walking(), System.nanoTime() - plusUntil < 0));
+                client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES), walking(), System.nanoTime() - plusUntil < 0, mcFeel()));
     }
 
     public static void camLog(Vector3d eyeMc, Vector3d backMc, double dist, double hit) {

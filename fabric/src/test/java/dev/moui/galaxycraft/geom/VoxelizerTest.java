@@ -23,9 +23,10 @@ class VoxelizerTest {
     @Test void floorBecomesThinSlab() {
         var boxes = Voxelizer.voxelize(floor(0), new double[] {-.5, -.2, -.5, .5, .5, .5});
         assertFalse(boxes.isEmpty());
-        for (double[] b : boxes) assertTrue(b[4] <= 0.125 + 1e-9, "top at most one cell above the floor");
+        // A floor on a cell boundary fills the cell under it: its top is the floor itself.
+        for (double[] b : boxes) assertEquals(0, b[4], 1e-9, "top on the floor");
         for (double x = -0.4375; x < 0.5; x += 0.125)
-            for (double z = -0.4375; z < 0.5; z += 0.125) assertTrue(covered(boxes, x, 0.0625, z), x + "," + z);
+            for (double z = -0.4375; z < 0.5; z += 0.125) assertTrue(covered(boxes, x, -0.0625, z), x + "," + z);
     }
 
     @Test void cellsAlignToEighths() {
@@ -38,6 +39,15 @@ class VoxelizerTest {
         var boxes = Voxelizer.voxelize(wall, new double[] {-.5, 0, -.5, .5, .5, .5});
         assertFalse(boxes.isEmpty());
         for (double[] b : boxes) assertTrue(b[4] - b[1] >= 1.0, "wall boxes are at least a block tall");
+    }
+
+    @Test void ledgeTopHasNoFence() {
+        // A block's side, x = 0, from y = -1 up to its top at y = 0: at most the grid's rounding (one
+        // cell) above y = 0, not the block-tall fence a raised wall used to leave on every ledge.
+        var side = List.of(Tri.of(v(0, -1, -2), v(0, 0, -2), v(0, 0, 2)), Tri.of(v(0, -1, -2), v(0, 0, 2), v(0, -1, 2)));
+        var boxes = Voxelizer.voxelize(side, new double[] {-.5, -1, -.5, .5, 1, .5});
+        assertFalse(boxes.isEmpty());
+        for (double[] b : boxes) assertTrue(b[4] <= Voxelizer.CELL + 1e-6, "no fence above the ledge's top: " + b[4]);
     }
 
     @Test void ceilingIsNotRaised() {

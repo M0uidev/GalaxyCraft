@@ -17,6 +17,11 @@ bool MarioVisible(bool following, bool demo, bool third_person);
 
 void LookAtView(const float eye[3], const float look[3], const float up[3], float out[12]);
 
+// Minecraft's jump on Mario: the most he may still rise this frame, units/frame, once `rose`
+// units above where he left the ground, to peak at `height` while slowing by `gravity` a frame
+// (frame by frame, not the continuous sqrt(2 g h)); 0 at or past the top.
+float JumpCeiling(float rose, float height, float gravity);
+
 // a times b, both 3x4 row-major affine matrices (the bottom row 0 0 0 1 implied).
 void Mul34(const float a[12], const float b[12], float out[12]);
 }  // namespace gxc

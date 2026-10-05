@@ -530,10 +530,12 @@ void HostBridge::WriteFollow(GuestMemory& mem, const PlayerState* player)
   // Playing in Minecraft's view the IR sits under its crosshair, which stands in for the pointer.
   const bool hide_pointer = player && !galaxy && m_in_game;
   const bool hitboxes = player && (player->flags & GXC_PLAYER_HITBOXES);
+  const bool mc_feel = player && (player->flags & GXC_PLAYER_MC_FEEL);
   PutBE32(b.data(), player ? GXC_MBX_FOLLOW | (galaxy ? GXC_MBX_GALAXY_VIEW : 0u) |
                                  (third ? GXC_MBX_THIRD_PERSON : 0u) |
                                  (hide_pointer ? GXC_MBX_HIDE_POINTER : 0u) |
-                                 (hitboxes ? GXC_MBX_HITBOXES : 0u) :
+                                 (hitboxes ? GXC_MBX_HITBOXES : 0u) |
+                                 (mc_feel ? GXC_MBX_MC_FEEL | m_gait : 0u) :
                              0u);
   if (player)
   {

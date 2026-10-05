@@ -101,6 +101,20 @@ DevCommand ParseLine(std::string_view line)
       rest.remove_prefix(1);
     return rest.empty() ? bad : DevCommand{DevCommand::Text, 0, 0, std::string(rest)};
   }
+  if (w[0] == "lean")
+  {
+    DevCommand cmd{DevCommand::Lean, 0, 0, {}};
+    if (w.size() != 4)
+      return bad;
+    for (size_t i = 1; i < 4; i++)
+    {
+      const auto v = ParseFloat(w[i]);
+      if (!v || *v < 0 || *v > 1)
+        return bad;
+      cmd.pose[i - 1] = *v;
+    }
+    return cmd;
+  }
   if (w[0] == "keys")
   {
     std::string names;
@@ -114,11 +128,14 @@ DevCommand ParseLine(std::string_view line)
     return w.size() == 1 ? DevCommand{DevCommand::Unfollow, 0, 0, {}} : bad;
   if (w[0] == "follow")
   {
-    const bool back = w.back() == "back";
-    const size_t n = w.size() - (back ? 1 : 0);
+    // Trailing words: back (third person), feel (Minecraft's feel, GXC_PLAYER_MC_FEEL).
+    u32 opts = 0;
+    size_t n = w.size();
+    while (n > 1 && (w[n - 1] == "back" || w[n - 1] == "feel"))
+      opts |= w[--n] == "back" ? 1u : 2u;
     if (n != 4 && n != 7)
       return bad;
-    DevCommand cmd{DevCommand::Follow, back ? 1u : 0u, 0, {}};
+    DevCommand cmd{DevCommand::Follow, opts, 0, {}};
     for (size_t i = 1; i < n; i++)
     {
       const auto v = ParseFloat(w[i]);

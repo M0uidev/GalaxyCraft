@@ -87,6 +87,9 @@ typedef struct { /* S -> M */
 #define GXC_PLAYER_WALKING 32u
 /* Hold SMG2's + button (its own pause menu): Escape opens Minecraft's pause menu instead. */
 #define GXC_PLAYER_PLUS 64u
+/* Minecraft's feel on Mario: SMG2 moves him (its own collision), at Minecraft's walk, sprint
+   (Ctrl) and sneak (Shift) speeds, with Minecraft's 1.25-block jump and none of Mario's moves. */
+#define GXC_PLAYER_MC_FEEL 128u
 
 typedef struct { /* M -> S */
   uint32_t seq;
@@ -350,6 +353,10 @@ typedef struct {
 #define GXC_MBX_HIDE_POINTER 16u /* host_flags: playing in Minecraft's view, the IR sits under its
                                    crosshair: the star pointer is not drawn */
 #define GXC_MBX_HITBOXES 32u /* host_flags: draw Mario's collision (GXC_PLAYER_HITBOXES) */
+#define GXC_MBX_MC_FEEL 64u /* host_flags: Minecraft's speeds and jump on Mario (GXC_PLAYER_MC_FEEL) */
+#define GXC_MBX_MC_SPRINT 128u /* host_flags, with GXC_MBX_MC_FEEL: Ctrl held, Minecraft's sprint */
+#define GXC_MBX_MC_SNEAK 256u  /* host_flags, with GXC_MBX_MC_FEEL: Shift held, Minecraft's sneak */
+#define GXC_MBX_MC_WALK 512u   /* host_flags, with GXC_MBX_MC_FEEL: a movement key is held (WASD) */
 #define GXC_MBX_GAME_FOLLOWING 1u /* game_flags: Mario hidden, first-person camera this frame */
 #define GXC_MBX_GAME_DEMO 2u   /* game_flags: a cutscene owns Mario and the camera */
 

@@ -40,6 +40,25 @@ static PartCandidate At(u32 id, float x, float y, float z, float r)
   return p;
 }
 
+static void TestJumpCeilingPeaksAtTheHeight()
+{
+  // Launched at the ceiling and slowing by g, a jump tops out at the height, never above.
+  const float g = 2.1f, h = 100.f;
+  float rose = 0, v = 30.f, top = 0;
+  for (int f = 0; f < 60; f++)
+  {
+    const float cap = gxc::JumpCeiling(rose, h, g);
+    if (v > cap)
+      v = cap;
+    rose += v;
+    top = rose > top ? rose : top;
+    v -= g;
+  }
+  CHECK(top <= h + 0.01f);
+  CHECK(top > h - 2.5f);  // the last frame's step short of it, at most
+  CHECK(gxc::JumpCeiling(100.f, h, g) == 0.f && gxc::JumpCeiling(150.f, h, g) == 0.f);
+}
+
 static void TestSelectNearest64()
 {
   PartCandidate c[70];
@@ -693,6 +712,7 @@ int main()
   TestMul34();
   TestHeldBlock();
   TestHeldFlatItem();
+  TestJumpCeilingPeaksAtTheHeight();
   TestSelectNearest64();
   TestBigRadiusWinsOrder();
   TestNoneInRange();

@@ -14,8 +14,11 @@ namespace gxc
 //   poke ADDR HEX   write these bytes (HEX: even number of hex digits, up to 64 bytes)
 //   mbx             one-line summary of the guest mailbox
 //   shot NAME | save PATH | load PATH   run by the emulator on its host thread
-//   follow LX LY LZ [UX UY UZ] [back]   follow Mario looking this way, as if the mod sent it;
-//                                back: third person, 4 blocks behind (addr = 1)
+//   lean W S N                   Minecraft's feel: the stick's lean walking, sprinting, sneaking
+//                                (MarioInput's defaults until Dolphin restarts; for measuring)
+//   follow LX LY LZ [UX UY UZ] [back] [feel]   follow Mario looking this way, as if the mod sent
+//                                it; back: third person, 4 blocks behind (addr bit 0); feel:
+//                                Minecraft's feel (GXC_PLAYER_MC_FEEL, addr bit 1)
 //                                (no up: opposite of the game's gravity)
 //   unfollow                     back to whatever the mod says
 //   text STRING                  type these characters (ASCII) into Minecraft, as the keyboard would
@@ -42,11 +45,12 @@ struct DevCommand
     Status,
     Keys,
     Text,
+    Lean,
     Bad
   } kind;
   u32 addr = 0, len = 0;
   std::string arg;  // file name/path, Poke's raw bytes, Keys' names, or the offending line for Bad
-  std::array<float, 6> pose{};  // Follow: look, up
+  std::array<float, 6> pose{};  // Follow: look, up; Lean: walk, sprint, sneak
 };
 
 std::vector<DevCommand> ParseDevCommands(std::string_view text);

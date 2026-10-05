@@ -28,6 +28,10 @@ struct WiimoteState
   bool a = false, b = false, minus = false, plus = false, home = false, one = false, two = false;
   bool c = false, z = false;
   float stick_x = 0, stick_y = 0;  // -1..1, y up
+  // Minecraft's feel: Ctrl (sprint) or Shift (sneak) held, for the game's speed (GXC_MBX_MC_*).
+  bool sprint = false, sneak = false;
+  // Minecraft's feel: a movement key (WASD) is held; let go, the game stops holding his speed.
+  bool walking = false;
   bool shake = false;
   // true: IR at (0, MarioInput::CENTER_IR_Y), under Minecraft's crosshair; false: no override
   // (the user's pointer mapping)
@@ -47,17 +51,35 @@ public:
   // Total Pitch 20°, the defaults), so IR (0,0) lands 8% of the screen above it. Measured live.
   static constexpr float CENTER_IR_Y = -0.156f;
 
+  // Minecraft's feel (GXC_PLAYER_MC_FEEL): how far the stick leans walking, sprinting (Ctrl) and
+  // sneaking (Shift). The game then holds Mario at Minecraft's speed (sprint and sneak go to it
+  // in WiimoteState); the lean picks his gait, the nearest of his steps of speed (measured
+  // through this override: 1.46, 2.43, 3.89, 4.87, 5.85 blocks/s, at leans of 22, 27, 32, 38
+  // and 42 steps of 127) above Minecraft's 4.317, 5.612 and 1.31 blocks/s.
+  static constexpr float WALK_LEAN = 0.303f, SPRINT_LEAN = 0.335f, SNEAK_LEAN = 0.18f;
+  // Space held keeps jumping, as Minecraft's does: A is pressed this many frames, then let go as
+  // many, so each landing takes a new press.
+  static constexpr int JUMP_PULSE_FRAMES = 4;
+
   // keys: SDL scancode bitmap (64 bytes); buttons: protocol mouse mask; in_game: game/menu rule;
   // free_pointer: the Galaxy view, where the mouse points even while playing; item_active: the
-  // clicks belong to Minecraft. Called once per Wii Remote frame.
+  // clicks belong to Minecraft; mc_feel: Minecraft's feel (speeds by lean, Ctrl sprints and Shift
+  // sneaks instead of C and Z, no spin from the clicks or F). Called once per Wii Remote frame.
   WiimoteState Update(const u8 keys[64], u32 buttons, bool in_game, bool free_pointer = false,
-                      bool item_active = false);
+                      bool item_active = false, bool mc_feel = false);
   // Mode switch: everything released, counters cleared.
   void Reset();
+  // Minecraft's feel: other leans than WALK_LEAN, SPRINT_LEAN, SNEAK_LEAN (ctl lean, measuring).
+  void SetLeans(float walk, float sprint, float sneak) { m_leans = {walk, sprint, sneak}; }
 
 private:
   int m_shake_frames = 0;  // frames left of the current shake
   bool m_left_was_down = false;
   bool m_f_was_down = false;
+  int m_jump_frames = 0;  // Minecraft's feel: frames Space has been held
+  struct Leans
+  {
+    float walk, sprint, sneak;
+  } m_leans = {WALK_LEAN, SPRINT_LEAN, SNEAK_LEAN};
 };
 }  // namespace gxc
