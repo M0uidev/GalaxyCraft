@@ -49,6 +49,11 @@ public final class SurfaceSampler {
         return depth;
     }
 
+    /** The grid a planet of this blueprint has (as PlanetGenerator builds it). */
+    public CubeSphere grid() {
+        return new CubeSphere(VoxelPlanet.gridSize(radius), radius - depth, depth + air);
+    }
+
     public boolean water() {
         return water;
     }

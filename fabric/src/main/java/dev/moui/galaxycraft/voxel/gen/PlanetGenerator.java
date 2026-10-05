@@ -68,9 +68,9 @@ public final class PlanetGenerator {
     public static Cells cells(PlanetBlueprint bp, TerrainNoise noise, BiomeTable table, Vegetation.Library plants,
             ToIntFunction<String> ids) {
         int radius = bp.radius(), air = bp.air(), depth = VoxelPlanet.groundDepth(radius);
-        int n = VoxelPlanet.gridSize(radius);
-        CubeSphere grid = new CubeSphere(n, radius - depth, depth + air);
         SurfaceSampler sampler = new SurfaceSampler(bp, noise, table);
+        CubeSphere grid = sampler.grid();
+        int n = grid.n;
         boolean water = sampler.water();
         int columns = 6 * n * n;
         int[] height = new int[columns];
