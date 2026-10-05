@@ -92,9 +92,11 @@ syati/build.sh       # the module, its Riivolution patch and Steve's model for S
 tools/gxplay.sh      # starts the patched Dolphin and Minecraft together
 ```
 
-Use your Wii Remote mapping on the title screen and file select. Once you pick a save, keyboard
-and mouse take over (Ctrl+G switches back and forth by hand). Once you are in a level, a planet
-appears above Mario. **P** lands you on it.
+Minecraft's menu opens in Dolphin's window while SMG2 boots behind it by itself, skipping its
+title and file select. Each Minecraft world is a galaxy: entering one puts you in
+**GalaxyCraftSpace** (an empty galaxy under SMG2's starry sky) on that world's planets, where you
+left off. A new world gets its home planet and a starter kit. Worlds, planets and settings are
+kept in `~/.local/share/galaxycraft/`. See [docs/LANZADOR.md](docs/LANZADOR.md).
 
 | Input | Action |
 |---|---|
@@ -113,7 +115,7 @@ appears above Mario. **P** lands you on it.
 | F5 | perspective |
 | F6 | Mario's movement / Minecraft's |
 | F3+B | Mario's collision |
-| Ctrl+G | give the game back to your Wii Remote |
+| Ctrl+G | give the game back to your Wii Remote (development) |
 
 ## Tests
 
@@ -124,6 +126,8 @@ syati/test.sh                                     # the module's pure logic
 dolphin/galaxycraft/build/galaxycraft_host_tests  # the Dolphin bridge (built by its CMake)
 tools/gxvoxel.sh                                  # end to end in the real game: planets
 tools/gxvoxel.sh movement                         # end to end: pause menu, Minecraft movement, /skin
+tools/gxvoxel.sh boot [--fresh-nand]              # SMG2 boots by itself into GalaxyCraftSpace
+tools/gxvoxel.sh launch                           # end to end: title, Create World, leave and come back
 tools/gxfit.sh                                    # end to end: Mario's fit and stillness
 ```
 

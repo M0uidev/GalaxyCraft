@@ -331,6 +331,19 @@ class PlanetSessionTest {
         assertTrue(secs < 60, secs + " s");
     }
 
+    @Test void aTeleportRightAfterSpawningSurvivesTheFirstUpdate() {
+        // A world's home planet: made and Mario sent onto it in the same tick, before the update
+        // that sends the planet to the game for the first time.
+        PlanetSession s = new PlanetSession(80);
+        s.setRenderDistance(Double.POSITIVE_INFINITY);
+        s.spawnAt(VoxelPlanet.ofRadius(16, CubeBlocks.INSTANCE), new Vector3d());
+        s.teleportToward(new Vector3d(0, 1, 0));
+        s.update(3, 100, new Vector3d());
+        List<PlanetSession.Msg> got = drain(s);
+        assertEquals(Layout.MSG_PLANET, got.get(0).type(), "the planet first");
+        assertEquals(1, got.stream().filter(m -> m.type() == Layout.MSG_PLANET_TP).count(), "the teleport, once");
+    }
+
     @Test void teleportWaitsForTheGroundWhereMarioLands() {
         PlanetSession s = new PlanetSession(80);
         s.spawn(64, MARIO, new Vector3d(0, 1, 0)); // Mario far below it: no collision anywhere

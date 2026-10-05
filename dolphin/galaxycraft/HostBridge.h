@@ -30,6 +30,10 @@ public:
   // he plays means its tick stalled, and the game waits for it (at most MOD_WAIT_MAX_MS a stall).
   static constexpr u64 MOD_STALL_MS = 250;
   static constexpr u64 MOD_WAIT_MAX_MS = 1500;
+  // Booting by ourselves, Minecraft is in its world while it last said so and its heartbeat is
+  // younger than this: a stall (a planet being made) must not hand the screen to its menus, nor
+  // stop the planet's collision under Mario.
+  static constexpr u64 IN_WORLD_TIMEOUT_MS = 10000;
 
   void Tick(GuestMemory& mem);
 

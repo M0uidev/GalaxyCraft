@@ -361,6 +361,10 @@ void MarioInit(void* self, const void* iter)
 {
   init__10MarioActorFRC12JMapInfoIter(self, iter);
   gOut.mbx.scene_id++;  // a new Mario means a new stage: the host republishes everything
+  // Until his first movement, no gravity nor position of the last stage's Mario (the file
+  // select's flies around with gravity): the mod would take them for this stage's.
+  for (int k = 0; k < 3; k++)
+    gOut.mbx.gravity[k] = 0.f, gOut.mbx.anchor_pos[k] = 0.f;
   gOwnBinderRadius = 0.f;
   VoxelPlanetCreate(&gOut.mbx.inbox_addr, &gOut.mbx.inbox_size);
   HeldItemCreate();

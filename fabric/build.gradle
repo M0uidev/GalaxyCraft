@@ -56,6 +56,12 @@ loom {
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 				if (project.hasProperty("biomesOnly")) vmArg "-Dgalaxycraft.biomesOnly=${project.property("biomesOnly")}"
 			}
+			if (project.hasProperty("galaxycraftLauncher")) { // tools/gxvoxel.sh launch: LauncherProbe, worlds as galaxies
+				vmArg "-Dgalaxycraft.launcher=true"
+				vmArg "-Dgalaxycraft.planetDir=" // empty: each world keeps its own galaxy, as when playing
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftWalk")) { // tools/gxvoxel.sh walk: WalkProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.walk=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
@@ -134,6 +140,9 @@ loom {
 			}
 			if (project.hasProperty("galaxycraftPlanet")) { // a voxel planet once linked (PlanetClient)
 				vmArg "-Dgalaxycraft.planet=true"
+			}
+			if (name == "client" && project.hasProperty("galaxycraftGameDir")) { // tools/gxplay.sh: kept between runs
+				runDir = project.property("galaxycraftGameDir")
 			}
 			if (project.hasProperty("galaxycraftHidden")) { // no window on the desktop
 				vmArg "-Dgalaxycraft.hidden=true"

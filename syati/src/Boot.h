@@ -3,8 +3,9 @@
 
 // GalaxyCraft boots SMG2 by itself (host flag GXC_MBX_BOOT_SPACE): the file selector skips the
 // title, picks a file (making one if there is none) and starts it, and the stage after it is
-// GalaxyCraftSpace. There Mario waits at the origin while Minecraft is in its menus
-// (GXC_MBX_HOLD) and until the mod's first teleport puts him on a planet.
+// GalaxyCraftSpace. There Mario waits at the origin until the mod's teleport puts him on a
+// planet, and again once the mod drops every planet (it left the world, back to its menus). A
+// stall of Minecraft (GXC_MBX_HOLD for a moment) does not move him.
 
 // From GalaxyCraft.cpp: the mailbox's host flags, and the debug words Boot fills (file
 // selector, its nerve as r13 - N, frames in it, steps taken: 1 title, 2 file, 4 start, 8 stage,
@@ -17,3 +18,5 @@ void BootStage(const char* stage);
 bool BootHoldMario();
 // The mod teleported Mario onto a planet: no longer held.
 void BootTeleported();
+// The mod dropped every planet (it left its world): Mario waits at the origin again.
+void BootPlanetsDropped();

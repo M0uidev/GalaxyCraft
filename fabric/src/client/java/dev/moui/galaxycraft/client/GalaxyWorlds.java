@@ -43,6 +43,6 @@ final class GalaxyWorlds {
     }
 
     private static void run(MinecraftServer server, String command) {
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSuppressedOutput(), command);
     }
 }

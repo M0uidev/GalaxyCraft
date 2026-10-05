@@ -57,6 +57,8 @@ public final class PlanetSession {
     public static final double MARIO_RADIUS = marioRadius(System.getProperty("galaxycraft.marioRadius"));
     /** In the chunk queue: the teleport, once the chunks before it are out. */
     private static final int TP_MARK = -1;
+    /** A teleport queued and not sent yet: a resend of everything (a new scene, the first update) keeps it. */
+    private boolean tpQueued;
     /**
      * A planet's id in the game (GxcPlanet.planet_id): 1..255, as a chunk's slot word carries it in
      * its top byte; each live session holds one, and a freed one is not given out again right away
@@ -235,6 +237,7 @@ public final class PlanetSession {
     public void remove() {
         if (planet == null) return;
         planet = null;
+        tpQueued = false;
         clearQueues();
         release();
     }
@@ -242,6 +245,7 @@ public final class PlanetSession {
     /** Forgets the planet without telling the game (it is gone with its scene). */
     public void unload() {
         planet = null;
+        tpQueued = false;
         clearQueues();
         release();
         gone.clear(); // the new scene's game never had it
@@ -292,6 +296,7 @@ public final class PlanetSession {
                 String.format("%.1f", tpGround / unitsPerBlock), String.format("%.1f", planet.surface()));
         for (int c : residency(land, land)) queueUrgent(c);
         urgent.add(TP_MARK);
+        tpQueued = true;
         return new Vector3d(land);
     }
 
@@ -360,6 +365,7 @@ public final class PlanetSession {
         while (built == null && !urgent.isEmpty()) {
             int c = urgent.poll();
             if (c == TP_MARK) {
+                tpQueued = false;
                 built = new Msg(Layout.MSG_PLANET_TP, ByteBuffer.allocate(20).putFloat(tpGround).putInt(id) // big-endian: passed on as is
                         .putFloat((float) tpDir.x).putFloat((float) tpDir.y).putFloat((float) tpDir.z).array());
                 break;
@@ -796,6 +802,10 @@ public final class PlanetSession {
         guestHasIt = false;
         tiles(mario, ahead, false);
         for (int t = 0; t < tileCount; t++) queueFar(t);
+        if (tpQueued) { // after the planet, Mario's landing ground, then the teleport, as teleportToward queued them
+            if (landing != null) for (int c : residency(landing, landing)) queueUrgent(c);
+            urgent.add(TP_MARK);
+        }
         if (!detail) return;
         if (mario != null) residency(mario, ahead);
         List<double[]> order = new ArrayList<>();

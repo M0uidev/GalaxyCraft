@@ -176,8 +176,6 @@ bool BootHoldMario()
 {
   if (!gSpaceStage)
     return false;
-  if (BootHostFlags() & GXC_MBX_HOLD)
-    gTeleported = false;
   if (gTeleported)
     return false;
   MR::setPlayerPos(TVec3f(0.f, 0.f, 0.f));
@@ -190,6 +188,11 @@ bool BootHoldMario()
 void BootTeleported()
 {
   gTeleported = true;
+}
+
+void BootPlanetsDropped()
+{
+  gTeleported = false;
 }
 
 // FileSelector's vtable: control (+ 0x50).

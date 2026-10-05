@@ -1,20 +1,19 @@
 #!/bin/bash
-# Play GalaxyCraft by hand: the patched Dolphin (window, your usual Dolphin config and controllers)
-# runs SMG2 with the module, and Minecraft runs hidden in a test world, drawn over Dolphin's
-# picture. The title screen and file select are played with your Wii Remote mapping; once a save is
-# picked, Mario mode: keyboard and mouse play Mario (WASD stick, Space A, Shift Z, Ctrl C, Esc +,
-# Tab -, right click B, left click spin) while the camera sits in his eyes; in SMG2's menus the
-# mouse is the pointer and left click is A. Ctrl+G (hotkey "GalaxyCraft: Toggle Minecraft Link")
-# switches between the two by hand; with the Wii Remote, Esc stops Dolphin again. Back on the title
-# screen, the Wii Remote has the game again.
-# A voxel planet appears above Mario once linked in a level (one per galaxy, saved and loaded
-# again; /galaxycraft planet spawn <radius> makes a new one, up to 256): P lands on it; with a
-# block or the pickaxe in hand (slots 2-5) left click breaks and right click places, F spins.
-# Any block of Minecraft can go on a planet: /gamemode creative, then E opens the creative
-# inventory, where the mouse is a pointer (click, drag, scroll); Esc closes it.
-# Dolphin runs with 256 MiB of MEM2 (RAM override): big planets live in the extra memory, and
-# savestates of a normal Dolphin do not load in it (nor the other way around).
-# Closing either side closes the other.
+# Play GalaxyCraft: Minecraft's menu opens in the patched Dolphin's window while Super Mario Galaxy
+# 2 boots behind it by itself, into GalaxyCraftSpace (an empty galaxy under SMG2's sky). Each
+# Minecraft world is a galaxy: entering one puts you on its planets, where you left off.
+# Keyboard and mouse are Minecraft's in its menus; in a world they play Mario (WASD stick, Space A,
+# Shift Z, Ctrl C, Esc Minecraft's pause menu, right click B, left click spin) with the camera in
+# his eyes. Closing either side closes the other.
+#
+# Everything is kept in $XDG_DATA_HOME/galaxycraft (~/.local/share/galaxycraft):
+#   minecraft/  Minecraft's game folder: worlds (saves/<world>/galaxycraft holds its planets),
+#               options.txt, config/galaxycraft.properties (GalaxyCraft's settings)
+#   dolphin/    Dolphin's own folder: on first launch its settings are copied from your usual
+#               Dolphin (~/.config/dolphin-emu) and so is SMG2's save, if you have one (without
+#               one the game makes a file by itself)
+#   blueprints/ planet blueprints, shared by every world
+# Dolphin runs with 256 MiB of MEM2 (RAM override), dual core.
 #   tools/gxplay.sh            (build first: dolphin/build.sh, syati/build.sh)
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -22,30 +21,51 @@ cd "$(dirname "$0")/.." || exit 1
 export JAVA_HOME
 [ -x dolphin/build/Binaries/dolphin-emu ] || { echo "gxplay: run dolphin/build.sh first" >&2; exit 1; }
 [ -f syati/build/galaxycraft.json ] || { echo "gxplay: run syati/build.sh first" >&2; exit 1; }
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}/galaxycraft"
+GAME_DIR="$DATA/minecraft"
+DOLPHIN_DIR="$DATA/dolphin"
+SMG2_SAVE=Wii/title/00010000/53423445
+
+# Dolphin's own folder, seeded once from the player's usual Dolphin (controllers, hotkeys, video)
+# and SMG2's save.
+if [ ! -d "$DOLPHIN_DIR/Config" ]; then
+  mkdir -p "$DOLPHIN_DIR/Config"
+  if [ -d "$HOME/.config/dolphin-emu" ]; then
+    cp "$HOME"/.config/dolphin-emu/*.ini "$DOLPHIN_DIR/Config/" 2> /dev/null
+  else
+    cp tools/dolphin-dev/*.ini "$DOLPHIN_DIR/Config/"
+  fi
+  if [ -d "$HOME/.local/share/dolphin-emu/$SMG2_SAVE" ]; then
+    mkdir -p "$DOLPHIN_DIR/$(dirname "$SMG2_SAVE")"
+    cp -r "$HOME/.local/share/dolphin-emu/$SMG2_SAVE" "$DOLPHIN_DIR/$SMG2_SAVE"
+  fi
+fi
+mkdir -p "$GAME_DIR"
 
 # A hidden Minecraft left over from an earlier run (Gradle's daemon outlives this script) would
 # still be linked to the new Dolphin through the shared memory, and two of them feeding one game
 # make it lag: stop any first. The game test ignores SIGTERM, so KILL follows.
+MC_MATCH="galaxycraft.hidden=true"
 stop_minecraft() {
-  pkill -f "galaxycraft.demo=true" 2> /dev/null || return 0
-  for _ in 1 2 3 4 5; do sleep 1; pgrep -f "galaxycraft.demo=true" > /dev/null || return 0; done
-  pkill -KILL -f "galaxycraft.demo=true" 2> /dev/null
+  pkill -f "$MC_MATCH" 2> /dev/null || return 0
+  for _ in 1 2 3 4 5; do sleep 1; pgrep -f "$MC_MATCH" > /dev/null || return 0; done
+  pkill -KILL -f "$MC_MATCH" 2> /dev/null
 }
 stop_minecraft
 
 # Dual core (CPUThread): this Dolphin defaults to single core on desktop, which puts the CPU and
 # the GPU on one thread and leaves no headroom on planets.
 # Background input / hotkeys without focus, for this run only (-C is not saved): on Hyprland,
-# Dolphin's window can hold the compositor's focus without Qt noticing, and then Dolphin would
-# ignore the Wii Remote and the link hotkey. XWayland only shows keys to a focused X window, so
-# typing in other programs still does not reach the game.
-GALAXYCRAFT=1 GALAXYCRAFT_LINK_ON_SAVE=1 dolphin/build/Binaries/dolphin-emu -e syati/build/galaxycraft.json \
+# Dolphin's window can hold the compositor's focus without Qt noticing.
+GALAXYCRAFT=1 GALAXYCRAFT_BOOT=space dolphin/build/Binaries/dolphin-emu -u "$DOLPHIN_DIR" \
+  -e syati/build/galaxycraft.json \
   -C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False \
-  -C Dolphin.Core.RAMOverrideEnable=True -C Dolphin.Core.MEM2Size=268435456 -C Dolphin.Core.CPUThread=True &
+  -C Dolphin.Core.RAMOverrideEnable=True -C Dolphin.Core.MEM2Size=268435456 -C Dolphin.Core.CPUThread=True \
+  -C Dolphin.Interface.ConfirmStop=False &
 DOLPHIN=$!
-# The overlay demo joins a peaceful adventure world and stays there; ~14 h of ticks.
-(cd fabric && exec ./gradlew runClientGameTest -PgalaxycraftDemo -PgalaxycraftHidden -PgalaxycraftPlanet \
-  -PgalaxycraftDemoTicks=1000000 --console=plain -q) &
+# Minecraft itself (not a game test): its title screen, its worlds, its options, kept between runs.
+(cd fabric && exec ./gradlew runClient -PgalaxycraftHidden -PgalaxycraftGameDir="$GAME_DIR" \
+  --console=plain -q) &
 MINECRAFT=$!
 trap 'kill $DOLPHIN $MINECRAFT 2> /dev/null' INT TERM
 wait -n $DOLPHIN $MINECRAFT

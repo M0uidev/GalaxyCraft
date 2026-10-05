@@ -376,8 +376,9 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             // Wait for the host to say where the player is, somewhere with gravity: SMG2's title
             // screen has a Mario too, but nothing to stand on.
             hold(player, true);
-            if (!world.get().anchor() || !world.get().hasGravity()) {
-                // GalaxyCraftSpace: no gravity until the world's planet is up and Mario is on it.
+            if (!world.get().anchor() || !world.get().hasGravity() || PlanetClient.waitingToLand()) {
+                // GalaxyCraftSpace: no gravity until the world's planet is up and Mario is on it (any
+                // gravity before is the last stage's Mario's).
                 if (PlanetClient.galaxy() != null) PlanetClient.tick(player, bridge, null, world.get());
                 return;
             }

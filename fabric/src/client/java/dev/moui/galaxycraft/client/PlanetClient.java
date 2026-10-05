@@ -112,6 +112,9 @@ public final class PlanetClient {
     /** Ticks between saves of where the player stands. */
     private static final int SPOT_TICKS = 100;
     private static int sinceSpot;
+    /** Since when (nanoTime, 0: not) Mario has had no gravity in GalaxyCraftSpace after landing; past RELAND_NANOS he lands again. */
+    private static long unlandedSince;
+    private static final long RELAND_NANOS = 5_000_000_000L;
     private static final ExecutorService saver = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "GalaxyCraft planet saver");
         t.setDaemon(true);
@@ -497,6 +500,16 @@ public final class PlanetClient {
             if (s.active() && world.queryPos() != null)
                 s.setDetail(PlanetLayout.detail(s.detail(), s == focus, s.center().distance(world.queryPos()), s.gravityUnits(),
                         1 / GravityFrame.SCALE));
+        // Mario back at the galaxy's center with no gravity a while after landing (the stage
+        // restarted: he fell, or died): onto the planet again, where the player last stood.
+        if (space && frame == null && !landPending && !world.hasGravity()) {
+            if (unlandedSince == 0) unlandedSince = System.nanoTime();
+            else if (System.nanoTime() - unlandedSince > RELAND_NANOS) {
+                landOn = galaxy.spot().orElse(null);
+                landPending = true;
+                unlandedSince = 0;
+            }
+        } else unlandedSince = 0;
         if (space && landPending) landOnSpot(player);
         if (space && frame != null && ++sinceSpot >= SPOT_TICKS) {
             sinceSpot = 0;
@@ -688,6 +701,7 @@ public final class PlanetClient {
         landOn = g.spot().orElse(null);
         landPending = true;
         sinceSpot = 0;
+        unlandedSince = 0;
         stage = null; // loaded at the next tick, from this world's folder
     }
 
@@ -716,6 +730,11 @@ public final class PlanetClient {
         placement = Placement.REPLACE;
     }
 
+    /** Entering a world in GalaxyCraftSpace, Mario not on its planet yet: the player waits for him. */
+    public static boolean waitingToLand() {
+        return galaxy != null && landPending;
+    }
+
     /** The world's galaxy, while one is entered (null otherwise, and in game tests). */
     public static GalaxySave galaxy() {
         return galaxy;
@@ -729,7 +748,7 @@ public final class PlanetClient {
                 if (p.active() && indexOf(p) == landOn.planet()) on = p;
         Vector3d dir = on != null ? new Vector3d(landOn.dx(), landOn.dy(), landOn.dz()) : new Vector3d(0, 1, 0);
         if (on == null) on = planets().stream().filter(PlanetSession::active).findFirst().orElse(null);
-        if (on == null) return; // the home planet is still being made
+        if (on == null || on.queued() > 0) return; // the planet still being made, or on its way to the game
         Vector3d at = on.teleportToward(dir);
         if (at == null) return;
         focus = on;

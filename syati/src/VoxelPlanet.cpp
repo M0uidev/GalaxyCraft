@@ -22,6 +22,7 @@ extern "C" void validateCollisionParts__2MRFP14CollisionParts(CollisionParts*);
 extern "C" void invalidateCollisionParts__2MRFP14CollisionParts(CollisionParts*);
 extern "C" void* getCollisionDirector__2MRFv();
 extern "C" long getCurrentPlacementZoneId__2MRFv();
+extern "C" void* getZone__26CollisionCategorizedKeeperFi(void* keeper, int zone);
 extern "C" void setCurrentPlacementZoneId__2MRFl(long);
 extern "C" void* getSceneHeapGDDR3__2MRFv();
 extern "C" void* getSceneHeapNapa__2MRFv();
@@ -272,8 +273,10 @@ u8* Alloc32(u32 size)
 }
 
 // The Map keeper's zone 0, where the planet's collision goes (see GalaxyCraft.cpp for the layout:
-// director +0x14 keepers, keeper +0x20 zones). Null if the stage has none: then no collision,
-// as CollisionParts::init would read through it.
+// director +0x14 keepers, keeper +0x20 zones). The keeper makes its zones the first time one is
+// asked for (getZone), which a stage with no collision of its own (GalaxyCraftSpace) never does:
+// then we ask. False if there is still none: no collision, as CollisionParts::init would read
+// through it.
 bool MainZoneReady()
 {
   const u32 director = reinterpret_cast<u32>(getCollisionDirector__2MRFv());
@@ -283,7 +286,11 @@ bool MainZoneReady()
   if (!keepers)
     return false;
   const u32 keeper = *reinterpret_cast<const u32*>(keepers);
-  return keeper && *reinterpret_cast<const u32*>(keeper + 0x20) != 0;
+  if (!keeper)
+    return false;
+  if (*reinterpret_cast<const u32*>(keeper + 0x20) == 0)
+    getZone__26CollisionCategorizedKeeperFi(reinterpret_cast<void*>(keeper), 0);
+  return *reinterpret_cast<const u32*>(keeper + 0x20) != 0;
 }
 
 void Identity(TPos3f* m, const f32 t[3])
@@ -411,6 +418,8 @@ public:
   {
     if (in.id == 0 || (in.flags & gxc::PLANET_GONE))
     {
+      if (in.id == 0)
+        BootPlanetsDropped();
       for (u32 i = 0; i < MAX_PLANETS; i++)
         if (gPlanets[i].id && (in.id == 0 || gPlanets[i].id == in.id))
           Drop(gPlanets[i]);

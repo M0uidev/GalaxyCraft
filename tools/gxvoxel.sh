@@ -16,7 +16,24 @@
 #   tools/gxvoxel.sh elytra   ElytraProbe instead: elytra from planet to planet, the void, the wind (elytra-*.png)
 #   tools/gxvoxel.sh boot     GalaxyCraft's own boot, no Minecraft: SMG2 reaches GalaxyCraftSpace by
 #                             itself and Mario waits there (tools/gxboot.py; --fresh-nand: no save file)
+#   tools/gxvoxel.sh launch   LauncherProbe: title screen, Create World, the home planet, leave and come
+#                             back (launch-*.png in fabric/build/run/clientGameTest/screenshots)
 set -u
+if [ "${1:-}" = launch ]; then
+  # LauncherProbe: the dev Dolphin boots by itself (no savestate), Minecraft starts at its title.
+  G="python3 tools/gxdev.py"
+  LOG="$HOME/.local/share/galaxycraft-dev/launch-minecraft.log"
+  syati/build.sh > /dev/null 2>&1 || { echo "gxvoxel: FAILED: syati/build.sh" >&2; exit 1; }
+  $G stop > /dev/null
+  GALAXYCRAFT_BOOT=space $G start --speed 1 || { echo "gxvoxel: FAILED: dolphin did not start" >&2; exit 1; }
+  echo "gxvoxel: running LauncherProbe (log: $LOG)"
+  (cd fabric && ./gradlew runClientGameTest -PgalaxycraftLauncher ${GXC_ARGS:-} --console=plain) > "$LOG" 2>&1
+  grep "\[GalaxyCraft launch\]" "$LOG"
+  [ -n "${GXC_KEEP:-}" ] || $G stop > /dev/null
+  grep -q "\[GalaxyCraft launch\] PASS" "$LOG" || { echo "gxvoxel: FAILED: LauncherProbe (see $LOG)" >&2; exit 1; }
+  echo "gxvoxel: PASS"
+  exit 0
+fi
 if [ "${1:-}" = boot ]; then
   shift
   "$(dirname "$0")/../syati/build.sh" > /dev/null 2>&1 || { echo "gxvoxel: FAILED: syati/build.sh" >&2; exit 1; }

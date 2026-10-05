@@ -489,6 +489,23 @@ TEST(boot_space_holds_mario_while_minecraft_is_in_its_menus)
   CHECK(f.bridge.InMenu() && f.mem.GetU32(MBX + 52) == (GXC_MBX_BOOT_SPACE | GXC_MBX_HOLD));
 }
 
+TEST(boot_space_stays_in_the_world_through_a_stall_of_minecraft)
+{
+  Fixture f;
+  f.bridge.SetBootSpace(true);
+  f.shm->SetU32(offsetof(GxcHeader, mod_flags), GXC_MOD_IN_WORLD);
+  f.ModReports(1, {10, 20, 30});
+  f.Tick();
+  CHECK(!f.bridge.InMenu());
+  f.now += 3000;  // Minecraft stalls 3 s (a planet being made): still in its world
+  f.Tick();
+  CHECK(!f.bridge.InMenu() && f.bridge.MinecraftMode());
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_HOLD) == 0);
+  f.now += HostBridge::IN_WORLD_TIMEOUT_MS;  // gone: closed or crashed
+  f.Tick();
+  CHECK(f.bridge.InMenu());
+}
+
 TEST(without_boot_space_there_is_no_menu)
 {
   Fixture f;

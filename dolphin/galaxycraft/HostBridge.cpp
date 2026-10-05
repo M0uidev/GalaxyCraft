@@ -186,7 +186,7 @@ void HostBridge::Tick(GuestMemory& mem)
 
   {
     const u64 hb = m_shm.GetU64(offsetof(GxcHeader, mod_heartbeat_ms));
-    m_in_world = hb != 0 && now - hb < GXC_HEARTBEAT_TIMEOUT_MS &&
+    m_in_world = hb != 0 && now - hb < IN_WORLD_TIMEOUT_MS &&
                  (m_shm.GetU32(offsetof(GxcHeader, mod_flags)) & GXC_MOD_IN_WORLD) != 0;
   }
   if (m_boot_space)
