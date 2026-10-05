@@ -78,4 +78,38 @@ class PlanetLayoutTest {
         double wall = (PlanetLayout.ALONG_MAX + 1000) * U;
         assertNull(PlanetLayout.placeAlong(List.of(new PlanetLayout.Sphere(huge, wall)), G, EYE, new Vector3d(1, 0, 0), U));
     }
+
+    static List<PlanetLayout.Sphere> line(int n) {
+        List<PlanetLayout.Sphere> out = new ArrayList<>();
+        for (int i = 0; i < n; i++) out.add(new PlanetLayout.Sphere(new Vector3d(i * 1000 * 80, 0, 0), 100 * 80));
+        return out;
+    }
+
+    @Test void theEightNearestAreComplete() {
+        List<Integer> r = PlanetLayout.ranked(line(12), new Vector3d(), java.util.Set.of(), 80);
+        assertEquals(List.of(0, 1, 2, 3, 4, 5, 6, 7), r.subList(0, PlanetLayout.NEAR_PLANETS));
+        assertEquals(List.of(8, 9), r.subList(8, 10), "the next two are made ahead");
+    }
+
+    @Test void aCompletePlanetStaysUntilAnotherIsClearlyNearer() {
+        List<PlanetLayout.Sphere> s = new ArrayList<>(line(8));
+        s.add(new PlanetLayout.Sphere(new Vector3d(7000 * 80 - 10 * 80, 0, 0), 100 * 80)); // 10 blocks nearer than 7
+        java.util.Set<Integer> had = java.util.Set.of(0, 1, 2, 3, 4, 5, 6, 7);
+        assertTrue(PlanetLayout.ranked(s, new Vector3d(), had, 80).subList(0, 8).contains(7));
+        s.set(8, new PlanetLayout.Sphere(new Vector3d(7000 * 80 - 70 * 80, 0, 0), 100 * 80)); // 70 nearer
+        List<Integer> r = PlanetLayout.ranked(s, new Vector3d(), had, 80).subList(0, 8);
+        assertTrue(r.contains(8));
+        assertFalse(r.contains(7));
+    }
+
+    @Test void farPlanetsLoseDetailWithDistanceWithSlack() {
+        double r = 100 * 80;
+        assertEquals(12, PlanetLayout.farPatches(r, 500 * 80, 0));   // ~23 degrees
+        assertEquals(6, PlanetLayout.farPatches(r, 4000 * 80, 0));   // ~2.9 degrees
+        assertEquals(3, PlanetLayout.farPatches(r, 9000 * 80, 0));   // ~1.3 degrees
+        double six = r / Math.tan(Math.toRadians(3)); // exactly 6 degrees across
+        assertEquals(12, PlanetLayout.farPatches(r, six * 1.05, 12), "a little smaller keeps 12");
+        assertEquals(6, PlanetLayout.farPatches(r, six * 0.95, 6), "a little bigger keeps 6");
+        assertEquals(12, PlanetLayout.farPatches(r, six * 0.7, 6));
+    }
 }
