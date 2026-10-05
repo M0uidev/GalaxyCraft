@@ -169,6 +169,11 @@ WordPatch gCameraStickPatches[] = {
     {0x803a20ac, 0xFC20F890, 0xC0220F94},
 };
 
+// Mario::doExtraServices kills him (MarioActor::forceKill, 0x803bb060) once he is too far along his
+// gravity below his last safe point: fallen into the abyss. Seated by the mod and carried over the
+// void (the elytra between planets) he is far from it without falling; the call is skipped then.
+WordPatch gAbyssKillPatch = {0x80387f64, 0x480330FD, 0x60000000};
+
 void SetWordPatch(WordPatch& p, bool on)
 {
   if (on == p.on)
@@ -479,8 +484,10 @@ void MarioMovement(void* self)
   // W walks where Minecraft looks (see gCameraStickPatches); counts from his next movement.
   for (u32 i = 0; i < sizeof(gCameraStickPatches) / sizeof(gCameraStickPatches[0]); i++)
     SetWordPatch(gCameraStickPatches[i], gFollowing && !gDemo && !GalaxyView());
+  SetWordPatch(gAbyssKillPatch, EntityDrawSafeFromAbyss());
   // Steve (Mario's model) is hidden only in first person; cutscenes always show him.
-  gHidden = !gxc::MarioVisible(gFollowing, gDemo, (gOut.mbx.host_flags & GXC_MBX_THIRD_PERSON) != 0);
+  gHidden = !gxc::MarioVisible(gFollowing, gDemo, (gOut.mbx.host_flags & GXC_MBX_THIRD_PERSON) != 0) &&
+            !EntityDrawFlying();
   // What the player holds in Minecraft, in Steve's hand while the mod plays him.
   HeldItemFrame(static_cast<const LiveActor*>(self), !gHidden && gFollowing);
   gOut.dbg.held_kind = HeldItemKind();

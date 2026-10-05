@@ -16,16 +16,16 @@ class CosmicWindTest {
             new GravityBody.Sphere(v(1000, 0, 0), 50));
 
     @Test void stillInsideAFieldAndJustPastIt() {
-        assertEquals(0, CosmicWind.push(v(0, 50, 0), v(0, 3, 0), PLANETS).length());
-        assertEquals(0, CosmicWind.push(v(0, 100 + CosmicWind.FREE, 0), v(0, 3, 0), PLANETS).length());
+        assertEquals(0, CosmicWind.push(false, v(0, 50, 0), v(0, 3, 0), PLANETS).length());
+        assertEquals(0, CosmicWind.push(false, v(0, 100 + CosmicWind.FREE, 0), v(0, 3, 0), PLANETS).length());
     }
 
     @Test void noPlanetsNoWind() {
-        assertEquals(0, CosmicWind.push(v(0, 1e6, 0), v(0, 1, 0), List.of()).length());
+        assertEquals(0, CosmicWind.push(false, v(0, 1e6, 0), v(0, 1, 0), List.of()).length());
     }
 
     @Test void pullsTowardTheNearestPlanet() {
-        Vector3d dv = CosmicWind.push(v(1000, 400, 0), new Vector3d(), PLANETS);
+        Vector3d dv = CosmicWind.push(false, v(1000, 400, 0), new Vector3d(), PLANETS);
         assertTrue(dv.length() > 0);
         assertEquals(-1, dv.normalize().y, 1e-9, "toward the planet at x = 1000, straight down");
     }
@@ -33,7 +33,7 @@ class CosmicWindTest {
     @Test void growsSmoothlyAndCaps() {
         double last = 0;
         for (double past = CosmicWind.FREE; past <= CosmicWind.FREE + 2 * CosmicWind.RAMP; past += 10) {
-            double s = CosmicWind.push(v(0, 100 + past, 0), new Vector3d(), PLANETS).length();
+            double s = CosmicWind.push(false, v(0, 100 + past, 0), new Vector3d(), PLANETS).length();
             assertTrue(s >= last - 1e-12, "never weaker farther out: " + past);
             assertTrue(s <= CosmicWind.PULL + 1e-12);
             last = s;
@@ -43,11 +43,11 @@ class CosmicWindTest {
 
     @Test void slowsGoingOutButNeverPushesOut() {
         Vector3d far = v(0, 100 + CosmicWind.FREE + CosmicWind.RAMP, 0);
-        Vector3d out = CosmicWind.push(far, v(0, 2, 0), PLANETS);
+        Vector3d out = CosmicWind.push(false, far, v(0, 2, 0), PLANETS);
         assertEquals(-(CosmicWind.PULL + 2 * CosmicWind.DRAG), out.y, 1e-9);
-        Vector3d in = CosmicWind.push(far, v(0, -2, 0), PLANETS);
+        Vector3d in = CosmicWind.push(false, far, v(0, -0.5, 0), PLANETS);
         assertEquals(-CosmicWind.PULL, in.y, 1e-9, "coming back: only the pull");
-        Vector3d side = CosmicWind.push(far, v(5, 0, 0), PLANETS);
+        Vector3d side = CosmicWind.push(false, far, v(5, 0, 0), PLANETS);
         assertEquals(0, side.x, 1e-9, "sideways speed is left alone");
     }
 
@@ -62,7 +62,22 @@ class CosmicWindTest {
                 return Math.abs(p.y) - 10;
             }
         };
-        assertEquals(0, CosmicWind.push(v(0, 150, 0), new Vector3d(), List.of(slab)).length());
-        assertTrue(CosmicWind.push(v(0, 500, 0), new Vector3d(), List.of(slab)).y < 0);
+        assertEquals(0, CosmicWind.push(false, v(0, 150, 0), new Vector3d(), List.of(slab)).length());
+        assertTrue(CosmicWind.push(false, v(0, 500, 0), new Vector3d(), List.of(slab)).y < 0);
+    }
+
+    @Test void strandedDriftsBackFromAnywhereOutside() {
+        // No elytra: even in the calm, a gentle pull home; never inside a field.
+        Vector3d dv = CosmicWind.push(true, v(0, 150, 0), new Vector3d(), PLANETS);
+        assertEquals(-CosmicWind.STRANDED_PULL, dv.y, 1e-12);
+        assertEquals(0, CosmicWind.push(true, v(0, 50, 0), new Vector3d(), PLANETS).length());
+        Vector3d far = CosmicWind.push(true, v(0, 100 + CosmicWind.FREE + CosmicWind.RAMP, 0), new Vector3d(), PLANETS);
+        assertEquals(-CosmicWind.PULL, far.y, 1e-12, "the wind is the stronger far out");
+    }
+
+    @Test void bringsBackNoFasterThanMaxIn() {
+        Vector3d far = v(0, 100 + CosmicWind.FREE + CosmicWind.RAMP, 0);
+        assertEquals(0, CosmicWind.push(false, far, v(0, -CosmicWind.MAX_IN, 0), PLANETS).length(), 1e-12);
+        assertEquals(-0.01, CosmicWind.push(false, far, v(0, -(CosmicWind.MAX_IN - 0.01), 0), PLANETS).y, 1e-9);
     }
 }

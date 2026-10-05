@@ -206,7 +206,9 @@ public final class ShadowWorld {
 
     /** A projectile the player launched (an arrow, a snowball, a trident) while Mario is on the planet: it flies from him. */
     public static boolean catchProjectile(ServerLevel level, net.minecraft.world.entity.projectile.Projectile p) {
-        if (isShadow(level) || !catchThrown || !(p.getOwner() instanceof ServerPlayer)) return false;
+        if (isShadow(level) || !catchThrown || !(p.getOwner() instanceof ServerPlayer owner)) return false;
+        // A rocket boosting the player's elytra pushes the player, where it is: not a shot from Mario.
+        if (p instanceof net.minecraft.world.entity.projectile.FireworkRocketEntity && owner.isFallFlying()) return false;
         ServerLevel shadow = level.getServer().getLevel(KEY);
         MarioProxy at = proxy;
         if (shadow == null || at == null || at.isRemoved()) return false;

@@ -203,8 +203,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         float pt = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         // Minecraft movement: Mario goes where the player is, and Steve is drawn there outside first person.
         boolean walker = ownPhysics() && frame != null && mc.player != null && bridge.gameLinked();
+        // The elytra in Mario's modes: Mario himself flies there (in his Launch Star pose), not Steve.
+        boolean marioFlies = walker && !walking() && mc.player.isFallFlying() && view() != View.FIRST;
         PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt))) : null,
-                walker && view() != View.FIRST ? frame : null);
+                walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
         SkinClient.frame(bridge);
         bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
         bridge.pointer().ifPresent(p -> input.applyPointer(Minecraft.getInstance(), p));
@@ -291,7 +293,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
      * Minecraft movement: the player to a galaxy point (a teleport), held there until the ground
      * under it has its collision.
      */
-    static void moveTo(Vector3d gal) {
+    public static void moveTo(Vector3d gal) {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null || frame == null || !walking()) return;
         Vector3d mc = frame.toMc(gal);
@@ -346,6 +348,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             GalaxyCraft.LOG.info("Linked to galaxy at {}", world.get().queryPos());
         } else {
             Flight.beforeFrame(player, world.get(), frame, world.get().follow() && !flying && !ownPhysics());
+            boolean space = ownPhysics() && Flight.space(player, world.get(), frame);
             // Look and velocity are left alone in Minecraft space, so they turn with the frame
             // (parallel transport): walking keeps hugging the planet, as Mario's momentum does.
             if (flying) {
@@ -355,13 +358,15 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             } else if (Flight.active() && !player.onGround()) {
                 // Elytra: up turns to the gravity that pulls, at a flight's pace; in the void
                 // (no gravity) it stays as it was.
-                if (world.get().hasGravity()) frame.update(Flight.upToward(frame, gravity).negate(), pos);
+                if (!space) frame.update(Flight.upToward(frame, gravity).negate(), pos);
             } else if (world.get().follow() && world.get().hasGravity() && !ownPhysics()) {
                 // Nobody walks by Minecraft's physics here, so the frame may lag the gravity a
                 // little: the camera's up turns smoothly instead of snapping at planet edges.
                 Vector3d up = GravityFrame.limitTurn(frame.upGal(), new Vector3d(gravity).normalize().negate(),
                         MAX_TURN_PER_TICK);
                 frame.update(up.negate(), pos);
+            } else if (space) {
+                // Minecraft movement out in space: up stays as it was.
             } else {
                 // Minecraft movement: the player walks by Minecraft's physics, so its up is the
                 // gravity's right away (gravity where Mario is, and Mario goes where it is). On a

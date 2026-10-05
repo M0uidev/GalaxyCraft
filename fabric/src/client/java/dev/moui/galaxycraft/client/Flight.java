@@ -23,10 +23,18 @@ final class Flight {
     private static final int LAND_TICKS = 10;
     /** Mario is on the ground (no take-off yet) if there is ground this far under his feet, blocks. */
     private static final double MARIO_GROUND = 0.6;
+    /**
+     * Space: past every planet's gravity with no ground of the stage this far below (blocks).
+     * Some stages pull everywhere (the prologue); over their ground that pull stays, out in space
+     * it is ignored, as in Mario Galaxy.
+     */
+    private static final double STAGE_GROUND = 64;
 
     private static boolean active;
     private static int landed;
     private static boolean inVoid;
+    /** Came in from space and has not touched ground yet: no fall damage for it (as in Mario Galaxy). */
+    private static boolean fromSpace;
     /** Mario's position last tick (galaxy units): his speed becomes the glide's at take-off. */
     private static Vector3d lastMario;
     private static Vector3d marioStep = new Vector3d();
@@ -41,6 +49,15 @@ final class Flight {
     /** Out of every gravity right now. */
     static boolean inVoid() {
         return inVoid;
+    }
+
+    /** Space where the player is: no gravity, or past every planet's with no stage ground below. */
+    static boolean space(LocalPlayer player, Seqlock.WorldState world, GravityFrame frame) {
+        if (!world.hasGravity()) return true;
+        Vector3d pos = frame.toGal(vec(player.position())).mul(GravityFrame.SCALE);
+        for (GravityBody b : bodies()) if (b.outside(pos) <= 0) return false;
+        Vec3 feet = player.position();
+        return !GalaxyCraft.FIELD.hasGroundBelow(new double[] {feet.x, feet.y, feet.z}, STAGE_GROUND);
     }
 
     /**
@@ -91,7 +108,7 @@ final class Flight {
      * wind far out. Returns true in the void (nothing to settle on there).
      */
     static boolean afterFrame(LocalPlayer player, Seqlock.WorldState world, GravityFrame frame) {
-        boolean voidNow = !world.hasGravity();
+        boolean voidNow = space(player, world, frame);
         if (voidNow) {
             player.setNoGravity(true);
             player.resetFallDistance();
@@ -99,9 +116,12 @@ final class Flight {
             player.setNoGravity(false);
         }
         inVoid = voidNow;
+        if (voidNow) fromSpace = true;
+        else if (player.onGround() || player.isFallFlying()) fromSpace = false;
+        if (fromSpace) player.resetFallDistance();
         Vector3d posBlocks = frame.toGal(vec(player.position())).mul(GravityFrame.SCALE);
         Vector3d velGal = frame.dirToGal(vec(player.getDeltaMovement()));
-        Vector3d dv = CosmicWind.push(posBlocks, velGal, bodies());
+        Vector3d dv = CosmicWind.push(voidNow && !player.isFallFlying(), posBlocks, velGal, bodies());
         if (dv.lengthSquared() > 0) {
             Vector3d mc = frame.dirToMc(dv);
             player.setDeltaMovement(player.getDeltaMovement().add(mc.x, mc.y, mc.z));
@@ -113,6 +133,7 @@ final class Flight {
     static void reset() {
         active = false;
         inVoid = false;
+        fromSpace = false;
         landed = 0;
         lastMario = null;
     }

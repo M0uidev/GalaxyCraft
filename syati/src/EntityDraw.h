@@ -17,6 +17,10 @@ void EntityDrawHurt(const gxc::InboxHurt& hurt);
 void EntityDrawSeat(const gxc::InboxSeat& seat);
 // Right after Mario's own movement each frame: on a seat, he is put back on it.
 void EntityDrawAfterMario();
+// Mario is (or just was) seated by the mod: SMG2's fall-too-far kill is off.
+bool EntityDrawSafeFromAbyss();
+// The player glides (seat riding 2): Mario is shown, in his flight pose.
+bool EntityDrawFlying();
 // Bit 0: Mario sits on something; above: seat records received.
 uint32_t EntityDrawRiding();
 // Once per frame: Mario's actor (MarioActor).

@@ -12,6 +12,7 @@
 #   tools/gxvoxel.sh biomes   BiomeProbe instead: generated planets' biome colors and water (biomes-*.png)
 #   tools/gxvoxel.sh walk     WalkProbe instead: Mario walks where the camera looks, also while it turns
 #   tools/gxvoxel.sh movement MovementProbe instead: Esc's menu, Minecraft's movement, /skin (move-*.png)
+#   tools/gxvoxel.sh elytra   ElytraProbe instead: elytra from planet to planet, the void, the wind (elytra-*.png)
 set -u
 : "${JAVA_HOME:=$(ls -d "$HOME"/.local/opt/jdk-25* 2>/dev/null | head -1)}"
 export JAVA_HOME
@@ -22,6 +23,7 @@ elif [ "${1:-}" = entities ]; then TEST=EntityTest PROP=galaxycraftEntities TAG=
 elif [ "${1:-}" = perf ]; then TEST=PerfProbe PROP=galaxycraftPerf TAG=perf
 elif [ "${1:-}" = walk ]; then TEST=WalkProbe PROP=galaxycraftWalk TAG=walk
 elif [ "${1:-}" = movement ]; then TEST=MovementProbe PROP=galaxycraftMovement TAG=movement
+elif [ "${1:-}" = elytra ]; then TEST=ElytraProbe PROP=galaxycraftElytra TAG=elytra
 elif [ "${1:-}" = lod ]; then TEST=LodProbe PROP=galaxycraftLod TAG=lod
 elif [ "${1:-}" = tp ]; then TEST=TpProbe PROP=galaxycraftTp TAG=tp
 elif [ "${1:-}" = biomes ]; then TEST=BiomeProbe PROP=galaxycraftBiomes TAG=biomes

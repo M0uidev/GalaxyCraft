@@ -40,6 +40,16 @@ f32 gSeat[3];
 u32 gSeatFrames = 0;
 const u32 SEAT_FRAMES = 30;  // half a second: a hitch in Minecraft does not throw him off
 u32 gSeats = 0;  // seat records received, for the dev harness
+// Riding 2: the player glides on elytra and Mario goes with it, shown in the Launch Star's flight
+// pose (SpaceFlyLoop in MarioAnime.arc), facing where he goes.
+bool gSeatFlying = false;
+f32 gSeatLast[3];
+const f32 FLY_TURN_MIN = 2.f;  // units a frame: slower than this, he keeps facing as he was
+const char* const FLY_ANIM = "SpaceFlyLoop";
+// Seated by the mod (a cart, a boat, the elytra) and a while after: carried out over the void, he
+// is not falling, and SMG2's fall-too-far kill must not count it (see EntityDrawSafeFromAbyss).
+u32 gSafeFrames = 0;
+const u32 SAFE_FRAMES = 90;  // after the seat: time to stand somewhere and save a new safe point
 u32 gHurts = 0, gHurtsTaken = 0;  // for the dev harness: blows passed on, and taken by Mario
 
 f32 ReadF32(const u8* p)
@@ -51,6 +61,9 @@ f32 ReadF32(const u8* p)
 }
 
 extern "C" void decLife__10MarioActorFUs(void* self, unsigned short n);
+extern "C" bool isAnimationRun__11MarioModuleCFPCc(const void* self, const char* name);
+// MarioActor::mMario (Mario, a MarioModule).
+const u32 MARIO_OF_ACTOR = 0x584;
 
 class EntityDrawActor : public LiveActor
 {
@@ -295,20 +308,48 @@ void EntityDrawHurt(const gxc::InboxHurt& hurt)
 void EntityDrawSeat(const gxc::InboxSeat& seat)
 {
   for (int k = 0; k < 3; k++)
+  {
+    gSeatLast[k] = gSeat[k];
     gSeat[k] = seat.pos[k];
+  }
   gSeatFrames = seat.riding ? SEAT_FRAMES : 0;
+  gSeatFlying = seat.riding == 2;
   gSeats++;
 }
 
 void EntityDrawAfterMario()
 {
   if (!gSeatFrames)
+  {
+    if (gSafeFrames)
+      gSafeFrames--;
     return;
+  }
   gSeatFrames--;
+  gSafeFrames = SAFE_FRAMES;
   MR::setPlayerPos(TVec3f(gSeat[0], gSeat[1], gSeat[2]));
   TVec3f* v = MR::getPlayerVelocity();
   if (v)
     v->set(0.f, 0.f, 0.f);
+  if (!gSeatFlying || !gMario)
+    return;
+  f32 d[3] = {gSeat[0] - gSeatLast[0], gSeat[1] - gSeatLast[1], gSeat[2] - gSeatLast[2]};
+  const f32 len = gxc::Sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+  if (len > FLY_TURN_MIN)
+    MR::setPlayerFrontVec(TVec3f(d[0] / len, d[1] / len, d[2] / len), 1);
+  const void* mario = *reinterpret_cast<void* const*>(static_cast<u8*>(gMario) + MARIO_OF_ACTOR);
+  if (mario && !isAnimationRun__11MarioModuleCFPCc(mario, FLY_ANIM))
+    MR::startBckPlayer(FLY_ANIM, static_cast<const char*>(0));
+}
+
+bool EntityDrawSafeFromAbyss()
+{
+  return gSafeFrames != 0;
+}
+
+bool EntityDrawFlying()
+{
+  return gSeatFrames != 0 && gSeatFlying;
 }
 
 uint32_t EntityDrawRiding()

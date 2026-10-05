@@ -15,11 +15,19 @@ public final class CosmicWind {
     public static final double RAMP = 100, PULL = 0.08;
     /** Share of the speed away from the body taken off each tick (at full wind). */
     public static final double DRAG = 0.05;
+    /**
+     * Stranded (out of every gravity with no elytra open): a pull home at least this strong
+     * anywhere past a field, or Minecraft's air drag would leave the player floating forever.
+     * Against that drag it settles at about 6 blocks/s.
+     */
+    public static final double STRANDED_PULL = 0.03;
+    /** The wind pulls no faster than this toward home, blocks/tick (20 blocks/s). */
+    public static final double MAX_IN = 1.0;
 
     private CosmicWind() {}
 
     /** The change of velocity this tick for a player at pos moving at vel; zero where it is calm. */
-    public static Vector3d push(Vector3d pos, Vector3d vel, List<? extends GravityBody> bodies) {
+    public static Vector3d push(boolean stranded, Vector3d pos, Vector3d vel, List<? extends GravityBody> bodies) {
         GravityBody nearest = null;
         double past = Double.MAX_VALUE;
         for (GravityBody b : bodies) {
@@ -30,12 +38,13 @@ public final class CosmicWind {
             }
         }
         Vector3d dv = new Vector3d();
-        if (nearest == null || past <= FREE) return dv;
+        if (nearest == null || past <= (stranded ? 0 : FREE)) return dv;
         Vector3d in = new Vector3d(nearest.center()).sub(pos);
         if (in.lengthSquared() < 1e-12) return dv;
         in.normalize();
-        double t = Math.min(1, (past - FREE) / RAMP), s = t * t * (3 - 2 * t);
-        dv.fma(PULL * s, in);
+        double t = Math.max(0, Math.min(1, (past - FREE) / RAMP)), s = t * t * (3 - 2 * t);
+        double pull = Math.max(PULL * s, stranded ? STRANDED_PULL : 0);
+        dv.fma(Math.min(pull, Math.max(0, MAX_IN - vel.dot(in))), in);
         double away = -vel.dot(in);
         if (away > 0) dv.fma(away * DRAG * s, in);
         return dv;

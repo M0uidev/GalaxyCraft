@@ -376,7 +376,10 @@ public final class PlanetClient {
             }
             generating = null;
         }
-        if (frame != null && world.hasGravity() && (spawnRadius > 0 || spawnBlueprint != null || generated != null || (autoSpawn && world.follow()))) {
+        // A planet asked for may be made out in space too (no gravity there); the automatic one waits
+        // for real gravity (SMG2's menus and title screen have none).
+        boolean asked = spawnRadius > 0 || spawnBlueprint != null || generated != null;
+        if (frame != null && (world.hasGravity() ? asked || autoSpawn && world.follow() : asked && GalaxyCraftClient.inVoid())) {
             VoxelPlanet p = generated != null ? generated : spawnBlueprint != null ? spawnBlueprint.build(blocks)
                     : VoxelPlanet.ofRadius(spawnRadius > 0 ? spawnRadius : autoRadius, blocks);
             spawnPlanet(p, world.queryPos(), frame.upGal(), player);
@@ -493,9 +496,11 @@ public final class PlanetClient {
     /**
      * Render thread, once per emulated frame: the planet's entities to the game, and Mario's seat
      * if he rides. Minecraft movement: walker is where the player's feet are (galaxy), Mario's seat
-     * every frame; drawSelf, if set, the frame the player is drawn in as one of the entities.
+     * every frame; drawSelf, if set, the frame the player is drawn in as one of the entities;
+     * marioFlies: Mario is shown in his flight pose there (the elytra, in Mario's modes).
      */
-    public static void frame(BridgeClient bridge, float partialTick, Vector3d walker, GravityFrame drawSelf) {
+    public static void frame(BridgeClient bridge, float partialTick, Vector3d walker, GravityFrame drawSelf,
+            boolean marioFlies) {
         bridge.world().ifPresent(w -> entities.frame(bridge, w.sceneId(), w.queryPos(), partialTick, drawSelf));
         ShadowWorld.Seat s = ShadowWorld.seat();
         PlanetSession f = focus;
@@ -504,7 +509,7 @@ public final class PlanetClient {
         if (on || riding) {
             Vector3d at = walker != null ? walker : onSeat ? f.galOf(s.pos()) : new Vector3d();
             if (bridge.send(Layout.MSG_SEAT, java.nio.ByteBuffer.allocate(16).putFloat((float) at.x).putFloat((float) at.y)
-                    .putFloat((float) at.z).putInt(on ? 1 : 0).array()))
+                    .putFloat((float) at.z).putInt(!on ? 0 : walker != null && marioFlies ? 2 : 1).array()))
                 riding = on;
         }
     }
