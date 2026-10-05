@@ -80,8 +80,50 @@ public final class MemoryProbe implements FabricClientGameTest {
             check(end[17] < start[17] + 2_000_000, String.format("the module's memory comes back: %.2f MB with no planet, %.2f at the end",
                     start[17] / 1e6, end[17] / 1e6));
             check(end[6] == 0, "no allocation failed (" + end[6] + ")");
+            replaceAndCreate(ctx);
             log(failed ? "FAIL" : "PASS");
         }
+    }
+
+    /** The editor's Replace (where it is, the player back on it) and Create (where the player looks). */
+    private void replaceAndCreate(ClientGameTestContext ctx) {
+        ctx.runOnClient(mc -> PlanetClient.requestSpawn(PlanetBlueprint.standard("home", 48)));
+        settle(ctx, ctx.computeOnClient(mc -> PlanetClient.focus()));
+        ctx.runOnClient(mc -> PlanetClient.teleport());
+        ctx.waitTicks(300);
+        PlanetSession home = ctx.computeOnClient(mc -> PlanetClient.standingOn());
+        check(home != null, "standing on the planet: Replace is offered");
+        if (home == null) return;
+        org.joml.Vector3d center = ctx.computeOnClient(mc -> new org.joml.Vector3d(home.center()));
+        org.joml.Vector3d dir = ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyPos().orElseThrow().sub(center, new org.joml.Vector3d()));
+        check(ctx.computeOnClient(mc -> PlanetClient.requestReplaceHere(PlanetBlueprint.standard("smaller", 40))), "Replace asked");
+        ctx.waitTicks(5);
+        settle(ctx, home);
+        ctx.waitTicks(300);
+        org.joml.Vector3d now = ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyPos().orElseThrow().sub(home.center(), new org.joml.Vector3d()));
+        double off = home.center().distance(center) / units(1), height = now.length() / units(1),
+                turn = Math.toDegrees(now.angle(dir));
+        log(String.format("replaced: center moved %.2f blocks; the player %.1f blocks from it (surface 40), %.1f degrees from before",
+                off, height, turn));
+        check(off < 0.01, "Replace keeps the planet where it was");
+        check(Math.abs(height - 40) < 3, "the player stands on the new planet");
+        check(turn < 10, "where the player was on it");
+
+        int before = ctx.computeOnClient(mc -> PlanetClient.planets().size());
+        org.joml.Vector3d up = ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyUp().orElseThrow());
+        org.joml.Vector3d feet = ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyPos().orElseThrow());
+        ctx.runOnClient(mc -> mc.player.setXRot(-90)); // straight up
+        check(ctx.computeOnClient(mc -> PlanetClient.requestCreateAhead(PlanetBlueprint.standard("ahead", 32))), "Create asked");
+        waitUntil(ctx, 200, () -> ctx.computeOnClient(mc -> PlanetClient.planets().size() > before));
+        PlanetSession made = ctx.computeOnClient(mc -> PlanetClient.planets().get(PlanetClient.planets().size() - 1));
+        org.joml.Vector3d to = ctx.computeOnClient(mc -> made.center().sub(feet, new org.joml.Vector3d()));
+        log(String.format("created: %.0f blocks away, %.1f degrees off the look", to.length() / units(1), Math.toDegrees(to.angle(up))));
+        check(ctx.computeOnClient(mc -> PlanetClient.planets().size() > before && home.active()), "Create adds one, the others kept");
+        check(Math.toDegrees(to.angle(up)) < 3, "where the player looks");
+    }
+
+    private static double units(double blocks) {
+        return blocks / dev.moui.galaxycraft.gravity.GravityFrame.SCALE;
     }
 
     private static PlanetBlueprint generated(String name, int radius) {

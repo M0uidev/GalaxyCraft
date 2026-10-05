@@ -49,6 +49,24 @@ public final class PlanetLayout {
         return null;
     }
 
+    /** placeAlong walks the look this far at most (blocks), in steps of ALONG_STEP. */
+    public static final double ALONG_MAX = 4000, ALONG_STEP = 4;
+
+    /**
+     * The center for a new planet whose gravity reaches gravity (units), where the player looks:
+     * the first point along look from eye (galaxy units) whose gravity keeps GAP blocks from every
+     * other planet's and from the eye. Looking down through the planet underfoot, it is past that
+     * one, below it. Null if there is none within ALONG_MAX blocks.
+     */
+    public static Vector3d placeAlong(List<Sphere> others, double gravity, Vector3d eye, Vector3d look, double unitsPerBlock) {
+        Vector3d dir = new Vector3d(look).normalize();
+        for (double d = gravity + GAP * unitsPerBlock; d <= ALONG_MAX * unitsPerBlock; d += ALONG_STEP * unitsPerBlock) {
+            Vector3d c = new Vector3d(dir).mul(d).add(eye);
+            if (free(others, c, gravity, unitsPerBlock)) return c;
+        }
+        return null;
+    }
+
     private static boolean free(List<Sphere> others, Vector3d c, double gravity, double unitsPerBlock) {
         for (Sphere o : others)
             if (o.center().distance(c) < o.gravity() + gravity + GAP * unitsPerBlock) return false;

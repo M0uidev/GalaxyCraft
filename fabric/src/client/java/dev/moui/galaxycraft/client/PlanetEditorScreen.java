@@ -253,7 +253,7 @@ public final class PlanetEditorScreen extends Screen {
         if (mode == PlanetBlueprint.Mode.LAYERS) layerWidgets(x, right);
         else generatedWidgets(x, right);
         // Actions.
-        int bw = Math.min(70, (right - x - 16) / 5), by = height - 26;
+        int bw = Math.min(70, (right - x - 20) / 6), by = height - 26;
         addRenderableWidget(Button.builder(Component.literal("New"), b -> {
             // A new one of the same kind: generated ones get a seed of their own.
             PlanetBlueprint.Mode kind = mode;
@@ -265,8 +265,15 @@ public final class PlanetEditorScreen extends Screen {
         }).bounds(x, by, bw, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Save"), b -> save()).bounds(x + (bw + 4), by, bw, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Delete"), b -> delete()).bounds(x + 2 * (bw + 4), by, bw, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Spawn"), b -> spawn()).bounds(x + 3 * (bw + 4), by, bw, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose()).bounds(x + 4 * (bw + 4), by, bw, 20).build());
+        Button replace = addRenderableWidget(Button.builder(Component.literal("Replace"), b -> replace())
+                .bounds(x + 3 * (bw + 4), by, bw, 20)
+                .tooltip(Tooltip.create(Component.literal("Remakes the planet you stand on as this one, where it is, and puts you back on it")))
+                .build());
+        replace.active = PlanetClient.standingOn() != null;
+        addRenderableWidget(Button.builder(Component.literal("Create"), b -> create()).bounds(x + 4 * (bw + 4), by, bw, 20)
+                .tooltip(Tooltip.create(Component.literal("Adds this planet where you look (past any planet in the way), the others kept")))
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose()).bounds(x + 5 * (bw + 4), by, bw, 20).build());
     }
 
     private void layerWidgets(int x, int right) {
@@ -449,10 +456,23 @@ public final class PlanetEditorScreen extends Screen {
         }
     }
 
-    private void spawn() {
+    private void replace() {
         PlanetBlueprint b = blueprint();
         if (b == null) return;
-        PlanetClient.requestSpawn(b);
+        if (!PlanetClient.requestReplaceHere(b)) {
+            say("Stand on a planet to replace it", RED);
+            return;
+        }
+        onClose();
+    }
+
+    private void create() {
+        PlanetBlueprint b = blueprint();
+        if (b == null) return;
+        if (!PlanetClient.requestCreateAhead(b)) {
+            say("Not in a galaxy yet", RED);
+            return;
+        }
         onClose();
     }
 
@@ -467,7 +487,9 @@ public final class PlanetEditorScreen extends Screen {
                 edit(b);
                 say("Opened " + b.name(), WHITE);
                 if (load) {
-                    spawn();
+                    // Into this stage: instead of the planet stood on, or else where the player looks.
+                    if (!PlanetClient.requestReplaceHere(b)) PlanetClient.requestCreateAhead(b);
+                    onClose();
                     return;
                 }
             }

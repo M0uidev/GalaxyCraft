@@ -39,4 +39,43 @@ class PlanetLayoutTest {
         assertTrue(PlanetLayout.detail(true, false, g + 100 * 80, g, 80));
         assertFalse(PlanetLayout.detail(true, false, g + 130 * 80, g, 80));
     }
+
+    // ---- placeAlong: where the player looks ----
+
+    static final double U = 80, G = PlanetSession.gravityRadius(32) * U;
+    static final Vector3d EYE = new Vector3d(0, 0, 0);
+
+    @Test void inEmptySpaceJustOutOfTheNewGravityAlongTheLook() {
+        Vector3d c = PlanetLayout.placeAlong(List.of(), G, EYE, new Vector3d(1, 0, 0), U);
+        assertNotNull(c);
+        assertEquals(0, c.y, 1e-9);
+        assertEquals(0, c.z, 1e-9);
+        assertTrue(c.x >= G + PlanetLayout.GAP * U - 1e-6, "the player is not in it: " + c.x);
+        assertTrue(c.x <= G + PlanetLayout.GAP * U + PlanetLayout.ALONG_STEP * U + 1e-6, "but just out: " + c.x);
+    }
+
+    @Test void pastAnotherPlanetInTheWay() {
+        Vector3d other = new Vector3d(3 * G, 0, 0);
+        Vector3d c = PlanetLayout.placeAlong(List.of(new PlanetLayout.Sphere(other, G)), G, EYE, new Vector3d(1, 0, 0), U);
+        assertNotNull(c);
+        assertTrue(c.distance(other) >= 2 * G + PlanetLayout.GAP * U - 1e-6, "its gravity apart from the other's");
+        assertTrue(c.x > other.x, "beyond it, along the look");
+    }
+
+    @Test void lookingDownThroughThePlanetUnderfootItGoesBelowIt() {
+        // Standing on a planet (its center 40 blocks under the eye), looking straight down.
+        Vector3d home = new Vector3d(0, -40 * U, 0);
+        double homeG = PlanetSession.gravityRadius(40) * U;
+        Vector3d c = PlanetLayout.placeAlong(List.of(new PlanetLayout.Sphere(home, homeG)), G, EYE, new Vector3d(0, -1, 0), U);
+        assertNotNull(c);
+        assertTrue(c.y < home.y - homeG, "under the planet: " + c.y / U);
+        assertTrue(c.distance(home) >= homeG + G + PlanetLayout.GAP * U - 1e-6);
+    }
+
+    @Test void nothingIfNoRoomWithinReach() {
+        // A wall of gravity filling the whole reach.
+        Vector3d huge = new Vector3d(0, 0, 0);
+        double wall = (PlanetLayout.ALONG_MAX + 1000) * U;
+        assertNull(PlanetLayout.placeAlong(List.of(new PlanetLayout.Sphere(huge, wall)), G, EYE, new Vector3d(1, 0, 0), U));
+    }
 }

@@ -81,7 +81,22 @@ public final class PlanetClient {
     private static final java.util.List<Extra> extras = new java.util.ArrayList<>();
     /** The planet nearest Mario (session when there is none). */
     private static PlanetSession focus = session;
-    private static boolean spawnAdds; // the next spawn adds a planet instead of replacing the one in focus
+    /** Where the next planet goes up. */
+    private enum Placement {
+        /** Replacing the one in focus, above the player (/galaxycraft planet spawn). */
+        REPLACE,
+        /** Another one, in PlanetLayout's rings (/galaxycraft planet add). */
+        ADD,
+        /** Replacing the planet the player stands on, where it is; the player lands on the new one. */
+        REPLACE_HERE,
+        /** Another one where the player looked (PlanetLayout.placeAlong). */
+        CREATE_AHEAD
+    }
+
+    private static Placement placement = Placement.REPLACE;
+    private static PlanetSession replaceTarget; // REPLACE_HERE: the planet stood on, and the player's
+    private static Vector3d replaceDir;         // direction from its center (galaxy axes)
+    private static Vector3d aheadEye, aheadLook; // CREATE_AHEAD: the player's eye and look then (galaxy)
     private static final PlanetStore store = new PlanetStore(planetDir());
     private static final ExecutorService saver = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "GalaxyCraft planet saver");
@@ -238,25 +253,59 @@ public final class PlanetClient {
     /** /galaxycraft planet spawn [radius]: next tick, above the player, replacing the one in focus. */
     public static void requestSpawn(int radius) {
         spawnRadius = radius;
-        spawnAdds = false;
+        placement = Placement.REPLACE;
     }
 
     /** A planet built from that blueprint, next tick, as {@link #requestSpawn(int)} puts one. */
     public static void requestSpawn(PlanetBlueprint blueprint) {
         spawnBlueprint = blueprint;
-        spawnAdds = false;
+        placement = Placement.REPLACE;
     }
 
     /** /galaxycraft planet add [radius]: next tick, another planet (PlanetLayout.place), the others kept. */
     public static void requestAdd(int radius) {
         spawnRadius = radius;
-        spawnAdds = true;
+        placement = Placement.ADD;
     }
 
     /** Another planet built from that blueprint, as {@link #requestAdd(int)} puts one. */
     public static void requestAdd(PlanetBlueprint blueprint) {
         spawnBlueprint = blueprint;
-        spawnAdds = true;
+        placement = Placement.ADD;
+    }
+
+    /** The planet the player stands on (in its gravity), if any. */
+    public static PlanetSession standingOn() {
+        Vector3d feet = GalaxyCraftClient.galaxyPos().orElse(null);
+        if (feet == null) return null;
+        for (PlanetSession s : planets())
+            if (s.active() && s.center().distance(feet) <= s.gravityUnits()) return s;
+        return null;
+    }
+
+    /** The editor's Replace: that blueprint instead of the planet stood on, where it is; the player lands on it. */
+    public static boolean requestReplaceHere(PlanetBlueprint blueprint) {
+        PlanetSession on = standingOn();
+        Vector3d feet = GalaxyCraftClient.galaxyPos().orElse(null);
+        if (on == null || feet == null) return false;
+        replaceTarget = on;
+        replaceDir = new Vector3d(feet).sub(on.center());
+        spawnBlueprint = blueprint;
+        placement = Placement.REPLACE_HERE;
+        return true;
+    }
+
+    /** The editor's Create: that blueprint as another planet, where the player looks now. */
+    public static boolean requestCreateAhead(PlanetBlueprint blueprint) {
+        LocalPlayer player = Minecraft.getInstance().player;
+        Vector3d feet = GalaxyCraftClient.galaxyPos().orElse(null);
+        Vector3d up = GalaxyCraftClient.galaxyUp().orElse(null);
+        if (player == null || feet == null || up == null) return false;
+        aheadEye = new Vector3d(up).mul(player.getEyeHeight() / GravityFrame.SCALE).add(feet);
+        aheadLook = GalaxyCraftClient.galaxyLook(player.getYRot(), player.getXRot()).orElse(up);
+        spawnBlueprint = blueprint;
+        placement = Placement.CREATE_AHEAD;
+        return true;
     }
 
     /** Mario onto the planet in focus. */
@@ -305,12 +354,20 @@ public final class PlanetClient {
     }
 
     /**
-     * Puts p up: replacing the planet in focus (or the first slot), or with spawnAdds as another
-     * one, where PlanetLayout finds room for its gravity among the others'. It is then in focus.
+     * Puts p up as placement says: replacing the planet in focus (or the first slot) above the
+     * player, or the one stood on where it is; or as another one, in PlanetLayout's rings or where
+     * the player looked, with room for its gravity among the others'. It is then in focus.
      */
     private static void spawnPlanet(VoxelPlanet p, Vector3d feet, Vector3d up, LocalPlayer player) {
         java.util.List<PlanetSession> all = planets();
-        PlanetSession target = !spawnAdds || !session.active() ? (focus.active() ? focus : session) : null;
+        Placement how = placement;
+        placement = Placement.REPLACE;
+        if (how == Placement.REPLACE_HERE && (replaceTarget == null || !replaceTarget.active())) how = Placement.REPLACE;
+        PlanetSession target = switch (how) {
+            case REPLACE -> focus.active() ? focus : session;
+            case REPLACE_HERE -> replaceTarget;
+            case ADD, CREATE_AHEAD -> session.active() ? null : session;
+        };
         if (target == null && all.stream().filter(PlanetSession::active).count() >= PlanetLayout.MAX_PLANETS) {
             say(player, "A stage holds " + PlanetLayout.MAX_PLANETS + " planets at most");
             return;
@@ -318,9 +375,14 @@ public final class PlanetClient {
         java.util.List<PlanetLayout.Sphere> others = new java.util.ArrayList<>();
         for (PlanetSession s : all) if (s.active() && s != target) others.add(new PlanetLayout.Sphere(s.center(), s.gravityUnits()));
         double units = 1 / GravityFrame.SCALE;
-        Vector3d c = PlanetLayout.place(others, PlanetSession.gravityRadius(p.surface()) * units, feet, up, units);
+        double gravity = PlanetSession.gravityRadius(p.surface()) * units;
+        Vector3d c = switch (how) {
+            case REPLACE_HERE -> new Vector3d(target.center());
+            case CREATE_AHEAD -> PlanetLayout.placeAlong(others, gravity, aheadEye, aheadLook, units);
+            default -> PlanetLayout.place(others, gravity, feet, up, units);
+        };
         if (c == null) {
-            say(player, "No room for another planet here");
+            say(player, how == Placement.CREATE_AHEAD ? "No room for a planet where you look" : "No room for another planet here");
             return;
         }
         if (target == null) {
@@ -330,6 +392,11 @@ public final class PlanetClient {
         }
         target.spawnAt(p, c);
         focus = target;
+        if (how == Placement.REPLACE_HERE) {
+            // Back where the player was, on the new ground.
+            Vector3d at = target.teleportToward(replaceDir);
+            if (at != null && GalaxyCraftClient.walking()) GalaxyCraftClient.moveTo(target.galOf(at));
+        }
     }
 
     /** The lowest file index no planet of the stage has. */
