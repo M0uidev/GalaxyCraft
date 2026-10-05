@@ -22,6 +22,8 @@ public final class GravityFrame {
     private static final double MIN_ANGLE = Math.toRadians(0.05);
     private static final double REBASE_MIN_Y = 36, REBASE_MAX_Y = 164, REBASE_Y = 100;
     private static final Vector3d UP = new Vector3d(0, 1, 0);
+    /** Flying into another body's gravity, up turns this much a tick at most: a flip in 1.5 s. */
+    public static final double FLIGHT_TURN_PER_TICK = Math.PI / 30;
 
     /** An alignGrid: the turn about Minecraft's Y (radians) and the shift it made, Minecraft space. */
     public record Align(double yaw, Vector3d shift) {}

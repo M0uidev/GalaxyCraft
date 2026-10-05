@@ -142,4 +142,22 @@ class GravityFrameTest {
         assertEquals(80, Math.toDegrees(step.angle(to)), 1e-6);
         assertTrue(GravityFrame.limitTurn(from, new Vector3d(0.1, 1, 0).normalize(), 1).distance(new Vector3d(0.1, 1, 0).normalize()) < 1e-12);
     }
+
+    static int stepsToTurn(Vector3d from, Vector3d to) {
+        Vector3d up = new Vector3d(from);
+        for (int n = 1; n < 1000; n++) {
+            up = GravityFrame.limitTurn(up, to, GravityFrame.FLIGHT_TURN_PER_TICK);
+            assertTrue(Double.isFinite(up.x + up.y + up.z), "no NaN at step " + n);
+            assertEquals(1, up.length(), 1e-9);
+            if (up.distance(to) < 1e-9) return n;
+        }
+        return -1;
+    }
+
+    @Test void flightTurnFlipsOverInAboutThirtyTicks() {
+        int flip = stepsToTurn(v(0, 1, 0), v(0, -1, 0));
+        assertTrue(flip >= 30 && flip <= 31, "flip took " + flip);
+        int quarter = stepsToTurn(v(0, 1, 0), v(1, 0, 0));
+        assertTrue(quarter >= 15 && quarter <= 16, "a quarter took " + quarter);
+    }
 }
