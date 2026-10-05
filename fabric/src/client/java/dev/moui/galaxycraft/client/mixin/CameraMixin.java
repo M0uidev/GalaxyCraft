@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -37,6 +38,11 @@ abstract class CameraMixin {
                 Mth.lerp(partialTicks, entity.yo, entity.getY()), Mth.lerp(partialTicks, entity.zo, entity.getZ()));
         GalaxyCraftClient.onCameraAligned(new Vector3d(position.x, position.y, position.z), vec(forwards), vec(up), feet,
                 partialTicks);
+    }
+
+    @ModifyVariable(method = "getMaxZoom", at = @At("HEAD"), argsOnly = true)
+    private float galaxycraft$distance(float cameraDist) {
+        return GalaxyCraftClient.exportingOverlay() ? GalaxyCraftClient.thirdPersonDistance(cameraDist) : cameraDist;
     }
 
     @Inject(method = "getMaxZoom", at = @At("RETURN"), cancellable = true)

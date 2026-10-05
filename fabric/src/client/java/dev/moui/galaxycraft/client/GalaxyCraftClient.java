@@ -14,6 +14,7 @@ import dev.moui.galaxycraft.gravity.LookMath;
 import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Seqlock;
 import dev.moui.galaxycraft.settings.Movement;
+import dev.moui.galaxycraft.view.CameraDistance;
 import dev.moui.galaxycraft.view.CameraMath;
 import dev.moui.galaxycraft.view.View;
 import dev.moui.galaxycraft.voxel.PlanetSession;
@@ -261,6 +262,26 @@ public final class GalaxyCraftClient implements ClientModInitializer {
      */
     public static boolean ownPhysics() {
         return walking() || Flight.active();
+    }
+
+    /** Third person's eased distance (blocks, before the player's scale) and when it was last eased. */
+    private static double camDistance = Double.NaN;
+    private static long camDistanceNanos;
+
+    /**
+     * Third person: the distance Minecraft asks for (4 blocks times the player's scale) becomes the
+     * one chosen for where the player is (walking, gliding, in space), eased between them.
+     */
+    public static float thirdPersonDistance(float vanilla) {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null || frame == null) return vanilla;
+        int target = Flight.inVoid() ? GalaxyOptions.CAMERA_DISTANCE_SPACE.get()
+                : player.isFallFlying() ? GalaxyOptions.CAMERA_DISTANCE_GLIDING.get() : GalaxyOptions.CAMERA_DISTANCE.get();
+        long now = System.nanoTime();
+        camDistance = Double.isNaN(camDistance) ? target
+                : CameraDistance.approach(camDistance, target, Math.min(1, (now - camDistanceNanos) / 1e9));
+        camDistanceNanos = now;
+        return (float) (camDistance * vanilla / 4);
     }
 
     /** Out of every planet's gravity (tests). */
