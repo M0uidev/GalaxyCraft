@@ -71,7 +71,9 @@ struct FarPart
 // The planets of the scene, by the mod's id (0: an unused entry). Each has one slot per chunk
 // (GxcPlanet.chunk_count, 0 if it comes only as its far view) and the slots that have something to
 // draw, so drawing does not walk a big planet's empty chunks.
-const u32 MAX_PLANETS = 8;
+// A galaxy's catalog has up to 64 planets: the 8 nearest Mario complete (gravity, chunks or their
+// far view), the others drawn only (gravity_range 0: no gravity, chunk_count 0: no chunks).
+const u32 MAX_PLANETS = 64;
 struct Planet
 {
   u32 id;
@@ -83,7 +85,8 @@ struct Planet
   u32* drawn;
   u32 drawn_count;
   u32 parts;    // collision parts alive
-  FarPart* far;  // FAR_VIEW_PARTS of them, from the scene's heap with the first one (0: none yet)
+  FarPart* far;  // far_count of them, from the module's heap with the first one (0: none yet)
+  u32 far_count;  // 6 for a planet drawn only (its whole faces), FAR_VIEW_PARTS once it has tiles
 };
 Planet gPlanets[MAX_PLANETS];
 // The camera is this far above a planet's surface (or its radius, if more), galaxy units, or
@@ -443,7 +446,7 @@ public:
     p->occluder = in.occluder;
     p->mario_radius = in.mario_radius;
     p->gravity->mLocalPos = TVec3f(p->center[0], p->center[1], p->center[2]);
-    p->gravity->mRange = in.gravity_range;
+    p->gravity->mRange = in.gravity_range > 1.f ? in.gravity_range : 1.f;  // 1: off, as an unused entry's
     p->gravity->updateIdentityMtx();
     mTranslation = p->gravity->mLocalPos;
   }
@@ -453,10 +456,11 @@ public:
     NewSlots(p, 0);
     if (p.far)
     {
-      for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
+      for (u32 f = 0; f < p.far_count; f++)
         Bury(p.far[f].dl);
       Bury(p.far);
       p.far = 0;
+      p.far_count = 0;
     }
     p.gravity->mRange = 1.f;
     p.gravity->updateIdentityMtx();
@@ -470,7 +474,7 @@ public:
     for (u32 i = 0; i < MAX_PLANETS; i++)
     {
       const Planet& p = gPlanets[i];
-      if (!p.id || p.mario_radius <= 0.f)
+      if (!p.id || p.mario_radius <= 0.f || p.gravity->mRange <= 1.f)
         continue;
       const f32 d[3] = {pos[0] - p.center[0], pos[1] - p.center[1], pos[2] - p.center[2]};
       const f32 range = p.gravity->mRange;
@@ -520,15 +524,25 @@ public:
 
   void ReplaceFar(Planet& p, const gxc::InboxChunk& c)
   {
-    if (!p.far)
+    // A planet drawn only has its six faces (slots 0..5); tiles need them all. A slot past what
+    // the planet has grows its parts to all, those it had kept.
+    if (!p.far || c.slot >= p.far_count)
     {
-      p.far = reinterpret_cast<FarPart*>(Alloc32(gxc::FAR_VIEW_PARTS * sizeof(FarPart)));
-      if (!p.far)
+      const u32 count = !p.far && c.slot < 6 ? 6 : gxc::FAR_VIEW_PARTS;
+      FarPart* grown = reinterpret_cast<FarPart*>(Alloc32(count * sizeof(FarPart)));
+      if (!grown)
       {
         gVoxelStats.alloc_failed++;
         return;
       }
-      memset(p.far, 0, gxc::FAR_VIEW_PARTS * sizeof(FarPart));
+      memset(grown, 0, count * sizeof(FarPart));
+      if (p.far)
+      {
+        memcpy(grown, p.far, p.far_count * sizeof(FarPart));
+        Bury(p.far);
+      }
+      p.far = grown;
+      p.far_count = count;
     }
     FarPart& f = p.far[c.slot];
     if (c.version <= f.version)
@@ -860,13 +874,17 @@ public:
     // planet's center, so neighbors' shared corners come out of the same math and leave no seams.
     f32 planet[12];
     gxc::ViewTranslate(view, p.center, planet);
+    // The whole planet beside the view (its ground and the room above it): none of it is drawn.
+    const f32 whole[3] = {planet[3], planet[7], planet[11]};
+    if (gxc::SphereOutsideView(proj, whole, p.surface + 32.f * 80.f))
+      return;
     const f32 above = gxc::Sqrt(eye[0] * eye[0] + eye[1] * eye[1] + eye[2] * eye[2]) - p.surface;
     const bool afar = p.far && above > (p.surface > FAR_VIEW_ABOVE ? p.surface : FAR_VIEW_ABOVE);
     const bool translucent = pass == PASS_CLEAR;
     if (p.far && pass == PASS_FAR)
     {
       GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(planet), GX_PNMTX0);
-      for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
+      for (u32 f = 0; f < p.far_count; f++)
       {
         const FarPart& part = p.far[f];
         if (!part.dl || (part.covered && !afar) || gxc::SphereHidden(eye, fwd, origin, p.occluder, part.sphere, part.sphere[3]))
