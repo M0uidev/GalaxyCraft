@@ -585,6 +585,15 @@ void MarioMovement(void* self)
   if (!MR::calcGravityVector(static_cast<const NameObj*>(self), TVec3f(query[0], query[1], query[2]),
                              &gravity, 0, 0))
     gravity = TVec3f(0.f, 0.f, 0.f);
+  // Carried by the mod over the void (the elytra between planets), Mario has no gravity, and the
+  // host would take that for a menu: the mouse let go, the star pointer shown. The last gravity he
+  // had stands in then; the mod tells space from its planets, not from this.
+  static TVec3f lastGravity(0.f, 0.f, 0.f);
+  const bool none = gravity.x == 0.f && gravity.y == 0.f && gravity.z == 0.f;
+  if (!none)
+    lastGravity = gravity;
+  else if (EntityDrawSafeFromAbyss())
+    gravity = lastGravity;
   gOut.mbx.gravity[0] = gravity.x, gOut.mbx.gravity[1] = gravity.y, gOut.mbx.gravity[2] = gravity.z;
   McFeelJump(self, before);
 
