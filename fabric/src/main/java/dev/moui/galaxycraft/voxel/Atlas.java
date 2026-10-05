@@ -41,8 +41,21 @@ public final class Atlas {
         return new int[] {w, h};
     }
 
-    /** Tiles (16×16 ARGB, row 0 at the top) in order, left to right and top to bottom. */
+    /**
+     * An animated tile: live is the tile models use; each of frames (tiles) shows in turn for
+     * ticks frames of the game (60 a second).
+     */
+    public record Anim(int live, int ticks, int[] frames) {}
+
+    /** "ANIM": the animations' table after the texels (syati/src/core/AtlasAnim.h). */
+    public static final int ANIM_MAGIC = 0x414E494D, ANIM_MAX = 256, ANIM_BYTES_MAX = 65536;
+
     public static Atlas of(List<int[]> tiles) {
+        return of(tiles, List.of());
+    }
+
+    /** Tiles (16×16 ARGB, row 0 at the top) in order, left to right and top to bottom; then the animations. */
+    public static Atlas of(List<int[]> tiles, List<Anim> anims) {
         int[] wh = size(tiles.size());
         int w = wh[0] * TILE, h = wh[1] * TILE;
         int[] level = new int[w * h];
@@ -55,6 +68,24 @@ public final class Atlas {
         for (int l = 0; l < LEVELS; l++) {
             out.writeBytes(rgb5a3(level, w >> l, h >> l));
             if (l + 1 < LEVELS) level = half(level, w >> l, h >> l);
+        }
+        if (!anims.isEmpty()) {
+            java.io.DataOutputStream table = new java.io.DataOutputStream(out);
+            try {
+                int count = Math.min(ANIM_MAX, anims.size());
+                table.writeInt(ANIM_MAGIC);
+                table.writeInt(count);
+                for (Anim a : anims.subList(0, count)) {
+                    table.writeShort(a.live());
+                    table.writeShort(Math.clamp(a.ticks(), 1, 0xFFFF));
+                    table.writeShort(a.frames().length);
+                    table.writeShort(0);
+                    for (int f : a.frames()) table.writeShort(f);
+                    if (a.frames().length % 2 == 1) table.writeShort(0);
+                }
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
         }
         return new Atlas(wh[0], wh[1], out.toByteArray());
     }

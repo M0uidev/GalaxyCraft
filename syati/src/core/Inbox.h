@@ -103,6 +103,8 @@ struct InboxEntities
 
 // Bytes of a GX RGB5A3 texture of width x height texels with its mipmaps (each level half the
 // last, down to levels of them), as the mod lays them out.
+// Bytes an atlas may carry after its texels: its animations' table (AtlasAnim).
+const u32 ATLAS_ANIM_MAX = 65536;
 u32 AtlasBytes(u32 width, u32 height, u32 levels);
 
 struct InboxRecord

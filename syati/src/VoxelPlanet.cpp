@@ -8,6 +8,7 @@
 #include "Game/Gravity/PointGravity.h"
 #include "Game/Map/CollisionParts.h"
 #include "EntityDraw.h"
+#include "AtlasAnim.h"
 #include "Graves.h"
 #include "HeldItem.h"
 #include "Inbox.h"
@@ -165,6 +166,8 @@ struct Atlas
   u8* tex;
   u32 id, width, height, levels, total, have;
   bool ready;
+  gxc::AtlasAnim anim;  // its animated tiles (after the texels), loaded once it is all in
+  u32 frame;            // frames drawn since, to step them
 };
 Atlas gAtlas;
 
@@ -204,6 +207,9 @@ void AtlasPiece(const gxc::InboxAtlas& a)
   gAtlas.have += a.size;
   if (!gAtlas.ready && gAtlas.have >= gAtlas.total)
   {
+    gAtlas.anim.Load(gAtlas.tex, gAtlas.total, gxc::AtlasBytes(gAtlas.width, gAtlas.height, gAtlas.levels), gAtlas.width,
+                     gAtlas.height, gAtlas.levels);
+    gAtlas.frame = 0;
     DCFlushRange(gAtlas.tex, gAtlas.total);
     gAtlas.ready = true;
   }
@@ -638,6 +644,17 @@ public:
       if (gHitboxOn)
         DrawHitbox();
       return;
+    }
+    // Water, lava, fire...: their live tiles take this frame's texels.
+    if (gAtlas.anim.Count())
+    {
+      u32 lo, hi;
+      gAtlas.anim.Tick(gAtlas.tex, gAtlas.frame++, &lo, &hi);
+      if (hi > lo)
+      {
+        DCFlushRange(gAtlas.tex + lo, hi - lo);
+        GXInvalidateTexAll();
+      }
     }
     // Positions: s16 with 3 fraction bits from the chunk's center (PlanetMesher), color RGB565,
     // light RGBA8 (block light's color, sky light in alpha), texture coordinates u16 with 15

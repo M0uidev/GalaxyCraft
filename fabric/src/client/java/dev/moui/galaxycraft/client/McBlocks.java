@@ -117,7 +117,8 @@ public final class McBlocks implements Blocks {
         this.tileOf = sprites;
         this.tiles = new ArrayList<>(sprites.size());
         for (Identifier name : sprites.keySet()) tiles.add(image(name));
-        this.atlas = Atlas.of(tiles);
+        List<Atlas.Anim> anims = animations(sprites.keySet());
+        this.atlas = Atlas.of(tiles, anims);
         for (Material m : Material.values()) materialIds[m.ordinal()] = parse(m.state);
         GalaxyCraft.LOG.info("Planet blocks: {} states, {} sprites in a {}x{} atlas", count, tiles.size(), atlas.width(),
                 atlas.height());
@@ -147,6 +148,69 @@ public final class McBlocks implements Blocks {
             for (int y = 0; y < n; y++)
                 for (int x = 0; x < n; x++) argb[y * n + x] = (x < n / 2) == (y < n / 2) ? 0xFFF800F8 : 0xFF000000;
         }
+        return argb;
+    }
+
+    /** Game frames (60 a second) per Minecraft tick (20 a second). */
+    private static final int FRAMES_PER_TICK = 3;
+
+    /**
+     * The animated sprites (water, lava, fire, portals, sea lanterns...): every frame of each
+     * becomes a tile after the others, and an animation shows them in its sprite's tile in the
+     * order and at the pace its .mcmeta gives (no interpolation). As many as the atlas holds.
+     */
+    private List<Atlas.Anim> animations(java.util.Collection<Identifier> names) {
+        List<Atlas.Anim> anims = new ArrayList<>();
+        int tableBytes = 8, maxTiles = Atlas.MAX_COLUMNS * Atlas.MAX_COLUMNS;
+        for (Identifier sprite : names) {
+            if (anims.size() == Atlas.ANIM_MAX) break;
+            Identifier file = sprite.withPath(p -> "textures/" + p + ".png");
+            com.google.gson.JsonObject anim;
+            try (var reader = mc.getResourceManager().openAsReader(file.withPath(p -> p + ".mcmeta"))) {
+                var meta = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
+                if (!meta.has("animation")) continue;
+                anim = meta.getAsJsonObject("animation");
+            } catch (IOException | RuntimeException e) {
+                continue; // no .mcmeta: not animated
+            }
+            try (InputStream in = mc.getResourceManager().open(file); NativeImage img = NativeImage.read(in)) {
+                int fw = anim.has("width") ? anim.get("width").getAsInt() : img.getWidth();
+                int fh = anim.has("height") ? anim.get("height").getAsInt() : fw;
+                int count = img.getHeight() / fh, across = img.getWidth() / fw;
+                count *= across;
+                if (count < 2) continue;
+                int frametime = anim.has("frametime") ? Math.max(1, anim.get("frametime").getAsInt()) : 1;
+                // The order: its "frames" (an index, or an index and a time of its own), else 0..count-1.
+                List<Integer> order = new ArrayList<>();
+                if (anim.has("frames"))
+                    for (var f : anim.getAsJsonArray("frames")) {
+                        int index = f.isJsonObject() ? f.getAsJsonObject().get("index").getAsInt() : f.getAsInt();
+                        int time = f.isJsonObject() && f.getAsJsonObject().has("time") ? f.getAsJsonObject().get("time").getAsInt() : frametime;
+                        for (int r = 0; r < Math.max(1, Math.round((float) time / frametime)); r++) order.add(index);
+                    }
+                else for (int k = 0; k < count; k++) order.add(k);
+                int bytes = 8 + 2 * order.size() + 2;
+                if (tiles.size() + count > maxTiles || tableBytes + bytes > Atlas.ANIM_BYTES_MAX) break;
+                int first = tiles.size();
+                for (int k = 0; k < count; k++) tiles.add(frame(img, (k % across) * fw, (k / across) * fh, fw, fh));
+                int[] frames = new int[order.size()];
+                for (int i = 0; i < frames.length; i++) frames[i] = first + Math.clamp(order.get(i), 0, count - 1);
+                anims.add(new Atlas.Anim(tileOf.get(sprite), frametime * FRAMES_PER_TICK, frames));
+                tableBytes += bytes;
+            } catch (IOException | RuntimeException e) {
+                GalaxyCraft.LOG.warn("Animated sprite {} left still: {}", sprite, e.toString());
+            }
+        }
+        GalaxyCraft.LOG.info("Planet blocks: {} animated sprites", anims.size());
+        return anims;
+    }
+
+    /** One frame (x, y, w, h texels of img), 16×16 ARGB. */
+    private static int[] frame(NativeImage img, int x0, int y0, int w, int h) {
+        int n = Atlas.TILE;
+        int[] argb = new int[n * n];
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++) argb[y * n + x] = img.getPixel(x0 + x * w / n, y0 + y * h / n);
         return argb;
     }
 

@@ -129,7 +129,7 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
     a.data = p + HEAD;
     if (!PowerOfTwo(a.width, 8, 1024) || !PowerOfTwo(a.height, 8, 1024) || a.levels < 1 || a.levels > 4 ||
         (a.width >> (a.levels - 1)) < 8 || (a.height >> (a.levels - 1)) < 8 ||
-        a.total != AtlasBytes(a.width, a.height, a.levels) || a.offset > a.total || a.size > a.total - a.offset)
+        a.total < AtlasBytes(a.width, a.height, a.levels) || a.total > AtlasBytes(a.width, a.height, a.levels) + ATLAS_ANIM_MAX || a.offset > a.total || a.size > a.total - a.offset)
       return false;
   }
   else if (type == InboxRecord::SKIN)

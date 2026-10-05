@@ -72,6 +72,9 @@ public final class BiomeProbe implements FabricClientGameTest {
                     });
                     ctx.waitTicks(15);
                     gxdev("ctl", "shot biomes-" + name + "-shore-" + yaw);
+                    // The same view a moment later: water and lava move (animated tiles).
+                    ctx.waitTicks(4);
+                    gxdev("ctl", "shot biomes-" + name + "-shore-" + yaw + "b");
                 }
                 if (name.equals("mixed")) light(ctx, sp, s);
             }

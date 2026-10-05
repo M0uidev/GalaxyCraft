@@ -7,6 +7,7 @@
 
 #include "CodePatch.h"
 #include "Graves.h"
+#include "AtlasAnim.h"
 #include "HeldMesh.h"
 #include "Inbox.h"
 #include "Kcl.h"
@@ -296,6 +297,43 @@ static void TestInboxTranslucentChunks()
   CHECK(!NextInboxRecord(d.data(), d.size(), &off, 512, &r));
 }
 
+// Animated tiles: each live tile takes its frame's texels, every level, when the frame changes.
+static void TestAtlasAnim()
+{
+  const u32 w = 64, h = 64, levels = 2, texels = w * h * 2 + (w / 2) * (h / 2) * 2;
+  std::vector<u8> a(texels, 0);
+  // Tile 5 (x 1, y 1) is all 0x1111, tile 6 all 0x2222, on both levels.
+  for (u32 l = 0; l < levels; l++)
+  {
+    const u32 lw = w >> l, t = 16 >> l, base = l ? w * h * 2 : 0;
+    for (u32 y = 0; y < t; y++)
+      for (u32 x = 0; x < t; x++)
+      {
+        a[base + Rgb5a3Offset(lw, t + x, t + y)] = 0x11;
+        a[base + Rgb5a3Offset(lw, 2 * t + x, t + y)] = 0x22;
+      }
+  }
+  Put32(a, AtlasAnim::MAGIC), Put32(a, 1);
+  a.push_back(0), a.push_back(0);  // live tile 0
+  a.push_back(0), a.push_back(3);  // 3 game frames each
+  a.push_back(0), a.push_back(2);  // 2 frames
+  a.push_back(0), a.push_back(0);
+  a.push_back(0), a.push_back(5), a.push_back(0), a.push_back(6);
+  AtlasAnim anim;
+  CHECK(anim.Load(a.data(), a.size(), texels, w, h, levels) && anim.Count() == 1);
+  u32 lo, hi;
+  anim.Tick(a.data(), 0, &lo, &hi);
+  CHECK(hi > lo && a[Rgb5a3Offset(w, 15, 15)] == 0x11 && a[w * h * 2 + Rgb5a3Offset(w / 2, 7, 7)] == 0x11);
+  anim.Tick(a.data(), 2, &lo, &hi);
+  CHECK(hi == 0);  // same frame: nothing copied
+  anim.Tick(a.data(), 3, &lo, &hi);
+  CHECK(hi > 0 && a[Rgb5a3Offset(w, 0, 0)] == 0x22 && a[w * h * 2 + Rgb5a3Offset(w / 2, 0, 0)] == 0x22);
+  CHECK(a[Rgb5a3Offset(w, 16, 0)] == 0);  // its neighbor untouched
+  CHECK(anim.Load(a.data(), texels, texels, w, h, levels) && anim.Count() == 0);  // no table
+  a[texels + 9] = 99;  // live tile past the atlas
+  CHECK(!anim.Load(a.data(), a.size(), texels, w, h, levels) && anim.Count() == 0);
+}
+
 // Several planets: a chunk's slot carries its planet's id in the top byte, a far view's part has
 // bit 23 set (its tile below, bit 22 if covered); a planet may come with flags (GONE); a teleport may name its planet.
 static void TestInboxPlanetIdsAndFarView()
@@ -501,8 +539,8 @@ static void TestInboxAtlas()
   CHECK(r.atlas.offset == 100 && r.atlas.size == 10 && r.atlas.data == b.data() + 8 + 24 && r.atlas.data[9] == 9);
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.atlas.offset == total - 10);
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
-  // Rejected: past its end, a wrong total, not a power of two, too big, mipmaps under 8 texels.
-  const u32 bad[][6] = {{256, 128, 4, total, total - 5, 10}, {256, 128, 4, total + 2, 0, 10},
+  // Rejected: past its end, a total under its texels or too far over (an animation table), not a power of two, too big, mipmaps under 8 texels.
+  const u32 bad[][6] = {{256, 128, 4, total, total - 5, 10}, {256, 128, 4, total - 2, 0, 10}, {256, 128, 4, total + 65540, 0, 10},
                         {200, 128, 1, 200 * 128 * 2, 0, 10}, {2048, 8, 1, 2048 * 8 * 2, 0, 10},
                         {64, 16, 3, AtlasBytes(64, 16, 3), 0, 10}};
   for (const auto& v : bad)
@@ -644,6 +682,7 @@ int main()
   TestInboxRecords();
   TestInboxRejectsBadChunks();
   TestInboxTranslucentChunks();
+  TestAtlasAnim();
   TestInboxPlanetIdsAndFarView();
   TestPlanetDropAndViewTranslate();
   TestCodePatch();
