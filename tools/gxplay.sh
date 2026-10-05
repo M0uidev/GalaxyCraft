@@ -23,13 +23,25 @@ export JAVA_HOME
 [ -x dolphin/build/Binaries/dolphin-emu ] || { echo "gxplay: run dolphin/build.sh first" >&2; exit 1; }
 [ -f syati/build/galaxycraft.json ] || { echo "gxplay: run syati/build.sh first" >&2; exit 1; }
 
+# A hidden Minecraft left over from an earlier run (Gradle's daemon outlives this script) would
+# still be linked to the new Dolphin through the shared memory, and two of them feeding one game
+# make it lag: stop any first. The game test ignores SIGTERM, so KILL follows.
+stop_minecraft() {
+  pkill -f "galaxycraft.demo=true" 2> /dev/null || return 0
+  for _ in 1 2 3 4 5; do sleep 1; pgrep -f "galaxycraft.demo=true" > /dev/null || return 0; done
+  pkill -KILL -f "galaxycraft.demo=true" 2> /dev/null
+}
+stop_minecraft
+
+# Dual core (CPUThread): this Dolphin defaults to single core on desktop, which puts the CPU and
+# the GPU on one thread and leaves no headroom on planets.
 # Background input / hotkeys without focus, for this run only (-C is not saved): on Hyprland,
 # Dolphin's window can hold the compositor's focus without Qt noticing, and then Dolphin would
 # ignore the Wii Remote and the link hotkey. XWayland only shows keys to a focused X window, so
 # typing in other programs still does not reach the game.
 GALAXYCRAFT=1 GALAXYCRAFT_LINK_ON_SAVE=1 dolphin/build/Binaries/dolphin-emu -e syati/build/galaxycraft.json \
   -C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False \
-  -C Dolphin.Core.RAMOverrideEnable=True -C Dolphin.Core.MEM2Size=268435456 &
+  -C Dolphin.Core.RAMOverrideEnable=True -C Dolphin.Core.MEM2Size=268435456 -C Dolphin.Core.CPUThread=True &
 DOLPHIN=$!
 # The overlay demo joins a peaceful adventure world and stays there; ~14 h of ticks.
 (cd fabric && exec ./gradlew runClientGameTest -PgalaxycraftDemo -PgalaxycraftHidden -PgalaxycraftPlanet \
@@ -38,5 +50,5 @@ MINECRAFT=$!
 trap 'kill $DOLPHIN $MINECRAFT 2> /dev/null' INT TERM
 wait -n $DOLPHIN $MINECRAFT
 kill $DOLPHIN $MINECRAFT 2> /dev/null
-pkill -f "galaxycraft.demo=true" 2> /dev/null  # Gradle's Minecraft child, if Gradle was killed first
+stop_minecraft  # Gradle's Minecraft child, if Gradle was killed first
 wait
