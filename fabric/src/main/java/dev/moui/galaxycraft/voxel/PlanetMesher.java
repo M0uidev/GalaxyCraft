@@ -20,7 +20,10 @@ import org.joml.Vector3d;
 public final class PlanetMesher {
     /** GX_QUADS | GX_VTXFMT7. */
     public static final int GX_QUADS_FMT7 = 0x80 | 7;
+    /** A far view's vertex (PlanetLod, format 5): position, color, texture coordinate. */
     public static final int VERTEX_BYTES = 6 + 2 + 4;
+    /** A chunk's (format 7): position, color, light (block light's color, sky light in alpha), texture coordinate. */
+    public static final int LIT_VERTEX_BYTES = 6 + 2 + 4 + 4;
     /** Position fraction bits: 1/8 unit steps, ±4095 units around the chunk's center. */
     public static final int POS_FRAC = 3;
     /** Texture coordinates: 1.0 = 32768 (a texel of a 1024-wide atlas is 32). */
@@ -52,9 +55,18 @@ public final class PlanetMesher {
      * cell), the brightness at each corner (sun and ambient occlusion), each corner's texture
      * coordinate within the tile (u, v from 0 to 1) and its tint (0xRRGGBB).
      */
-    public record Quad(Vector3d[] corners, int tile, int side, double[] light, double[][] uv, int tint, boolean translucent) {
+    /**
+     * levels: Minecraft's sky and block light at each corner (0 to 15, smoothed as Minecraft
+     * smooths them), sky first; null: full daylight.
+     */
+    public record Quad(Vector3d[] corners, int tile, int side, double[] light, double[][] uv, int tint, boolean translucent,
+            double[] levels) {
         public Quad(Vector3d[] corners, int tile, int side, double[] light, double[][] uv, int tint) {
-            this(corners, tile, side, light, uv, tint, false);
+            this(corners, tile, side, light, uv, tint, false, null);
+        }
+
+        public Quad(Vector3d[] corners, int tile, int side, double[] light, double[][] uv, int tint, boolean translucent) {
+            this(corners, tile, side, light, uv, tint, translucent, null);
         }
     }
 
@@ -110,12 +122,24 @@ public final class PlanetMesher {
                 for (int v = 0; v < 4; v++) q[v] = CellSpace.point(p.grid, c, pos[3 * v], pos[3 * v + 1], pos[3 * v + 2]);
                 double[] light = new double[4];
                 double sun = sun(q);
-                double[] ao = mq.cull() >= 0 && nb >= 0 ? ambientOcclusion(p, c, mq.cull(), nb) : null;
-                for (int v = 0; v < 4; v++)
-                    light[v] = sun * (ao == null ? 1 : trilinear(ao, pos[3 * v + 2], pos[3 * v], pos[3 * v + 1]));
+                boolean faced = mq.cull() >= 0 && nb >= 0;
+                double[] ao = faced ? ambientOcclusion(p, c, mq.cull(), nb) : null;
+                double[] corners = faced ? lightCorners(p, mq.cull(), nb) : null;
+                double[] levels = new double[8];
+                for (int v = 0; v < 4; v++) {
+                    double fi = pos[3 * v + 2], fj = pos[3 * v], fk = pos[3 * v + 1];
+                    light[v] = sun * (ao == null ? 1 : trilinear(ao, fi, fj, fk));
+                    if (corners != null) {
+                        levels[v] = trilinear(corners, fi, fj, fk, 0);
+                        levels[4 + v] = trilinear(corners, fi, fj, fk, 8);
+                    } else { // inside its cell (a torch, a flower): the cell's own light
+                        levels[v] = p.light().sky(c);
+                        levels[4 + v] = p.light().block(c);
+                    }
+                }
                 double[][] uv = new double[4][];
                 for (int v = 0; v < 4; v++) uv[v] = new double[] {mq.uv()[2 * v], mq.uv()[2 * v + 1]};
-                out.add(new Quad(q, mq.tile(), mq.cull(), light, uv, p.tint(c, mq.tint())));
+                out.add(new Quad(q, mq.tile(), mq.cull(), light, uv, p.tint(c, mq.tint()), false, levels));
             }
         }
         return out;
@@ -231,6 +255,10 @@ public final class PlanetMesher {
         }
         double r0 = g.radius(g.k(c));
         Vector3d center = g.center(c);
+        // Lit as Minecraft lights fluids: the brighter of the cell and the one above it.
+        int above = g.neighbor(c, CubeSphere.TOP);
+        double sky = Math.max(p.light().sky(c), p.light().sky(above)), blk = Math.max(p.light().block(c), p.light().block(above));
+        double[] levels = {sky, sky, sky, sky, blk, blk, blk, blk};
 
         int up = g.neighbor(c, CubeSphere.TOP);
         double lowest = Math.min(Math.min(h[0][0], h[0][1]), Math.min(h[1][0], h[1][1]));
@@ -251,12 +279,12 @@ public final class PlanetMesher {
                 else if (di == 1) uv[v] = new double[] {0.5 + cs + sn, 0.5 + cs - sn};
                 else uv[v] = new double[] {0.5 + cs - sn, 0.5 - cs - sn};
             }
-            addFluid(out, q, uv, center, moving ? flowing : still, CubeSphere.TOP, tint, translucent);
+            addFluid(out, q, uv, center, moving ? flowing : still, CubeSphere.TOP, tint, translucent, levels);
         }
         int down = g.neighbor(c, CubeSphere.BOTTOM);
         if (down >= 0 && p.fluid(down) != f && !p.occludes(down) && !(dark != null && dark.in(down))) {
             Vector3d[] q = {point(g, c, 0, 0, r0), point(g, c, 1, 0, r0), point(g, c, 1, 1, r0), point(g, c, 0, 1, r0)};
-            addFluid(out, q, new double[][] {{0, 0}, {0, 1}, {1, 1}, {1, 0}}, center, still, CubeSphere.BOTTOM, tint, translucent);
+            addFluid(out, q, new double[][] {{0, 0}, {0, 1}, {1, 1}, {1, 0}}, center, still, CubeSphere.BOTTOM, tint, translucent, levels);
         }
         for (int s : LATERAL) {
             int nb = g.neighbor(c, s);
@@ -272,7 +300,7 @@ public final class PlanetMesher {
             Vector3d[] q = {point(g, c, a[0], a[1], r0), point(g, c, a[2], a[3], r0), point(g, c, a[2], a[3], r0 + h1),
                     point(g, c, a[0], a[1], r0 + h0)};
             double[][] uv = {{0, 0.5}, {0.5, 0.5}, {0.5, (1 - h1) * 0.5}, {0, (1 - h0) * 0.5}};
-            addFluid(out, q, uv, center, flowing, s, tint, translucent);
+            addFluid(out, q, uv, center, flowing, s, tint, translucent, levels);
         }
     }
 
@@ -283,7 +311,7 @@ public final class PlanetMesher {
 
     /** A fluid face, turned to face away from the cell's center, lit by the sun alone (no ambient occlusion on fluids). */
     private static void addFluid(List<Quad> out, Vector3d[] q, double[][] uv, Vector3d center, int tile, int side, int tint,
-            boolean translucent) {
+            boolean translucent, double[] levels) {
         Vector3d n = new Vector3d(q[1]).sub(q[0]).cross(new Vector3d(q[2]).sub(q[0]));
         Vector3d mid = new Vector3d(q[0]).add(q[1]).add(q[2]).add(q[3]).mul(0.25);
         if (n.dot(mid.sub(center)) < 0) {
@@ -295,7 +323,7 @@ public final class PlanetMesher {
             uv[3] = u;
         }
         double sun = sun(q);
-        out.add(new Quad(q, tile, side, new double[] {sun, sun, sun, sun}, uv, tint, translucent));
+        out.add(new Quad(q, tile, side, new double[] {sun, sun, sun, sun}, uv, tint, translucent, levels));
     }
 
     /**
@@ -432,14 +460,18 @@ public final class PlanetMesher {
         return AMBIENT + (1 - AMBIENT) * Math.max(0, n.dot(SUN));
     }
 
-    /** Value at model point (x, y, z) of eight values at the cell's corners, indexed di | dj << 1 | dk << 2. */
     private static double trilinear(double[] v, double fi, double fj, double fk) {
+        return trilinear(v, fi, fj, fk, 0);
+    }
+
+    /** Value at model point (x, y, z) of eight values at the cell's corners, indexed di | dj << 1 | dk << 2, from v[at]. */
+    private static double trilinear(double[] v, double fi, double fj, double fk, int at) {
         fi = Math.max(0, Math.min(1, fi));
         fj = Math.max(0, Math.min(1, fj));
         fk = Math.max(0, Math.min(1, fk));
         double out = 0;
         for (int m = 0; m < 8; m++)
-            out += v[m] * ((m & 1) == 1 ? fi : 1 - fi) * ((m >> 1 & 1) == 1 ? fj : 1 - fj) * ((m >> 2) == 1 ? fk : 1 - fk);
+            out += v[at + m] * ((m & 1) == 1 ? fi : 1 - fi) * ((m >> 1 & 1) == 1 ? fj : 1 - fj) * ((m >> 2) == 1 ? fk : 1 - fk);
         return out;
     }
 
@@ -487,6 +519,52 @@ public final class PlanetMesher {
                 }
                 int m = di | dj << 1 | dk << 2;
                 out[m] = out[m ^ across] = AO[level];
+            }
+        return out;
+    }
+
+    /**
+     * Minecraft's smooth light on side of a cell at each of the cell's corners (indexed as in
+     * {@link #ambientOcclusion}; sky light in [0, 8), block light in [8, 16)): the light of the cell
+     * in front of the face averaged with the two neighbors toward that corner and the one between
+     * them; one that is opaque counts as the front cell (it has no light of its own).
+     */
+    static double[] lightCorners(VoxelPlanet p, int side, int front) {
+        CubeSphere g = p.grid;
+        PlanetLight l = p.light();
+        double[] out = new double[16];
+        int[] axisA, axisB;
+        switch (side) {
+            case CubeSphere.TOP, CubeSphere.BOTTOM -> {
+                axisA = new int[] {CubeSphere.I_MINUS, CubeSphere.I_PLUS};
+                axisB = new int[] {CubeSphere.J_MINUS, CubeSphere.J_PLUS};
+            }
+            case CubeSphere.I_MINUS, CubeSphere.I_PLUS -> {
+                axisA = new int[] {CubeSphere.J_MINUS, CubeSphere.J_PLUS};
+                axisB = new int[] {CubeSphere.BOTTOM, CubeSphere.TOP};
+            }
+            default -> {
+                axisA = new int[] {CubeSphere.I_MINUS, CubeSphere.I_PLUS};
+                axisB = new int[] {CubeSphere.BOTTOM, CubeSphere.TOP};
+            }
+        }
+        int fs = l.sky(front), fb = l.block(front);
+        for (int a = 0; a < 2; a++)
+            for (int b = 0; b < 2; b++) {
+                int s1 = g.neighbor(front, axisA[a]), s2 = g.neighbor(front, axisB[b]);
+                int corner = s1 >= 0 ? g.neighbor(s1, axisB[b]) : -1;
+                boolean o1 = p.occludes(s1), o2 = p.occludes(s2), oc = o1 && o2 || p.occludes(corner);
+                double sky = fs + (o1 ? fs : l.sky(s1)) + (o2 ? fs : l.sky(s2)) + (oc ? fs : l.sky(corner));
+                double blk = fb + (o1 ? fb : l.block(s1)) + (o2 ? fb : l.block(s2)) + (oc ? fb : l.block(corner));
+                int di, dj, dk, across;
+                switch (side) {
+                    case CubeSphere.TOP, CubeSphere.BOTTOM -> { di = a; dj = b; dk = side == CubeSphere.TOP ? 1 : 0; across = 4; }
+                    case CubeSphere.I_MINUS, CubeSphere.I_PLUS -> { di = side == CubeSphere.I_PLUS ? 1 : 0; dj = a; dk = b; across = 1; }
+                    default -> { di = a; dj = side == CubeSphere.J_PLUS ? 1 : 0; dk = b; across = 2; }
+                }
+                int m = di | dj << 1 | dk << 2;
+                out[m] = out[m ^ across] = sky / 4;
+                out[8 + m] = out[8 + (m ^ across)] = blk / 4;
             }
         return out;
     }
@@ -550,7 +628,7 @@ public final class PlanetMesher {
     private static byte[] displayList(VoxelPlanet p, List<Quad> quads, double unitsPerBlock, Vector3d origin) {
         if (quads.isEmpty()) return new byte[0];
         if (quads.size() * 4 > 0xFFFF) throw new IllegalStateException("chunk too detailed for one draw");
-        int size = 3 + quads.size() * 4 * VERTEX_BYTES;
+        int size = 3 + quads.size() * 4 * LIT_VERTEX_BYTES;
         ByteBuffer dl = ByteBuffer.allocate((size + 31) & ~31).order(ByteOrder.BIG_ENDIAN);
         dl.put((byte) GX_QUADS_FMT7).putShort((short) (quads.size() * 4));
         int cols = p.blocks.atlasColumns(), rows = p.blocks.atlasRows();
@@ -560,6 +638,7 @@ public final class PlanetMesher {
                 Vector3d v = new Vector3d(q.corners()[k]).mul(unitsPerBlock);
                 dl.putShort(fixed(v.x - origin.x)).putShort(fixed(v.y - origin.y)).putShort(fixed(v.z - origin.z));
                 dl.putShort(rgb565(q.light()[k], q.tint()));
+                dl.putInt(q.levels() == null ? DAYLIGHT : lightRGBA(q.levels()[k], q.levels()[4 + k]));
                 dl.putShort(st(tx, q.uv()[k][0], cols)).putShort(st(ty, q.uv()[k][1], rows));
             }
         }
@@ -570,6 +649,46 @@ public final class PlanetMesher {
     static short st(int t, double f, int n) {
         double texel = Math.max(HALF_TEXEL, Math.min(TILE_TEXELS - HALF_TEXEL, f * TILE_TEXELS));
         return (short) Math.round((t * TILE_TEXELS + texel) / (n * TILE_TEXELS) * ST_ONE);
+    }
+
+    /** Minecraft's warm block light (its overworld BLOCK_LIGHT_TINT, FFD88C) and how much more it counts (BlockFactor). */
+    private static final double[] BLOCK_TINT = {1, 0xD8 / 255.0, 0x8C / 255.0};
+    private static final double BLOCK_FACTOR = 1.4, DARKEST = 0.02;
+    /** Full sky light, no block light. */
+    static final int DAYLIGHT = lightRGBA(15, 0);
+
+    /**
+     * A corner's light as the game combines it (VoxelPlanet.cpp): block light's color in RGB, sky
+     * light's brightness in A, each through Minecraft's lightmap (lightmap.fsh: the level's curve,
+     * block light's tint, the brightness setting's lift at its default). The game adds A times the
+     * sky's color of the hour (GXC_MSG_SKY) to RGB.
+     */
+    static int lightRGBA(double sky, double block) {
+        double lb = Math.clamp(block / 15, 0, 1), ls = Math.clamp(sky / 15, 0, 1);
+        double bb = curve(lb) * BLOCK_FACTOR, parabolic = (2 * lb - 1) * (2 * lb - 1);
+        double[] c = new double[3];
+        double max = 0;
+        for (int i = 0; i < 3; i++) {
+            c[i] = Math.min(1, (BLOCK_TINT[i] + (1 - BLOCK_TINT[i]) * 0.9 * parabolic) * bb + DARKEST);
+            max = Math.max(max, c[i]);
+        }
+        double lift = lift(max) / max;
+        int rgba = 0;
+        for (int i = 0; i < 3; i++) rgba = rgba << 8 | (int) Math.round(255 * Math.min(1, (c[i] + c[i] * lift) / 2));
+        double a = curve(ls);
+        a = (a + lift(a)) / 2;
+        return rgba << 8 | (int) Math.round(255 * a);
+    }
+
+    /** Minecraft's brightness of a light level (0 to 1): v / (4 - 3v). */
+    private static double curve(double v) {
+        return v / (4 - 3 * v);
+    }
+
+    /** lightmap.fsh's notGamma of a brightness. */
+    private static double lift(double x) {
+        double inv = 1 - x;
+        return 1 - inv * inv * inv * inv;
     }
 
     /** Brightness times tint, as RGB565. */

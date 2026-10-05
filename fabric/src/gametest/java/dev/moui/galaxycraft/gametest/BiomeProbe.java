@@ -73,11 +73,86 @@ public final class BiomeProbe implements FabricClientGameTest {
                     ctx.waitTicks(15);
                     gxdev("ctl", "shot biomes-" + name + "-shore-" + yaw);
                 }
+                if (name.equals("mixed")) light(ctx, sp, s);
             }
             ctx.runOnClient(mc -> PlanetClient.remove());
             ctx.waitTicks(10);
             log("PASS");
         }
+    }
+
+    /**
+     * Light: Mario walled in under a roof (dark), then with a torch (warm light), then the box gone
+     * at midnight. Screenshots biomes-light-*.png.
+     */
+    private static void light(ClientGameTestContext ctx, TestSingleplayerContext sp, PlanetSession s) {
+        int[] box = ctx.computeOnClient(mc -> {
+            var p = s.planet();
+            var g = p.grid;
+            int feet = s.cellAt(GalaxyCraftClient.galaxyPos().orElseThrow());
+            if (feet < 0) return new int[0];
+            int stone = p.blocks.parse("minecraft:stone"), torch = p.blocks.parse("minecraft:torch");
+            java.util.List<Integer> cells = new java.util.ArrayList<>();
+            for (int a = -3; a <= 3; a++)
+                for (int b = -3; b <= 3; b++)
+                    for (int up = 0; up <= 4; up++) {
+                        int c = step(g, step(g, step(g, feet, a < 0 ? dev.moui.galaxycraft.voxel.CubeSphere.I_MINUS
+                                : dev.moui.galaxycraft.voxel.CubeSphere.I_PLUS, Math.abs(a)), b < 0
+                                ? dev.moui.galaxycraft.voxel.CubeSphere.J_MINUS : dev.moui.galaxycraft.voxel.CubeSphere.J_PLUS, Math.abs(b)),
+                                dev.moui.galaxycraft.voxel.CubeSphere.TOP, up);
+                        if (c < 0) continue;
+                        boolean wall = Math.abs(a) == 3 || Math.abs(b) == 3 || up == 4;
+                        if (wall) {
+                            p.set(c, stone);
+                            cells.add(c);
+                        } else if (p.get(c) != dev.moui.galaxycraft.voxel.Blocks.AIR) {
+                            p.set(c, dev.moui.galaxycraft.voxel.Blocks.AIR);
+                        }
+                    }
+            int t = step(g, feet, dev.moui.galaxycraft.voxel.CubeSphere.I_PLUS, 2);
+            log("light: in the box sky " + p.light().sky(feet) + " block " + p.light().block(feet));
+            int[] out = new int[2 + cells.size()];
+            out[0] = t;
+            out[1] = torch;
+            for (int i = 0; i < cells.size(); i++) out[2 + i] = cells.get(i);
+            return out;
+        });
+        if (box.length == 0) {
+            log("light: Mario is not on the planet");
+            return;
+        }
+        ctx.waitTicks(60);
+        shots(ctx, "light-box");
+        ctx.runOnClient(mc -> {
+            s.planet().set(box[0], box[1]);
+            log("light: torch at " + s.planet().blocks.name(s.planet().get(box[0])) + ", block light there "
+                    + s.planet().light().block(box[0]));
+        });
+        ctx.waitTicks(60);
+        shots(ctx, "light-torch");
+        ctx.runOnClient(mc -> {
+            for (int i = 2; i < box.length; i++) s.planet().set(box[i], dev.moui.galaxycraft.voxel.Blocks.AIR);
+        });
+        sp.getServer().runCommand("time set midnight");
+        ctx.waitTicks(60);
+        shots(ctx, "light-night");
+    }
+
+    private static void shots(ClientGameTestContext ctx, String tag) {
+        for (int yaw = 0; yaw < 360; yaw += 180) {
+            int y = yaw;
+            ctx.runOnClient(mc -> {
+                mc.player.setXRot(10);
+                mc.player.setYRot(y);
+            });
+            ctx.waitTicks(15);
+            gxdev("ctl", "shot biomes-" + tag + "-" + yaw);
+        }
+    }
+
+    private static int step(dev.moui.galaxycraft.voxel.CubeSphere g, int c, int side, int n) {
+        for (int i = 0; i < n && c >= 0; i++) c = g.neighbor(c, side);
+        return c;
     }
 
     /** A land column (its direction, planet space) with water in a column 2 cells off; null if none. */

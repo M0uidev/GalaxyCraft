@@ -120,6 +120,7 @@ struct InboxRecord
     ENTITIES = 110,
     HURT = 111,
     SEAT = 112,
+    SKY = 113,
   };
   u32 type;
   InboxPlanet planet;
@@ -133,6 +134,7 @@ struct InboxRecord
   InboxHurt hurt;
   InboxSeat seat;
   InboxTeleport teleport;
+  f32 sky[3];  // SKY: the light of full sky light now, 0 to 1
 };
 
 u32 ReadBE32(const u8* p);

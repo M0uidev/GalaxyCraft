@@ -155,6 +155,35 @@ public final class PlanetClient {
         });
     }
 
+    private static int skySent = -1, skyAge;
+
+    /**
+     * The sky's light at this hour to the game (GXC_MSG_SKY): Minecraft's lightmap for full sky
+     * light and no block light (the time's sky light factor and color, then lightmap.fsh's clamp
+     * and its lift at the default brightness). Sent when it changes, and now and then anyway (a
+     * restarted game has forgotten it).
+     */
+    private static void sendSky(Minecraft mc, BridgeClient bridge) {
+        if (mc.level == null || mc.player == null) return;
+        var attrs = mc.level.environmentAttributes();
+        var pos = mc.player.position();
+        float factor = attrs.getValue(net.minecraft.world.attribute.EnvironmentAttributes.SKY_LIGHT_FACTOR, pos);
+        org.joml.Vector3fc color = attrs.getValue(net.minecraft.world.attribute.EnvironmentAttributes.SKY_LIGHT_COLOR, pos);
+        double[] c = {Math.min(1, color.x() * factor), Math.min(1, color.y() * factor), Math.min(1, color.z() * factor)};
+        double max = Math.max(c[0], Math.max(c[1], c[2]));
+        if (max > 0) {
+            double inv = 1 - max, lift = (1 - inv * inv * inv * inv) / max;
+            for (int i = 0; i < 3; i++) c[i] = (c[i] + c[i] * lift) / 2;
+        }
+        int packed = (int) Math.round(c[0] * 255) << 16 | (int) Math.round(c[1] * 255) << 8 | (int) Math.round(c[2] * 255);
+        if (packed == skySent && ++skyAge < 100) return;
+        if (bridge.send(Layout.MSG_SKY, java.nio.ByteBuffer.allocate(12).putFloat((float) c[0]).putFloat((float) c[1])
+                .putFloat((float) c[2]).array())) {
+            skySent = packed;
+            skyAge = 0;
+        }
+    }
+
     private static void say(LocalPlayer player, String text) {
         if (player != null) player.sendSystemMessage(Component.literal("GalaxyCraft: " + text));
     }
@@ -406,6 +435,7 @@ public final class PlanetClient {
                 bridge.send(Layout.MSG_HURT, java.nio.ByteBuffer.allocate(16).putFloat((float) from.x).putFloat((float) from.y)
                         .putFloat((float) from.z).putInt(h.kind()).array());
             }
+        sendSky(Minecraft.getInstance(), bridge);
         lastButtons = buttons;
         lastP = p;
         // The planet in focus first: its chunks before the others' when the ring is full. Mario's

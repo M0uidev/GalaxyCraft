@@ -113,6 +113,8 @@ const f32 HB_COS[HB_SEGMENTS] = {1.f,     0.92388f,  0.70711f,  0.38268f,  0.f, 
                                  -1.f,    -0.92388f, -0.70711f, -0.38268f, 0.f,      0.38268f,  0.70711f,  0.92388f};
 MarioHitbox gHitbox;
 bool gHitboxOn = false;
+// The light of full sky light now (GXC_MSG_SKY): white by day, dim and bluish at night.
+GXColor gSky = {255, 255, 255, 255};
 u8* gHitboxDl[2] = {0, 0};
 u32 gHitboxNext = 0;
 
@@ -323,6 +325,16 @@ public:
     else if (r.type == gxc::InboxRecord::SEAT)
     {
       EntityDrawSeat(r.seat);
+    }
+    else if (r.type == gxc::InboxRecord::SKY)
+    {
+      u8 c[3];
+      for (int k = 0; k < 3; k++)
+      {
+        const f32 v = r.sky[k] < 0.f ? 0.f : r.sky[k] > 1.f ? 1.f : r.sky[k];
+        c[k] = static_cast<u8>(v * 255.f + 0.5f);
+      }
+      gSky.r = c[0], gSky.g = c[1], gSky.b = c[2];
     }
     else if (r.type == gxc::InboxRecord::HURT)
     {
@@ -627,15 +639,13 @@ public:
         DrawHitbox();
       return;
     }
-    GXClearVtxDesc();
-    GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
-    GXSetVtxDesc(GX_VA_CLR0, GX_DIRECT);
-    GXSetVtxDesc(GX_VA_TEX0, GX_DIRECT);
     // Positions: s16 with 3 fraction bits from the chunk's center (PlanetMesher), color RGB565,
-    // texture coordinates u16 with 15 fraction bits (a texel of a 1024-wide atlas is 32). A far
-    // view's (format 5): whole units from the planet's center (PlanetLod).
+    // light RGBA8 (block light's color, sky light in alpha), texture coordinates u16 with 15
+    // fraction bits (a texel of a 1024-wide atlas is 32). A far view's (format 5): whole units
+    // from the planet's center, no light (PlanetLod).
     GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_POS, GX_POS_XYZ, GX_S16, 3);
     GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
+    GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_CLR1, GX_CLR_RGBA, GX_RGBA8, 0);
     GXSetVtxAttrFmt(GX_VTXFMT7, GX_VA_TEX0, GX_TEX_ST, GX_U16, 15);
     GXSetVtxAttrFmt(GX_VTXFMT5, GX_VA_POS, GX_POS_XYZ, GX_S16, 0);
     GXSetVtxAttrFmt(GX_VTXFMT5, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
@@ -652,16 +662,7 @@ public:
                     static_cast<f32>(gAtlas.levels - 1), 0.f, GX_FALSE, GX_TRUE, GX_ANISO_1);
     GXLoadTexObj(&tex, GX_TEXMAP0);
     GXSetNumIndStages(0);
-    GXSetTevDirect(GX_TEVSTAGE0);
-    GXSetNumTevStages(1);
-    GXSetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
     GXSetTevSwapModeTable(GX_TEV_SWAP0, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE, GX_CH_ALPHA);
-    GXSetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
-    GXSetTevOp(GX_TEVSTAGE0, GX_MODULATE);
-    // Alpha is the texture's alone (the vertex color has none): Minecraft's cutout, the holes of
-    // leaves, glass and flowers are not drawn and do not hide what is behind them.
-    GXSetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
-    GXSetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
     GXColor black = {0, 0, 0, 0};
     GXSetFog(GX_FOG_NONE, 0.f, 0.f, 0.f, 0.f, black);
     GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
@@ -680,9 +681,16 @@ public:
         view[4 * r + c] = cam[r][c];
     GXSetCurrentMtx(GX_PNMTX0);
     u32 drawn = 0, far = 0;
+    // Far views: their texture and color under the sky's light (seen from afar, all sky-lit).
+    UseFarLight();
     for (u32 i = 0; i < MAX_PLANETS; i++)
       if (gPlanets[i].id)
-        DrawPlanet(gPlanets[i], view, proj, &drawn, &far, false);
+        DrawPlanet(gPlanets[i], view, proj, &drawn, &far, PASS_FAR);
+    // Chunks: each corner's own light (caves dark, torches warm), the sky's by the hour.
+    UseCornerLight();
+    for (u32 i = 0; i < MAX_PLANETS; i++)
+      if (gPlanets[i].id)
+        DrawPlanet(gPlanets[i], view, proj, &drawn, &far, PASS_SOLID);
     // Water, over everything opaque: blended by its texture's alpha, hiding nothing behind it (no
     // depth written), seen from both sides (from under the surface too).
     GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
@@ -691,7 +699,7 @@ public:
     GXSetCullMode(GX_CULL_NONE);
     for (u32 i = 0; i < MAX_PLANETS; i++)
       if (gPlanets[i].id)
-        DrawPlanet(gPlanets[i], view, proj, &drawn, &far, true);
+        DrawPlanet(gPlanets[i], view, proj, &drawn, &far, PASS_CLEAR);
     GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_NOOP);
     GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
     GXSetCullMode(GX_CULL_FRONT);
@@ -709,7 +717,70 @@ public:
   // Its far view's tiles and its chunks: the mod sends each tile as one or the other (chunks within
   // its render distance of Mario), so whatever the planet has is drawn. From afar, its far view
   // alone: the covered parts stand in for the chunks.
-  static void DrawPlanet(const Planet& p, const f32 view[12], const f32 proj[7], u32* drawn, u32* far, bool translucent)
+  enum Pass
+  {
+    PASS_FAR,    // its far view's parts
+    PASS_SOLID,  // its chunks' opaque faces
+    PASS_CLEAR,  // its chunks' translucent faces (water)
+  };
+
+  // TEV: texture x vertex color x the sky's light (KONST). Far views have no light of their own.
+  static void UseFarLight()
+  {
+    GXClearVtxDesc();
+    GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GXSetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+    GXSetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+    GXSetNumChans(1);
+    GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_VTX, 0, GX_DF_NONE, GX_AF_NONE);
+    GXSetNumTevStages(2);
+    GXSetTevKColor(GX_KCOLOR0, gSky);
+    Stage(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0, GX_CC_ZERO, GX_CC_TEXC, GX_CC_RASC, GX_CC_ZERO, GX_TEVPREV);
+    GXSetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+    GXSetTevKColorSel(GX_TEVSTAGE1, GX_TEV_KCSEL_K0);
+    Stage(GX_TEVSTAGE1, GX_TEXCOORD_NULL, GX_TEXMAP_NULL, GX_COLOR_NULL, GX_CC_ZERO, GX_CC_CPREV, GX_CC_KONST, GX_CC_ZERO,
+          GX_TEVPREV);
+    GXSetTevAlphaIn(GX_TEVSTAGE1, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_APREV);
+  }
+
+  // TEV: light = block light's color + sky light x the sky's light (into C0), then texture x
+  // vertex color x light: Minecraft's lightmap, the hour's part done here.
+  static void UseCornerLight()
+  {
+    GXClearVtxDesc();
+    GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GXSetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+    GXSetVtxDesc(GX_VA_CLR1, GX_DIRECT);
+    GXSetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+    GXSetNumChans(2);
+    GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_VTX, 0, GX_DF_NONE, GX_AF_NONE);
+    GXSetChanCtrl(GX_COLOR1A1, GX_FALSE, GX_SRC_REG, GX_SRC_VTX, 0, GX_DF_NONE, GX_AF_NONE);
+    GXSetNumTevStages(3);
+    GXSetTevKColor(GX_KCOLOR0, gSky);
+    GXSetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
+    Stage(GX_TEVSTAGE0, GX_TEXCOORD_NULL, GX_TEXMAP_NULL, GX_COLOR1A1, GX_CC_ZERO, GX_CC_KONST, GX_CC_RASA, GX_CC_RASC,
+          GX_TEVREG0);
+    GXSetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO);
+    Stage(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0, GX_CC_ZERO, GX_CC_TEXC, GX_CC_RASC, GX_CC_ZERO, GX_TEVPREV);
+    GXSetTevAlphaIn(GX_TEVSTAGE1, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+    Stage(GX_TEVSTAGE2, GX_TEXCOORD_NULL, GX_TEXMAP_NULL, GX_COLOR_NULL, GX_CC_ZERO, GX_CC_CPREV, GX_CC_C0, GX_CC_ZERO,
+          GX_TEVPREV);
+    GXSetTevAlphaIn(GX_TEVSTAGE2, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_APREV);
+  }
+
+  // A TEV stage computing d + (1 - c) a + c b (clamped) into out; its alpha (set by the caller) likewise.
+  static void Stage(GXTevStageID st, GXTexCoordID coord, GXTexMapID map, GXChannelID chan, GXTevColorArg a, GXTevColorArg b,
+                    GXTevColorArg c, GXTevColorArg d, GXTevRegID out)
+  {
+    GXSetTevDirect(st);
+    GXSetTevSwapMode(st, GX_TEV_SWAP0, GX_TEV_SWAP0);
+    GXSetTevOrder(st, coord, map, chan);
+    GXSetTevColorIn(st, a, b, c, d);
+    GXSetTevColorOp(st, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, out);
+    GXSetTevAlphaOp(st, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, out);
+  }
+
+  static void DrawPlanet(const Planet& p, const f32 view[12], const f32 proj[7], u32* drawn, u32* far, Pass pass)
   {
     // The camera in the planet's frame: chunks behind it, past the horizon or beside the view are
     // skipped. The bedrock shell (unbreakable) is the ball that hides them.
@@ -725,7 +796,8 @@ public:
     gxc::ViewTranslate(view, p.center, planet);
     const f32 above = gxc::Sqrt(eye[0] * eye[0] + eye[1] * eye[1] + eye[2] * eye[2]) - p.surface;
     const bool afar = p.far && above > (p.surface > FAR_VIEW_ABOVE ? p.surface : FAR_VIEW_ABOVE);
-    if (p.far && !translucent)
+    const bool translucent = pass == PASS_CLEAR;
+    if (p.far && pass == PASS_FAR)
     {
       GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(planet), GX_PNMTX0);
       for (u32 f = 0; f < gxc::FAR_VIEW_PARTS; f++)
@@ -742,7 +814,7 @@ public:
         (*far)++;
       }
     }
-    if (afar)
+    if (afar || pass == PASS_FAR)
       return;
     for (u32 i = 0; i < p.drawn_count; i++)
     {

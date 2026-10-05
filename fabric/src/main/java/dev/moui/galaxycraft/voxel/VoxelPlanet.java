@@ -27,6 +27,7 @@ public final class VoxelPlanet {
     private Listener listener; // told of every change but those set quietly
     private final java.util.Map<Long, Boolean> sameLook = new java.util.HashMap<>();
     private PlanetBiomes biomes = PlanetBiomes.uniform(PlanetBiomes.PLAINS);
+    private final PlanetLight light;
     /** Per biome color kind, per column: the color blended over the columns around (0: not yet). */
     private final int[][] blended = new int[PlanetBiomes.KINDS][];
     /** Columns each way a biome color is averaged over (Minecraft's biome blend, 5 x 5 by default). */
@@ -54,6 +55,9 @@ public final class VoxelPlanet {
             BlockInfo b = info(c);
             if (b.occludes()) solid[chunkOf(c)]++;
         }
+        this.light = new PlanetLight(this);
+        light.computeAll();
+        light.onChange(this::lightChanged);
         // Flowing again where it was saved, but only what can change: a sea of still water would
         // otherwise keep the fluid ticks busy for a while after every load.
         for (int c = 0; c < cells.length; c++)
@@ -181,6 +185,22 @@ public final class VoxelPlanet {
     /** A planet as saved by {@link #cells()}, its ids those of blocks. */
     public static VoxelPlanet of(CubeSphere grid, int depth, char[] cells, Blocks blocks) {
         return new VoxelPlanet(grid, depth, cells, blocks);
+    }
+
+    /** Sky and block light of every cell (Minecraft's levels, 0 to 15). */
+    public PlanetLight light() {
+        return light;
+    }
+
+    /** A cell's light changed: what shows its light (its chunk, and its neighbors' faces toward it) is drawn anew. */
+    private void lightChanged(int cell) {
+        dirty.set(chunkOf(cell));
+        int i = grid.i(cell) % CHUNK, j = grid.j(cell) % CHUNK, k = grid.k(cell) % CHUNK;
+        if (i == 0 || j == 0 || k == 0 || i == CHUNK - 1 || j == CHUNK - 1 || k == CHUNK - 1)
+            for (int s = 0; s < 6; s++) {
+                int nb = grid.neighbor(cell, s);
+                if (nb >= 0) dirty.set(chunkOf(nb));
+            }
     }
 
     public PlanetBiomes biomes() {
@@ -315,6 +335,8 @@ public final class VoxelPlanet {
         char was = cells[cell];
         if (was == b) return;
         cells[cell] = b;
+        if (blocks.lightBlock(was) != blocks.lightBlock(b) || blocks.lightEmission(was) != blocks.lightEmission(b))
+            light.update(cell);
         if (sameLook(was, b)) { // nothing to draw or collide anew
             if (listener != null) listener.changed(cell, b);
             return;

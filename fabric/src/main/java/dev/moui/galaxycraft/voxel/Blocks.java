@@ -51,6 +51,18 @@ public interface Blocks {
         return -1;
     }
 
+    /** How much light id takes from what passes through it, 0 to 15 (Minecraft's light dampening). */
+    default int lightBlock(int id) {
+        BlockInfo b = info(id);
+        return b.occludes() ? 15 : b.isFluid() && b.fluid() == WATER || leaves(id) ? 1 : 0;
+    }
+
+    /** The light id gives off, 0 to 15. */
+    default int lightEmission(int id) {
+        BlockInfo b = info(id);
+        return b.isFluid() && b.fluid() == LAVA ? 15 : 0;
+    }
+
     /** The atlas tile of a fluid's flowing texture; -1: its still one serves. */
     default int flowTile(int fluid) {
         return -1;

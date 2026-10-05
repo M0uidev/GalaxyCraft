@@ -226,6 +226,10 @@ static void TestInboxRecords()
         r.teleport.planet == 0);
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
   CHECK(off == b.size());
+  std::vector<u8> sky;  // the sky's light at night
+  Put32(sky, 113u << 16), Put32(sky, 12), PutF(sky, 0.25f), PutF(sky, 0.3f), PutF(sky, 0.5f);
+  off = 0;
+  CHECK(NextInboxRecord(sky.data(), sky.size(), &off, 512, &r) && r.type == InboxRecord::SKY && r.sky[2] == 0.5f);
   std::vector<u8> a;  // aimed: where to land
   Put32(a, 104u << 16), Put32(a, 20), PutF(a, 1500.f), Put32(a, 3), PutF(a, 0.f), PutF(a, 1.f), PutF(a, 0.f);
   off = 0;

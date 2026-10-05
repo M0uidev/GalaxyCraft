@@ -194,6 +194,8 @@ enum {
   GXC_MSG_SEAT = 112,      /* Mario rides something: f32 pos[3] (galaxy), u32 riding (0: he gets off); big-endian,
                               sent every frame while he rides (the game lets go if they stop) */
   GXC_MSG_HURT = 111,      /* the player was hurt in Minecraft: f32 from[3] (galaxy), u32 GXC_HURT_*; big-endian */
+  GXC_MSG_SKY = 113,       /* the sky's light now (Minecraft's lightmap at full sky light, day or night): f32 rgb[3],
+                              big-endian; planets' sky-lit faces take it */
   GXC_MSG_PAD = 0xFFFF,
 };
 

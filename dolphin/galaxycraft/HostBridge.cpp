@@ -307,7 +307,7 @@ void HostBridge::QueueInbox(const Msg& msg)
   if (msg.type != GXC_MSG_PLANET && msg.type != GXC_MSG_CHUNK && msg.type != GXC_MSG_PLANET_TP &&
       msg.type != GXC_MSG_OUTLINE && msg.type != GXC_MSG_HELD && msg.type != GXC_MSG_ATLAS &&
       msg.type != GXC_MSG_SKIN && msg.type != GXC_MSG_MODEL && msg.type != GXC_MSG_ENTITIES &&
-      msg.type != GXC_MSG_HURT && msg.type != GXC_MSG_SEAT)
+      msg.type != GXC_MSG_HURT && msg.type != GXC_MSG_SEAT && msg.type != GXC_MSG_SKY)
     return;
   // Entity frames say where everything is now: an older one still waiting is stale.
   if (msg.type == GXC_MSG_ENTITIES)

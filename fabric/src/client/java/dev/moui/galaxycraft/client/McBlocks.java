@@ -240,6 +240,14 @@ public final class McBlocks implements Blocks {
         return new ModelQuad(pos, uv, tileOf.getOrDefault(sprite.contents().name(), 0), tint, cull);
     }
 
+    @Override public int lightBlock(int id) {
+        return state(id).getLightDampening();
+    }
+
+    @Override public int lightEmission(int id) {
+        return state(id).getLightEmission();
+    }
+
     @Override public int flowTile(int fluid) {
         return fluid == WATER ? tileOf.get(WATER_FLOW) : fluid == LAVA ? tileOf.get(LAVA_FLOW) : -1;
     }

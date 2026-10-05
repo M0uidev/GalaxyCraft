@@ -141,7 +141,7 @@ class PlanetMesherTest {
             int v = 0;
             for (PlanetMesher.Quad q : PlanetMesher.quads(p, c))
                 for (Vector3d corner : q.corners()) {
-                    int o = 3 + PlanetMesher.VERTEX_BYTES * v++;
+                    int o = 3 + PlanetMesher.LIT_VERTEX_BYTES * v++;
                     String at = "";
                     for (int a = 0; a < 3; a++) at += ((long) s[a] * 8 + dl.getShort(o + 2 * a)) + ",";
                     String before = seen.putIfAbsent(key(corner), at);
