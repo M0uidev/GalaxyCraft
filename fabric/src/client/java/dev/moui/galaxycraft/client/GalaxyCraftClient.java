@@ -198,11 +198,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         if (bridge == null) return;
         // One frame per emulated frame, right after it: SMG2 takes a new look every frame, not two
         // in one and none in the next as two free-running 60 Hz clocks drift past each other.
-        if (following || walking() && bridge.gameLinked()) hostFrame = bridge.awaitFrame(hostFrame, FRAME_WAIT_MS);
+        if (following || ownPhysics() && bridge.gameLinked()) hostFrame = bridge.awaitFrame(hostFrame, FRAME_WAIT_MS);
         Minecraft mc = Minecraft.getInstance();
         float pt = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         // Minecraft movement: Mario goes where the player is, and Steve is drawn there outside first person.
-        boolean walker = walking() && frame != null && mc.player != null && bridge.gameLinked();
+        boolean walker = ownPhysics() && frame != null && mc.player != null && bridge.gameLinked();
         PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt))) : null,
                 walker && view() != View.FIRST ? frame : null);
         SkinClient.frame(bridge);
@@ -251,6 +251,19 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     /** Minecraft's physics chosen (the player walks on its own, Mario goes with it). */
     public static boolean walking() {
         return GalaxyOptions.MOVEMENT.get() == Movement.MINECRAFT;
+    }
+
+    /**
+     * The player moves by Minecraft's own physics and Mario goes with it: Minecraft's movement, or
+     * a flight (the elytra, from take-off until landed) in any movement mode.
+     */
+    public static boolean ownPhysics() {
+        return walking() || Flight.active();
+    }
+
+    /** Out of every planet's gravity (tests). */
+    public static boolean inVoid() {
+        return Flight.inVoid();
     }
 
     /** Minecraft's feel chosen: SMG2 moves Mario at Minecraft's speeds, with its jump. */
@@ -302,6 +315,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static void resetFrame() {
         frame = null;
         camOffsetGal = camLookGal = camUpGal = null;
+        Flight.reset();
         GalaxyCraft.FIELD.setFrame(null);
     }
 
@@ -331,13 +345,18 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             settleTicks = SETTLE_TICKS;
             GalaxyCraft.LOG.info("Linked to galaxy at {}", world.get().queryPos());
         } else {
+            Flight.beforeFrame(player, world.get(), frame, world.get().follow() && !flying && !ownPhysics());
             // Look and velocity are left alone in Minecraft space, so they turn with the frame
             // (parallel transport): walking keeps hugging the planet, as Mario's momentum does.
             if (flying) {
                 // Flying: up turns (smoothly) to the galaxy's +Y and stays there, whatever pulls.
                 Vector3d up = GravityFrame.limitTurn(frame.upGal(), GALAXY_UP, MAX_TURN_PER_TICK);
                 frame.update(up.negate(), pos);
-            } else if (world.get().follow() && world.get().hasGravity() && !walking()) {
+            } else if (Flight.active() && !player.onGround()) {
+                // Elytra: up turns to the gravity that pulls, at a flight's pace; in the void
+                // (no gravity) it stays as it was.
+                if (world.get().hasGravity()) frame.update(Flight.upToward(frame, gravity).negate(), pos);
+            } else if (world.get().follow() && world.get().hasGravity() && !ownPhysics()) {
                 // Nobody walks by Minecraft's physics here, so the frame may lag the gravity a
                 // little: the camera's up turns smoothly instead of snapping at planet edges.
                 Vector3d up = GravityFrame.limitTurn(frame.upGal(), new Vector3d(gravity).normalize().negate(),
@@ -353,7 +372,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 frame.update(grid != null ? new Vector3d(grid[2]).negate() : gravity, pos);
             }
         }
-        following = world.get().follow() && !flying && !walking();
+        following = world.get().follow() && !flying && !ownPhysics();
         if (wasFollowing && !following && walking()) {
             player.setPos(player.getX(), player.getY() + WALK_LIFT, player.getZ());
             player.setDeltaMovement(Vec3.ZERO);
@@ -379,11 +398,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 player.setPos(np.x, np.y, np.z);
                 player.setOldPosAndRot();
             });
-            if (walking() && !flying) alignToBlocks(player);
+            if (ownPhysics() && !flying && !Flight.active()) alignToBlocks(player);
         }
-        fitWidth(player, walking() && !flying && !following);
+        fitWidth(player, ownPhysics() && !flying && !following);
         GalaxyCraft.FIELD.setFrame(frame);
-        if (walking() && !flying && !following) {
+        if (ownPhysics() && !flying && !following) {
             // The galaxy's boxes turned and snapped with the frame; one overlapping the player
             // would let it through (Minecraft passes a box it starts in): out by the least move.
             var b = player.getBoundingBox();
@@ -415,6 +434,12 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                     SETTLE_DEPTH_BLOCKS) ? 0 : settleTicks - 1;
         }
         hold(player, settleTicks > 0);
+        // Minecraft's physics: no gravity in the void (nothing to settle on there), the wind far out.
+        if (ownPhysics() && !flying && Flight.afterFrame(player, world.get(), frame)) {
+            settleTicks = 0;
+            if (holding) hold(player, false);
+            player.setNoGravity(true);
+        }
     }
 
     /**
@@ -564,7 +589,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
                 client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene,
                 PlanetClient.itemActive(player), client.gui.screen() != null, flying,
-                client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES), walking(), System.nanoTime() - plusUntil < 0, mcFeel()));
+                client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES), ownPhysics(), System.nanoTime() - plusUntil < 0, mcFeel()));
     }
 
     public static void camLog(Vector3d eyeMc, Vector3d backMc, double dist, double hit) {
