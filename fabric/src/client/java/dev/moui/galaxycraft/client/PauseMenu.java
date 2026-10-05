@@ -31,7 +31,7 @@ final class PauseMenu {
     }
 
     private static void addButtons(Minecraft mc, Screen pause) {
-        List<AbstractWidget> buttons = Screens.getButtons(pause);
+        List<AbstractWidget> buttons = Screens.getWidgets(pause);
         if (buttons.isEmpty()) return; // F3+Esc: paused without a menu
         List<AbstractWidget> spare = buttons.stream().filter(PauseMenu::spare).toList();
         // Two places: the two spare buttons', one spare button's halves, or else the top corner.
