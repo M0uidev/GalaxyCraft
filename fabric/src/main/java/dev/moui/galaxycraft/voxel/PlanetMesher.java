@@ -663,7 +663,7 @@ public final class PlanetMesher {
      * block light's tint, the brightness setting's lift at its default). The game adds A times the
      * sky's color of the hour (GXC_MSG_SKY) to RGB.
      */
-    static int lightRGBA(double sky, double block) {
+    public static int lightRGBA(double sky, double block) {
         double lb = Math.clamp(block / 15, 0, 1), ls = Math.clamp(sky / 15, 0, 1);
         double bb = curve(lb) * BLOCK_FACTOR, parabolic = (2 * lb - 1) * (2 * lb - 1);
         double[] c = new double[3];

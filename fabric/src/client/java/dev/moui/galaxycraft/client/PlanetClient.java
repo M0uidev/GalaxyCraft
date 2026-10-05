@@ -157,6 +157,11 @@ public final class PlanetClient {
 
     private static int skySent = -1, skyAge;
 
+    /** The sky's light last sent to the game, 0xRRGGBB (white before any). */
+    static int skyLight() {
+        return skySent < 0 ? 0xFFFFFF : skySent;
+    }
+
     /**
      * The sky's light at this hour to the game (GXC_MSG_SKY): Minecraft's lightmap for full sky
      * light and no block light (the time's sky light factor and color, then lightmap.fsh's clamp

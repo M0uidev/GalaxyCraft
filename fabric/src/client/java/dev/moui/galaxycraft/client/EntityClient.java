@@ -116,6 +116,40 @@ final class EntityClient {
         return best;
     }
 
+    /**
+     * Each piece in the light where it is, as Minecraft lights entities: the planet's block light
+     * and sky light there (the brighter of its cell and the one above, so a piece sunk into the
+     * ground is not black) under the sky's light of the hour, times the piece's own tint.
+     */
+    private List<EntityWire.Piece> lit(List<EntityWire.Piece> pieces) {
+        if (!session().active()) return pieces;
+        var p = session().planet();
+        int sky = PlanetClient.skyLight();
+        java.util.Map<Integer, Integer> byCell = new java.util.HashMap<>();
+        List<EntityWire.Piece> out = new ArrayList<>(pieces.size());
+        for (EntityWire.Piece piece : pieces) {
+            double[] m = piece.mtx();
+            int cell = session().cellAt(new Vector3d(m[3], m[7], m[11]));
+            int light = byCell.computeIfAbsent(cell, c -> {
+                if (c < 0) return sky;
+                int up = p.grid.neighbor(c, dev.moui.galaxycraft.voxel.CubeSphere.TOP);
+                int l = dev.moui.galaxycraft.voxel.PlanetMesher.lightRGBA(Math.max(p.light().sky(c), p.light().sky(up)),
+                        Math.max(p.light().block(c), p.light().block(up)));
+                int a = l & 0xFF, rgb = 0;
+                for (int sh = 16; sh >= 0; sh -= 8) {
+                    int ch = (l >>> (sh + 8) & 0xFF) + a * (sky >> sh & 0xFF) / 255;
+                    rgb |= Math.min(255, ch) << sh;
+                }
+                return rgb;
+            });
+            int t = piece.tint(), tinted = t & 0xFF;
+            for (int sh = 24; sh >= 8; sh -= 8)
+                tinted |= ((t >>> sh & 0xFF) * (light >> (sh - 8) & 0xFF) / 255) << sh;
+            out.add(new EntityWire.Piece(piece.model(), piece.skin(), piece.overlay(), tinted, m));
+        }
+        return out;
+    }
+
     /** Render thread, once per emulated frame: this frame's entities to the game. */
     void frame(BridgeClient bridge, int sceneId, Vector3d marioFeetGal, float pt) {
         if (sceneId != scene || bridge.hostPid() != host) {
@@ -137,6 +171,7 @@ final class EntityClient {
             for (ParticleClient.Live l : particles.all()) particle(l, mario, pt, pieces);
         }
         if (pieces.isEmpty() && wasEmpty) return;
+        pieces = lit(pieces);
         for (EntityWire.Piece p : pieces) {
             if (!send(bridge, Layout.MSG_MODEL, p.model() & ~EntityWire.BILLBOARD, models, sentModels)) return;
             if (!send(bridge, Layout.MSG_SKIN, p.skin(), skins, sentSkins)) return;

@@ -247,8 +247,15 @@ public final class EntityTest implements FabricClientGameTest {
         sp.getServer().runCommand("item replace entity @a hotbar.0 with bucket");
         ctx.waitTicks(5);
         ctx.runOnClient(mc -> {
+            // The one summoned by Mario (a planet's new ground has cows of its own, farther off).
+            net.minecraft.world.entity.Entity cow = null;
             for (var e : ShadowWorld.entities().list())
-                if (e instanceof net.minecraft.world.entity.animal.cow.Cow) ShadowWorld.interact(e.getId(), mc.player.getUUID());
+                if (e instanceof net.minecraft.world.entity.animal.cow.Cow && (cow == null
+                        || ShadowWorld.distanceToMario(e.getX(), e.getY(), e.getZ()) < ShadowWorld.distanceToMario(cow.getX(), cow.getY(), cow.getZ())))
+                    cow = e;
+            System.out.println("[GalaxyCraft entities] the nearest cow: " + (cow == null ? "none"
+                    : String.format("%.1f blocks off", ShadowWorld.distanceToMario(cow.getX(), cow.getY(), cow.getZ()))));
+            if (cow != null) ShadowWorld.interact(cow.getId(), mc.player.getUUID());
         });
         ctx.waitTicks(5);
         check(ctx.computeOnClient(mc -> mc.player.getMainHandItem().is(net.minecraft.world.item.Items.MILK_BUCKET)), "the cow is milked");
