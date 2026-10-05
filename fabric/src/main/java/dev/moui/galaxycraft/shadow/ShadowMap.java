@@ -20,12 +20,32 @@ public final class ShadowMap {
     /** By cell side: the step in the shadow dimension (x, y, z). */
     public static final int[][] STEP = {{0, 1, 0}, {0, -1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
+    /** The overworld's surface: where a planet's ground goes in the shadow (SURFACE_Y - depth is its layer 0). */
+    public static final int SURFACE_Y = 64;
+
     public final CubeSphere grid;
     public final int z0;
+    /** The shadow's y of the planet's layer 0. */
+    public final int y0;
 
     public ShadowMap(CubeSphere grid, String stage) {
+        this(grid, stage, 0);
+    }
+
+    /**
+     * y0: where layer 0 goes. A planet's ground at the overworld's height (y0 = SURFACE_Y - depth):
+     * Minecraft's rules that go by height work as on its surface (no slimes of slime chunks,
+     * which need y under 40; swamp slimes at night, which need 51 to 69).
+     */
+    public ShadowMap(CubeSphere grid, String stage, int y0) {
         this.grid = grid;
         this.z0 = Z_BASE + Math.floorMod(stage.hashCode(), SLOTS) * STRIDE;
+        this.y0 = y0;
+    }
+
+    /** The shadow map of a planet: its ground at the overworld's surface height. */
+    public static ShadowMap of(dev.moui.galaxycraft.voxel.VoxelPlanet p, String stage) {
+        return new ShadowMap(p.grid, stage, Math.max(0, SURFACE_Y - p.depth));
     }
 
     public int x(int cell) {
@@ -33,7 +53,7 @@ public final class ShadowMap {
     }
 
     public int y(int cell) {
-        return grid.k(cell);
+        return y0 + grid.k(cell);
     }
 
     public int z(int cell) {
@@ -42,6 +62,7 @@ public final class ShadowMap {
 
     /** The cell at a position inside a face's box; -1 elsewhere (halo, gaps, above or below). */
     public int cell(int x, int y, int z) {
+        y -= y0;
         int f = Math.floorDiv(x, STRIDE), j = x - f * STRIDE - 1, i = z - z0 - 1;
         if (f < 0 || f >= 6 || y < 0 || y >= grid.layers || i < 0 || i >= grid.n || j < 0 || j >= grid.n) return -1;
         return grid.index(f, i, j, y);
@@ -49,6 +70,7 @@ public final class ShadowMap {
 
     /** The cell a halo position copies (the one across the face's edge); -1 if it is no halo. */
     public int haloSource(int x, int y, int z) {
+        y -= y0;
         int f = Math.floorDiv(x, STRIDE), j = x - f * STRIDE - 1, i = z - z0 - 1, n = grid.n;
         if (f < 0 || f >= 6 || y < 0 || y >= grid.layers) return -1;
         boolean iOut = i == -1 || i == n, jOut = j == -1 || j == n;
@@ -95,7 +117,7 @@ public final class ShadowMap {
         int bx = (int) Math.floor(x), bz = (int) Math.floor(z), f = Math.floorDiv(bx, STRIDE), n = grid.n;
         int j = bx - f * STRIDE - 1, i = bz - z0 - 1;
         if (f < 0 || f >= 6 || j < -2 || j > n + 1 || i < -2 || i > n + 1) return null;
-        int cell = grid.index(f, Math.clamp(i, 0, n - 1), Math.clamp(j, 0, n - 1), Math.clamp((int) Math.floor(y), 0, grid.layers - 1));
+        int cell = grid.index(f, Math.clamp(i, 0, n - 1), Math.clamp(j, 0, n - 1), Math.clamp((int) Math.floor(y) - y0, 0, grid.layers - 1));
         double fx = x - x(cell), fy = y - y(cell), fz = z - z(cell);
         Vector3d o = CellSpace.point(grid, cell, fx, fy, fz);
         Vector3d ax = CellSpace.point(grid, cell, fx + 1, fy, fz).sub(o);
@@ -117,7 +139,7 @@ public final class ShadowMap {
         int j = bx - f * STRIDE - 1, i = bz - z0 - 1;
         if (j >= 0 && j < n && i >= 0 && i < n) return null;
         double[] a = frame(x, y, z);
-        if (a == null || y < 0 || y >= grid.layers) return null;
+        if (a == null || y < y0 || y >= y0 + grid.layers) return null;
         Vector3d p = new Vector3d(a[0], a[1], a[2]);
         int cell = grid.cellAt(p);
         if (cell < 0 || grid.face(cell) == f) return null;

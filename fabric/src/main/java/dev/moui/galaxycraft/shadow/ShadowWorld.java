@@ -315,7 +315,7 @@ public final class ShadowWorld {
         ops.add(level -> {
             release(level);
             planet = p;
-            map = p == null ? null : new ShadowMap(p.grid, stage);
+            map = p == null ? null : ShadowMap.of(p, stage);
         });
     }
 
@@ -421,7 +421,37 @@ public final class ShadowWorld {
         mirrorSome(level);
         flushEdges(level);
         moveProxy(level);
+        animate(level);
         entities = map == null ? null : new Entities(planet, map, collect(level));
+    }
+
+    private static final net.minecraft.util.RandomSource ANIMATE = net.minecraft.util.RandomSource.create();
+
+    /**
+     * What a Minecraft client does around its player every tick (ClientLevel.animateTick): blocks
+     * at random spots within 16 and 32 blocks of Mario make their ambient particles (a torch's
+     * flame and smoke, a campfire's, falling leaves, portal swirls), here caught for the planet.
+     * Fluids are the planet's (not in the shadow): theirs come from its cells (lava pops, drips).
+     */
+    private static void animate(ServerLevel level) {
+        if (map == null || proxy == null || proxy.isRemoved() || proxy.isSpectator()) return;
+        BlockPos m = mario;
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int i = 0; i < 667; i++)
+            for (int r : new int[] {16, 32}) {
+                pos.set(m.getX() + ANIMATE.nextInt(r) - ANIMATE.nextInt(r), m.getY() + ANIMATE.nextInt(r) - ANIMATE.nextInt(r),
+                        m.getZ() + ANIMATE.nextInt(r) - ANIMATE.nextInt(r));
+                if (!mirrored.contains(ChunkPos.pack(pos)) || !level.isLoaded(pos)) continue;
+                BlockState s = level.getBlockState(pos);
+                try {
+                    if (!s.isAir()) s.getBlock().animateTick(s, level, pos, ANIMATE);
+                    int cell = map.cell(pos.getX(), pos.getY(), pos.getZ());
+                    if (cell >= 0 && planet.fluid(cell) != dev.moui.galaxycraft.voxel.Blocks.NO_FLUID)
+                        state(planet.get(cell)).getFluidState().animateTick(level, pos.immutable(), ANIMATE);
+                } catch (RuntimeException e) {
+                    // Some block that wants a client level: no particles from it.
+                }
+            }
     }
 
     /** Mario's stand-in: made when there is a planet and a player, kept where Mario is. */
@@ -671,8 +701,8 @@ public final class ShadowWorld {
         boolean[] any = {false};
         chunk.fillBiomesFromNoise((qx, qy, qz) -> {
             int x = (qx << 2) + 2, z = (qz << 2) + 2;
-            int cell = map.cell(x, 0, z);
-            if (cell < 0) cell = map.haloSource(x, 0, z);
+            int cell = map.cell(x, map.y0, z);
+            if (cell < 0) cell = map.haloSource(x, map.y0, z);
             var was = chunk.getNoiseBiome(qx, qy, qz);
             if (cell < 0) return was;
             String name = planet.biome(cell);
@@ -697,8 +727,8 @@ public final class ShadowWorld {
         if (chunk.getInhabitedTime() > 0) return;
         chunk.setInhabitedTime(1);
         ChunkPos pos = new ChunkPos(ChunkPos.getX(column), ChunkPos.getZ(column));
-        BlockPos middle = new BlockPos(pos.getMiddleBlockX(), map.grid.layers - 1, pos.getMiddleBlockZ());
-        if (map.cell(middle.getX(), 0, middle.getZ()) < 0) return;
+        BlockPos middle = new BlockPos(pos.getMiddleBlockX(), map.y0 + map.grid.layers - 1, pos.getMiddleBlockZ());
+        if (map.cell(middle.getX(), map.y0, middle.getZ()) < 0) return;
         try {
             net.minecraft.world.level.NaturalSpawner.spawnMobsForChunkGeneration(level, middle, pos, level.getRandom());
         } catch (RuntimeException e) {
@@ -714,11 +744,11 @@ public final class ShadowWorld {
         int x = (ChunkPos.getX(column) << 4) + row, z0 = ChunkPos.getZ(column) << 4;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         for (int z = z0; z < z0 + 16; z++)
-            for (int y = 0; y < map.grid.layers; y++) {
+            for (int y = map.y0; y < map.y0 + map.grid.layers; y++) {
                 int cell = map.cell(x, y, z);
                 if (cell < 0) cell = map.haloSource(x, y, z);
                 if (cell < 0) {
-                    if (y == 0 && map.haloSource(x, 0, z) < 0) break; // not this planet's column
+                    if (y == map.y0 && map.haloSource(x, y, z) < 0) break; // not this planet's column
                     continue;
                 }
                 BlockState s = state(planet.get(cell));

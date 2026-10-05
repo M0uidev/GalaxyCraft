@@ -46,7 +46,7 @@ public final class SpawnProbe implements FabricClientGameTest {
             run(ctx, 200); // the shadow takes the planet in
             String biome = ctx.computeOnClient(mc -> {
                 var level = mc.getSingleplayerServer().getLevel(ShadowWorld.KEY);
-                var map = new ShadowMap(s.planet().grid, "probe");
+                var map = ShadowMap.of(s.planet(), "probe");
                 int cell = s.cellAt(mario);
                 return level.getBiome(new BlockPos(map.x(cell), map.y(cell), map.z(cell))).getRegisteredName();
             });
@@ -56,7 +56,28 @@ public final class SpawnProbe implements FabricClientGameTest {
             int animals = count(ctx, true);
             System.out.println("[GalaxyCraft spawn] animals after the planet came in: " + animals);
             if (animals == 0) fails.add("no animals");
+            // A torch beside Mario: its flame and smoke, as a client would make them.
+            ctx.runOnClient(mc -> {
+                var p = s.planet();
+                int c = p.grid.neighbor(s.cellAt(mario), dev.moui.galaxycraft.voxel.CubeSphere.I_PLUS);
+                p.set(c, p.blocks.parse("minecraft:torch"));
+                while (ShadowWorld.pollParticle() != null) {}
+            });
+            run(ctx, 100);
+            int flames = ctx.computeOnClient(mc -> {
+                int n = 0;
+                for (ShadowWorld.Particle q; (q = ShadowWorld.pollParticle()) != null; )
+                    if (q.options().getType() == net.minecraft.core.particles.ParticleTypes.FLAME) n++;
+                return n;
+            });
+            System.out.println("[GalaxyCraft spawn] flames from a torch in 5 s: " + flames);
+            if (flames == 0) fails.add("no torch flames");
             int dayMonsters = count(ctx, false);
+            System.out.println("[GalaxyCraft spawn] by day: " + ctx.computeOnClient(mc -> {
+                java.util.Map<String, Integer> kinds = new java.util.TreeMap<>();
+                for (var m : ShadowWorld.entities().list()) if (m instanceof Enemy) kinds.merge(m.getType().toShortString(), 1, Integer::sum);
+                return kinds.toString();
+            }));
             sp.getServer().runCommand("time set midnight");
             run(ctx, 1200);
             int night = count(ctx, false);
@@ -69,6 +90,7 @@ public final class SpawnProbe implements FabricClientGameTest {
             });
             System.out.println("[GalaxyCraft spawn] monsters by day " + dayMonsters + ", after a minute of night " + night
                     + " (nearest " + near + " blocks)");
+            if (dayMonsters > 0) fails.add("monsters in daylight on plains: " + dayMonsters);
             if (night <= dayMonsters) fails.add("no monsters at night");
             if (night > 20) fails.add("too many monsters for the planet's ground near Mario: " + night);
             System.out.println("[GalaxyCraft spawn] " + (fails.isEmpty() ? "PASS" : "FAIL " + fails));
@@ -87,7 +109,7 @@ public final class SpawnProbe implements FabricClientGameTest {
         {
             var server = mc.getSingleplayerServer();
             var level = server.getLevel(ShadowWorld.KEY);
-            var map = new ShadowMap(s.planet().grid, "probe");
+            var map = ShadowMap.of(s.planet(), "probe");
             int cell = s.cellAt(mario);
             BlockPos at = new BlockPos(map.x(cell), map.y(cell), map.z(cell));
             var cp = new net.minecraft.world.level.ChunkPos(at.getX() >> 4, at.getZ() >> 4);

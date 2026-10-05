@@ -69,7 +69,7 @@ public final class ShadowLink {
     /** The shadow's columns under the planet's chunks near Mario, with a block more around for the halo. */
     private void follow(VoxelPlanet p, Vector3d marioGal) {
         Set<Long> columns = new HashSet<>();
-        var map = new dev.moui.galaxycraft.shadow.ShadowMap(p.grid, stage);
+        var map = dev.moui.galaxycraft.shadow.ShadowMap.of(p, stage);
         for (int chunk : session().chunksNear(marioGal, RANGE)) {
             int[] cells = p.cellsOf(chunk);
             int x0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, z0 = Integer.MAX_VALUE, z1 = Integer.MIN_VALUE;
