@@ -34,16 +34,14 @@ stop_minecraft() {
 stop_minecraft
 
 # Dual core (CPUThread): this Dolphin defaults to single core on desktop, which puts the CPU and
-# the GPU on one thread and leaves no headroom on planets. Vulkan: frame generation layers
-# (lsfg-vk) only hook Vulkan, and Dolphin's default here is OpenGL.
+# the GPU on one thread and leaves no headroom on planets.
 # Background input / hotkeys without focus, for this run only (-C is not saved): on Hyprland,
 # Dolphin's window can hold the compositor's focus without Qt noticing, and then Dolphin would
 # ignore the Wii Remote and the link hotkey. XWayland only shows keys to a focused X window, so
 # typing in other programs still does not reach the game.
 GALAXYCRAFT=1 GALAXYCRAFT_LINK_ON_SAVE=1 dolphin/build/Binaries/dolphin-emu -e syati/build/galaxycraft.json \
   -C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False \
-  -C Dolphin.Core.RAMOverrideEnable=True -C Dolphin.Core.MEM2Size=268435456 -C Dolphin.Core.CPUThread=True \
-  -C Dolphin.Core.GFXBackend=Vulkan &
+  -C Dolphin.Core.RAMOverrideEnable=True -C Dolphin.Core.MEM2Size=268435456 -C Dolphin.Core.CPUThread=True &
 DOLPHIN=$!
 # The overlay demo joins a peaceful adventure world and stays there; ~14 h of ticks.
 (cd fabric && exec ./gradlew runClientGameTest -PgalaxycraftDemo -PgalaxycraftHidden -PgalaxycraftPlanet \
