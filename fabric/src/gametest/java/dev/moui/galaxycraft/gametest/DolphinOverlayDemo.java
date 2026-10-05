@@ -17,8 +17,14 @@ public final class DolphinOverlayDemo implements FabricClientGameTest {
         // Commands allowed: /gamemode creative gives the creative inventory (E), and its blocks go on planets.
         try (TestSingleplayerContext sp = ctx.worldBuilder().adjustSettings(w -> w.setAllowCommands(true)).create()) {
             sp.getServer().runCommand("gamemode adventure @a");
-            sp.getServer().runCommand("difficulty peaceful");
+            // Monsters come out in the dark on planets, as in Minecraft (-Dgalaxycraft.difficulty=peaceful: none).
+            sp.getServer().runCommand("difficulty " + System.getProperty("galaxycraft.difficulty", "normal"));
             sp.getServer().runCommand("gamerule fall_damage false"); // like Mario, no fall damage
+            // Minecraft's world as it is (the test world freezes these): mobs spawn by the light,
+            // days pass (-Dgalaxycraft.dayCycle=false: always noon, monsters in the dark only).
+            sp.getServer().runCommand("gamerule spawn_mobs true");
+            sp.getServer().runCommand("gamerule advance_weather true");
+            sp.getServer().runCommand("gamerule advance_time " + !"false".equals(System.getProperty("galaxycraft.dayCycle")));
             // Blocks and buckets for the voxel planet (slot 1 stays empty: the empty hand spins and presses B).
             String[] items = {"iron_pickaxe", "grass_block 64", "dirt 64", "stone 64", "cobblestone 64", "ice 64",
                     "water_bucket", "lava_bucket"};

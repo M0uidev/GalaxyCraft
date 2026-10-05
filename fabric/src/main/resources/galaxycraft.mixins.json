@@ -1,24 +1,25 @@
 {
-	"required": true,
-	"package": "dev.moui.galaxycraft.mixin",
-	"compatibilityLevel": "JAVA_25",
-	"mixins": [
-		"EntityCollideMixin",
-		"ServerGamePacketListenerMixin",
-		"ShadowAnimationMixin",
-		"ShadowChunkMixin",
-		"ShadowChunkReadMixin",
-		"ShadowFluidMixin",
-		"LivingEntityAccessor",
-		"ShadowLevelMixin",
-		"ShadowParticleMixin",
-		"ShadowReachMixin",
-		"ShadowRideMixin"
-	],
-	"injectors": {
-		"defaultRequire": 1
-	},
-	"overwrites": {
-		"requireAnnotations": true
-	}
+  "required": true,
+  "package": "dev.moui.galaxycraft.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "EntityCollideMixin",
+    "ServerGamePacketListenerMixin",
+    "ShadowAnimationMixin",
+    "ShadowChunkMixin",
+    "ShadowChunkReadMixin",
+    "ShadowFluidMixin",
+    "LivingEntityAccessor",
+    "ShadowLevelMixin",
+    "ShadowParticleMixin",
+    "ShadowReachMixin",
+    "ShadowRideMixin",
+    "ShadowSpawnMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
 }

@@ -32,6 +32,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(ServerLevel.class)
 abstract class ShadowLevelMixin {
+    /**
+     * Monsters spawn on the planets (the shadow) alone: the hidden player's own world stays free of
+     * them, or they would hurt the player from where nobody sees.
+     */
+    @Inject(method = "isSpawningMonsters", at = @At("HEAD"), cancellable = true)
+    private void galaxycraft$monstersOnPlanetsOnly(CallbackInfoReturnable<Boolean> cir) {
+        if (ShadowWorld.hidesPlayer() && !ShadowWorld.isShadow((ServerLevel) (Object) this)) cir.setReturnValue(false);
+    }
+
+    /** No phantoms, patrols, cats or traders in the shadow: they count on players Mario's proxy is not. */
+    @Inject(method = "tickCustomSpawners", at = @At("HEAD"), cancellable = true)
+    private void galaxycraft$noCustomSpawners(boolean spawnEnemies, CallbackInfo ci) {
+        if (ShadowWorld.isShadow((ServerLevel) (Object) this)) ci.cancel();
+    }
+
     @Inject(method = "addFreshEntity", at = @At("HEAD"), cancellable = true)
     private void galaxycraft$dropsOnThePlanet(Entity entity, CallbackInfoReturnable<Boolean> cir) {
         ServerLevel self = (ServerLevel) (Object) this;

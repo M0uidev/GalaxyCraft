@@ -20,7 +20,8 @@
 			"dev.moui.galaxycraft.gametest.MarioPerspectivesTest",
 			"dev.moui.galaxycraft.gametest.CameraProbe",
 			"dev.moui.galaxycraft.gametest.BlockRulesProbe",
-			"dev.moui.galaxycraft.gametest.ShadowProbe"
+			"dev.moui.galaxycraft.gametest.ShadowProbe",
+			"dev.moui.galaxycraft.gametest.SpawnProbe"
 		]
 	},
 	"depends": {"galaxycraft": "*"}

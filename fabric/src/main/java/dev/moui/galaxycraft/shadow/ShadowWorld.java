@@ -415,6 +415,9 @@ public final class ShadowWorld {
             return;
         }
         for (Consumer<ServerLevel> op; (op = ops.poll()) != null; ) op.accept(level);
+        // Monsters by the gamerules as they are now: Minecraft re-reads them only when difficulty
+        // or spawn_monsters change, not spawn_mobs.
+        level.setSpawnSettings(level.isSpawningMonsters());
         mirrorSome(level);
         flushEdges(level);
         moveProxy(level);
@@ -427,7 +430,10 @@ public final class ShadowWorld {
         ServerPlayer p = at == null || map == null || at.planet() != planet ? null : level.getServer().getPlayerList().getPlayer(at.player());
         int cell = p == null ? -1 : map.grid.cellAt(at.feet());
         if (cell < 0) {
-            if (proxy != null) proxy.setGameMode(net.minecraft.world.level.GameType.SPECTATOR);
+            if (proxy != null && proxy.gameMode() != net.minecraft.world.level.GameType.SPECTATOR) {
+                proxy.setGameMode(net.minecraft.world.level.GameType.SPECTATOR);
+                level.getChunkSource().move(proxy); // no mobs spawn around a Mario who left the planet
+            }
             return;
         }
         if (proxy == null || proxy.isRemoved() || proxy.level() != level) {
@@ -442,6 +448,8 @@ public final class ShadowWorld {
         float yaw = (float) Math.toDegrees(Math.atan2(-d.x, d.z)), pitch = (float) -Math.toDegrees(Math.asin(Math.clamp(d.y, -1, 1)));
         proxy.snapTo(map.x(cell) + m.x, map.y(cell) + m.y, map.z(cell) + m.z, yaw, pitch);
         proxy.setYHeadRot(yaw);
+        // Where the chunks around players count him (natural spawning: monsters near him, not too near).
+        level.getChunkSource().move(proxy);
         if (p.isAlive()) proxy.setHealth(p.getHealth());
         // Mario's body: what he walks into is pushed, arrows lying there are picked up.
         for (Entity e : level.getEntities(proxy, proxy.getBoundingBox().inflate(0.2))) {
@@ -531,10 +539,28 @@ public final class ShadowWorld {
         }
     }
 
+    /** Mobs that may despawn, by category, as of the last tick (server thread). */
+    private static final int[] mobCounts = new int[net.minecraft.world.entity.MobCategory.values().length];
+
+    /**
+     * The categories still under their cap on this planet: Minecraft's caps (per 17 × 17 chunks)
+     * times the planet's columns near Mario over 289.
+     */
+    public static List<net.minecraft.world.entity.MobCategory> underCap(List<net.minecraft.world.entity.MobCategory> categories) {
+        int columns = Math.max(1, mirrored.size());
+        List<net.minecraft.world.entity.MobCategory> out = new ArrayList<>(categories.size());
+        for (var c : categories)
+            if (mobCounts[c.ordinal()] < Math.max(1, c.getMaxInstancesPerChunk() * columns / 289)) out.add(c);
+        return out;
+    }
+
     /** The planet's entities, those that walked off a face's edge put on the next face. */
     private static List<Entity> collect(ServerLevel level) {
         List<Entity> out = new ArrayList<>();
+        java.util.Arrays.fill(mobCounts, 0);
         for (Entity e : level.getAllEntities()) {
+            if (e instanceof Mob mob && !mob.isPersistenceRequired() && !mob.requiresCustomPersistence() && !e.isRemoved())
+                mobCounts[e.getType().getCategory().ordinal()]++;
             // Dying mobs stay until Minecraft removes them: they fall over first.
             if (e instanceof Player || e instanceof net.minecraft.world.entity.item.ItemEntity
                     || e.isRemoved() || !map.inStrip((int) Math.floor(e.getZ())))
@@ -611,10 +637,14 @@ public final class ShadowWorld {
                 if (map == null || !forced.contains(next)) continue;
                 mirroring = next;
                 mirrorX = 0;
+                paintBiomes(level, next);
                 mirrored.add(next); // edits reach it from now on; the rows still to copy take what the cells are then
             }
             mirrorRow(level, mirroring, mirrorX++);
-            if (mirrorX == 16) mirroring = null;
+            if (mirrorX == 16) {
+                populate(level, mirroring);
+                mirroring = null;
+            }
         } while (System.nanoTime() - until < 0);
     }
 
@@ -622,9 +652,62 @@ public final class ShadowWorld {
     private static void mirror(ServerLevel level, long column) {
         if (map == null || !forced.contains(column)) return;
         mirrored.add(column);
+        paintBiomes(level, column);
         for (int x = 0; x < 16; x++) mirrorRow(level, column, x);
+        populate(level, column);
         if (Long.valueOf(column).equals(mirroring)) mirroring = null;
     }
+
+    /**
+     * The column's biomes are the planet's there: Minecraft spawns each biome's mobs, makes snow
+     * fall where it is cold, and so on. Halo positions take the biome of the cell they copy;
+     * what is no planet's stays the void.
+     */
+    private static void paintBiomes(ServerLevel level, long column) {
+        if (map == null) return;
+        var chunk = level.getChunk(ChunkPos.getX(column), ChunkPos.getZ(column));
+        var registry = level.registryAccess().lookupOrThrow(Registries.BIOME);
+        java.util.Map<String, net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome>> holders = new java.util.HashMap<>();
+        boolean[] any = {false};
+        chunk.fillBiomesFromNoise((qx, qy, qz) -> {
+            int x = (qx << 2) + 2, z = (qz << 2) + 2;
+            int cell = map.cell(x, 0, z);
+            if (cell < 0) cell = map.haloSource(x, 0, z);
+            var was = chunk.getNoiseBiome(qx, qy, qz);
+            if (cell < 0) return was;
+            String name = planet.biome(cell);
+            var h = holders.computeIfAbsent(name, n -> {
+                Identifier id = Identifier.tryParse(n);
+                return id == null ? null : registry.get(ResourceKey.create(Registries.BIOME, id)).map(r -> (net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome>) r).orElse(null);
+            });
+            if (h == null) return was;
+            any[0] |= !h.equals(was);
+            return h;
+        });
+        if (any[0]) chunk.markUnsaved();
+    }
+
+    /**
+     * A column copied in for the first time: the animals Minecraft puts in a new chunk, by its
+     * biome (NaturalSpawner.spawnMobsForChunkGeneration). Its inhabited time marks it done.
+     */
+    private static void populate(ServerLevel level, long column) {
+        if (map == null || !SPAWN_ANIMALS) return;
+        var chunk = level.getChunk(ChunkPos.getX(column), ChunkPos.getZ(column));
+        if (chunk.getInhabitedTime() > 0) return;
+        chunk.setInhabitedTime(1);
+        ChunkPos pos = new ChunkPos(ChunkPos.getX(column), ChunkPos.getZ(column));
+        BlockPos middle = new BlockPos(pos.getMiddleBlockX(), map.grid.layers - 1, pos.getMiddleBlockZ());
+        if (map.cell(middle.getX(), 0, middle.getZ()) < 0) return;
+        try {
+            net.minecraft.world.level.NaturalSpawner.spawnMobsForChunkGeneration(level, middle, pos, level.getRandom());
+        } catch (RuntimeException e) {
+            GalaxyCraft.LOG.warn("Could not put animals in {}: {}", pos, e.toString());
+        }
+    }
+
+    /** -Dgalaxycraft.animals=false: no animals in new columns (natural spawning stays Minecraft's gamerules). */
+    static final boolean SPAWN_ANIMALS = !"false".equals(System.getProperty("galaxycraft.animals"));
 
     /** One row of a column: x = its 16 blocks along z, by the planet's layers. */
     private static void mirrorRow(ServerLevel level, long column, int row) {
@@ -669,6 +752,14 @@ public final class ShadowWorld {
     }
 
     // ---- hooks (server thread, from the mixins) ----
+
+    /**
+     * The player stands hidden in a world of their own while Mario plays (tools/gxplay.sh's demo,
+     * or -Dgalaxycraft.hiddenPlayer=true): monsters spawn on planets only.
+     */
+    public static boolean hidesPlayer() {
+        return Boolean.getBoolean("galaxycraft.demo") || Boolean.getBoolean("galaxycraft.hiddenPlayer");
+    }
 
     public static boolean isShadow(Level level) {
         return level.dimension() == KEY;
