@@ -7,7 +7,7 @@ from collections import namedtuple
 
 SHM_PATH = "/dev/shm/galaxycraft_v1"
 MAGIC = 0x52435847  # "GXCR"
-VERSION = 9
+VERSION = 10
 
 OFF_HEADER = 0
 OFF_WORLD = 64

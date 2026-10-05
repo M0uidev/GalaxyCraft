@@ -79,9 +79,11 @@ _Static_assert(offsetof(GxcMailbox, parts) == 168, "mbx.parts");
 _Static_assert(GXC_MBX_GAME_FOLLOWING == 1u && GXC_MBX_GAME_DEMO == 2u, "mbx flags");
 _Static_assert(GXC_MBX_FOLLOW == 2u && GXC_WORLD_FOLLOW == 2u && GXC_MBX_GALAXY_VIEW == 4u &&
                GXC_MBX_THIRD_PERSON == 8u && GXC_MBX_HIDE_POINTER == 16u && GXC_MBX_HITBOXES == 32u, "flags");
-_Static_assert(GXC_VERSION == 9u && GXC_MBX_VERSION == 5u, "v9");
+_Static_assert(GXC_VERSION == 10u && GXC_MBX_VERSION == 5u, "v10");
 _Static_assert(sizeof(GxcTextState) == 264 && GXC_OFF_TEXT >= GXC_OFF_GAMECAM + sizeof(GxcGameCamera) &&
                GXC_OFF_TEXT + sizeof(GxcTextState) <= GXC_OFF_RING_S2M, "text");
-_Static_assert(GXC_PLAYER_SCREEN == 4u && GXC_PLAYER_FLYING == 8u && GXC_PLAYER_HITBOXES == 16u, "player flags");
+_Static_assert(GXC_PLAYER_SCREEN == 4u && GXC_PLAYER_FLYING == 8u && GXC_PLAYER_HITBOXES == 16u &&
+               GXC_PLAYER_WALKING == 32u && GXC_PLAYER_PLUS == 64u, "player flags");
+_Static_assert(GXC_MSG_MARIO_SKIN == 114, "mario skin");
 
 int main(void) { puts("OK"); return 0; }

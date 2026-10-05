@@ -62,6 +62,14 @@ Three programs share one world:
 - **Collision that feels like Minecraft.** Mario shrinks to Steve's width on planets, so he
   falls into 1×1 holes and fits in 1×2 tunnels. Press **F3+B** to see his collision.
 - **`/fly`** for free flight, and `/galaxycraft planet spawn|tp|remove` to manage planets.
+- **Pause menu.** Esc opens Minecraft's own pause menu, with **GalaxyCraft...** (movement, skin,
+  entity distance, particles, flight, the planet editor) and **SMG2 Menu** (the game's own pause,
+  the + button). Settings are kept in `config/galaxycraft.properties`.
+- **Two movements.** *Mario* (SMG2 moves Mario: his jumps and spins) or *Minecraft* (Minecraft
+  moves you, Mario goes along, and Steve is drawn in the game with Minecraft's player model).
+  **F6** switches them.
+- **`/skin <account>`** puts that Minecraft account's skin on your character (Mario's model and
+  Steve's); `/skin` alone goes back to Steve.
 
 ## Requirements
 
@@ -94,7 +102,7 @@ appears above Mario. **P** lands you on it.
 | Space | A |
 | Shift | Z |
 | Ctrl | C |
-| Esc | + |
+| Esc | Minecraft's pause menu (SMG2's own from there); + in SMG2's menus |
 | Tab | − |
 | Mouse | look and aim (the pointer) |
 | Left click / right click | spin / B, or break / place with an item in hand |
@@ -103,6 +111,7 @@ appears above Mario. **P** lands you on it.
 | E | inventory (`/gamemode creative` for the creative one); the mouse is its pointer |
 | T | chat |
 | F5 | perspective |
+| F6 | Mario's movement / Minecraft's |
 | F3+B | Mario's collision |
 | Ctrl+G | give the game back to your Wii Remote |
 

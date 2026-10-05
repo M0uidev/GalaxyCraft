@@ -75,7 +75,11 @@ public final class PlanetEditorScreen extends Screen {
     public static void openIfRequested(Minecraft mc) {
         if (!openNextTick || mc.gui.screen() != null) return;
         openNextTick = false;
-        // On the planet it had last (generated ones stay generated), or a new one.
+        open(mc);
+    }
+
+    /** Opens the editor now, on the planet it had last (generated ones stay generated) or a new one. */
+    public static void open(Minecraft mc) {
         mc.gui.setScreen(new PlanetEditorScreen(PlanetClient.blueprints.readLast()
                 .filter(b -> b.problem() == null).orElse(PlanetBlueprint.standard("My planet", PlanetClient.DEFAULT_RADIUS))));
     }

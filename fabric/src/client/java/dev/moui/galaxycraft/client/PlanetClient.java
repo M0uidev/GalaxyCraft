@@ -261,7 +261,13 @@ public final class PlanetClient {
 
     /** Mario onto the planet in focus. */
     public static void teleport() {
-        focus.teleport();
+        land(focus);
+    }
+
+    /** With Minecraft movement the player is put there too (Mario goes where it is). */
+    private static void land(PlanetSession s) {
+        Vector3d at = s.teleport();
+        if (at != null && GalaxyCraftClient.walking()) GalaxyCraftClient.moveTo(s.galOf(at));
     }
 
     /** Removes the planet in focus, from the game and from disk. */
@@ -394,7 +400,7 @@ public final class PlanetClient {
                         1 / GravityFrame.SCALE));
         PlanetSession session = focus; // the clicks, the outline and Minecraft's running of the blocks are its
         if (session.active() && frame != null && player != null) {
-            if (p && !lastP && !screen) session.teleport();
+            if (p && !lastP && !screen) land(session);
             Vector3d eye = frame.toGal(vec(player.getEyePosition()));
             Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
             PlanetSession.Aim aim = screen ? null : session.aim(eye, look);
@@ -484,14 +490,19 @@ public final class PlanetClient {
         return drops.all().size();
     }
 
-    /** Render thread, once per emulated frame: the planet's entities to the game, and Mario's seat if he rides. */
-    public static void frame(BridgeClient bridge, float partialTick) {
-        bridge.world().ifPresent(w -> entities.frame(bridge, w.sceneId(), w.queryPos(), partialTick));
+    /**
+     * Render thread, once per emulated frame: the planet's entities to the game, and Mario's seat
+     * if he rides. Minecraft movement: walker is where the player's feet are (galaxy), Mario's seat
+     * every frame; drawSelf, if set, the frame the player is drawn in as one of the entities.
+     */
+    public static void frame(BridgeClient bridge, float partialTick, Vector3d walker, GravityFrame drawSelf) {
+        bridge.world().ifPresent(w -> entities.frame(bridge, w.sceneId(), w.queryPos(), partialTick, drawSelf));
         ShadowWorld.Seat s = ShadowWorld.seat();
         PlanetSession f = focus;
-        boolean on = s != null && f.active() && s.planet() == f.planet();
+        boolean onSeat = s != null && f.active() && s.planet() == f.planet();
+        boolean on = onSeat || walker != null;
         if (on || riding) {
-            Vector3d at = on ? f.galOf(s.pos()) : new Vector3d();
+            Vector3d at = walker != null ? walker : onSeat ? f.galOf(s.pos()) : new Vector3d();
             if (bridge.send(Layout.MSG_SEAT, java.nio.ByteBuffer.allocate(16).putFloat((float) at.x).putFloat((float) at.y)
                     .putFloat((float) at.z).putInt(on ? 1 : 0).array()))
                 riding = on;

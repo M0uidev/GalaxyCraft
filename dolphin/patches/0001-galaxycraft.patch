@@ -52,7 +52,7 @@ new file mode 100644
 index 0000000..2f5f643
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,510 @@
+@@ -0,0 +1,518 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -252,13 +252,17 @@ index 0000000..2f5f643
 +  if (following)
 +  {
 +    // With a Minecraft screen open (the chat) the keyboard and mouse type there, and while the
-+    // player flies (/fly) they move it: Mario stays put.
++    // player flies (/fly) or walks by Minecraft's movement they move it: Mario stays put, or goes
++    // where the player is.
 +    static const u8 none[64] = {};
-+    const bool screen = state.bridge->ScreenOpen() || state.bridge->Flying();
++    const bool screen =
++        state.bridge->ScreenOpen() || state.bridge->Flying() || state.bridge->Walking();
 +    const u8* keys = state.dev_keys ? state.dev_keys->first.data() : screen ? none : state.keys;
 +    const u32 buttons = state.dev_keys ? state.dev_keys->second : screen ? 0u : state.buttons;
 +    pad = state.mario.Update(keys, buttons, state.bridge->InGame(), state.bridge->GalaxyView(),
 +                             state.bridge->ItemActive());
++    // Minecraft's pause menu opens SMG2's own: the mod holds + for a few frames.
++    pad.plus = pad.plus || state.bridge->PlusHeld();
 +  }
 +  std::lock_guard lock(s_pad_mutex);
 +  s_pad = pad;
@@ -497,10 +501,14 @@ index 0000000..2f5f643
 +  gxc::X11KeymapToScancodes(keymap, keys);
 +  constexpr int X_ESCAPE = 9;  // X keycode (evdev 1 + 8)
 +  const bool escape = (keymap[X_ESCAPE / 8] >> (X_ESCAPE % 8)) & 1;
-+  // With a Minecraft screen open (the chat) Escape closes it; otherwise it is Mario's + button.
++  // Escape is Minecraft's while one of its screens is open (it closes it) and while Mario is
++  // playable (it opens Minecraft's pause menu, from which SMG2's own is one button away); in
++  // SMG2's menus it is Mario's + button.
++  const bool mc_escape =
++      s_state->bridge->ScreenOpen() || (s_state->bridge->Following() && s_state->bridge->InGame());
 +  u8 mc_keys[64];
 +  std::memcpy(mc_keys, keys, sizeof(keys));
-+  if (escape && s_state->bridge->ScreenOpen())
++  if (escape && mc_escape)
 +    mc_keys[gxc::SC_ESCAPE / 8] |= 1u << (gxc::SC_ESCAPE % 8);
 +  s_state->input->SetKeys(mc_keys);
 +  const u32 buttons = gxc::X11ButtonsToSdl(x_buttons);
@@ -509,9 +517,9 @@ index 0000000..2f5f643
 +    s_xinput_buttons = buttons;
 +    s_state->input->Buttons(buttons);
 +  }
-+  // Mario mode also reads Escape (the + button), which Minecraft never gets.
++  // Mario mode reads Escape (the + button) when Minecraft does not.
 +  std::memcpy(s_state->keys, keys, sizeof(keys));
-+  if (escape)
++  if (escape && !mc_escape)
 +    s_state->keys[gxc::SC_ESCAPE / 8] |= 1u << (gxc::SC_ESCAPE % 8);
 +  s_state->buttons = buttons;
 +  return capture;

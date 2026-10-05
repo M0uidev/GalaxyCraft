@@ -4,7 +4,7 @@ package dev.moui.galaxycraft.proto;
 public final class Layout {
     public static final String SHM_PATH = "/dev/shm/galaxycraft_v1";
     public static final int MAGIC = 0x52435847; // "GXCR"
-    public static final int VERSION = 9;
+    public static final int VERSION = 10;
     public static final int MOD_VERSION = 1;
 
     public static final long OFF_HEADER = 0;
@@ -43,6 +43,8 @@ public final class Layout {
     /** A piece of the block atlas (GxcAtlas + data), M -> S. */
     public static final int MSG_ATLAS = 107, ATLAS_PIECE_MAX = 65536;
     public static final int MSG_SKIN = 108, MSG_MODEL = 109, MSG_ENTITIES = 110, MSG_HURT = 111, MSG_SEAT = 112, MSG_SKY = 113;
+    /** The skin of Mario's model (Steve), M -> S for the host: a 64x64 GXC_MSG_SKIN payload. */
+    public static final int MSG_MARIO_SKIN = 114;
     public static final int HURT_HIT = 0, HURT_FIRE = 1, HURT_EXPLOSION = 2;
     public static final int ENT_MAX_SKINS = 256, ENT_MAX_MODELS = 2048, ENT_MAX = 768, ENT_BYTES = 60;
     public static final int ENT_SKIN_MAX = 256, ENT_DL_MAX = 65536, ENT_VTXFMT = 3;
@@ -58,6 +60,10 @@ public final class Layout {
     public static final int PLAYER_FLYING = 8;
     /** PlayerState.flags: F3+B, Mario's collision is drawn. */
     public static final int PLAYER_HITBOXES = 16;
+    /** PlayerState.flags: Minecraft movement, the player walks on its own and Mario goes with it. */
+    public static final int PLAYER_WALKING = 32;
+    /** PlayerState.flags: hold SMG2's + button (its own pause menu). */
+    public static final int PLAYER_PLUS = 64;
     /** WorldState.flags: queryPos is the host's anchor (where the player is). */
     public static final int WORLD_ANCHOR = 1;
     public static final int WORLD_FOLLOW = 2;

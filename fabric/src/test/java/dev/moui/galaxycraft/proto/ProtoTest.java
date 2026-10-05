@@ -44,7 +44,7 @@ class ProtoTest {
         var g = new Vector3d(0, -1, 0);
         assertTrue(new Seqlock.WorldState(1, 1, g, new Vector3d(), Layout.WORLD_FOLLOW).follow());
         assertFalse(new Seqlock.WorldState(1, 1, g, new Vector3d(), Layout.WORLD_ANCHOR).follow());
-        assertEquals(9, Layout.VERSION);
+        assertEquals(10, Layout.VERSION);
     }
 
     @Test void readTextFromTheRing() {
@@ -78,6 +78,15 @@ class ProtoTest {
         assertEquals(-320f, s.get(F, 128 + 60 + 8));    // cam_offset.z
         assertEquals(Layout.VIEW_FRONT, s.get(I, 128 + 72));
         assertEquals(9, s.get(I, 128 + 76));
+    }
+
+    @Test void writePlayerFlagsWalkingAndPlus() throws Exception {
+        MemorySegment s = Shm.create(dir.resolve("shm")).seg();
+        Seqlock.writePlayer(s, new Seqlock.PlayerOut(1, new Vector3d(), new Vector3d(0, 0, -1), new Vector3d(0, 1, 0), 70f,
+                162f, false, new Vector3d(), Layout.VIEW_FIRST, 3, false, false, false, false, true, true));
+        assertEquals(Layout.PLAYER_WALKING | Layout.PLAYER_PLUS, s.get(I, 128 + 4));
+        assertEquals(32, Layout.PLAYER_WALKING);
+        assertEquals(64, Layout.PLAYER_PLUS);
     }
 
     @Test void readGameCameraSlot() throws Exception {

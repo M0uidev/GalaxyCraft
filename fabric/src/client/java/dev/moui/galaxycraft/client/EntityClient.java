@@ -5,10 +5,12 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.bridge.BridgeClient;
 import dev.moui.galaxycraft.client.mixin.ModelPartAccessor;
+import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.view.EntityWire;
 import dev.moui.galaxycraft.view.HeldItem;
+import dev.moui.galaxycraft.view.SkinImage;
 import dev.moui.galaxycraft.voxel.PlanetDrops;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import java.io.InputStream;
@@ -23,6 +25,7 @@ import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.builders.UVPair;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
@@ -45,7 +48,7 @@ import org.joml.Vector3d;
  * frame only where each piece is (EntityWire).
  */
 final class EntityClient {
-    /** Entities farther from Mario than this (blocks) are not sent. */
+    /** Entities farther from Mario than this (blocks) are never sent; the settings may say less. */
     static final double RANGE = 64;
     /** A hurt mob's overlay: red (RGBA, A how much). */
     static final int HURT = 0xFF000066;
@@ -71,6 +74,10 @@ final class EntityClient {
     private final List<Seen> seen = new ArrayList<>();
 
     private record Seen(Entity entity, Matrix4d at, Vector3d pos) {}
+    /** While the local player is captured: Minecraft blocks around it -> galaxy units (else null: planet blocks). */
+    private Matrix4d galaxy;
+    /** While the local player is captured: the skin (/skin) its body wears instead of its own, -1 none. */
+    private int playerSkin = -1;
     private int scene = Integer.MIN_VALUE, host = Integer.MIN_VALUE;
     private boolean wasEmpty = true;
 
@@ -151,7 +158,7 @@ final class EntityClient {
     }
 
     /** Render thread, once per emulated frame: this frame's entities to the game. */
-    void frame(BridgeClient bridge, int sceneId, Vector3d marioFeetGal, float pt) {
+    void frame(BridgeClient bridge, int sceneId, Vector3d marioFeetGal, float pt, GravityFrame self) {
         if (sceneId != scene || bridge.hostPid() != host) {
             sentModels.clear();
             sentSkins.clear();
@@ -164,12 +171,14 @@ final class EntityClient {
         if (session().active() && marioFeetGal != null) {
             Vector3d mario = session().localOf(marioFeetGal);
             for (PlanetDrops.Drop<ItemStack> d : drops.all())
-                if (d.pos.distance(mario) < RANGE) drop(d, pt, pieces);
+                if (d.pos.distance(mario) < range()) drop(d, pt, pieces);
             ShadowWorld.Entities shadow = ShadowWorld.entities();
             if (shadow != null && shadow.planet() == session().planet())
                 for (Entity e : shadow.list()) shadowEntity(shadow, e, mario, pt, pieces);
-            for (ParticleClient.Live l : particles.all()) particle(l, mario, pt, pieces);
+            if (GalaxyOptions.PARTICLES.get())
+                for (ParticleClient.Live l : particles.all()) particle(l, mario, pt, pieces);
         }
+        if (self != null) self(self, pt, pieces);
         if (pieces.isEmpty() && wasEmpty) return;
         pieces = lit(pieces);
         for (EntityWire.Piece p : pieces) {
@@ -212,11 +221,15 @@ final class EntityClient {
         return new Matrix4d(x.x, x.y, x.z, 0, up.x, up.y, up.z, 0, z.x, z.y, z.z, 0, at.x, at.y, at.z, 1);
     }
 
-    /** Planet blocks to galaxy units, then 3x4 row-major. */
+    /** Planet blocks (or, while the player is captured, Minecraft blocks around it) to galaxy units, then 3x4 row-major. */
     double[] toGal(Matrix4d planet) {
-        Vector3d c = session().galOf(new Vector3d());
-        double u = session().galOf(new Vector3d(1, 0, 0)).sub(c).x;
-        Matrix4d g = new Matrix4d().translation(c).scale(u).mul(planet);
+        Matrix4d g;
+        if (galaxy != null) g = new Matrix4d(galaxy).mul(planet);
+        else {
+            Vector3d c = session().galOf(new Vector3d());
+            double u = session().galOf(new Vector3d(1, 0, 0)).sub(c).x;
+            g = new Matrix4d().translation(c).scale(u).mul(planet);
+        }
         return new double[] {g.m00(), g.m10(), g.m20(), g.m30(), g.m01(), g.m11(), g.m21(), g.m31(), g.m02(), g.m12(),
                 g.m22(), g.m32()};
     }
@@ -230,7 +243,7 @@ final class EntityClient {
             EntityRenderer r = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(e);
             EntityRenderState st = r.createRenderState(e, pt);
             double[] f = shadow.map().frame(st.x, st.y, st.z);
-            if (f == null || new Vector3d(f[0], f[1], f[2]).distance(mario) > RANGE) return;
+            if (f == null || new Vector3d(f[0], f[1], f[2]).distance(mario) > range()) return;
             // The shadow's blocks around the entity, as planet blocks (its frame there).
             Matrix4d at = new Matrix4d(f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], 0, f[0], f[1], f[2], 1);
             seen.add(new Seen(e, at, new Vector3d(st.x, st.y, st.z)));
@@ -250,7 +263,7 @@ final class EntityClient {
     /** A particle, facing the camera: its sprite now, or a bit of its block's side. */
     private void particle(ParticleClient.Live l, Vector3d mario, float pt, List<EntityWire.Piece> out) {
         Vector3d at = new Vector3d(l.pos).fma(pt, l.vel);
-        if (at.distance(mario) > RANGE) return;
+        if (at.distance(mario) > range()) return;
         int skin, model;
         if (l.block != null) {
             HeldClient.Look look = look(l.block, () -> HeldClient.look(l.block));
@@ -362,7 +375,11 @@ final class EntityClient {
     /** A model's texture from its render type: the image it samples (null: none, or an atlas). */
     int renderTypeSkin(RenderType type) {
         Identifier texture = textures.computeIfAbsent(type, EntityClient::textureOf).orElse(null);
-        return texture == null ? -1 : entitySkin(texture);
+        if (texture == null) return -1;
+        // The player's body, whatever skin Minecraft gave it (a default one, or downloaded), wears /skin's.
+        if (playerSkin >= 0 && (texture.getPath().startsWith("textures/entity/player/") || texture.getPath().startsWith("skins/")))
+            return playerSkin;
+        return entitySkin(texture);
     }
 
     private static java.util.Optional<Identifier> textureOf(RenderType type) {
@@ -482,5 +499,54 @@ final class EntityClient {
 
     private PlanetSession session() {
         return focus.get();
+    }
+
+    private static double range() {
+        return Math.min(RANGE, GalaxyOptions.ENTITY_RANGE.get());
+    }
+
+    // ---- the player itself (Minecraft movement) ----
+
+    /**
+     * The local player drawn by its own renderer where it is, as SMG2 draws no Mario then: its
+     * pieces placed from the gravity frame (Minecraft blocks -> galaxy units) instead of a planet.
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void self(GravityFrame frame, float pt, List<EntityWire.Piece> out) {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null || failed.contains(player.getClass())) return;
+        try {
+            EntityRenderer r = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(player);
+            EntityRenderState st = r.createRenderState(player, pt);
+            Vector3d o = frame.toGal(new Vector3d(st.x, st.y, st.z));
+            Vector3d x = frame.toGal(new Vector3d(st.x + 1, st.y, st.z)).sub(o);
+            Vector3d y = frame.toGal(new Vector3d(st.x, st.y + 1, st.z)).sub(o);
+            Vector3d z = frame.toGal(new Vector3d(st.x, st.y, st.z + 1)).sub(o);
+            galaxy = new Matrix4d(x.x, x.y, x.z, 0, y.x, y.y, y.z, 0, z.x, z.y, z.z, 0, o.x, o.y, o.z, 1);
+            playerSkin = customSkin();
+            PoseStack ps = new PoseStack();
+            net.minecraft.world.phys.Vec3 offset = r.getRenderOffset(st);
+            ps.translate(offset.x, offset.y, offset.z);
+            capture.begin(new Matrix4d(), out);
+            r.submit(st, ps, capture, camera);
+        } catch (RuntimeException ex) {
+            failed.add(player.getClass());
+            GalaxyCraft.LOG.warn("Not drawing the player in the game: {}", ex.toString());
+        } finally {
+            galaxy = null;
+            playerSkin = -1;
+        }
+    }
+
+    /** /skin's skin as one of the game's textures (made again when it changes), -1 none. */
+    private int customSkin() {
+        SkinClient.Skin s = SkinClient.current();
+        if (s == null) return -1;
+        Integer id = skinIds.get(s);
+        if (id == null) {
+            id = addSkin(SkinImage.SIZE, SkinImage.SIZE, s.argb());
+            skinIds.put(s, id);
+        }
+        return id;
     }
 }

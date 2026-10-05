@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "GuestMemory.h"
+#include "MarioSkin.h"
 #include "Shm.h"
 #include "galaxycraft_protocol.h"
 
@@ -68,6 +69,12 @@ public:
   }
   // /fly: the player flies away from Mario, who stays put.
   bool Flying() const { return m_following && m_player && (m_player->flags & GXC_PLAYER_FLYING) != 0; }
+  // Minecraft movement: the player walks on its own and Mario goes with it, the keys are not his.
+  bool Walking() const { return m_following && m_player && (m_player->flags & GXC_PLAYER_WALKING) != 0; }
+  // The mod holds SMG2's + button (its pause menu), as Escape opens Minecraft's own instead.
+  bool PlusHeld() const { return m_following && m_player && (m_player->flags & GXC_PLAYER_PLUS) != 0; }
+  // Copies of Mario's skin texture written by the last GXC_MSG_MARIO_SKIN, for the dev harness.
+  int MarioSkinWrites() const { return m_skin_writes; }
   // A savestate was loaded (CPU thread): the game's RAM went back in time, the mod did not. At the
   // next tick the game gets a scene id never seen before, so the mod sends everything again.
   void OnStateLoaded() { m_state_loaded = true; }
@@ -128,5 +135,9 @@ private:
   u64 m_frame = 0;
   bool m_state_loaded = false;
   std::optional<u32> m_last_scene;  // the newest scene id seen, kept across mailbox losses
+  MarioSkin m_skin;
+  int m_skin_tries = 0;     // scans left to find Mario's texture in this scene
+  int m_skin_cooldown = 0;  // ticks to the next scan
+  int m_skin_writes = 0;
 };
 }  // namespace gxc

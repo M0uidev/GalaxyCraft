@@ -852,3 +852,48 @@ TEST(f3_b_draws_marios_hitbox)
   f.Tick();
   CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_HITBOXES) != 0);
 }
+
+TEST(walking_hides_mario_and_takes_his_keys)
+{
+  Fixture f;
+  f.Tick();
+  f.shm->SetU64(offsetof(GxcHeader, mod_heartbeat_ms), f.now);
+  WritePlayer(*f.shm, {GXC_PLAYER_WALKING, 1, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {}, GXC_VIEW_BACK, 3});
+  f.Tick();
+  CHECK(f.bridge.Walking() && !f.bridge.PlusHeld());
+  // Steve is one of the planet's entities: Mario's own model stays hidden, even from behind.
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_THIRD_PERSON) == 0);
+  WritePlayer(*f.shm, {GXC_PLAYER_PLUS, 2, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {}, GXC_VIEW_BACK, 3});
+  f.Tick();
+  CHECK(!f.bridge.Walking() && f.bridge.PlusHeld());
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_THIRD_PERSON) != 0);
+}
+
+TEST(mario_skin_goes_onto_his_texture_and_again_in_a_new_scene)
+{
+  Fixture f;
+  // Mario.bdl's TEX1 as tools/steve/build.py makes it: one 64x64 RGB5A3 texture, "steve".
+  constexpr u32 TEX1 = 0x80600000u, DATA = TEX1 + 0x60;
+  const u8 section[] = {'T', 'E', 'X', '1', 0, 0, 0x20, 0x60, 0, 1, 0xFF, 0xFF, 0, 0, 0, 0x20, 0, 0, 0, 0x40};
+  f.mem.PutBytes(TEX1, section, sizeof(section));
+  const u8 header[] = {5, 0, 0, 64, 0, 64};
+  f.mem.PutBytes(TEX1 + 0x20, header, sizeof(header));
+  f.mem.PutU32(TEX1 + 0x20 + 0x1C, 0x40);  // the image, from its header
+  const u8 names[] = {0, 1, 0xFF, 0xFF, 0x12, 0x34, 0, 8, 's', 't', 'e', 'v', 'e', 0};
+  f.mem.PutBytes(TEX1 + 0x40, names, sizeof(names));
+
+  std::vector<u8> skin(12 + MarioSkin::BYTES, 0xAB);
+  const u8 dims[] = {0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 64};
+  std::memcpy(skin.data(), dims, sizeof(dims));
+  Ring(*f.shm, GXC_OFF_RING_M2S).Push(GXC_MSG_MARIO_SKIN, skin.data(), static_cast<u32>(skin.size()));
+  f.Tick();
+  CHECK(f.bridge.MarioSkinWrites() == 1);
+  CHECK(f.mem.GetU32(DATA) == 0xABABABABu && f.mem.GetU32(DATA + MarioSkin::BYTES - 4) == 0xABABABABu);
+  CHECK(f.mem.GetU32(DATA + MarioSkin::BYTES) == 0);  // not a byte past it
+
+  // A new scene loads Mario afresh: the skin is written once more.
+  f.mem.PutU32(DATA, 0);
+  f.mem.PutU32(MBX + offsetof(GxcMailbox, scene_id), 4);
+  f.Tick();
+  CHECK(f.mem.GetU32(DATA) == 0xABABABABu);
+}

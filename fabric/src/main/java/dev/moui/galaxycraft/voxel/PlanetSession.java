@@ -261,19 +261,20 @@ public final class PlanetSession {
         return planet.surface();
     }
 
-    public void teleport() {
-        if (planet == null) return;
+    /** Mario onto the ground under him (once its collision is in); where he lands, planet blocks (null: no planet). */
+    public Vector3d teleport() {
+        if (planet == null) return null;
         if (!detail) {
             detail = true;
             guestHasIt = true;
             sendAll();
         }
-        teleportToward(mario == null || mario.lengthSquared() < 1 ? new Vector3d(0, 1, 0) : mario);
+        return teleportToward(mario == null || mario.lengthSquared() < 1 ? new Vector3d(0, 1, 0) : mario);
     }
 
-    /** Lands Mario on the ground straight out from the planet's center along toward (planet space). */
-    public void teleportToward(Vector3d toward) {
-        if (planet == null) return;
+    /** Lands Mario on the ground straight out from the planet's center along toward (planet space); where, planet blocks. */
+    public Vector3d teleportToward(Vector3d toward) {
+        if (planet == null) return null;
         if (!detail) {
             detail = true;
             guestHasIt = true;
@@ -291,6 +292,7 @@ public final class PlanetSession {
                 String.format("%.1f", tpGround / unitsPerBlock), String.format("%.1f", planet.surface()));
         for (int c : residency(land, land)) queueUrgent(c);
         urgent.add(TP_MARK);
+        return new Vector3d(land);
     }
 
     /**

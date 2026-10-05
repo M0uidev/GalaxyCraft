@@ -12,6 +12,8 @@ import org.lwjgl.sdl.SDLKeyboard;
 /** Feeds the host's keyboard and mouse (Dolphin's window) into Minecraft's own input handlers. */
 final class InputInjector {
     private static final int PRESS = 1, RELEASE = 0;
+    /** SDL scancode of F6: switches Mario's movement and Minecraft's while playing. */
+    static final int SC_F6 = 63;
     private Seqlock.InputState prev;
     private int textSeen = -1;
     private double pointerX = Double.NaN, pointerY = Double.NaN;
@@ -27,6 +29,7 @@ final class InputInjector {
         int mods = InputDiff.modifiers(cur.keys());
         for (InputDiff.KeyEvent e : InputDiff.keys(prev.keys(), cur.keys())) {
             int keycode = SDLKeyboard.SDL_GetKeyFromScancode(e.code(), (short) mods, true);
+            if (e.code() == SC_F6 && e.down() && mc.gui.screen() == null) GalaxyCraftClient.toggleMovement();
             mc.keyboardHandler.keyPress(window, e.down() ? PRESS : RELEASE, new KeyEvent(e.code(), keycode, mods));
         }
         for (InputDiff.KeyEvent e : InputDiff.buttons(prev.buttons(), cur.buttons())) {

@@ -4,6 +4,7 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.bridge.BridgeClient;
@@ -12,6 +13,7 @@ import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.gravity.LookMath;
 import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Seqlock;
+import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.view.CameraMath;
 import dev.moui.galaxycraft.view.View;
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
@@ -65,6 +67,9 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static final Vector3d GALAXY_UP = new Vector3d(0, 1, 0);
     /** The camera as last drawn, galaxy space: what SMG2's camera copies outside the Galaxy view. */
     private static Vector3d camOffsetGal, camLookGal, camUpGal;
+    /** Ticks left holding SMG2's + button (the pause menu's SMG2 Menu): long enough for the game to see it. */
+    private static int plusTicks;
+    private static final int PLUS_TICKS = 4;
 
     @Override
     public void onInitializeClient() {
@@ -92,6 +97,12 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         ClientTickEvents.START_CLIENT_TICK.register(GalaxyCraftClient::beforeTick);
         ClientTickEvents.END_CLIENT_TICK.register(GalaxyCraftClient::afterTick);
         ClientTickEvents.END_CLIENT_TICK.register(PlanetEditorScreen::openIfRequested);
+        ClientTickEvents.END_CLIENT_TICK.register(client -> { // after the chat that ran the command has closed
+            if (settingsRequested && client.gui.screen() == null) {
+                settingsRequested = false;
+                client.gui.setScreen(new GalaxySettingsScreen(null));
+            }
+        });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> resetFrame());
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             if (Boolean.getBoolean("galaxycraft.hidden")) { // Dolphin shows the overlay instead
@@ -99,17 +110,33 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 SDLVideo.SDL_HideWindow(client.getWindow().handle());
             }
         });
+        GalaxyOptions.init();
+        PauseMenu.register();
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("fly").executes(c -> {
-            flying = !flying;
-            c.getSource().sendFeedback(Component.literal(flying ? "GalaxyCraft: flying (/fly again to go back to Mario)"
-                    : "GalaxyCraft: back with Mario"));
+            toggleFlying();
             return 1;
         })));
+        // /skin <account>: that account's skin on the character; /skin alone: Steve's again.
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("skin")
+                .executes(c -> {
+                    GalaxyOptions.SKIN.set("");
+                    return 1;
+                })
+                .then(argument("account", StringArgumentType.word()).executes(c -> {
+                    String name = StringArgumentType.getString(c, "account");
+                    c.getSource().sendFeedback(Component.literal("GalaxyCraft: looking up " + name + "'s skin..."));
+                    if (name.equals(GalaxyOptions.SKIN.get())) SkinClient.wear(name, GalaxyCraftClient::say); // again
+                    else GalaxyOptions.SKIN.set(name);
+                    return 1;
+                }))));
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(
                 literal("galaxycraft").executes(c -> {
                     PlanetEditorScreen.requestOpen();
                     return 1;
-                }).then(literal("status").executes(c -> {
+                }).then(literal("settings").executes(c -> {
+                    settingsRequested = true;
+                    return 1;
+                })).then(literal("status").executes(c -> {
                     c.getSource().sendFeedback(Component.literal(status(c.getSource().getPlayer())));
                     return 1;
                 })).then(literal("planet")
@@ -128,6 +155,8 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                         .executes(c -> planetCommand(c.getSource(), () -> {})))));
     }
 
+    private static boolean settingsRequested;
+
     /** While a host is linked, Minecraft renders a transparent overlay and exports it. */
     public static boolean exportingOverlay() {
         return bridge != null && bridge.linked();
@@ -138,8 +167,14 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         if (bridge == null) return;
         // One frame per emulated frame, right after it: SMG2 takes a new look every frame, not two
         // in one and none in the next as two free-running 60 Hz clocks drift past each other.
-        if (following) hostFrame = bridge.awaitFrame(hostFrame, FRAME_WAIT_MS);
-        PlanetClient.frame(bridge, Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false));
+        if (following || walking() && bridge.gameLinked()) hostFrame = bridge.awaitFrame(hostFrame, FRAME_WAIT_MS);
+        Minecraft mc = Minecraft.getInstance();
+        float pt = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        // Minecraft movement: Mario goes where the player is, and Steve is drawn there outside first person.
+        boolean walker = walking() && frame != null && mc.player != null && bridge.gameLinked();
+        PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt))) : null,
+                walker && view() != View.FIRST ? frame : null);
+        SkinClient.frame(bridge);
         bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
         bridge.pointer().ifPresent(p -> input.applyPointer(Minecraft.getInstance(), p));
         bridge.text().ifPresentOrElse(t -> input.applyText(Minecraft.getInstance(), t), input::resetText);
@@ -182,6 +217,52 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         return bridge.linked();
     }
 
+    /** Minecraft movement chosen (the player walks on its own, Mario goes with it). */
+    public static boolean walking() {
+        return GalaxyOptions.MOVEMENT.get() == Movement.MINECRAFT;
+    }
+
+    /** F6: Mario's movement or Minecraft's. */
+    static void toggleMovement() {
+        GalaxyOptions.MOVEMENT.set(GalaxyOptions.MOVEMENT.get().other());
+        say("movement: " + GalaxyOptions.MOVEMENT.get().label() + " (F6 to switch)");
+    }
+
+    public static boolean flying() {
+        return flying;
+    }
+
+    /** /fly: free flight on or off. */
+    static void toggleFlying() {
+        flying = !flying;
+        say(flying ? "flying (/fly again to stop)" : walking() ? "walking" : "back with Mario");
+    }
+
+    /**
+     * Minecraft movement: the player to a galaxy point (a teleport), held there until the ground
+     * under it has its collision.
+     */
+    static void moveTo(Vector3d gal) {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null || frame == null || following) return;
+        Vector3d mc = frame.toMc(gal);
+        player.setPos(mc.x, mc.y, mc.z);
+        player.setDeltaMovement(Vec3.ZERO);
+        player.setOldPosAndRot();
+        settleTicks = SETTLE_TICKS;
+    }
+
+    /** SMG2's + button, held for a moment: its own pause menu opens (or closes). */
+    static void pressPlus() {
+        plusTicks = PLUS_TICKS;
+    }
+
+    /** A line in the chat, from GalaxyCraft. */
+    static void say(String text) {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player != null) player.sendSystemMessage(Component.literal("GalaxyCraft: " + text));
+    }
+
     private static void resetFrame() {
         frame = null;
         camOffsetGal = camLookGal = camUpGal = null;
@@ -220,17 +301,19 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 // Flying: up turns (smoothly) to the galaxy's +Y and stays there, whatever pulls.
                 Vector3d up = GravityFrame.limitTurn(frame.upGal(), GALAXY_UP, MAX_TURN_PER_TICK);
                 frame.update(up.negate(), pos);
-            } else if (world.get().follow() && world.get().hasGravity()) {
+            } else if (world.get().follow() && world.get().hasGravity() && !walking()) {
                 // Nobody walks by Minecraft's physics here, so the frame may lag the gravity a
                 // little: the camera's up turns smoothly instead of snapping at planet edges.
                 Vector3d up = GravityFrame.limitTurn(frame.upGal(), new Vector3d(gravity).normalize().negate(),
                         MAX_TURN_PER_TICK);
                 frame.update(up.negate(), pos);
             } else {
+                // Minecraft movement: the player walks by Minecraft's physics, so its up is the
+                // gravity's right away (gravity where Mario is, and Mario goes where it is).
                 frame.update(gravity, pos);
             }
         }
-        following = world.get().follow() && !flying;
+        following = world.get().follow() && !flying && !walking();
         fly(player);
         if (following) {
             // Mario mode: SMG2 moves Mario (played on the emulated Wii Remote); the player is
@@ -298,6 +381,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     }
 
     private static void afterTick(Minecraft client) {
+        if (plusTicks > 0) plusTicks--;
         sendPose(client);
     }
 
@@ -349,7 +433,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
                 client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene,
                 PlanetClient.itemActive(player), client.gui.screen() != null, flying,
-                client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES)));
+                client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES), walking(), plusTicks > 0));
     }
 
     public static void camLog(Vector3d eyeMc, Vector3d backMc, double dist, double hit) {

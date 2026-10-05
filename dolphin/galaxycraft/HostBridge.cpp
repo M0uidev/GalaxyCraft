@@ -22,6 +22,10 @@ constexpr float MATRIX_EPSILON = 1e-4f;
 constexpr size_t MBX_SIZE = sizeof(GxcMailbox);
 constexpr int IN_GAME_TICKS = 30;
 constexpr const char* TITLE_STAGE = "FileSelect";  // SMG2's title screen and file select
+// Mario's skin: scans of guest RAM for his texture after a new skin or scene, a second apart (his
+// model may load a little after the scene's first frames).
+constexpr int SKIN_TRIES = 5;
+constexpr int SKIN_RETRY_TICKS = 60;
 
 u32 BE32(const u8* p)
 {
@@ -210,6 +214,15 @@ void HostBridge::Tick(GuestMemory& mem)
       m_seen_player_frame = p->frame_id;
   }
   PublishParts(mem, mbx, republish);
+  // A new scene may load Mario's model afresh: the skin goes on it again.
+  if (republish && m_skin.Has())
+    m_skin_tries = SKIN_TRIES, m_skin_cooldown = 0;
+  if (m_skin_tries > 0 && m_skin_cooldown-- <= 0)
+  {
+    m_skin_cooldown = SKIN_RETRY_TICKS;
+    m_skin_writes = m_skin.Apply(mem);
+    m_skin_tries = m_skin_writes > 0 ? 0 : m_skin_tries - 1;
+  }
 
   // Only a pose anchored in this scene counts: right after a scene change (Mario died, a new
   // stage) the mod may still report one from the old scene before it hears of the new one.
@@ -260,6 +273,11 @@ bool HostBridge::PopMessages(size_t limit)
       break;
     if (msg->type == GXC_MSG_HELLO)
       hello = true;
+    else if (msg->type == GXC_MSG_MARIO_SKIN)
+    {
+      if (m_skin.Set(msg->payload))
+        m_skin_tries = SKIN_TRIES, m_skin_cooldown = 0;
+    }
     else
       QueueInbox(*msg);
   }
@@ -505,8 +523,10 @@ void HostBridge::WriteFollow(GuestMemory& mem, const PlayerState* player)
   constexpr size_t LAST = offsetof(GxcMailbox, cam_offset) + 12;
   std::array<u8, LAST - FIRST> b{};
   const bool galaxy = player && player->view == GXC_VIEW_GALAXY;
-  // Mario is drawn outside first person, and while the player flies off on its own (/fly).
-  const bool third = player && (player->view != GXC_VIEW_FIRST || (player->flags & GXC_PLAYER_FLYING));
+  // Mario is drawn outside first person, and while the player flies off on its own (/fly); never
+  // with Minecraft movement, where Steve is drawn as one of the planet's entities instead.
+  const bool third = player && !(player->flags & GXC_PLAYER_WALKING) &&
+                     (player->view != GXC_VIEW_FIRST || (player->flags & GXC_PLAYER_FLYING));
   // Playing in Minecraft's view the IR sits under its crosshair, which stands in for the pointer.
   const bool hide_pointer = player && !galaxy && m_in_game;
   const bool hitboxes = player && (player->flags & GXC_PLAYER_HITBOXES);
