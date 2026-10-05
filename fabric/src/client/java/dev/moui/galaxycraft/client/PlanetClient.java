@@ -15,6 +15,7 @@ import dev.moui.galaxycraft.voxel.CellSpace;
 import dev.moui.galaxycraft.voxel.Material;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.BlueprintStore;
+import dev.moui.galaxycraft.voxel.GalaxySave;
 import dev.moui.galaxycraft.voxel.PlanetBlueprint;
 import dev.moui.galaxycraft.voxel.PlanetLayout;
 import dev.moui.galaxycraft.voxel.PlanetStore;
@@ -90,14 +91,27 @@ public final class PlanetClient {
         /** Replacing the planet the player stands on, where it is; the player lands on the new one. */
         REPLACE_HERE,
         /** Another one where the player looked (PlanetLayout.placeAlong). */
-        CREATE_AHEAD
+        CREATE_AHEAD,
+        /** A world's first planet, at the center of GalaxyCraftSpace (where Mario waits). */
+        HOME
     }
 
     private static Placement placement = Placement.REPLACE;
     private static PlanetSession replaceTarget; // REPLACE_HERE: the planet stood on, and the player's
     private static Vector3d replaceDir;         // direction from its center (galaxy axes)
     private static Vector3d aheadEye, aheadLook; // CREATE_AHEAD: the player's eye and look then (galaxy)
-    private static final PlanetStore store = new PlanetStore(planetDir());
+    /** -Dgalaxycraft.planetDir (game tests): one folder for every world, as before worlds had galaxies. */
+    private static final boolean FIXED_DIR = !System.getProperty("galaxycraft.planetDir", "").isEmpty();
+    /** The world's planets (null: no world, so none is loaded or saved). */
+    private static PlanetStore store = FIXED_DIR ? new PlanetStore(planetDir()) : null;
+    /** The world's galaxy (null: none, or FIXED_DIR). */
+    private static GalaxySave galaxy;
+    /** Entering a world in GalaxyCraftSpace: Mario goes to the saved spot (or onto the first planet) once a planet is up. */
+    private static boolean landPending;
+    private static GalaxySave.Spot landOn;
+    /** Ticks between saves of where the player stands. */
+    private static final int SPOT_TICKS = 100;
+    private static int sinceSpot;
     private static final ExecutorService saver = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "GalaxyCraft planet saver");
         t.setDaemon(true);
@@ -330,7 +344,8 @@ public final class PlanetClient {
         }
         focus = session;
         String s = stage;
-        if (s != null && !s.isEmpty()) saver.execute(() -> {
+        PlanetStore store = PlanetClient.store;
+        if (s != null && !s.isEmpty() && store != null) saver.execute(() -> {
             try {
                 store.delete(PlanetStore.key(s, index));
             } catch (IOException e) {
@@ -367,6 +382,7 @@ public final class PlanetClient {
             case REPLACE -> focus.active() ? focus : session;
             case REPLACE_HERE -> replaceTarget;
             case ADD, CREATE_AHEAD -> session.active() ? null : session;
+            case HOME -> session;
         };
         if (target == null && all.stream().filter(PlanetSession::active).count() >= PlanetLayout.MAX_PLANETS) {
             say(player, "A stage holds " + PlanetLayout.MAX_PLANETS + " planets at most");
@@ -379,6 +395,7 @@ public final class PlanetClient {
         Vector3d c = switch (how) {
             case REPLACE_HERE -> new Vector3d(target.center());
             case CREATE_AHEAD -> PlanetLayout.placeAlong(others, gravity, aheadEye, aheadLook, units);
+            case HOME -> new Vector3d();
             default -> PlanetLayout.place(others, gravity, feet, up, units);
         };
         if (c == null) {
@@ -433,6 +450,13 @@ public final class PlanetClient {
         for (byte[] piece; (piece = atlasLink.peek(world.sceneId(), bridge.hostPid())) != null
                 && bridge.send(Layout.MSG_ATLAS, piece); ) atlasLink.sent();
         if (!bridge.stage().equals(stage)) enterStage(bridge.stage());
+        boolean space = galaxy != null && Layout.SPACE_STAGE.equals(stage);
+        if (space && planets().stream().noneMatch(PlanetSession::active) && generating == null && generated == null
+                && spawnBlueprint == null && spawnRadius == 0 && worldgen() != null) {
+            // A world's first visit: its home planet, generated with the default biome.
+            spawnBlueprint = PlanetBlueprint.standard("Home", DEFAULT_RADIUS).withMode(PlanetBlueprint.Mode.GENERATED);
+            placement = Placement.HOME;
+        }
         if (spawnBlueprint != null && spawnBlueprint.mode() == PlanetBlueprint.Mode.GENERATED) {
             if (generating == null) generate(spawnBlueprint, player);
             spawnBlueprint = null;
@@ -449,10 +473,12 @@ public final class PlanetClient {
         // A planet asked for may be made out in space too (no gravity there); the automatic one waits
         // for real gravity (SMG2's menus and title screen have none).
         boolean asked = spawnRadius > 0 || spawnBlueprint != null || generated != null;
-        if (frame != null && (world.hasGravity() ? asked || autoSpawn && world.follow() : asked && GalaxyCraftClient.inVoid())) {
+        // A world's first planet goes up in GalaxyCraftSpace before Mario has any gravity.
+        boolean home = placement == Placement.HOME && asked && spawnBlueprint == null;
+        if (home || frame != null && (world.hasGravity() ? asked || autoSpawn && world.follow() : asked && GalaxyCraftClient.inVoid())) {
             VoxelPlanet p = generated != null ? generated : spawnBlueprint != null ? spawnBlueprint.build(blocks)
                     : VoxelPlanet.ofRadius(spawnRadius > 0 ? spawnRadius : autoRadius, blocks);
-            spawnPlanet(p, world.queryPos(), frame.upGal(), player);
+            spawnPlanet(p, world.queryPos(), frame == null ? new Vector3d(0, 1, 0) : frame.upGal(), player);
             spawnRadius = 0;
             spawnBlueprint = null;
             generated = null;
@@ -471,6 +497,11 @@ public final class PlanetClient {
             if (s.active() && world.queryPos() != null)
                 s.setDetail(PlanetLayout.detail(s.detail(), s == focus, s.center().distance(world.queryPos()), s.gravityUnits(),
                         1 / GravityFrame.SCALE));
+        if (space && landPending) landOnSpot(player);
+        if (space && frame != null && ++sinceSpot >= SPOT_TICKS) {
+            sinceSpot = 0;
+            writeSpot(player);
+        }
         PlanetSession session = focus; // the clicks, the outline and Minecraft's running of the blocks are its
         if (session.active() && frame != null && player != null) {
             if (p && !lastP && !screen) land(session);
@@ -612,7 +643,7 @@ public final class PlanetClient {
         focus = session;
         stage = next;
         autoSpawn = false;
-        if (next.isEmpty()) return;
+        if (next.isEmpty() || store == null) return;
         java.util.List<Integer> saved = store.saved(next, PlanetLayout.MAX_PLANETS);
         for (int index : saved) {
             try {
@@ -632,7 +663,8 @@ public final class PlanetClient {
     }
 
     private static void saveNow() {
-        if (stage == null || stage.isEmpty()) return;
+        PlanetStore store = PlanetClient.store; // the saves run later, maybe after another world's is in
+        if (stage == null || stage.isEmpty() || store == null) return;
         for (PlanetSession p : planets()) {
             if (!p.unsaved()) continue;
             PlanetStore.Saved s = p.save();
@@ -646,6 +678,81 @@ public final class PlanetClient {
                 }
             });
         }
+    }
+
+    /** A world was entered: its galaxy's planets are the ones loaded and saved from now on. */
+    public static void enterWorld(GalaxySave g) {
+        if (FIXED_DIR) return;
+        galaxy = g;
+        store = new PlanetStore(g.planets());
+        landOn = g.spot().orElse(null);
+        landPending = true;
+        sinceSpot = 0;
+        stage = null; // loaded at the next tick, from this world's folder
+    }
+
+    /**
+     * The world is left: where the player stands and its planets are saved, and the game drops
+     * them (Mario then waits in GalaxyCraftSpace for the next world).
+     */
+    public static void leaveWorld(BridgeClient bridge) {
+        if (FIXED_DIR || galaxy == null) return;
+        writeSpot(Minecraft.getInstance().player);
+        saveNow();
+        session.unload();
+        for (Extra e : extras) e.s().unload();
+        extras.clear();
+        leaving.clear();
+        focus = session;
+        bridge.send(Layout.MSG_PLANET, PlanetSession.dropAll());
+        galaxy = null;
+        store = null;
+        stage = null;
+        landPending = false;
+        generating = null;
+        generated = null;
+        spawnBlueprint = null;
+        spawnRadius = 0;
+        placement = Placement.REPLACE;
+    }
+
+    /** The world's galaxy, while one is entered (null otherwise, and in game tests). */
+    public static GalaxySave galaxy() {
+        return galaxy;
+    }
+
+    /** Mario onto the saved spot's planet, the way he stood there; or onto the first planet's top. */
+    private static void landOnSpot(LocalPlayer player) {
+        PlanetSession on = null;
+        if (landOn != null)
+            for (PlanetSession p : planets())
+                if (p.active() && indexOf(p) == landOn.planet()) on = p;
+        Vector3d dir = on != null ? new Vector3d(landOn.dx(), landOn.dy(), landOn.dz()) : new Vector3d(0, 1, 0);
+        if (on == null) on = planets().stream().filter(PlanetSession::active).findFirst().orElse(null);
+        if (on == null) return; // the home planet is still being made
+        Vector3d at = on.teleportToward(dir);
+        if (at == null) return;
+        focus = on;
+        if (GalaxyCraftClient.walking()) GalaxyCraftClient.moveTo(on.galOf(at));
+        landPending = false;
+        GalaxyCraft.LOG.info("Entered the world's galaxy: Mario onto planet {} toward {}", indexOf(on), dir);
+    }
+
+    /** Where the player stands, into the world's galaxy (only on a planet: in the void the last one stays). */
+    private static void writeSpot(LocalPlayer player) {
+        GalaxySave g = galaxy;
+        PlanetSession on = standingOn();
+        Vector3d feet = GalaxyCraftClient.galaxyPos().orElse(null);
+        if (g == null || on == null || feet == null || player == null) return;
+        Vector3d d = new Vector3d(feet).sub(on.center());
+        GalaxySave.Spot spot = new GalaxySave.Spot(indexOf(on), d.x, d.y, d.z, player.getYRot(), player.getXRot());
+        saver.execute(() -> {
+            try {
+                g.writeSpot(spot);
+            } catch (IOException e) {
+                GalaxyCraft.LOG.warn("Could not save where the player stands: {}", e.toString());
+            }
+        });
     }
 
     /**

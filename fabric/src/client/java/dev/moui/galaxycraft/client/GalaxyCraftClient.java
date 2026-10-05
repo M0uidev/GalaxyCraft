@@ -135,7 +135,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 client.gui.setScreen(new GalaxySettingsScreen(null));
             }
         });
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> resetFrame());
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> GalaxyWorlds.joined(client));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            PlanetClient.leaveWorld(bridge);
+            resetFrame();
+        });
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             if (Boolean.getBoolean("galaxycraft.hidden")) { // Dolphin shows the overlay instead
                 client.options.pauseOnLostFocus = false;
@@ -363,7 +367,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             // Wait for the host to say where the player is, somewhere with gravity: SMG2's title
             // screen has a Mario too, but nothing to stand on.
             hold(player, true);
-            if (!world.get().anchor() || !world.get().hasGravity()) return;
+            if (!world.get().anchor() || !world.get().hasGravity()) {
+                // GalaxyCraftSpace: no gravity until the world's planet is up and Mario is on it.
+                if (PlanetClient.galaxy() != null) PlanetClient.tick(player, bridge, null, world.get());
+                return;
+            }
             frame = new GravityFrame(world.get().queryPos(), pos, gravity);
             frameScene = world.get().sceneId();
             settleTicks = SETTLE_TICKS;

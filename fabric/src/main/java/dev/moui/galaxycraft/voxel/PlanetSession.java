@@ -997,6 +997,11 @@ public final class PlanetSession {
         return new Vector3d(gal).sub(center).div(unitsPerBlock);
     }
 
+    /** A MSG_PLANET with id 0: the game drops every planet (leaving a world, its galaxy goes). */
+    public static byte[] dropAll() {
+        return ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN).array();
+    }
+
     /** GxcPlanet (36 bytes the host swaps), then flags big-endian (passed on as is). */
     private byte[] planetPayload(int planetId, int flags) {
         ByteBuffer b = ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN).putInt(planetId);
