@@ -46,7 +46,8 @@ Menu está para eso.
 - Esc es de Minecraft con una pantalla suya abierta (la cierra) y mientras Mario se puede jugar
   (`Following && InGame`: abre la pausa); en los menús de SMG2 sigue siendo el +.
 - `GXC_PLAYER_PLUS` (64): mientras el mod lo manda, Dolphin aprieta el +. SMG2 Menu cierra la
-  pausa de Minecraft y lo manda 4 ticks.
+  pausa de Minecraft y lo manda un cuarto de segundo (tiempo real: el juego lo ve aunque los
+  ticks de Minecraft vayan rápido o lento).
 
 ## 4. Movimiento de Minecraft
 
@@ -71,7 +72,7 @@ Menu está para eso.
 - `client/SkinClient`: la busca en otro hilo, la guarda en `config/galaxycraft/skins/` (sin red usa
   la última copia) y la pone:
   - en Steve como entidad: el cuerpo del jugador usa esa textura en vez de la suya;
-  - en el modelo de Mario: `GXC_MSG_MARIO_SKIN` (113) a Dolphin, una vez por skin y por Dolphin.
+  - en el modelo de Mario: `GXC_MSG_MARIO_SKIN` (114) a Dolphin, una vez por skin y por Dolphin.
     `MarioSkin` (Dolphin) busca en la RAM del juego las secciones TEX1 de J3D con una textura RGB5A3
     de 64x64 llamada "steve" (la de `Mario.bdl` que hace `tools/steve/build.py`) y escribe la skin
     encima. Lo repite en cada escena nueva (hasta 5 intentos, uno por segundo).

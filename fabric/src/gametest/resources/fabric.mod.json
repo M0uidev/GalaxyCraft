@@ -9,6 +9,7 @@
 			"dev.moui.galaxycraft.gametest.BiomeProbe",
 			"dev.moui.galaxycraft.gametest.PerfProbe",
 			"dev.moui.galaxycraft.gametest.WalkProbe",
+			"dev.moui.galaxycraft.gametest.MovementProbe",
 			"dev.moui.galaxycraft.gametest.LodProbe",
 			"dev.moui.galaxycraft.gametest.TpProbe",
 			"dev.moui.galaxycraft.gametest.VoxelPlanetTest",

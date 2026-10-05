@@ -335,13 +335,13 @@ index 0000000..2f5f643
 +      const auto& perf = Core::System::GetInstance().GetPerfMetrics();
 +      AppendCtlOut(fmt::format("render_focus={} full_focus={} ui_blocks_input={} link={} mod_alive={} "
 +                               "following={} in_game={} focus_gained={} focus_lost={} link_toggles={} "
-+                               "xinput_updates={} fps={:.1f} vps={:.1f} speed={:.0f} max_speed={:.0f}\n",
++                               "xinput_updates={} fps={:.1f} vps={:.1f} speed={:.0f} max_speed={:.0f} mario_skin_writes={} plus_held={}\n",
 +                               Host_RendererHasFocus(), Host_RendererHasFullFocus(),
 +                               Host_UIBlocksControllerState(), bridge.MinecraftMode(),
 +                               mod_alive, bridge.Following(), bridge.InGame(), s_focus_gained.load(),
 +                               s_focus_lost.load(), s_link_toggles.load(),
 +                               s_xinput_updates.load(), perf.GetFPS(), perf.GetVPS(), perf.GetSpeed() * 100,
-+                               perf.GetMaxSpeed() * 100));
++                               perf.GetMaxSpeed() * 100, bridge.MarioSkinWrites(), bridge.PlusHeld()));
 +    }
 +      break;
 +    case gxc::DevCommand::Keys:
