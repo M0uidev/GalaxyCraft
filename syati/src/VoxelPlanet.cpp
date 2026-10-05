@@ -334,7 +334,10 @@ public:
       if (!p)
         return;
       const TVec3f* mario = MR::getPlayerPos();
-      const f32 m[3] = {mario->x, mario->y, mario->z};
+      f32 m[3] = {mario->x, mario->y, mario->z};
+      if (r.teleport.aimed)  // where the mod measured the ground, not above wherever Mario is now
+        for (int k = 0; k < 3; k++)
+          m[k] = p->center[k] + 100.f * r.teleport.dir[k];
       f32 to[3];
       // Onto the ground under him (a hill, something built), not into it.
       gxc::PlanetDrop(p->center, r.teleport.ground > 0.f ? r.teleport.ground : p->surface, DROP_ABOVE, m, to);

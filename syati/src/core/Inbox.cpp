@@ -184,10 +184,13 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   }
   else if (type == InboxRecord::TELEPORT)
   {
-    if (len != 0 && len != 4 && len != 8)
+    if (len != 0 && len != 4 && len != 8 && len != 20)
       return false;
     out->teleport.ground = len >= 4 ? ReadF32(p) : 0.f;
-    out->teleport.planet = len == 8 ? ReadBE32(p + 4) : 0;
+    out->teleport.planet = len >= 8 ? ReadBE32(p + 4) : 0;
+    out->teleport.aimed = len == 20;
+    for (int k = 0; k < 3; k++)
+      out->teleport.dir[k] = len == 20 ? ReadF32(p + 8 + 4 * k) : 0.f;
   }
   else
   {

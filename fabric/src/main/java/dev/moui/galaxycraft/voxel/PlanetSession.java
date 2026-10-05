@@ -106,6 +106,7 @@ public final class PlanetSession {
     private VoxelPlanet planet;
     private Vector3d center;
     private float tpGround; // galaxy units from the center: where the next teleport lands
+    private Vector3d tpDir = new Vector3d(0, 1, 0); // and the direction from the center it lands along
     private int id;
     /** Ids of planets this session had that the game is to drop (its new scene may not have them). */
     private final Deque<Integer> gone = new ArrayDeque<>();
@@ -267,7 +268,19 @@ public final class PlanetSession {
             guestHasIt = true;
             sendAll();
         }
-        Vector3d land = mario == null || mario.lengthSquared() < 1 ? new Vector3d(0, 1, 0) : new Vector3d(mario);
+        teleportToward(mario == null || mario.lengthSquared() < 1 ? new Vector3d(0, 1, 0) : mario);
+    }
+
+    /** Lands Mario on the ground straight out from the planet's center along toward (planet space). */
+    public void teleportToward(Vector3d toward) {
+        if (planet == null) return;
+        if (!detail) {
+            detail = true;
+            guestHasIt = true;
+            sendAll();
+        }
+        Vector3d land = new Vector3d(toward);
+        tpDir = new Vector3d(toward).normalize(); // planet space has the galaxy's axes
         tpGround = (float) (ground(land) * unitsPerBlock);
         land.normalize(Math.max(planet.surface(), tpGround / unitsPerBlock));
         landing = land;
@@ -345,7 +358,8 @@ public final class PlanetSession {
         while (built == null && !urgent.isEmpty()) {
             int c = urgent.poll();
             if (c == TP_MARK) {
-                built = new Msg(Layout.MSG_PLANET_TP, ByteBuffer.allocate(8).putFloat(tpGround).putInt(id).array()); // big-endian: passed on as is
+                built = new Msg(Layout.MSG_PLANET_TP, ByteBuffer.allocate(20).putFloat(tpGround).putInt(id) // big-endian: passed on as is
+                        .putFloat((float) tpDir.x).putFloat((float) tpDir.y).putFloat((float) tpDir.z).array());
                 break;
             }
             urgentSet.clear(c);
@@ -407,7 +421,7 @@ public final class PlanetSession {
         ByteBuffer b = ByteBuffer.allocate((split ? 36 : 32) + m.displayList().length + m.kcl().length).order(ByteOrder.LITTLE_ENDIAN);
         b.putInt(id << 24 | (split ? TRANSLUCENT : 0) | c).putInt(planet.bump(c)).putInt(m.displayList().length).putInt(m.kcl().length);
         for (float f : m.sphere()) b.putFloat(f);
-        if (split) b.putInt(m.translucentAt());
+        if (split) b.putInt(Integer.reverseBytes(m.translucentAt())); // after the header the host swaps: big-endian
         b.put(m.displayList()).put(m.kcl());
         built = new Msg(Layout.MSG_CHUNK, b.array());
         builtChunk = c;

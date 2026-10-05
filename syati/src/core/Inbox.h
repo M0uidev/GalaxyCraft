@@ -91,6 +91,8 @@ struct InboxTeleport
 {
   f32 ground;
   u32 planet;  // 0: the first one
+  bool aimed;  // dir is where to land (from the planet's center); else straight above Mario
+  f32 dir[3];
 };
 
 struct InboxEntities

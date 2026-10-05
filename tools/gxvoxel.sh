@@ -9,6 +9,7 @@
 #                             GXC_PERF_ARGS="-PperfOnly=caves -PperfRadius=128" narrows or changes it
 #   tools/gxvoxel.sh lod      LodProbe instead: a planet seen from 40 to 1200 blocks off (lod-*.png)
 #   tools/gxvoxel.sh tp       TpProbe instead: P onto a planet just made lands on it, not inside
+#   tools/gxvoxel.sh biomes   BiomeProbe instead: generated planets' biome colors and water (biomes-*.png)
 #   tools/gxvoxel.sh walk     WalkProbe instead: Mario walks where the camera looks, also while it turns
 set -u
 : "${JAVA_HOME:=$(ls -d "$HOME"/.local/opt/jdk-25* 2>/dev/null | head -1)}"
@@ -21,6 +22,7 @@ elif [ "${1:-}" = perf ]; then TEST=PerfProbe PROP=galaxycraftPerf TAG=perf
 elif [ "${1:-}" = walk ]; then TEST=WalkProbe PROP=galaxycraftWalk TAG=walk
 elif [ "${1:-}" = lod ]; then TEST=LodProbe PROP=galaxycraftLod TAG=lod
 elif [ "${1:-}" = tp ]; then TEST=TpProbe PROP=galaxycraftTp TAG=tp
+elif [ "${1:-}" = biomes ]; then TEST=BiomeProbe PROP=galaxycraftBiomes TAG=biomes
 else TEST=VoxelPlanetTest PROP=galaxycraftVoxel TAG=voxel; fi
 # GXC_SAV=<savestate> starts from another one instead (made with the current module; not remade).
 SAV="${GXC_SAV:-$HOME/.local/share/galaxycraft-dev/voxel-intro.sav}"

@@ -6,6 +6,7 @@
 	"environment": "client",
 	"entrypoints": {
 		"fabric-client-gametest": [
+			"dev.moui.galaxycraft.gametest.BiomeProbe",
 			"dev.moui.galaxycraft.gametest.PerfProbe",
 			"dev.moui.galaxycraft.gametest.WalkProbe",
 			"dev.moui.galaxycraft.gametest.LodProbe",

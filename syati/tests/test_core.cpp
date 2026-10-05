@@ -226,6 +226,11 @@ static void TestInboxRecords()
         r.teleport.planet == 0);
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
   CHECK(off == b.size());
+  std::vector<u8> a;  // aimed: where to land
+  Put32(a, 104u << 16), Put32(a, 20), PutF(a, 1500.f), Put32(a, 3), PutF(a, 0.f), PutF(a, 1.f), PutF(a, 0.f);
+  off = 0;
+  CHECK(NextInboxRecord(a.data(), a.size(), &off, 512, &r) && r.type == InboxRecord::TELEPORT && r.teleport.aimed &&
+        r.teleport.planet == 3 && r.teleport.dir[1] == 1.f && r.teleport.ground == 1500.f);
 }
 
 static void TestInboxRejectsBadChunks()

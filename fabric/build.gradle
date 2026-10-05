@@ -48,6 +48,14 @@ loom {
 				if (project.hasProperty("perfOnly")) vmArg "-Dgalaxycraft.perfOnly=${project.property("perfOnly")}"
 				if (project.hasProperty("perfRadius")) vmArg "-Dgalaxycraft.perfRadius=${project.property("perfRadius")}"
 			}
+			if (project.hasProperty("galaxycraftBiomes")) { // tools/gxvoxel.sh biomes: BiomeProbe in the dev Dolphin
+				vmArg "-Dgalaxycraft.biomes=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+				if (project.hasProperty("biomesOnly")) vmArg "-Dgalaxycraft.biomesOnly=${project.property("biomesOnly")}"
+			}
 			if (project.hasProperty("galaxycraftWalk")) { // tools/gxvoxel.sh walk: WalkProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.walk=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
