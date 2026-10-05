@@ -228,6 +228,11 @@ public final class PlanetSession {
                 planet.biomes());
     }
 
+    /** Nothing to save: a planet made again the same from its recipe until it is edited. */
+    public void clean() {
+        unsaved = false;
+    }
+
     /** Edited (or new) since the last {@link #save()}. */
     public boolean unsaved() {
         return planet != null && unsaved;

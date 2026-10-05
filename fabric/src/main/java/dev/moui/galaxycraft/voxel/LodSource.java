@@ -27,6 +27,11 @@ public interface LodSource {
 
     /** A built planet: the mean of its columns' tops and the block most of them have. */
     static LodSource of(VoxelPlanet p) {
+        return of(p, 1);
+    }
+
+    /** As {@link #of(VoxelPlanet)}, looking at every stride-th column each way only (faster on big planets). */
+    static LodSource of(VoxelPlanet p, int stride) {
         return new LodSource() {
             @Override public CubeSphere grid() {
                 return p.grid;
@@ -41,8 +46,8 @@ public interface LodSource {
                 Map<Integer, Integer> count = new HashMap<>();
                 long sum = 0;
                 int cols = 0, best = Blocks.AIR, bestCount = 0;
-                for (int i = i0; i < i1; i++)
-                    for (int j = j0; j < j1; j++) {
+                for (int i = i0; i < i1; i += stride)
+                    for (int j = j0; j < j1; j += stride) {
                         // The top of the highest opaque block or fluid; leaves, plants and air above
                         // them do not count: trees blur into lumps from afar.
                         int top = 0, block = Blocks.AIR;
@@ -106,6 +111,30 @@ public interface LodSource {
                 int col = t.cell() / g.layers, face = col / (g.n * g.n), i = col / g.n % g.n, j = col % g.n;
                 int c = blocks.biomeColor(biomeAt.getOrDefault(t.cell(), PlanetBiomes.PLAINS), kind, face * 1024 + j, i);
                 return c < 0 ? tint & 0xFFFFFF : c & 0xFFFFFF;
+            }
+        };
+    }
+
+    /** A ball of radius blocks, its ground all of one block: a planet known only by its size. */
+    static LodSource flat(int radius, Blocks blocks, int block) {
+        int depth = VoxelPlanet.groundDepth(radius);
+        CubeSphere g = new CubeSphere(VoxelPlanet.gridSize(radius), radius - depth, depth + VoxelPlanet.defaultAir(radius));
+        return new LodSource() {
+            @Override public CubeSphere grid() {
+                return g;
+            }
+
+            @Override public Blocks blocks() {
+                return blocks;
+            }
+
+            @Override public Patch patch(int face, int i0, int i1, int j0, int j1) {
+                return new Patch(depth, block, g.index(face, Math.min((i0 + i1) / 2, g.n - 1), Math.min((j0 + j1) / 2, g.n - 1), 0));
+            }
+
+            @Override public int tint(Patch p, int tint) {
+                int c = blocks.biomeColor(PlanetBiomes.PLAINS, PlanetBiomes.kind(tint), 0, 0);
+                return PlanetBiomes.kind(tint) == PlanetBiomes.FIXED || c < 0 ? tint & 0xFFFFFF : c & 0xFFFFFF;
             }
         };
     }

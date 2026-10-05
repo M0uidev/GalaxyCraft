@@ -48,4 +48,22 @@ class LodSourceTest {
         for (Vector3d x : v) sum += x.length();
         return sum / v.length;
     }
+
+    @Test void aStridedLookAtTheCellsSeesTheSameFlatGround() {
+        VoxelPlanet p = VoxelPlanet.standard();
+        PlanetLod.Part[] all = PlanetLod.coarse(LodSource.of(p), 6, 80), strided = PlanetLod.coarse(LodSource.of(p, 3), 6, 80);
+        for (int f = 0; f < 6; f++) assertEquals(mean(all[f]), mean(strided[f]), 1e-6);
+    }
+
+    @Test void aFlatSourceIsABallOfOneBlockAtTheSurface() {
+        int grass = CubeBlocks.INSTANCE.id(Material.GRASS);
+        LodSource flat = LodSource.flat(48, CubeBlocks.INSTANCE, grass);
+        PlanetLod.Part[] parts = PlanetLod.coarse(flat, 6, 80);
+        double surface = flat.grid().radius(VoxelPlanet.groundDepth(48));
+        for (PlanetLod.Part part : parts) {
+            double top = 0;
+            for (Vector3d v : PlanetLodTest.vertices(part)) top = Math.max(top, v.length());
+            assertEquals(surface, top, 0.05, "the tops (skirts hang below)");
+        }
+    }
 }
