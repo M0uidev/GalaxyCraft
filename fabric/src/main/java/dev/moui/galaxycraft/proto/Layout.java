@@ -31,6 +31,8 @@ public final class Layout {
     public static final long H_HOST_HEARTBEAT = 16, H_MOD_HEARTBEAT = 24, H_HOST_FLAGS = 32, H_MOD_FLAGS = 36;
     /** GalaxyCraft's own galaxy, where Minecraft's worlds are played (GXC_SPACE_STAGE). */
     public static final String SPACE_STAGE = "GalaxyCraftSpace";
+    /** host_flags: SMG2 is in GalaxyCraftSpace, ready for a world (GXC_HOST_SPACE_READY). */
+    public static final int HOST_SPACE_READY = 4;
     /** mod_flags: Minecraft is in a world (else Dolphin shows its menus over the game). */
     public static final int MOD_IN_WORLD = 2;
 

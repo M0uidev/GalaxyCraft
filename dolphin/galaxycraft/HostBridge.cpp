@@ -203,14 +203,18 @@ void HostBridge::Tick(GuestMemory& mem)
     }
   }
 
+  // Booting by ourselves: Minecraft's title screen says when SMG2 is ready for a world.
+  const u32 ready = m_boot_space && std::strcmp(mbx.stage_name.data(), GXC_SPACE_STAGE) == 0 ?
+                        GXC_HOST_SPACE_READY :
+                        0u;
   if (!m_minecraft_mode)
   {
-    m_shm.SetU32(offsetof(GxcHeader, host_flags), 0);
+    m_shm.SetU32(offsetof(GxcHeader, host_flags), ready);
     m_relink = true;
     WriteFollow(mem, nullptr);
     return;
   }
-  m_shm.SetU32(offsetof(GxcHeader, host_flags), 1);
+  m_shm.SetU32(offsetof(GxcHeader, host_flags), 1u | ready);
 
   if (!m_scene || *m_scene != mbx.scene_id || m_relink)
     republish = true;

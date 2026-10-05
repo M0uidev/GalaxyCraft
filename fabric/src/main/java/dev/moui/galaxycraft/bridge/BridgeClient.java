@@ -105,6 +105,11 @@ public final class BridgeClient {
                 && shm.seg().get(INT, Layout.H_MAGIC) == Layout.MAGIC;
     }
 
+    /** SMG2 is in GalaxyCraftSpace, ready for a world (said also while Minecraft is in its menus). */
+    public boolean spaceReady() {
+        return linked() && (shm.seg().get(INT, Layout.H_HOST_FLAGS) & Layout.HOST_SPACE_READY) != 0;
+    }
+
     /** Linked and the host hands the game over (Dolphin's link toggle is on). */
     public boolean gameLinked() {
         return linked() && (shm.seg().get(INT, Layout.H_HOST_FLAGS) & 1) != 0;

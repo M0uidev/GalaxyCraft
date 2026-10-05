@@ -98,6 +98,7 @@ public final class LauncherProbe implements FabricClientGameTest {
         ctx.takeScreenshot("launch-again");
         ctx.runOnClient(mc -> mc.disconnectWithSavingScreen());
         waitReal(ctx, mc -> mc.level == null, 60);
+        ctx.setScreen(TitleScreen::new); // as the pause menu's Save and Quit does; game tests end there
         log(ok ? "PASS" : "FAIL");
     }
 

@@ -36,6 +36,9 @@
 #define GXC_OVERLAY_FRAME_BYTES (GXC_OVERLAY_MAX_W * GXC_OVERLAY_MAX_H * 4)
 #define GXC_TOTAL_SIZE (GXC_OFF_OVERLAY + 32 + 3 * GXC_OVERLAY_FRAME_BYTES)
 
+/* host_flags (header): SMG2 is in GalaxyCraftSpace, ready for a world (also in Minecraft's menus). */
+#define GXC_HOST_SPACE_READY 4u
+
 /* mod_flags: Minecraft is in a world (else its title, world list or another menu). */
 #define GXC_MOD_IN_WORLD 2u
 

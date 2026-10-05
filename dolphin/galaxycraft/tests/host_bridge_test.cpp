@@ -506,6 +506,19 @@ TEST(boot_space_stays_in_the_world_through_a_stall_of_minecraft)
   CHECK(f.bridge.InMenu());
 }
 
+TEST(boot_space_tells_the_mod_when_the_galaxy_is_ready)
+{
+  Fixture f;
+  f.bridge.SetBootSpace(true);
+  f.Tick();
+  CHECK((f.shm->GetU32(offsetof(GxcHeader, host_flags)) & GXC_HOST_SPACE_READY) == 0);
+  char buf[32] = "GalaxyCraftSpace";
+  f.mem.PutBytes(MBX + offsetof(GxcMailbox, stage_name), buf, sizeof(buf));
+  f.Tick();  // still Minecraft's menus: the title screen says SMG2 is ready
+  CHECK(f.bridge.InMenu());
+  CHECK((f.shm->GetU32(offsetof(GxcHeader, host_flags)) & GXC_HOST_SPACE_READY) != 0);
+}
+
 TEST(without_boot_space_there_is_no_menu)
 {
   Fixture f;
