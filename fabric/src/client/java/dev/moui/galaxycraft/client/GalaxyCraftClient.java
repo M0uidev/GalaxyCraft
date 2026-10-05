@@ -399,9 +399,13 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 followTarget = target;
             }
         } else {
+            // The old position moves by the same shift: drawing between ticks stays smooth (a
+            // straight flight through space, up frozen, rebases every couple of seconds).
             frame.rebase(vec(player.position())).ifPresent(np -> {
+                double dy = np.y - player.getY();
                 player.setPos(np.x, np.y, np.z);
-                player.setOldPosAndRot();
+                player.yo += dy;
+                player.yOld += dy;
             });
             if (ownPhysics() && !flying && !Flight.active()) alignToBlocks(player);
         }
