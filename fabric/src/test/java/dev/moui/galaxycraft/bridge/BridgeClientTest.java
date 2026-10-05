@@ -56,6 +56,24 @@ class BridgeClientTest {
         assertFalse(c.gameLinked());
     }
 
+    @Test void inWorldIsReportedInModFlags() throws Exception {
+        // Dolphin shows Minecraft's menus over the game while the mod is not in a world.
+        Path p = dir.resolve("shm");
+        var seg = Shm.create(p).seg();
+        seg.set(I, 0, Layout.MAGIC);
+        seg.set(I, 4, Layout.VERSION);
+        seg.set(L, 16, 10_000L);
+        var c = new BridgeClient(p, () -> 10_100L, new Recorder());
+        c.poll();
+        assertEquals(0, seg.get(I, Layout.H_MOD_FLAGS) & Layout.MOD_IN_WORLD);
+        c.setInWorld(true);
+        c.poll();
+        assertEquals(Layout.MOD_IN_WORLD, seg.get(I, Layout.H_MOD_FLAGS) & Layout.MOD_IN_WORLD);
+        c.setInWorld(false);
+        c.poll();
+        assertEquals(0, seg.get(I, Layout.H_MOD_FLAGS) & Layout.MOD_IN_WORLD);
+    }
+
     @Test void staleHeartbeatIsNotLinked() throws Exception {
         Path p = dir.resolve("shm");
         var seg = Shm.create(p).seg();

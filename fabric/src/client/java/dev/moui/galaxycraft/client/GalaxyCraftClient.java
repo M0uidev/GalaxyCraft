@@ -343,6 +343,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     }
 
     private static void beforeTick(Minecraft client) {
+        bridge.setInWorld(client.level != null && client.player != null);
         bridge.poll();
         LocalPlayer player = client.player;
         if (player == null) return;

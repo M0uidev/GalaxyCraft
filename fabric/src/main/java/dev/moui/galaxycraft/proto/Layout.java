@@ -29,6 +29,8 @@ public final class Layout {
     // Header fields.
     public static final long H_MAGIC = 0, H_VERSION = 4, H_HOST_PID = 8, H_MOD_PID = 12;
     public static final long H_HOST_HEARTBEAT = 16, H_MOD_HEARTBEAT = 24, H_HOST_FLAGS = 32, H_MOD_FLAGS = 36;
+    /** mod_flags: Minecraft is in a world (else Dolphin shows its menus over the game). */
+    public static final int MOD_IN_WORLD = 2;
 
     public static final long HEARTBEAT_TIMEOUT_MS = 2000;
     public static final int KCL_CHUNK_MAX = 65536;

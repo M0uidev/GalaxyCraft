@@ -60,6 +60,7 @@ public final class BridgeClient {
     private long now;
     private Optional<Seqlock.WorldState> world = Optional.empty();
     private String stage = "";
+    private boolean inWorld;
 
     public BridgeClient(Path path, LongSupplier clockMs, PartListener listener) {
         this.path = path;
@@ -82,6 +83,7 @@ public final class BridgeClient {
             m2s.push(Layout.MSG_HELLO, le(Layout.MOD_VERSION));
         }
         s.set(INT, Layout.H_MOD_PID, (int) ProcessHandle.current().pid());
+        s.set(INT, Layout.H_MOD_FLAGS, inWorld ? Layout.MOD_IN_WORLD : 0);
         s.set(LONG, Layout.H_MOD_HEARTBEAT, now);
         for (int i = 0; i < MAX_MESSAGES_PER_POLL; i++) {
             Optional<Ring.Msg> m = s2m.pop();
@@ -89,6 +91,11 @@ public final class BridgeClient {
             handle(m.get());
         }
         world = Seqlock.readWorld(s);
+    }
+
+    /** Minecraft is in a world or not (its menus): told to the host at each poll. */
+    public void setInWorld(boolean on) {
+        inWorld = on;
     }
 
     public boolean linked() {
