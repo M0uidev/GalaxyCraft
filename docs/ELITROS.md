@@ -26,6 +26,13 @@ En supervivencia se gastan los cohetes y la durabilidad de los élitros, como en
   (unos 6 bloques/s). Llegar desde el espacio no hace daño por caída.
 - `/galaxycraft planet add` puede crear planetas también en el espacio.
 
+## Cámara en tercera persona
+
+En **Opciones → GalaxyCraft...** hay tres distancias: **Camera Distance** (caminando, 4 bloques),
+**Camera Distance Gliding** (con los élitros abiertos cerca de un planeta, 6) y **Camera Distance in Space**
+(en el espacio, 10). La cámara pasa de una a otra con una transición suave de medio segundo, y sigue
+deteniéndose antes de las paredes.
+
 ## Mario durante el vuelo
 
 Con los élitros abiertos manda la física de Minecraft, en cualquier modo. Mario va "sentado" en tu
