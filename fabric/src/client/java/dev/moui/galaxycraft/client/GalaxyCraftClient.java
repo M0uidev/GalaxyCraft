@@ -64,12 +64,23 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static boolean galaxyView;
     /** /fly: the player flies on its own like in creative, with the galaxy's +Y as up; Mario waits. */
     private static boolean flying;
+    /**
+     * Minecraft movement starts this far above where Mario stands, blocks: the galaxy's collision
+     * reaches Minecraft as boxes on a 1/8-block grid whose tops may stand above the true ground,
+     * and a player that starts inside a box falls through it.
+     */
+    private static final double WALK_LIFT = 0.25;
+    /** Last tick's following: the tick Mario lets go, the player is lifted (WALK_LIFT). */
+    private static boolean wasFollowing;
     private static final Vector3d GALAXY_UP = new Vector3d(0, 1, 0);
     /** The camera as last drawn, galaxy space: what SMG2's camera copies outside the Galaxy view. */
     private static Vector3d camOffsetGal, camLookGal, camUpGal;
-    /** Ticks left holding SMG2's + button (the pause menu's SMG2 Menu): long enough for the game to see it. */
-    private static int plusTicks;
-    private static final int PLUS_TICKS = 4;
+    /**
+     * Until when (System.nanoTime) SMG2's + button is held (the pause menu's SMG2 Menu): a quarter
+     * of a second of real time, which the game sees however fast or slow Minecraft ticks.
+     */
+    private static long plusUntil = System.nanoTime();
+    private static final long PLUS_NANOS = 250_000_000L;
 
     @Override
     public void onInitializeClient() {
@@ -244,9 +255,9 @@ public final class GalaxyCraftClient implements ClientModInitializer {
      */
     static void moveTo(Vector3d gal) {
         LocalPlayer player = Minecraft.getInstance().player;
-        if (player == null || frame == null || following) return;
+        if (player == null || frame == null || !walking()) return;
         Vector3d mc = frame.toMc(gal);
-        player.setPos(mc.x, mc.y, mc.z);
+        player.setPos(mc.x, mc.y + WALK_LIFT, mc.z);
         player.setDeltaMovement(Vec3.ZERO);
         player.setOldPosAndRot();
         settleTicks = SETTLE_TICKS;
@@ -254,7 +265,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
 
     /** SMG2's + button, held for a moment: its own pause menu opens (or closes). */
     static void pressPlus() {
-        plusTicks = PLUS_TICKS;
+        plusUntil = System.nanoTime() + PLUS_NANOS;
     }
 
     /** A line in the chat, from GalaxyCraft. */
@@ -314,6 +325,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             }
         }
         following = world.get().follow() && !flying && !walking();
+        if (wasFollowing && !following && walking()) {
+            player.setPos(player.getX(), player.getY() + WALK_LIFT, player.getZ());
+            player.setDeltaMovement(Vec3.ZERO);
+        }
+        wasFollowing = following;
         fly(player);
         if (following) {
             // Mario mode: SMG2 moves Mario (played on the emulated Wii Remote); the player is
@@ -381,7 +397,6 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     }
 
     private static void afterTick(Minecraft client) {
-        if (plusTicks > 0) plusTicks--;
         sendPose(client);
     }
 
@@ -433,7 +448,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
                 client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene,
                 PlanetClient.itemActive(player), client.gui.screen() != null, flying,
-                client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES), walking(), plusTicks > 0));
+                client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES), walking(), System.nanoTime() - plusUntil < 0));
     }
 
     public static void camLog(Vector3d eyeMc, Vector3d backMc, double dist, double hit) {
