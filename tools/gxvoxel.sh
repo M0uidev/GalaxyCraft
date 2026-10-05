@@ -14,7 +14,14 @@
 #   tools/gxvoxel.sh movement MovementProbe instead: Esc's menu, Minecraft's movement, /skin (move-*.png)
 #   tools/gxvoxel.sh memory   MemoryProbe instead: the game's memory with several big generated planets
 #   tools/gxvoxel.sh elytra   ElytraProbe instead: elytra from planet to planet, the void, the wind (elytra-*.png)
+#   tools/gxvoxel.sh boot     GalaxyCraft's own boot, no Minecraft: SMG2 reaches GalaxyCraftSpace by
+#                             itself and Mario waits there (tools/gxboot.py; --fresh-nand: no save file)
 set -u
+if [ "${1:-}" = boot ]; then
+  shift
+  "$(dirname "$0")/../syati/build.sh" > /dev/null 2>&1 || { echo "gxvoxel: FAILED: syati/build.sh" >&2; exit 1; }
+  exec python3 "$(dirname "$0")/gxboot.py" "$@"
+fi
 : "${JAVA_HOME:=$(ls -d "$HOME"/.local/opt/jdk-25* 2>/dev/null | head -1)}"
 export JAVA_HOME
 cd "$(dirname "$0")/.." || exit 1

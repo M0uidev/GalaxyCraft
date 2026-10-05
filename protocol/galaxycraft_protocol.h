@@ -36,6 +36,9 @@
 #define GXC_OVERLAY_FRAME_BYTES (GXC_OVERLAY_MAX_W * GXC_OVERLAY_MAX_H * 4)
 #define GXC_TOTAL_SIZE (GXC_OFF_OVERLAY + 32 + 3 * GXC_OVERLAY_FRAME_BYTES)
 
+/* mod_flags: Minecraft is in a world (else its title, world list or another menu). */
+#define GXC_MOD_IN_WORLD 2u
+
 /* Heartbeat older than this means the other side is gone. */
 #define GXC_HEARTBEAT_TIMEOUT_MS 2000
 
@@ -47,7 +50,7 @@ typedef struct {
   uint64_t host_heartbeat_ms; /* CLOCK_MONOTONIC milliseconds */
   uint64_t mod_heartbeat_ms;
   uint32_t host_flags; /* bit0: game linked (gravity/collision are real) */
-  uint32_t mod_flags;  /* bit0: mod drives the player */
+  uint32_t mod_flags;  /* bit0: mod drives the player; GXC_MOD_IN_WORLD */
   uint8_t reserved[24];
 } GxcHeader;
 
@@ -357,6 +360,9 @@ typedef struct {
 #define GXC_MBX_MC_SPRINT 128u /* host_flags, with GXC_MBX_MC_FEEL: Ctrl held, Minecraft's sprint */
 #define GXC_MBX_MC_SNEAK 256u  /* host_flags, with GXC_MBX_MC_FEEL: Shift held, Minecraft's sneak */
 #define GXC_MBX_MC_WALK 512u   /* host_flags, with GXC_MBX_MC_FEEL: a movement key is held (WASD) */
+#define GXC_MBX_BOOT_SPACE 1024u /* host_flags: the game boots by itself into GalaxyCraftSpace */
+#define GXC_MBX_HOLD 2048u /* host_flags: Minecraft is in its menus, Mario waits at the origin */
+#define GXC_SPACE_STAGE "GalaxyCraftSpace" /* GalaxyCraft's own galaxy (tools/space_galaxy.py) */
 #define GXC_MBX_GAME_FOLLOWING 1u /* game_flags: Mario hidden, first-person camera this frame */
 #define GXC_MBX_GAME_DEMO 2u   /* game_flags: a cutscene owns Mario and the camera */
 

@@ -13,6 +13,8 @@
 #include "HeldItem.h"
 #include "Inbox.h"
 #include "VoxelPlanet.h"
+
+#include "Boot.h"
 #include "ViewMath.h"
 #include "galaxycraft_protocol.h"
 
@@ -399,6 +401,7 @@ public:
       // Onto the ground under him (a hill, something built), not into it.
       gxc::PlanetDrop(p->center, r.teleport.ground > 0.f ? r.teleport.ground : p->surface, DROP_ABOVE, m, to);
       MR::setPlayerPos(TVec3f(to[0], to[1], to[2]));
+      BootTeleported();
     }
   }
 

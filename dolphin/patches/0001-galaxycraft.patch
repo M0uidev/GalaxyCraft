@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..06544c2
+index 0000000..4f1746c
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,525 @@
+@@ -0,0 +1,560 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -73,7 +73,10 @@ index 0000000..06544c2
 +#include <string_view>
 +#include <utility>
 +
++#include "AudioCommon/AudioCommon.h"
++#include "AudioCommon/SoundStream.h"
 +#include "Common/HookableEvent.h"
++#include "Core/Config/MainSettings.h"
 +#include "Common/Logging/Log.h"
 +#include "Core/Core.h"
 +#include "Core/Host.h"
@@ -221,6 +224,7 @@ index 0000000..06544c2
 +  gxc::MarioInput mario;
 +  bool override_on = false;
 +  bool link_shown = true;  // the bridge's Minecraft mode as last announced
++  bool muted = false;      // the game's sound off while Minecraft's menus show (InMenu)
 +  u8 keys[64] = {};  // keyboard and mouse as of the last XInput2 update (Escape included)
 +  u32 buttons = 0;
 +  std::optional<std::pair<std::array<u8, 64>, u32>> dev_keys;  // ctl keys, while set
@@ -238,15 +242,17 @@ index 0000000..06544c2
 +    state.dev_keys.emplace(keys, buttons);
 +}
 +
-+// Field hook, after Tick: Mario mode's Wii Remote follows keyboard and mouse while following.
++// Field hook, after Tick: Mario mode's Wii Remote follows keyboard and mouse while following;
++// in Minecraft's menus it is held neutral (no other controller reaches the game).
 +void UpdateMarioInput(State& state)
 +{
 +  const bool following = state.bridge->Following();
-+  if (following != state.override_on)
++  const bool override = following || state.bridge->InMenu();
++  if (override != state.override_on)
 +  {
 +    state.mario.Reset();
-+    SetWiimoteOverride(following);
-+    state.override_on = following;
++    SetWiimoteOverride(override);
++    state.override_on = override;
 +  }
 +  gxc::WiimoteState pad;
 +  if (following)
@@ -267,6 +273,19 @@ index 0000000..06544c2
 +  }
 +  std::lock_guard lock(s_pad_mutex);
 +  s_pad = pad;
++}
++
++// Field hook: the game is silent while Minecraft's menus cover it (its own sound plays there).
++void UpdateMute(State& state)
++{
++  const bool mute = state.bridge->InMenu();
++  if (mute == state.muted)
++    return;
++  state.muted = mute;
++  Core::QueueHostJob([mute](Core::System& system) {
++    if (SoundStream* stream = system.GetSoundStream())
++      stream->SetVolume(mute || Config::Get(Config::MAIN_AUDIO_MUTED) ? 0 : Config::Get(Config::MAIN_AUDIO_VOLUME));
++  });
 +}
 +
 +// Development control channel (tools/gxdev.py): commands in, results appended out.
@@ -388,6 +407,12 @@ index 0000000..06544c2
 +  return hb != 0 && NowMs() - hb < GXC_HEARTBEAT_TIMEOUT_MS;
 +}
 +
++// Keyboard and mouse are Minecraft's: the link is on, or its menus cover the game.
++bool MinecraftHasInput(const State& state)
++{
++  return (state.bridge->MinecraftMode() || state.bridge->InMenu()) && ModAlive(*state.shm);
++}
++
 +// After the mode changes (hotkey, ctl link or a save picked): nothing held across the switch,
 +// neither in Minecraft nor on the Wii Remote, and a message on screen. Under s_mutex.
 +void AnnounceLink(State& state)
@@ -425,9 +450,12 @@ index 0000000..06544c2
 +  // Start on the Wii Remote (menus), the player links with the hotkey in a level.
 +  if (const char* unlinked = std::getenv("GALAXYCRAFT_START_UNLINKED"); unlinked && *unlinked == '1')
 +    state->bridge->SetMinecraftMode(false);
-+  // tools/gxplay.sh: the Wii Remote on the title and file select, Minecraft once a save is picked.
++  // The Wii Remote on the title and file select, Minecraft once a save is picked.
 +  if (const char* on_save = std::getenv("GALAXYCRAFT_LINK_ON_SAVE"); on_save && *on_save == '1')
 +    state->bridge->SetLinkOnSave(true);
++  // tools/gxplay.sh: the game boots by itself into GalaxyCraftSpace behind Minecraft's menus.
++  if (const char* boot = std::getenv("GALAXYCRAFT_BOOT"); boot && std::strcmp(boot, "space") == 0)
++    state->bridge->SetBootSpace(true);
 +  state->link_shown = state->bridge->MinecraftMode();
 +  state->input = std::make_unique<gxc::InputWriter>(*state->shm);
 +  state->memory = std::make_unique<DolphinGuestMemory>(system.GetMemory());
@@ -440,6 +468,7 @@ index 0000000..06544c2
 +    RunControlFile(*s_state->memory, *s_state->bridge, ModAlive(*s_state->shm), *s_state);
 +    AnnounceLink(*s_state);
 +    UpdateMarioInput(*s_state);
++    UpdateMute(*s_state);
 +  });
 +
 +  std::lock_guard lock(s_mutex);
@@ -476,7 +505,7 @@ index 0000000..06544c2
 +bool InputActive()
 +{
 +  std::lock_guard lock(s_mutex);
-+  return s_state && s_state->bridge->MinecraftMode() && ModAlive(*s_state->shm);
++  return s_state && MinecraftHasInput(*s_state);
 +}
 +
 +// Minecraft turns with the mouse: playing in its view, no Minecraft screen open (s_mutex held).
@@ -490,7 +519,7 @@ index 0000000..06544c2
 +               float pointer_y)
 +{
 +  std::lock_guard lock(s_mutex);
-+  const bool active = s_state && s_state->bridge->MinecraftMode() && ModAlive(*s_state->shm);
++  const bool active = s_state && MinecraftHasInput(*s_state);
 +  if (!active)
 +    return false;
 +  s_xinput_updates++;
@@ -499,7 +528,7 @@ index 0000000..06544c2
 +  const bool capture = CaptureRule(*s_state);
 +  if (capture && (dx != 0 || dy != 0))
 +    s_state->input->MouseDelta(dx, dy);
-+  const bool screen = s_state->bridge->ScreenOpen();
++  const bool screen = s_state->bridge->ScreenOpen() || s_state->bridge->InMenu();
 +  s_state->input->Pointer(pointer_x, pointer_y,
 +                          screen && pointer_x >= 0 && pointer_x <= 1 && pointer_y >= 0 && pointer_y <= 1);
 +  if (dz != 0)
@@ -511,8 +540,8 @@ index 0000000..06544c2
 +  // Escape is Minecraft's while one of its screens is open (it closes it) and while Mario is
 +  // playable (it opens Minecraft's pause menu, from which SMG2's own is one button away); in
 +  // SMG2's menus it is Mario's + button.
-+  const bool mc_escape =
-+      s_state->bridge->ScreenOpen() || (s_state->bridge->Following() && s_state->bridge->InGame());
++  const bool mc_escape = s_state->bridge->ScreenOpen() || s_state->bridge->InMenu() ||
++                         (s_state->bridge->Following() && s_state->bridge->InGame());
 +  u8 mc_keys[64];
 +  std::memcpy(mc_keys, keys, sizeof(keys));
 +  if (escape && mc_escape)
@@ -535,7 +564,7 @@ index 0000000..06544c2
 +void OnText(u32 keysym)
 +{
 +  std::lock_guard lock(s_mutex);
-+  if (s_state && s_state->bridge->MinecraftMode() && ModAlive(*s_state->shm))
++  if (s_state && MinecraftHasInput(*s_state))
 +    s_state->input->Text(gxc::KeysymToCodepoint(keysym));
 +}
 +
@@ -548,7 +577,7 @@ index 0000000..06544c2
 +bool BlocksStopHotkey()
 +{
 +  std::lock_guard lock(s_mutex);
-+  return s_state && s_state->bridge->Following();
++  return s_state && (s_state->bridge->Following() || s_state->bridge->InMenu());
 +}
 +
 +void NoteRenderFocus(bool focus)
@@ -566,10 +595,16 @@ index 0000000..06544c2
 +  AnnounceLink(*s_state);
 +}
 +
++bool OverlayCoversGame()
++{
++  std::lock_guard lock(s_mutex);
++  return s_state && s_state->bridge->InMenu();
++}
++
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn)
 +{
 +  std::lock_guard lock(s_mutex);
-+  if (!s_state || !s_state->bridge->MinecraftMode() || !ModAlive(*s_state->shm))
++  if (!s_state || !MinecraftHasInput(*s_state))
 +    return;
 +  // Cutscenes are the game's alone: no hand, hotbar or crosshair until they end.
 +  if (s_state->bridge->Cutscene())
@@ -580,10 +615,10 @@ index 0000000..06544c2
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..e7861f5
+index 0000000..f6436d8
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,65 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -640,6 +675,10 @@ index 0000000..e7861f5
 +// hand the game to Minecraft or take it back (to use SMG2's menus with the Wii Remote).
 +void ToggleLink();
 +
++
++// Video thread: Minecraft's menus cover the game (GALAXYCRAFT_BOOT=space, not in a world): until
++// its first frame, the window is a plain GalaxyCraft screen instead of SMG2 booting.
++bool OverlayCoversGame();
 +
 +// Video thread: calls fn(width, height, frame_id, rgba) with the newest overlay frame, if any
 +// (none during cutscenes).
@@ -1118,7 +1157,7 @@ index 4144805..e283734 100644
    const int pointer_deviceid;
    const int keyboard_deviceid;
 diff --git a/Source/Core/VideoCommon/OnScreenUI.cpp b/Source/Core/VideoCommon/OnScreenUI.cpp
-index 209e96c..9c2c18f 100644
+index 209e96c..5d7eae9 100644
 --- a/Source/Core/VideoCommon/OnScreenUI.cpp
 +++ b/Source/Core/VideoCommon/OnScreenUI.cpp
 @@ -3,6 +3,10 @@
@@ -1132,7 +1171,7 @@ index 209e96c..9c2c18f 100644
  #include "Common/CommonPaths.h"
  #include "Common/EnumMap.h"
  #include "Common/FileUtil.h"
-@@ -413,10 +417,46 @@ void OnScreenUI::DrawChallengesAndLeaderboards()
+@@ -413,10 +417,56 @@ void OnScreenUI::DrawChallengesAndLeaderboards()
  #endif  // USE_RETRO_ACHIEVEMENTS
  }
  
@@ -1168,6 +1207,16 @@ index 209e96c..9c2c18f 100644
 +    }
 +    ImGui::GetBackgroundDrawList()->AddImage(*m_galaxycraft_texture, ImVec2(0, 0),
 +                                             ImGui::GetIO().DisplaySize);
++  }
++  else if (GalaxyCraft::OverlayCoversGame())
++  {
++    // Minecraft's menus will cover the game; until its first frame, SMG2 booting stays hidden.
++    const ImVec2 size = ImGui::GetIO().DisplaySize;
++    ImDrawList* list = ImGui::GetBackgroundDrawList();
++    list->AddRectFilled(ImVec2(0, 0), size, IM_COL32(12, 10, 24, 255));
++    const char* title = "GalaxyCraft";
++    const ImVec2 text = ImGui::CalcTextSize(title);
++    list->AddText(ImVec2((size.x - text.x) / 2, (size.y - text.y) / 2), IM_COL32(230, 230, 240, 255), title);
 +  }
 +}
 +

@@ -184,6 +184,14 @@ void HostBridge::Tick(GuestMemory& mem)
   m_in_game = m_ticks_since_game_frame <= IN_GAME_TICKS && !no_gravity && !demo;
   m_cutscene = m_ticks_since_game_frame <= IN_GAME_TICKS && demo;
 
+  {
+    const u64 hb = m_shm.GetU64(offsetof(GxcHeader, mod_heartbeat_ms));
+    m_in_world = hb != 0 && now - hb < GXC_HEARTBEAT_TIMEOUT_MS &&
+                 (m_shm.GetU32(offsetof(GxcHeader, mod_flags)) & GXC_MOD_IN_WORLD) != 0;
+  }
+  if (m_boot_space)
+    m_minecraft_mode = m_in_world;
+
   // The stage name is set when a Mario spawns: empty while booting, FileSelect on the title.
   if (m_link_on_save && mbx.stage_name[0])
   {
@@ -531,12 +539,13 @@ void HostBridge::WriteFollow(GuestMemory& mem, const PlayerState* player)
   const bool hide_pointer = player && !galaxy && m_in_game;
   const bool hitboxes = player && (player->flags & GXC_PLAYER_HITBOXES);
   const bool mc_feel = player && (player->flags & GXC_PLAYER_MC_FEEL);
-  PutBE32(b.data(), player ? GXC_MBX_FOLLOW | (galaxy ? GXC_MBX_GALAXY_VIEW : 0u) |
+  const u32 boot = m_boot_space ? GXC_MBX_BOOT_SPACE | (InMenu() ? GXC_MBX_HOLD : 0u) : 0u;
+  PutBE32(b.data(), boot | (player ? GXC_MBX_FOLLOW | (galaxy ? GXC_MBX_GALAXY_VIEW : 0u) |
                                  (third ? GXC_MBX_THIRD_PERSON : 0u) |
                                  (hide_pointer ? GXC_MBX_HIDE_POINTER : 0u) |
                                  (hitboxes ? GXC_MBX_HITBOXES : 0u) |
                                  (mc_feel ? GXC_MBX_MC_FEEL | m_gait : 0u) :
-                             0u);
+                             0u));
   if (player)
   {
     Vec3 offset = player->cam_offset;

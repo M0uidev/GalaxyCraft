@@ -49,6 +49,13 @@ public:
   // mode once a save is picked and another stage loads. Each crossing sets the mode once; in
   // between, SetMinecraftMode (Ctrl+G) has the last word.
   void SetLinkOnSave(bool on);
+  // tools/gxplay.sh (GALAXYCRAFT_BOOT=space): the game boots by itself into GalaxyCraftSpace
+  // (GXC_MBX_BOOT_SPACE), and Minecraft mode follows the mod: on while it is in a world
+  // (GXC_MOD_IN_WORLD), else Minecraft's menus show and Mario waits (GXC_MBX_HOLD).
+  void SetBootSpace(bool on) { m_boot_space = on; }
+  bool BootSpace() const { return m_boot_space; }
+  // Booting by ourselves and Minecraft is not in a world: its menus have the screen and the input.
+  bool InMenu() const { return m_boot_space && !m_in_world; }
   // Minecraft mode with a live mod (or a dev follow): the Wii Remote override belongs to us.
   bool Following() const { return m_following; }
   // Mario is playable: game frames within the last 30 ticks, gravity, no cutscene. Else a menu.
@@ -137,6 +144,8 @@ private:
   std::optional<PlayerState> m_dev_follow;
   u32 m_gait = 0;  // GXC_MBX_MC_SPRINT / GXC_MBX_MC_SNEAK / GXC_MBX_MC_WALK
   bool m_minecraft_mode = true;
+  bool m_boot_space = false;
+  bool m_in_world = false;
   bool m_relink = false;
   bool m_link_on_save = false;
   bool m_on_title = true;

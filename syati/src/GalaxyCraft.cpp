@@ -6,6 +6,7 @@
 
 #include "CodePatch.h"
 #include "EntityDraw.h"
+#include "Boot.h"
 #include "HeldItem.h"
 #include "Kcl.h"
 #include "Parts.h"
@@ -61,6 +62,7 @@ struct Debug
   u32 player_life;     // SMG2's life meter (Minecraft's blows must leave it as it was)
   u32 hurts[2];        // Minecraft's blows passed on to Mario, and taken by him
   u32 riding;          // bit 0: Mario sits on a minecart or boat (GXC_MSG_SEAT); above: seat records seen
+  uint32_t boot[4];       // Boot.h: file selector, its nerve (r13 - N), frames in it, steps taken
 };
 
 struct Published
@@ -370,6 +372,7 @@ void MarioInit(void* self, const void* iter)
   for (u32 i = 0; stage && stage[i] && i + 1 < sizeof(gOut.mbx.stage_name); i++)
     gOut.mbx.stage_name[i] = stage[i];
   gOut.dbg.voxel_stats = reinterpret_cast<u32>(&gVoxelStats);
+  BootStage(stage);
 }
 
 // Minecraft's feel on Mario (GXC_MBX_MC_FEEL): his jumps from the ground rise 1.25 blocks, as
@@ -484,7 +487,9 @@ void MarioMovement(void* self)
   // W walks where Minecraft looks (see gCameraStickPatches); counts from his next movement.
   for (u32 i = 0; i < sizeof(gCameraStickPatches) / sizeof(gCameraStickPatches[0]); i++)
     SetWordPatch(gCameraStickPatches[i], gFollowing && !gDemo && !GalaxyView());
-  SetWordPatch(gAbyssKillPatch, EntityDrawSafeFromAbyss());
+  // GalaxyCraftSpace: Mario waits at the origin until the mod puts him on a planet.
+  const bool held = BootHoldMario();
+  SetWordPatch(gAbyssKillPatch, EntityDrawSafeFromAbyss() || held);
   // Steve (Mario's model) is hidden only in first person; cutscenes always show him.
   gHidden = !gxc::MarioVisible(gFollowing, gDemo, (gOut.mbx.host_flags & GXC_MBX_THIRD_PERSON) != 0) &&
             !EntityDrawFlying();
@@ -753,6 +758,16 @@ bool ClipFrustumLevel0(const void* self, const TVec3f& pos, f32 radius)
   return ClipFrustum(self, pos, radius, 0);
 }
 }  // namespace
+
+uint32_t BootHostFlags()
+{
+  return gOut.mbx.host_flags;
+}
+
+uint32_t* BootDebugWords()
+{
+  return gOut.dbg.boot;
+}
 
 // Vtable slots (symbols/SB4E.txt): __vt__10MarioActor + 0xC init, + 0x14 movement, + 0x18 draw;
 // __vt__14CameraDirector + 0x14 movement; __vt__17StarPointerLayout and __vt__15StarPointerBlur

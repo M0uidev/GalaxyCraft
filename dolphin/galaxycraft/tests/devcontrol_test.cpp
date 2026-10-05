@@ -117,10 +117,12 @@ TEST(mbx_summarizes_mailbox)
   mem.PutU32(MBX + 48, 2), mem.PutU32(MBX + 52, 1);  // host_flags
   mem.PutF32(MBX + 56, 7), mem.PutF32(MBX + 60, 8), mem.PutF32(MBX + 64, 9);
   mem.PutU32(MBX + offsetof(GxcMailbox, part_count), 3);
+  mem.PutBytes(MBX + offsetof(GxcMailbox, stage_name), "GalaxyCraftSpace", 17);
   auto c = ParseDevCommands("mbx");
   const std::string out = RunMemoryCommand(c[0], mem, MBX);
   for (const char* key : {"game_seq=1234 ", "scene=5 ", "grav=(0.000,-1.000,0.000) ",
-                          "anchor=(1.5,2.0,-3.0) ", "flags=2/1 ", "parts=3", "player=(7.0,8.0,9.0)"})
+                          "anchor=(1.5,2.0,-3.0) ", "flags=2/1 ", "parts=3 ", "player=(7.0,8.0,9.0)",
+                          "stage=GalaxyCraftSpace\n"})
     CHECK(out.find(key) != std::string::npos);
   CHECK(out.ends_with("\n"));
 }

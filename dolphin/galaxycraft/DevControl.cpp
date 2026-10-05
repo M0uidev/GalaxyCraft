@@ -192,14 +192,17 @@ std::string Mailbox(GuestMemory& mem, u32 at)
            static_cast<u32>(b[off + 2]) << 8 | b[off + 3];
   };
   auto f = [&](size_t off) { return static_cast<double>(std::bit_cast<float>(u(off))); };
+  char stage[33] = {};
+  if (!mem.Read(at + offsetof(GxcMailbox, stage_name), stage, 32))
+    stage[0] = 0;
   char buf[512];
   std::snprintf(buf, sizeof(buf),
                 "at=%08x game_seq=%u host_seq=%u scene=%u grav=(%.3f,%.3f,%.3f) anchor=(%.1f,%.1f,%.1f) "
-                "flags=%x/%x player=(%.1f,%.1f,%.1f) parts=%u\n",
+                "flags=%x/%x player=(%.1f,%.1f,%.1f) parts=%u stage=%s\n",
                 at, u(offsetof(GxcMailbox, game_seq)), u(offsetof(GxcMailbox, host_seq)),
                 u(offsetof(GxcMailbox, scene_id)), f(24), f(28), f(32), f(36), f(40), f(44),
                 u(offsetof(GxcMailbox, game_flags)), u(offsetof(GxcMailbox, host_flags)), f(56),
-                f(60), f(64), u(offsetof(GxcMailbox, part_count)));
+                f(60), f(64), u(offsetof(GxcMailbox, part_count)), stage[0] ? stage : "-");
   return buf;
 }
 }  // namespace

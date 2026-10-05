@@ -465,6 +465,40 @@ TEST(link_on_save_waits_for_a_stage_past_the_title)
   CHECK(f.bridge.MinecraftMode());
 }
 
+TEST(boot_space_holds_mario_while_minecraft_is_in_its_menus)
+{
+  Fixture f;
+  f.bridge.SetBootSpace(true);
+  f.Tick();  // Minecraft not running yet: a menu (its title is what will show)
+  CHECK(f.bridge.InMenu() && !f.bridge.Following());
+  CHECK(f.mem.GetU32(MBX + 52) == (GXC_MBX_BOOT_SPACE | GXC_MBX_HOLD));
+  f.ModReports(1, {10, 20, 30});  // alive, at its title (not in a world)
+  f.Tick();
+  CHECK(f.bridge.InMenu() && !f.bridge.Following());
+  CHECK(f.mem.GetU32(MBX + 52) == (GXC_MBX_BOOT_SPACE | GXC_MBX_HOLD));
+  f.shm->SetU32(offsetof(GxcHeader, mod_flags), GXC_MOD_IN_WORLD);  // a world was entered
+  f.ModReports(2, {10, 20, 30});
+  f.Tick();
+  CHECK(!f.bridge.InMenu() && f.bridge.Following());
+  f.ModReports(3, {10, 20, 30});  // its first pose after the switch (the one before re-anchors it)
+  f.Tick();
+  CHECK(f.mem.GetU32(MBX + 52) == (GXC_MBX_BOOT_SPACE | GXC_MBX_FOLLOW | GXC_MBX_HIDE_POINTER));
+  f.shm->SetU32(offsetof(GxcHeader, mod_flags), 0);  // back to the title
+  f.ModReports(4, {10, 20, 30});
+  f.Tick();
+  CHECK(f.bridge.InMenu() && f.mem.GetU32(MBX + 52) == (GXC_MBX_BOOT_SPACE | GXC_MBX_HOLD));
+}
+
+TEST(without_boot_space_there_is_no_menu)
+{
+  Fixture f;
+  f.Tick();
+  f.ModReports(1, {10, 20, 30});
+  f.Tick();
+  CHECK(!f.bridge.InMenu() && f.bridge.Following());
+  CHECK((f.mem.GetU32(MBX + 52) & (GXC_MBX_BOOT_SPACE | GXC_MBX_HOLD)) == 0);
+}
+
 TEST(in_game_rule)
 {
   Fixture f;
