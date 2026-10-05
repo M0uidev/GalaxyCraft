@@ -61,6 +61,79 @@ def _entries(arc):
             yield at, name, flags, off, size
 
 
+def _walk(arc):
+    """(path, entry offset, data offset, size) of every file, paths as root/dir/.../name."""
+    arc = yaz0_decompress(arc)
+    h = _HEADER.unpack_from(arc, 0)
+    info = _INFO.unpack_from(arc, 0x20)
+    nodes, ents, strings = info[1] + 0x20, info[3] + 0x20, info[5] + 0x20
+
+    def name_at(off):
+        return arc[strings + off:arc.index(b"\0", strings + off)].decode()
+
+    def node(i, prefix):
+        _, name_off, _, count, first = _NODE.unpack_from(arc, nodes + i * _NODE.size)
+        path = prefix + name_at(name_off)
+        for e in range(first, first + count):
+            at = ents + e * _ENTRY.size
+            _, _, flags, n_off, off, size, _ = _ENTRY.unpack_from(arc, at)
+            n = name_at(n_off)
+            if n in (".", ".."):
+                continue
+            if flags & _DIR:
+                yield from node(off, path + "/")
+            else:
+                yield path + "/" + n, at, off, size
+
+    return arc, list(node(0, ""))
+
+
+def list_paths(arc):
+    """[(path, contents)] with each file's folder path (root/dir/name)."""
+    arc, files = _walk(arc)
+    data = _layout(arc)[0]
+    return [(p, arc[data + off:data + off + size]) for p, _, off, size in files]
+
+
+def replace_paths(arc, files, renames=None):
+    """The same archive with the files at these paths (as list_paths names them) replaced, and
+    the files in renames ({path: new file name}) renamed."""
+    arc, walked = _walk(arc)
+    arc = bytearray(arc)
+    data = _layout(arc)[0]
+    known = {p for p, _, _, _ in walked}
+    renames = renames or {}
+    for p in list(files) + list(renames):
+        if p not in known:
+            raise KeyError(p)
+    if renames:  # new names go at the end of the string table, which then pushes the data on
+        info = _INFO.unpack_from(arc, 0x20)
+        strings, size = info[5] + 0x20, info[4]
+        used = arc.rindex(b"\0", strings, strings + size) + 1  # past the last name: padding
+        table = bytearray(arc[strings:used])
+        for p, at, _, _ in walked:
+            if p in renames:
+                name = renames[p]
+                struct.pack_into(">H", arc, at + 2, _hash(name))
+                struct.pack_into(">H", arc, at + 6, len(table))
+                table += name.encode() + b"\0"
+        table += bytes(-len(table) % 32)
+        rest = arc[strings + size:data]  # nothing in SMG2's archives, kept if present
+        arc = arc[:strings] + table + rest + arc[data:]
+        struct.pack_into(">I", arc, 0x20 + 16, len(table))
+        data = strings + len(table) + len(rest)
+        struct.pack_into(">I", arc, 12, data - 0x20)
+    blobs = bytearray()
+    for p, at, off, size in sorted(walked, key=lambda w: w[2]):
+        blob = files.get(p, bytes(arc[data + off:data + off + size]))
+        struct.pack_into(">II", arc, at + 8, len(blobs), len(blob))
+        blobs += blob + bytes(-len(blob) % 32)
+    head = arc[:data]
+    struct.pack_into(">I", head, 4, len(head) + len(blobs))
+    struct.pack_into(">III", head, 0x10, len(blobs), len(blobs), 0)
+    return bytes(head) + bytes(blobs)
+
+
 def list_files(arc):
     arc = yaz0_decompress(arc)
     data = _layout(arc)[0]

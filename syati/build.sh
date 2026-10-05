@@ -31,9 +31,11 @@ export WINEDEBUG=-all
 # Steve: Mario's model (and his gloves) replaced, built from the disc into build/ObjectData, and
 # where what he holds goes on his skeleton (build/gen/held.h).
 GXC_GAME="$GAME" python3 ../tools/steve/build.py --out build
+# GalaxyCraft's own galaxy, empty space under SMG2's sky (build/StageData/GalaxyCraftSpace).
+GXC_GAME="$GAME" python3 ../tools/space_galaxy.py --out build
 # Module: core/ (also tested with g++) plus the game glue.
 OBJS=""
-for src in src/core/*.cpp src/GalaxyCraft.cpp src/VoxelPlanet.cpp src/HeldItem.cpp src/EntityDraw.cpp; do
+for src in src/core/*.cpp src/GalaxyCraft.cpp src/VoxelPlanet.cpp src/HeldItem.cpp src/EntityDraw.cpp src/Boot.cpp; do
   obj="build/obj/$(basename "$src" .cpp).o"
   "$CC" $FLAGS -i src -i src/core -i build/gen -i ../protocol -i "$SYATI/include" -I- -i src/shim "$src" -o "$obj"
   OBJS="$OBJS $obj"
@@ -52,6 +54,7 @@ patches = open("build/loader_patches.xml").read().strip()
 for arc in sorted(os.listdir("build/ObjectData")):
     if arc.endswith(".arc"):
         patches += f'\n\t\t<file disc="/ObjectData/{arc}" external="/ObjectData/{arc}" />'
+patches += '\n\t\t<folder disc="/StageData/GalaxyCraftSpace" external="/StageData/GalaxyCraftSpace" create="true" />'
 xml = open("riivolution/galaxycraft.xml.in").read().replace("@LOADER_PATCHES@", patches)
 open("build/galaxycraft.xml", "w").write(xml)
 build = os.path.abspath("build")
