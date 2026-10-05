@@ -38,5 +38,8 @@ struct VoxelStats
   uint32_t parts_live, drawn_last, no_zone;
   uint32_t atlas_id, atlas_bytes, atlas_ready;
   uint32_t far_drawn;  // parts of planets' far views drawn last frame (PlanetLod)
+  // MEM2's free memory in all (free_mem2 is its largest free block: what one allocation can get),
+  // and the bytes the module holds there now.
+  uint32_t total_free_mem2, module_bytes;
 };
 extern VoxelStats gVoxelStats;

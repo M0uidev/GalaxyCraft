@@ -11,6 +11,7 @@
 			"dev.moui.galaxycraft.gametest.WalkProbe",
 			"dev.moui.galaxycraft.gametest.MovementProbe",
 			"dev.moui.galaxycraft.gametest.ElytraProbe",
+			"dev.moui.galaxycraft.gametest.MemoryProbe",
 			"dev.moui.galaxycraft.gametest.LodProbe",
 			"dev.moui.galaxycraft.gametest.TpProbe",
 			"dev.moui.galaxycraft.gametest.VoxelPlanetTest",

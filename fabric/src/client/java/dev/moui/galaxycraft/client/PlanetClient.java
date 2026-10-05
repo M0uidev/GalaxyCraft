@@ -275,7 +275,10 @@ public final class PlanetClient {
         PlanetSession gone = focus;
         int index = indexOf(gone);
         gone.remove();
-        if (gone != session) extras.removeIf(e -> e.s() == gone);
+        if (gone != session) {
+            extras.removeIf(e -> e.s() == gone);
+            leaving.add(gone); // until the game has been told it is gone (its far view, its slots)
+        }
         focus = session;
         String s = stage;
         if (s != null && !s.isEmpty()) saver.execute(() -> {
@@ -465,6 +468,9 @@ public final class PlanetClient {
             s.update(world.sceneId(), bridge.hostPid(), world.queryPos());
             for (PlanetSession.Msg m; (m = s.peek(bulk)) != null && bridge.send(m.type(), m.payload()); ) s.sent();
         }
+        for (PlanetSession s : leaving)
+            for (PlanetSession.Msg m; (m = s.peek(bulk)) != null && bridge.send(m.type(), m.payload()); ) s.sent();
+        leaving.removeIf(s -> s.queued() == 0);
         if (++sinceSave >= SAVE_TICKS) {
             sinceSave = 0;
             saveNow();
@@ -514,6 +520,9 @@ public final class PlanetClient {
         }
     }
 
+    /** Extra planets removed whose GONE has not reached the game yet. */
+    private static final java.util.List<PlanetSession> leaving = new java.util.ArrayList<>();
+
     /** Mario sat on something last frame (the game is told once when he gets off). */
     private static boolean riding;
 
@@ -532,6 +541,7 @@ public final class PlanetClient {
         session.unload();
         for (Extra e : extras) e.s().unload();
         extras.clear();
+        leaving.clear(); // the new scene never had them
         focus = session;
         stage = next;
         autoSpawn = false;

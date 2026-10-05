@@ -24,6 +24,10 @@ extern "C" void setCurrentPlacementZoneId__2MRFl(long);
 extern "C" void* getSceneHeapGDDR3__2MRFv();
 extern "C" void* getSceneHeapNapa__2MRFv();
 extern "C" u32 getFreeSize__7JKRHeapFv(void*);
+extern "C" u32 getTotalFreeSize__7JKRHeapFv(void*);
+extern "C" s32 getSize__7JKRHeapFPv(void* heap, void* p);
+extern "C" void free__7JKRHeapFPvP7JKRHeap(void* p, void* heap);
+extern "C" void* create__10JKRExpHeapFUlP7JKRHeapb(u32 size, void* parent, bool errorFlag);
 extern "C" void GXGetProjectionv(f32* p);
 // operator new(size, JKRHeap*, alignment)
 extern "C" void* __nw__FUlP7JKRHeapi(u32 size, void* heap, int align);
@@ -89,9 +93,37 @@ const f32 FAR_VIEW_ABOVE = 96.f * 80.f;
 const u32 GRAVE_FRAMES = 8;
 gxc::Graves gGraves;
 
+// The module's own heap, in the scene's MEM2 heap. That one is a JKRSolidHeap (read live: its
+// vtable is JKRSolidHeap's): it only grows and frees nothing until the scene ends, so every chunk
+// sent again (a block broken or placed), every far view and every removed planet stayed until
+// then, and a long session ran out. This one frees for real; it is made at the first allocation
+// of a scene (the stage is loaded by then) and goes with the scene's heap.
+void* gModHeap = 0;
+// What the game keeps of the scene's MEM2 heap: an eighth of what is free then, 8 MB at least.
+const u32 GAME_KEEPS_MIN = 8 * 1024 * 1024;
+
+void* ModHeap()
+{
+  if (gModHeap)
+    return gModHeap;
+  void* scene = getSceneHeapGDDR3__2MRFv();
+  const u32 free = getFreeSize__7JKRHeapFv(scene);
+  const u32 keep = free / 8 > GAME_KEEPS_MIN ? free / 8 : GAME_KEEPS_MIN;
+  if (free <= keep + 1024 * 1024)
+    return 0;
+  gModHeap = create__10JKRExpHeapFUlP7JKRHeapb((free - keep) & ~31u, scene, false);
+  return gModHeap;
+}
+
 void FreeHeap(void* p)
 {
-  operator delete(p);
+  void* heap = gModHeap;
+  if (!p || !heap)
+    return;
+  const s32 size = getSize__7JKRHeapFPv(heap, p);
+  if (size > 0)
+    gVoxelStats.module_bytes -= size;
+  free__7JKRHeapFPvP7JKRHeap(p, heap);
 }
 
 void Bury(void* p)
@@ -218,16 +250,23 @@ void AtlasPiece(const gxc::InboxAtlas& a)
   gVoxelStats.atlas_ready = gAtlas.ready ? 1 : 0;
 }
 
-// Chunk memory comes from the scene's MEM2 heap (the larger one), 32-byte aligned for the GPU.
-// A failed JKRHeap allocation can stop the game, so this leaves the game a reserve instead.
-const u32 HEAP_RESERVE = 2 * 1024 * 1024;
+// Chunk memory comes from the module's heap (ModHeap, in the scene's MEM2 heap), 32-byte aligned
+// for the GPU. A failed JKRHeap allocation can stop the game, so a request it may not meet gets 0.
+const u32 HEAP_RESERVE = 64 * 1024;
 
 u8* Alloc32(u32 size)
 {
-  void* heap = getSceneHeapGDDR3__2MRFv();
-  return getFreeSize__7JKRHeapFv(heap) > size + HEAP_RESERVE ?
-             static_cast<u8*>(__nw__FUlP7JKRHeapi(size, heap, 32)) :
-             0;
+  void* heap = ModHeap();
+  u8* p = heap && getFreeSize__7JKRHeapFv(heap) > size + HEAP_RESERVE ?
+              static_cast<u8*>(__nw__FUlP7JKRHeapi(size, heap, 32)) :
+              0;
+  if (p)
+  {
+    const s32 got = getSize__7JKRHeapFPv(heap, p);
+    if (got > 0)
+      gVoxelStats.module_bytes += got;
+  }
+  return p;
 }
 
 // The Map keeper's zone 0, where the planet's collision goes (see GalaxyCraft.cpp for the layout:
@@ -601,10 +640,8 @@ public:
   {
     for (u32 i = 0; i < p.slot_count; i++)
       Free(p, p.slots[i]);
-    if (p.slots)
-      operator delete(p.slots);
-    if (p.drawn)
-      operator delete(p.drawn);
+    FreeHeap(p.slots);
+    FreeHeap(p.drawn);
     p.slots = 0;
     p.drawn = 0;
     p.slot_count = p.drawn_count = 0;
@@ -1004,6 +1041,8 @@ void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size)
   gHitboxDl[0] = gHitboxDl[1] = 0;
   gHitboxOn = false;
   gGraves.Reset();
+  gVoxelStats.module_bytes = 0;
+  gModHeap = 0;  // went with the old scene's heap
   gInbox = static_cast<u8*>(operator new(INBOX_BYTES));
   memset(&gAtlas, 0, sizeof(gAtlas));  // the mod sends it again to every scene
   memset(gInbox, 0, sizeof(GxcInboxHeader));
@@ -1037,12 +1076,14 @@ void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_s
   if (!gActor || !gInbox)
     return;
   TickGraves();
+  // Every frame, not only with a batch: what was freed after the last one (the graves) shows too.
+  gVoxelStats.free_mem2 = gModHeap ? getFreeSize__7JKRHeapFv(gModHeap) : 0;
+  gVoxelStats.free_mem1 = getFreeSize__7JKRHeapFv(getSceneHeapNapa__2MRFv());
+  gVoxelStats.total_free_mem2 = getTotalFreeSize__7JKRHeapFv(getSceneHeapGDDR3__2MRFv());
   GxcInboxHeader* h = reinterpret_cast<GxcInboxHeader*>(gInbox);
   if (h->state != 1)
     return;
   gVoxelStats.batches++;
-  gVoxelStats.free_mem2 = getFreeSize__7JKRHeapFv(getSceneHeapGDDR3__2MRFv());
-  gVoxelStats.free_mem1 = getFreeSize__7JKRHeapFv(getSceneHeapNapa__2MRFv());
   if (h->scene_id == scene_id && h->bytes <= INBOX_BYTES - sizeof(GxcInboxHeader))
   {
     const u8* rec = gInbox + sizeof(GxcInboxHeader);
