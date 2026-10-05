@@ -49,6 +49,51 @@ public final class GalaxySave {
         Files.createDirectories(planets());
     }
 
+    /** The world's planets: the options it was made with and the catalog (galaxy.json). */
+    public record Galaxy(int version, GalaxyCatalog.Options options, java.util.List<GalaxyCatalog.Entry> entries) {}
+
+    public Optional<Galaxy> galaxy() {
+        Path f = dir.resolve("galaxy.json");
+        if (!Files.isRegularFile(f)) return Optional.empty();
+        try {
+            Galaxy g = GSON.fromJson(Files.readString(f, StandardCharsets.UTF_8), Galaxy.class);
+            return g != null && g.options() != null && g.entries() != null && !g.entries().isEmpty() ? Optional.of(g) : Optional.empty();
+        } catch (IOException | RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** Written whole and atomically, as the spot. */
+    public void writeGalaxy(Galaxy g) throws IOException {
+        Files.createDirectories(dir);
+        Path tmp = dir.resolve("galaxy.json.tmp");
+        Files.writeString(tmp, GSON.toJson(g), StandardCharsets.UTF_8);
+        Files.move(tmp, dir.resolve("galaxy.json"), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    /**
+     * The catalog of a world made before catalogs: one entry per planet file of the stage, where it
+     * was and as big as it is (no blueprint: the file is all there is of it).
+     */
+    public Galaxy fromFiles(PlanetStore store, String stage) {
+        java.util.List<GalaxyCatalog.Entry> entries = new java.util.ArrayList<>();
+        for (int index : store.saved(stage, GalaxyCatalog.MAX)) {
+            try {
+                Optional<PlanetStore.Header> h = store.header(PlanetStore.key(stage, index));
+                if (h.isEmpty()) continue;
+                org.joml.Vector3d c = h.get().center();
+                entries.add(new GalaxyCatalog.Entry(index, c.x, c.y, c.z, (int) Math.round(h.get().surface()),
+                        GalaxyCatalog.Kind.BLUEPRINT, null, null, 0));
+            } catch (IOException e) {
+                // An unreadable file stays out; PlanetClient says so when it fails to load it.
+            }
+        }
+        GalaxyCatalog.Options d = GalaxyCatalog.Options.defaults(0);
+        GalaxyCatalog.Options o = new GalaxyCatalog.Options(Math.max(1, entries.size()), d.minRadius(), d.maxRadius(), d.first(),
+                d.spacing(), 0);
+        return new Galaxy(1, o, java.util.List.copyOf(entries));
+    }
+
     public Optional<Spot> spot() {
         Path f = dir.resolve("player.json");
         if (!Files.isRegularFile(f)) return Optional.empty();

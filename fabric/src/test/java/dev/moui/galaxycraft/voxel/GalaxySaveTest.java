@@ -35,4 +35,43 @@ class GalaxySaveTest {
         Files.writeString(world.resolve("galaxycraft/player.json"), "{\"planet\": 0, \"dx\": 0, \"dy\": 0, \"dz\": 0}");
         assertTrue(g.spot().isEmpty()); // no direction: nowhere to stand
     }
+
+    @Test void theGalaxyComesBack() throws Exception {
+        GalaxySave g = GalaxySave.of(world);
+        assertTrue(g.galaxy().isEmpty());
+        var o = GalaxyCatalog.Options.defaults(42);
+        var es = GalaxyCatalog.make(o, 48, java.util.List.of("minecraft:plains"), 80).entries();
+        g.writeGalaxy(new GalaxySave.Galaxy(1, o, es));
+        GalaxySave.Galaxy back = GalaxySave.of(world).galaxy().orElseThrow();
+        assertEquals(o, back.options());
+        assertEquals(es, back.entries());
+    }
+
+    @Test void aBrokenGalaxyIsNone() throws Exception {
+        Files.createDirectories(world.resolve("galaxycraft"));
+        Files.writeString(world.resolve("galaxycraft/galaxy.json"), "{nope");
+        assertTrue(GalaxySave.of(world).galaxy().isEmpty());
+    }
+
+    @Test void aWorldFromBeforeCatalogsGetsOneFromItsPlanetFiles() throws Exception {
+        GalaxySave g = GalaxySave.of(world);
+        PlanetStore store = new PlanetStore(g.planets());
+        VoxelPlanet p = VoxelPlanet.standard();
+        int[] indices = {0, 2, 5};
+        for (int i : indices) {
+            var saved = new PlanetStore.Saved(p.grid.n, p.grid.core, p.grid.layers, p.depth, new org.joml.Vector3d(i * 1000, 0, -i), p.cells());
+            store.write(PlanetStore.key("S", i), saved, CubeBlocks.INSTANCE);
+        }
+        GalaxySave.Galaxy made = g.fromFiles(store, "S");
+        assertEquals(3, made.entries().size());
+        for (int k = 0; k < 3; k++) {
+            GalaxyCatalog.Entry e = made.entries().get(k);
+            assertEquals(indices[k], e.index());
+            assertEquals(indices[k] * 1000, e.x(), 1e-9);
+            assertEquals(Math.round(p.surface()), e.radius());
+            assertEquals(GalaxyCatalog.Kind.BLUEPRINT, e.kind());
+            assertNull(e.blueprint());
+        }
+        assertEquals(3, made.options().count());
+    }
 }
