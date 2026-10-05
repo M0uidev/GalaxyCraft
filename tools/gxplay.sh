@@ -9,9 +9,9 @@
 # Everything is kept in $XDG_DATA_HOME/galaxycraft (~/.local/share/galaxycraft):
 #   minecraft/  Minecraft's game folder: worlds (saves/<world>/galaxycraft holds its planets),
 #               options.txt, config/galaxycraft.properties (GalaxyCraft's settings)
-#   dolphin/    Dolphin's own folder: on first launch its settings are copied from your usual
-#               Dolphin (~/.config/dolphin-emu) and so is SMG2's save, if you have one (without
-#               one the game makes a file by itself)
+#   dolphin/    Dolphin's own folder: an emulated Wii Remote only GalaxyCraft drives, your usual
+#               Dolphin's video settings and hotkeys, and SMG2's save copied from it if you have
+#               one (without one the game makes a file by itself)
 #   blueprints/ planet blueprints, shared by every world
 # Dolphin runs with 256 MiB of MEM2 (RAM override), dual core.
 #   tools/gxplay.sh            (build first: dolphin/build.sh, syati/build.sh)
@@ -26,25 +26,32 @@ GAME_DIR="$DATA/minecraft"
 DOLPHIN_DIR="$DATA/dolphin"
 SMG2_SAVE=Wii/title/00010000/53423445
 
-# Dolphin's own folder, seeded once from the player's usual Dolphin (controllers, hotkeys, video)
-# and SMG2's save.
+# Dolphin's own folder: an emulated Wii Remote + Nunchuk that only GalaxyCraft drives
+# (tools/dolphin-play), with the player's own video settings and hotkeys if they have a Dolphin.
 if [ ! -d "$DOLPHIN_DIR/Config" ]; then
   mkdir -p "$DOLPHIN_DIR/Config"
-  if [ -d "$HOME/.config/dolphin-emu" ]; then
-    cp "$HOME"/.config/dolphin-emu/*.ini "$DOLPHIN_DIR/Config/" 2> /dev/null
-  else
-    cp tools/dolphin-dev/*.ini "$DOLPHIN_DIR/Config/"
-  fi
-  if [ -d "$HOME/.local/share/dolphin-emu/$SMG2_SAVE" ]; then
-    mkdir -p "$DOLPHIN_DIR/$(dirname "$SMG2_SAVE")"
-    cp -r "$HOME/.local/share/dolphin-emu/$SMG2_SAVE" "$DOLPHIN_DIR/$SMG2_SAVE"
-  fi
+  cp tools/dolphin-play/*.ini "$DOLPHIN_DIR/Config/"
+  for ini in GFX.ini Hotkeys.ini; do
+    [ -f "$HOME/.config/dolphin-emu/$ini" ] && cp "$HOME/.config/dolphin-emu/$ini" "$DOLPHIN_DIR/Config/"
+  done
+fi
+# SMG2's save, from the player's usual Dolphin while this folder has none (without one, the game
+# makes a file by itself).
+if [ ! -d "$DOLPHIN_DIR/$SMG2_SAVE/data" ]; then
+  for from in "$HOME/.local/share/dolphin-emu" "$HOME/.dolphin-emu"; do
+    if [ -d "$from/$SMG2_SAVE/data" ]; then
+      mkdir -p "$DOLPHIN_DIR/$SMG2_SAVE"
+      cp -r "$from/$SMG2_SAVE/." "$DOLPHIN_DIR/$SMG2_SAVE/"
+      break
+    fi
+  done
 fi
 mkdir -p "$GAME_DIR"
 
 # A hidden Minecraft left over from an earlier run (Gradle's daemon outlives this script) would
 # still be linked to the new Dolphin through the shared memory, and two of them feeding one game
-# make it lag: stop any first. The game test ignores SIGTERM, so KILL follows.
+# make it lag: stop any first. The game test ignores SIGTERM, so KILL follows. (This also stops
+# a test of tools/gxvoxel.sh, whose Minecraft is hidden too: never play while one runs.)
 MC_MATCH="galaxycraft.hidden=true"
 stop_minecraft() {
   pkill -f "$MC_MATCH" 2> /dev/null || return 0

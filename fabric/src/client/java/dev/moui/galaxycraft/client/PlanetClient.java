@@ -106,6 +106,10 @@ public final class PlanetClient {
     private static PlanetStore store = FIXED_DIR ? new PlanetStore(planetDir()) : null;
     /** The world's galaxy (null: none, or FIXED_DIR). */
     private static GalaxySave galaxy;
+    /** This world's home planet asked for (once: a failed generation is not retried every tick). */
+    private static boolean homeAsked;
+    /** The stage has planet files: a home planet never goes over one, even one that could not be read. */
+    private static boolean hadSaved;
     /** Entering a world in GalaxyCraftSpace: Mario goes to the saved spot (or onto the first planet) once a planet is up. */
     private static boolean landPending;
     private static GalaxySave.Spot landOn;
@@ -454,8 +458,9 @@ public final class PlanetClient {
                 && bridge.send(Layout.MSG_ATLAS, piece); ) atlasLink.sent();
         if (!bridge.stage().equals(stage)) enterStage(bridge.stage());
         boolean space = galaxy != null && Layout.SPACE_STAGE.equals(stage);
-        if (space && planets().stream().noneMatch(PlanetSession::active) && generating == null && generated == null
-                && spawnBlueprint == null && spawnRadius == 0 && worldgen() != null) {
+        if (space && !homeAsked && !hadSaved && planets().stream().noneMatch(PlanetSession::active) && generating == null
+                && generated == null && spawnBlueprint == null && spawnRadius == 0 && worldgen() != null) {
+            homeAsked = true;
             // A world's first visit: its home planet, generated with the default biome.
             spawnBlueprint = PlanetBlueprint.standard("Home", DEFAULT_RADIUS).withMode(PlanetBlueprint.Mode.GENERATED);
             placement = Placement.HOME;
@@ -658,6 +663,7 @@ public final class PlanetClient {
         autoSpawn = false;
         if (next.isEmpty() || store == null) return;
         java.util.List<Integer> saved = store.saved(next, PlanetLayout.MAX_PLANETS);
+        hadSaved = !saved.isEmpty();
         for (int index : saved) {
             try {
                 Optional<PlanetStore.Saved> s = store.read(PlanetStore.key(next, index), blocks);
@@ -700,6 +706,8 @@ public final class PlanetClient {
         store = new PlanetStore(g.planets());
         landOn = g.spot().orElse(null);
         landPending = true;
+        homeAsked = false;
+        hadSaved = false;
         sinceSpot = 0;
         unlandedSince = 0;
         stage = null; // loaded at the next tick, from this world's folder
@@ -718,7 +726,7 @@ public final class PlanetClient {
         extras.clear();
         leaving.clear();
         focus = session;
-        bridge.send(Layout.MSG_PLANET, PlanetSession.dropAll());
+        dropAllPending = !bridge.send(Layout.MSG_PLANET, PlanetSession.dropAll());
         galaxy = null;
         store = null;
         stage = null;
@@ -733,6 +741,14 @@ public final class PlanetClient {
     /** Entering a world in GalaxyCraftSpace, Mario not on its planet yet: the player waits for him. */
     public static boolean waitingToLand() {
         return galaxy != null && landPending;
+    }
+
+    /** The game told to drop every planet, once the ring has room (it was full when the world was left). */
+    private static boolean dropAllPending;
+
+    /** Every client tick, also out of a world: a drop-everything that did not fit in the ring goes now. */
+    public static void flushDropAll(BridgeClient bridge) {
+        if (dropAllPending && bridge.send(Layout.MSG_PLANET, PlanetSession.dropAll())) dropAllPending = false;
     }
 
     /** The world's galaxy, while one is entered (null otherwise, and in game tests). */

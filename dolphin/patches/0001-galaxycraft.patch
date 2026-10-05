@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..4f1746c
+index 0000000..cdc3939
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,560 @@
+@@ -0,0 +1,559 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -540,8 +540,7 @@ index 0000000..4f1746c
 +  // Escape is Minecraft's while one of its screens is open (it closes it) and while Mario is
 +  // playable (it opens Minecraft's pause menu, from which SMG2's own is one button away); in
 +  // SMG2's menus it is Mario's + button.
-+  const bool mc_escape = s_state->bridge->ScreenOpen() || s_state->bridge->InMenu() ||
-+                         (s_state->bridge->Following() && s_state->bridge->InGame());
++  const bool mc_escape = s_state->bridge->MinecraftTakesEscape();
 +  u8 mc_keys[64];
 +  std::memcpy(mc_keys, keys, sizeof(keys));
 +  if (escape && mc_escape)

@@ -18,6 +18,9 @@ final class GalaxyWorlds {
     private static final String[] STARTER = {"iron_pickaxe", "grass_block 64", "dirt 64", "stone 64", "cobblestone 64",
             "ice 64", "water_bucket", "lava_bucket"};
 
+    /** A world younger than this (game ticks) was just made. */
+    private static final long NEW_WORLD_TICKS = 200;
+
     private GalaxyWorlds() {}
 
     static void joined(Minecraft client) {
@@ -25,7 +28,9 @@ final class GalaxyWorlds {
         if (server == null) return; // another's server: no galaxy of ours
         GalaxySave galaxy = GalaxySave.of(server.getWorldPath(LevelResource.ROOT));
         if (galaxy.isNew()) {
-            server.execute(() -> firstVisit(server));
+            // Only a world just made gets Mario's rules and the starter hotbar; one made elsewhere
+            // (copied in from Minecraft) keeps its own.
+            if (server.overworld().getGameTime() < NEW_WORLD_TICKS) server.execute(() -> firstVisit(server));
             try {
                 galaxy.markMade();
             } catch (IOException e) {

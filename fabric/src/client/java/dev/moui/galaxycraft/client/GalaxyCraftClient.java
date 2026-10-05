@@ -135,11 +135,12 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 client.gui.setScreen(new GalaxySettingsScreen(null));
             }
         });
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> GalaxyWorlds.joined(client));
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+        // On the client's thread: DISCONNECT may come from the network's when the connection drops.
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> client.execute(() -> GalaxyWorlds.joined(client)));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
             PlanetClient.leaveWorld(bridge);
             resetFrame();
-        });
+        }));
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             if (Boolean.getBoolean("galaxycraft.hidden")) { // Dolphin shows the overlay instead
                 client.options.pauseOnLostFocus = false;
@@ -358,6 +359,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static void beforeTick(Minecraft client) {
         bridge.setInWorld(client.level != null && client.player != null);
         bridge.poll();
+        PlanetClient.flushDropAll(bridge);
         LocalPlayer player = client.player;
         if (player == null) return;
         following = false;

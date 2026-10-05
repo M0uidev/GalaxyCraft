@@ -66,6 +66,13 @@ public:
   bool InGame() const { return m_in_game; }
   // A cutscene owns Mario and the camera (game frames within the last 30 ticks, DEMO).
   bool Cutscene() const { return m_cutscene; }
+  // Escape is Minecraft's (its screen closes, or its pause menu opens) rather than SMG2's + button:
+  // a Minecraft screen or menu is open, or Mario is playable. Booting by ourselves, also with no
+  // gravity under him (waiting to land, the void between planets): SMG2's menu is a button there.
+  bool MinecraftTakesEscape() const
+  {
+    return ScreenOpen() || InMenu() || (m_following && (m_in_game || m_boot_space));
+  }
   // Following with the mod's Galaxy view (F5): SMG2 keeps its camera, the mouse is the pointer.
   bool GalaxyView() const { return m_galaxy_view; }
   // Following with something in Minecraft's main hand: the clicks break and place blocks.

@@ -519,6 +519,20 @@ TEST(boot_space_tells_the_mod_when_the_galaxy_is_ready)
   CHECK((f.shm->GetU32(offsetof(GxcHeader, host_flags)) & GXC_HOST_SPACE_READY) != 0);
 }
 
+TEST(boot_space_escape_is_minecrafts_also_with_no_gravity)
+{
+  // Waiting to land in GalaxyCraftSpace, or out in the void between planets, Mario has no gravity
+  // (not "in game"): Escape must still open Minecraft's pause menu, not SMG2's.
+  Fixture f;
+  f.bridge.SetBootSpace(true);
+  f.mem.PutF32(MBX + 24, 0), f.mem.PutF32(MBX + 28, 0), f.mem.PutF32(MBX + 32, 0);  // no gravity
+  f.shm->SetU32(offsetof(GxcHeader, mod_flags), GXC_MOD_IN_WORLD);
+  f.ModReports(1, {10, 20, 30});
+  f.Tick();
+  CHECK(f.bridge.Following() && !f.bridge.InGame());
+  CHECK(f.bridge.MinecraftTakesEscape());
+}
+
 TEST(without_boot_space_there_is_no_menu)
 {
   Fixture f;
