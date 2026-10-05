@@ -70,42 +70,23 @@ public final class PlanetGenerator {
         int radius = bp.radius(), air = bp.air(), depth = VoxelPlanet.groundDepth(radius);
         int n = VoxelPlanet.gridSize(radius);
         CubeSphere grid = new CubeSphere(n, radius - depth, depth + air);
-        String fixed = bp.biomeSize() == 0 ? biome(bp, table) : null;
-        boolean water = bp.water();
-        Climate.Span span = fixed == null ? (water ? EVERYWHERE : INLAND) : table.span(fixed);
-        if (span == null) throw new IllegalArgumentException("no biome " + fixed);
-        if (fixed != null && water && table.watery(fixed)) {
-            Climate m = span.max();
-            span = new Climate.Span(span.min(), new Climate(Math.max(m.continentalness(), ISLANDS), m.erosion(), m.ridges(),
-                    m.temperature(), m.humidity()));
-        }
-        int lowest = water ? Math.min(depth - 2, MAX_WATER_DEPTH) : depth - 2;
-        double climateScale = bp.biomeSize() == 0 ? 0 : 256.0 / bp.biomeSize();
-        double relief = Math.min(1, radius / FULL_RELIEF_RADIUS);
-
+        SurfaceSampler sampler = new SurfaceSampler(bp, noise, table);
+        boolean water = sampler.water();
         int columns = 6 * n * n;
         int[] height = new int[columns];
         String[] biome = new String[columns];
         float[] dirs = new float[3 * columns];
-        Climate.Span fspan = span;
         java.util.stream.IntStream.range(0, 6).parallel().forEach(f -> {
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++) {
                     int col = (f * n + i) * n + j;
-                    Vector3d p = grid.dir(f, i, j).add(grid.dir(f, i + 1, j)).add(grid.dir(f, i, j + 1))
-                            .add(grid.dir(f, i + 1, j + 1)).normalize();
+                    Vector3d p = SurfaceSampler.columnDir(grid, f, i, j);
                     dirs[3 * col] = (float) p.x;
                     dirs[3 * col + 1] = (float) p.y;
                     dirs[3 * col + 2] = (float) p.z;
-                    p.mul(radius);
-                    double tx = p.x * TERRAIN_SCALE, ty = p.y * TERRAIN_SCALE, tz = p.z * TERRAIN_SCALE;
-                    double cx = p.x * climateScale, cy = p.y * climateScale, cz = p.z * climateScale;
-                    Climate c = fspan.map(new Climate(noise.value(Field.CONTINENTALNESS, tx, ty, tz),
-                            noise.value(Field.EROSION, tx, ty, tz), noise.value(Field.RIDGES, tx, ty, tz),
-                            noise.value(Field.TEMPERATURE, cx, cy, cz), noise.value(Field.HUMIDITY, cx, cy, cz)));
-                    biome[col] = fixed != null ? fixed : table.find(c, water);
-                    double h = TerrainShaper.height(c) * relief;
-                    height[col] = (int) Math.round(h > 0 ? soft(h, air - 4) : -soft(-h, lowest));
+                    SurfaceSampler.Column c = sampler.at(p);
+                    biome[col] = c.biome();
+                    height[col] = c.height();
                 }
         });
 
@@ -170,11 +151,6 @@ public final class PlanetGenerator {
             Vegetation.plant(grid, depth, cells, height, biome, bare, plants, bp.seed(), bp.plants(), ids);
         }
         return new Cells(grid, depth, cells, dev.moui.galaxycraft.voxel.PlanetBiomes.of(biome));
-    }
-
-    /** lim·tanh(h/lim): h itself near 0, never past lim. */
-    private static double soft(double h, int lim) {
-        return lim <= 0 ? 0 : lim * Math.tanh(h / lim);
     }
 
     /** Whether a column stands STEEP or more above any of its four neighbors (on its face or past an edge). */
