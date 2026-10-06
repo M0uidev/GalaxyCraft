@@ -228,6 +228,11 @@ public final class PlanetSession {
                 planet.biomes());
     }
 
+    /** Nothing to save: a planet made again the same from its recipe until it is edited. */
+    public void clean() {
+        unsaved = false;
+    }
+
     /** Edited (or new) since the last {@link #save()}. */
     public boolean unsaved() {
         return planet != null && unsaved;
@@ -717,7 +722,7 @@ public final class PlanetSession {
         release();
         planet = p;
         center = c;
-        id = newId();
+        id = takeId();
         farVersion = new int[PlanetLod.tileCount(p)];
         guestHasIt = false;
         tileSpheres = null;
@@ -728,13 +733,25 @@ public final class PlanetSession {
     private void release() {
         if (id == 0) return;
         gone.add(id);
-        synchronized (usedIds) {
-            usedIds.clear(id);
-        }
+        freeId(id);
         id = 0;
     }
 
-    private static int newId() {
+    /** An id freed: given out again only after every other (the game may still hold its chunks). */
+    static void freeId(int id) {
+        synchronized (usedIds) {
+            usedIds.clear(id);
+        }
+    }
+
+    /** Whether a session or far planet holds that id (tests). */
+    static boolean idUsed(int id) {
+        synchronized (usedIds) {
+            return usedIds.get(id);
+        }
+    }
+
+    static int takeId() {
         synchronized (usedIds) {
             for (int k = 1; k <= 255; k++) {
                 int i = (lastId + k - 1) % 255 + 1;

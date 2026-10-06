@@ -15,6 +15,7 @@ import dev.moui.galaxycraft.voxel.CellSpace;
 import dev.moui.galaxycraft.voxel.Material;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.BlueprintStore;
+import dev.moui.galaxycraft.voxel.GalaxyCatalog;
 import dev.moui.galaxycraft.voxel.GalaxySave;
 import dev.moui.galaxycraft.voxel.PlanetBlueprint;
 import dev.moui.galaxycraft.voxel.PlanetLayout;
@@ -78,7 +79,7 @@ public final class PlanetClient {
     /** The stage's first planet (index 0): the same session all along, which tests hold on to. */
     private static final PlanetSession session = new PlanetSession(1 / GravityFrame.SCALE);
     /** The stage's other planets, each with the index of its file (PlanetStore.key). */
-    private record Extra(PlanetSession s, int index) {}
+    record Extra(PlanetSession s, int index) {}
     private static final java.util.List<Extra> extras = new java.util.ArrayList<>();
     /** The planet nearest Mario (session when there is none). */
     private static PlanetSession focus = session;
@@ -97,6 +98,10 @@ public final class PlanetClient {
     }
 
     private static Placement placement = Placement.REPLACE;
+    /** The blueprint the planet being put up is made from (its name, for the catalog), null if none. */
+    private static String madeFrom;
+    /** The world's galaxy streamed from its catalog (null: no world, or game tests' fixed folder). */
+    private static GalaxyStream stream;
     private static PlanetSession replaceTarget; // REPLACE_HERE: the planet stood on, and the player's
     private static Vector3d replaceDir;         // direction from its center (galaxy axes)
     private static Vector3d aheadEye, aheadLook; // CREATE_AHEAD: the player's eye and look then (galaxy)
@@ -119,6 +124,16 @@ public final class PlanetClient {
     /** Since when (nanoTime, 0: not) Mario has had no gravity in GalaxyCraftSpace after landing; past RELAND_NANOS he lands again. */
     private static long unlandedSince;
     private static final long RELAND_NANOS = 5_000_000_000L;
+    /**
+     * Planets are made (generated, read) one at a time on this thread, at low priority: the game,
+     * Dolphin and Minecraft's server keep their cores while a galaxy streams in.
+     */
+    static final ExecutorService maker = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "GalaxyCraft planet maker");
+        t.setDaemon(true);
+        t.setPriority(Thread.MIN_PRIORITY);
+        return t;
+    });
     private static final ExecutorService saver = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "GalaxyCraft planet saver");
         t.setDaemon(true);
@@ -161,20 +176,26 @@ public final class PlanetClient {
      * adds ids as it meets new states); the planet is spawned when they are done.
      */
     private static void generate(PlanetBlueprint bp, LocalPlayer player) {
-        McWorldgen gen = worldgen();
-        if (gen == null) {
+        if (worldgen() == null) {
             say(player, "Generated planets need a single player world");
             return;
         }
+        say(player, "Generating " + bp.name() + "...");
+        generating = generateAsync(bp);
+    }
+
+    /** bp's planet made on another thread (null without Minecraft's worldgen: no single player world). */
+    static java.util.concurrent.CompletableFuture<VoxelPlanet> generateAsync(PlanetBlueprint bp) {
+        McWorldgen gen = worldgen();
+        if (gen == null || blocks == null) return null;
         java.util.Map<String, Integer> known = new java.util.concurrent.ConcurrentHashMap<>();
         for (String b : PlanetGenerator.blocks()) known.put(b, blocks.parse(b));
         // Trees bring states of their own: those are looked up on this thread too, as they come.
         java.util.function.ToIntFunction<String> ids = name -> known.computeIfAbsent(name,
                 n -> Minecraft.getInstance().submit(() -> blocks.parse(n)).join());
         TerrainNoise noise = gen.noise(bp.seed());
-        say(player, "Generating " + bp.name() + "...");
         McBlocks b = blocks;
-        generating = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+        return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
             PlanetGenerator.Cells cells = PlanetGenerator.cells(bp, noise, gen.biomes(), gen.vegetation(), ids);
             // The planet reads every cell's block info as it is put together (millions of cells for a
             // big one): that is done here, not in a tick, once the game's thread has worked out the
@@ -188,7 +209,7 @@ public final class PlanetClient {
             VoxelPlanet planet = cells.planet(b);
             planet.sphere(0, new Vector3d(), new double[1]); // every chunk's bounding sphere, worked out here too
             return planet;
-        });
+        }, maker);
     }
 
     private static int skySent = -1, skyAge;
@@ -350,6 +371,7 @@ public final class PlanetClient {
             leaving.add(gone); // until the game has been told it is gone (its far view, its slots)
         }
         focus = session;
+        if (stream != null) stream.removeEntry(index);
         String s = stage;
         PlanetStore store = PlanetClient.store;
         if (s != null && !s.isEmpty() && store != null) saver.execute(() -> {
@@ -391,12 +413,20 @@ public final class PlanetClient {
             case ADD, CREATE_AHEAD -> session.active() ? null : session;
             case HOME -> session;
         };
-        if (target == null && all.stream().filter(PlanetSession::active).count() >= PlanetLayout.MAX_PLANETS) {
-            say(player, "A stage holds " + PlanetLayout.MAX_PLANETS + " planets at most");
+        if (target == null && (stream != null ? stream.entries().size() >= GalaxyCatalog.MAX
+                : all.stream().filter(PlanetSession::active).count() >= PlanetLayout.MAX_PLANETS)) {
+            int max = stream != null ? GalaxyCatalog.MAX : PlanetLayout.MAX_PLANETS;
+            say(player, "A galaxy holds " + max + " planets at most");
             return;
         }
         java.util.List<PlanetLayout.Sphere> others = new java.util.ArrayList<>();
         for (PlanetSession s : all) if (s.active() && s != target) others.add(new PlanetLayout.Sphere(s.center(), s.gravityUnits()));
+        if (stream != null) // the far ones too: a new planet keeps clear of every planet of the galaxy
+            for (GalaxyCatalog.Entry e : stream.entries()) {
+                PlanetSession s = sessionOf(e.index());
+                if ((s == null || !s.active()) && s != target)
+                    others.add(new PlanetLayout.Sphere(e.center(), PlanetSession.gravityRadius(e.radius()) / GravityFrame.SCALE));
+            }
         double units = 1 / GravityFrame.SCALE;
         double gravity = PlanetSession.gravityRadius(p.surface()) * units;
         Vector3d c = switch (how) {
@@ -409,13 +439,20 @@ public final class PlanetClient {
             say(player, how == Placement.CREATE_AHEAD ? "No room for a planet where you look" : "No room for another planet here");
             return;
         }
+        String made = madeFrom;
+        madeFrom = null;
         if (target == null) {
+            int index = stream != null ? GalaxyCatalog.added(stream.entries(), c, 0, GalaxyCatalog.Kind.BLUEPRINT, null, null, 0).index()
+                    : freeIndex();
             target = new PlanetSession(units);
             target.setBlocks(blocks);
-            extras.add(new Extra(target, freeIndex()));
+            extras.add(new Extra(target, index));
         }
         target.spawnAt(p, c);
         focus = target;
+        if (stream != null) // the catalog keeps it: a blueprint's name, or no recipe (its file is all there is)
+            stream.put(new GalaxyCatalog.Entry(indexOf(target), c.x, c.y, c.z, (int) Math.round(p.surface()),
+                    GalaxyCatalog.Kind.BLUEPRINT, null, made, 0));
         if (how == Placement.REPLACE_HERE) {
             // Back where the player was, on the new ground.
             Vector3d at = target.teleportToward(replaceDir);
@@ -458,12 +495,10 @@ public final class PlanetClient {
                 && bridge.send(Layout.MSG_ATLAS, piece); ) atlasLink.sent();
         if (!bridge.stage().equals(stage)) enterStage(bridge.stage());
         boolean space = galaxy != null && Layout.SPACE_STAGE.equals(stage);
-        if (space && !homeAsked && !hadSaved && planets().stream().noneMatch(PlanetSession::active) && generating == null
-                && generated == null && spawnBlueprint == null && spawnRadius == 0 && worldgen() != null) {
+        // A world's galaxy: its catalog (made now on its first visit), its planets streamed from it.
+        if (space && stream == null && !homeAsked && worldgen() != null) {
             homeAsked = true;
-            // A world's first visit: its home planet, generated with the default biome.
-            spawnBlueprint = PlanetBlueprint.standard("Home", DEFAULT_RADIUS).withMode(PlanetBlueprint.Mode.GENERATED);
-            placement = Placement.HOME;
+            startGalaxy(player);
         }
         if (spawnBlueprint != null && spawnBlueprint.mode() == PlanetBlueprint.Mode.GENERATED) {
             if (generating == null) generate(spawnBlueprint, player);
@@ -484,6 +519,7 @@ public final class PlanetClient {
         // A world's first planet goes up in GalaxyCraftSpace before Mario has any gravity.
         boolean home = placement == Placement.HOME && asked && spawnBlueprint == null;
         if (home || frame != null && (world.hasGravity() ? asked || autoSpawn && world.follow() : asked && GalaxyCraftClient.inVoid())) {
+            if (spawnBlueprint != null) madeFrom = spawnBlueprint.name();
             VoxelPlanet p = generated != null ? generated : spawnBlueprint != null ? spawnBlueprint.build(blocks)
                     : VoxelPlanet.ofRadius(spawnRadius > 0 ? spawnRadius : autoRadius, blocks);
             spawnPlanet(p, world.queryPos(), frame == null ? new Vector3d(0, 1, 0) : frame.upGal(), player);
@@ -515,6 +551,12 @@ public final class PlanetClient {
                 unlandedSince = 0;
             }
         } else unlandedSince = 0;
+        if (stream != null) {
+            Vector3d from = world.queryPos();
+            if (landPending && landOn != null) from = stream.entry(landOn.planet()).map(GalaxyCatalog.Entry::center).orElse(from);
+            else if (landPending) from = new Vector3d();
+            stream.tick(from, world.sceneId(), bridge.hostPid());
+        }
         if (space && landPending) landOnSpot(player);
         if (space && frame != null && ++sinceSpot >= SPOT_TICKS) {
             sinceSpot = 0;
@@ -587,6 +629,7 @@ public final class PlanetClient {
         for (PlanetSession s : leaving)
             for (PlanetSession.Msg m; (m = s.peek(bulk)) != null && bridge.send(m.type(), m.payload()); ) s.sent();
         leaving.removeIf(s -> s.queued() == 0);
+        if (stream != null) stream.send(bridge, bulk);
         if (++sinceSave >= SAVE_TICKS) {
             sinceSave = 0;
             saveNow();
@@ -662,6 +705,10 @@ public final class PlanetClient {
         stage = next;
         autoSpawn = false;
         if (next.isEmpty() || store == null) return;
+        if (galaxy != null && Layout.SPACE_STAGE.equals(next)) {
+            hadSaved = true; // the galaxy's catalog says what there is (GalaxyStream)
+            return;
+        }
         java.util.List<Integer> saved = store.saved(next, PlanetLayout.MAX_PLANETS);
         hadSaved = !saved.isEmpty();
         for (int index : saved) {
@@ -721,6 +768,8 @@ public final class PlanetClient {
         if (FIXED_DIR || galaxy == null) return;
         writeSpot(Minecraft.getInstance().player);
         saveNow();
+        if (stream != null) stream.clear();
+        stream = null;
         session.unload();
         for (Extra e : extras) e.s().unload();
         extras.clear();
@@ -762,6 +811,9 @@ public final class PlanetClient {
         if (landOn != null)
             for (PlanetSession p : planets())
                 if (p.active() && indexOf(p) == landOn.planet()) on = p;
+        // A galaxy's planet being made (it is far from where Mario waits): waited for, not another one.
+        if (on == null && landOn != null && stream != null && stream.entry(landOn.planet()).isPresent()
+                && !stream.failed(landOn.planet())) return;
         Vector3d dir = on != null ? new Vector3d(landOn.dx(), landOn.dy(), landOn.dz()) : new Vector3d(0, 1, 0);
         if (on == null) on = planets().stream().filter(PlanetSession::active).findFirst().orElse(null);
         if (on == null || on.queued() > 0) return; // the planet still being made, or on its way to the game
@@ -788,6 +840,122 @@ public final class PlanetClient {
                 GalaxyCraft.LOG.warn("Could not save where the player stands: {}", e.toString());
             }
         });
+    }
+
+    /** A catalog planet's session, if it has one (complete or not). */
+    static PlanetSession sessionOf(int index) {
+        if (index == 0) return session;
+        for (Extra e : extras) if (e.index() == index) return e.s();
+        return null;
+    }
+
+    /** The session a catalog planet becomes complete in: its own, or a new one. */
+    static PlanetSession claim(int index) {
+        PlanetSession s = sessionOf(index);
+        if (s != null) return s;
+        s = new PlanetSession(1 / GravityFrame.SCALE);
+        s.setBlocks(blocks);
+        extras.add(new Extra(s, index));
+        return s;
+    }
+
+    /** A catalog planet no longer complete: the game drops it (its far view takes its place). */
+    static void release(int index) {
+        PlanetSession s = sessionOf(index);
+        if (s == null) return;
+        s.remove();
+        if (s != session) {
+            extras.removeIf(e -> e.s() == s);
+            leaving.add(s);
+        }
+        if (focus == s) focus = session;
+    }
+
+    /** One planet saved now if it was edited (it is about to go). */
+    static void saveOne(PlanetSession p) {
+        PlanetStore store = PlanetClient.store;
+        if (stage == null || stage.isEmpty() || store == null || !p.unsaved()) return;
+        PlanetStore.Saved s = p.save();
+        String where = PlanetStore.key(stage, indexOf(p));
+        McBlocks b = blocks;
+        saver.execute(() -> {
+            try {
+                store.write(where, s, b);
+            } catch (IOException e) {
+                GalaxyCraft.LOG.warn("Could not save the planet {}: {}", where, e.toString());
+            }
+        });
+    }
+
+    /** Runs on the saver's thread, after the saves asked for before. */
+    static void saveLater(Runnable r) {
+        saver.execute(r);
+    }
+
+    /** Complete planets and far ones in the game (end-to-end tests); {0, 0} without a galaxy. */
+    public static int[] tiers() {
+        return stream == null ? new int[2] : stream.tiers();
+    }
+
+    /** Mario onto that catalog planet (end-to-end tests): it is made complete first, as when entering the world there. */
+    public static void travelTo(int index) {
+        landOn = new GalaxySave.Spot(index, 0, 1, 0, 0, 0);
+        landPending = true;
+    }
+
+    /** The galaxy's catalog (end-to-end tests); empty without one. */
+    public static java.util.List<GalaxyCatalog.Entry> catalog() {
+        return stream == null ? java.util.List.of() : java.util.List.copyOf(stream.entries());
+    }
+
+    /**
+     * The world's galaxy, on its first tick in GalaxyCraftSpace: its galaxy.json; or, for a world
+     * from before catalogs, one from its planet files; or a new one from the Create World tab's
+     * options (or the defaults) and the world's seed.
+     */
+    private static void startGalaxy(LocalPlayer player) {
+        GalaxySave g = galaxy;
+        GalaxySave.Galaxy made = g.galaxy().orElse(null);
+        if (made == null) {
+            if (!store.saved(stage, GalaxyCatalog.MAX).isEmpty()) made = g.fromFiles(store, stage);
+            else made = newGalaxy(player);
+            GalaxySave.Galaxy write = made;
+            saver.execute(() -> {
+                try {
+                    g.writeGalaxy(write);
+                } catch (IOException e) {
+                    GalaxyCraft.LOG.warn("Could not save the galaxy: {}", e.toString());
+                }
+            });
+        }
+        stream = new GalaxyStream(g, store, stage, made);
+        GalaxyCraft.LOG.info("The world's galaxy: {} planets", made.entries().size());
+    }
+
+    private static GalaxySave.Galaxy newGalaxy(LocalPlayer player) {
+        MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
+        long seed = server == null ? 0 : server.getWorldGenSettings().options().seed();
+        GalaxyCatalog.Options asked = PendingGalaxy.take().orElse(GalaxyCatalog.Options.defaults(seed));
+        GalaxyCatalog.Options o = new GalaxyCatalog.Options(asked.count(), asked.minRadius(), asked.maxRadius(), asked.first(),
+                asked.spacing(), seed).clamp();
+        int firstRadius = o.first().radius();
+        if (o.first().isBlueprint()) {
+            PlanetBlueprint bp = null;
+            try {
+                bp = blueprints.read(o.first().name()).orElse(null);
+            } catch (IOException e) {
+                GalaxyCraft.LOG.warn("Could not read blueprint {}: {}", o.first().name(), e.toString());
+            }
+            if (bp == null) {
+                say(player, "The blueprint " + o.first().name() + " is gone: the first planet is generated instead");
+                o = new GalaxyCatalog.Options(o.count(), o.minRadius(), o.maxRadius(), GalaxyCatalog.First.generated("random", 48),
+                        o.spacing(), seed);
+                firstRadius = 48;
+            } else firstRadius = bp.radius();
+        }
+        GalaxyCatalog.Result r = GalaxyCatalog.make(o, firstRadius, worldgen().biomes().land(), 1 / GravityFrame.SCALE);
+        if (r.placed() < r.asked()) say(player, r.placed() + " of " + r.asked() + " planets fit in the galaxy");
+        return new GalaxySave.Galaxy(1, o, r.entries());
     }
 
     /**

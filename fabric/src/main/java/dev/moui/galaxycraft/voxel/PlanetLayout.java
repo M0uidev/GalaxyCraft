@@ -11,8 +11,12 @@ public final class PlanetLayout {
     /** A planet's place: its center and the reach of its gravity. */
     public record Sphere(Vector3d center, double gravity) {}
 
-    /** Most planets a stage holds (the module keeps 8). */
-    public static final int MAX_PLANETS = 8;
+    /** Most complete planets (gravity, chunks or their far view) in the game at once. */
+    public static final int NEAR_PLANETS = 8;
+    /** Most planets a stage holds outside a catalog (/galaxycraft planet add in a level). */
+    public static final int MAX_PLANETS = NEAR_PLANETS;
+    /** A complete planet gives its place to another only once that one is this much nearer, blocks. */
+    public static final double KEEP_NEAR = 160;
     /** Between two planets' gravity, blocks. */
     public static final double GAP = 24;
     /**
@@ -82,5 +86,41 @@ public final class PlanetLayout {
         if (nearest) return true;
         double past = distance - gravity;
         return past < (had ? DETAIL_OUT : DETAIL_IN) * unitsPerBlock;
+    }
+
+    /**
+     * The planets by how near Mario is to their gravity, nearest first, those in had (complete now)
+     * counted KEEP_NEAR blocks nearer than they are: the first NEAR_PLANETS are complete, the next
+     * two are made ahead. Positions in all.
+     */
+    public static java.util.List<Integer> ranked(List<Sphere> all, Vector3d mario, java.util.Set<Integer> had, double unitsPerBlock) {
+        double[] score = new double[all.size()];
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        for (int i = 0; i < all.size(); i++) {
+            Sphere s = all.get(i);
+            score[i] = s.center().distance(mario) - s.gravity() - (had.contains(i) ? KEEP_NEAR * unitsPerBlock : 0);
+            out.add(i);
+        }
+        out.sort((a, b) -> Double.compare(score[a], score[b]));
+        return out;
+    }
+
+    /** A far view's patches along a face's edge, and the angle (degrees) a planet must span for each. */
+    static final int[] FAR_PATCHES = {12, 6, 3, 2, 1};
+    static final double[] FAR_ANGLES = {6, 2, 0.7, 0.25};
+
+    /**
+     * Patches along a face's edge for a planet drawn from afar: fewer the smaller it looks (12
+     * while it spans more than 6 degrees of view, down to 1, a cube, under 0.25); had (its
+     * patches now, 0: none) moves only 20% past a threshold, so it does not flicker there.
+     */
+    public static int farPatches(double radius, double distance, int had) {
+        double angle = Math.toDegrees(2 * Math.atan(radius / Math.max(distance, 1e-9)));
+        for (int k = 0; k < FAR_ANGLES.length; k++) {
+            // Level k (or finer) now: it stays until 20% under; coarser now: it goes up only 20% over.
+            double needed = FAR_ANGLES[k] * (had >= FAR_PATCHES[k] ? 0.8 : 1.2);
+            if (angle > needed) return FAR_PATCHES[k];
+        }
+        return 1;
     }
 }

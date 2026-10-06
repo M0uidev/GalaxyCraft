@@ -3,9 +3,7 @@ package dev.moui.galaxycraft.voxel;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import org.joml.Vector3d;
 
 /**
@@ -24,8 +22,6 @@ public final class PlanetLod {
     /** A face's display list and its bounding sphere (center from the planet's, radius; units). */
     public record Part(byte[] displayList, float[] sphere) {}
 
-    private record Patch(int height, int block, int cell) {}
-
     private PlanetLod() {}
 
     /** The six faces' parts. */
@@ -42,7 +38,7 @@ public final class PlanetLod {
 
     public static Part face(VoxelPlanet p, int face, double unitsPerBlock) {
         int n = p.grid.n;
-        return region(p, face, 0, n, 0, n, patchColumns(n), unitsPerBlock);
+        return region(LodSource.of(p), face, 0, n, 0, n, patchColumns(n), unitsPerBlock);
     }
 
     /**
@@ -96,27 +92,38 @@ public final class PlanetLod {
     public static Part tile(VoxelPlanet p, int tile, double unitsPerBlock) {
         int t = tilesPerEdge(p), n = p.grid.n, cols = TILE_CHUNKS * VoxelPlanet.CHUNK;
         int f = tile / (t * t), ti = tile / t % t, tj = tile % t;
-        return region(p, f, ti * cols, Math.min(n, ti * cols + cols), tj * cols, Math.min(n, tj * cols + cols),
+        return region(LodSource.of(p), f, ti * cols, Math.min(n, ti * cols + cols), tj * cols, Math.min(n, tj * cols + cols),
                 tilePatchColumns(n), unitsPerBlock);
     }
 
+    /**
+     * The six whole faces at patches × patches each (or fewer, a patch being one column at least):
+     * the far view of a planet seen from far off.
+     */
+    public static Part[] coarse(LodSource src, int patches, double unitsPerBlock) {
+        int n = src.grid().n, s = Math.max(1, (n + patches - 1) / patches);
+        Part[] out = new Part[6];
+        for (int f = 0; f < 6; f++) out[f] = region(src, f, 0, n, 0, n, s, unitsPerBlock);
+        return out;
+    }
+
     /** Columns [i0, i1) × [j0, j1) of a face, in patches of s × s: walls between them, skirts around. */
-    private static Part region(VoxelPlanet p, int face, int i0r, int i1r, int j0r, int j1r, int s, double unitsPerBlock) {
-        CubeSphere g = p.grid;
+    private static Part region(LodSource p, int face, int i0r, int i1r, int j0r, int j1r, int s, double unitsPerBlock) {
+        CubeSphere g = p.grid();
         int ma = (i1r - i0r + s - 1) / s, mb = (j1r - j0r + s - 1) / s;
-        Patch[][] patch = new Patch[ma][mb];
+        LodSource.Patch[][] patch = new LodSource.Patch[ma][mb];
         for (int a = 0; a < ma; a++)
             for (int b = 0; b < mb; b++)
-                patch[a][b] = patch(p, face, i0r + a * s, Math.min(i1r, i0r + a * s + s), j0r + b * s, Math.min(j1r, j0r + b * s + s));
+                patch[a][b] = p.patch(face, i0r + a * s, Math.min(i1r, i0r + a * s + s), j0r + b * s, Math.min(j1r, j0r + b * s + s));
         List<PlanetMesher.Quad> quads = new ArrayList<>();
         int skirt = 2 * s + 2;
         for (int a = 0; a < ma; a++)
             for (int b = 0; b < mb; b++) {
-                Patch t = patch[a][b];
+                LodSource.Patch t = patch[a][b];
                 int i0 = i0r + a * s, i1 = Math.min(i1r, i0 + s), j0 = j0r + b * s, j1 = Math.min(j1r, j0 + s);
-                double r = g.radius(t.height);
+                double r = g.radius(t.height());
                 Vector3d mid = g.dir(face, i0, j0).add(g.dir(face, i1, j1)).normalize();
-                quads.add(top(p, t.block, t.cell, new Vector3d[] {g.dir(face, i0, j0).mul(r), g.dir(face, i1, j0).mul(r),
+                quads.add(top(p, t, new Vector3d[] {g.dir(face, i0, j0).mul(r), g.dir(face, i1, j0).mul(r),
                         g.dir(face, i1, j1).mul(r), g.dir(face, i0, j1).mul(r)}, mid));
                 // Walls toward lower neighbors (+i and +j here, -i and -j by those), skirts at the region's edges.
                 wall(p, quads, t, a + 1 < ma ? patch[a + 1][b] : null, g.dir(face, i1, j0), g.dir(face, i1, j1), mid, skirt);
@@ -127,60 +134,27 @@ public final class PlanetLod {
         return new Part(displayList(p, quads, unitsPerBlock), sphere(quads, unitsPerBlock));
     }
 
-    /**
-     * The ground of a patch: the mean of its columns' tops (the top of the highest opaque block or
-     * fluid; leaves, plants and air above them do not count: trees blur into lumps from afar) and the
-     * block most of them have there.
-     */
-    private static Patch patch(VoxelPlanet p, int face, int i0, int i1, int j0, int j1) {
-        CubeSphere g = p.grid;
-        Map<Integer, Integer> count = new HashMap<>();
-        long sum = 0;
-        int cols = 0, best = Blocks.AIR, bestCount = 0;
-        for (int i = i0; i < i1; i++)
-            for (int j = j0; j < j1; j++) {
-                int top = 0, block = Blocks.AIR;
-                for (int k = g.layers - 1; k >= 0; k--) {
-                    int id = p.get(g.index(face, i, j, k));
-                    BlockInfo b = p.blocks.info(id);
-                    if ((b.occludes() || b.isFluid()) && !p.blocks.leaves(id)) {
-                        top = k + 1;
-                        block = id;
-                        break;
-                    }
-                }
-                sum += top;
-                cols++;
-                int c = count.merge(block, 1, Integer::sum);
-                if (c > bestCount) {
-                    bestCount = c;
-                    best = block;
-                }
-            }
-        return new Patch((int) Math.round((double) sum / cols), best, g.index(face, (i0 + i1) / 2, (j0 + j1) / 2, 0));
-    }
-
     /** A patch's top quad, counter-clockwise seen from outside. */
-    private static PlanetMesher.Quad top(VoxelPlanet p, int block, int cell, Vector3d[] q, Vector3d outward) {
+    private static PlanetMesher.Quad top(LodSource p, LodSource.Patch t, Vector3d[] q, Vector3d outward) {
         Vector3d n = new Vector3d(q[1]).sub(q[0]).cross(new Vector3d(q[2]).sub(q[0]));
         if (n.dot(outward) < 0) {
-            Vector3d t = q[1];
+            Vector3d swap = q[1];
             q[1] = q[3];
-            q[3] = t;
+            q[3] = swap;
         }
-        return quad(p, block, cell, q, CubeSphere.TOP, new double[][] {{0, 0}, {1, 0}, {1, 1}, {0, 1}});
+        return quad(p, t, q, CubeSphere.TOP, new double[][] {{0, 0}, {1, 0}, {1, 1}, {0, 1}});
     }
 
     /**
      * The wall on the edge e0-e1 of patch t down to its neighbor nb if that is lower, or down skirt
      * layers if there is none (the face's edge); facing away from t's middle.
      */
-    private static void wall(VoxelPlanet p, List<PlanetMesher.Quad> out, Patch t, Patch nb, Vector3d e0, Vector3d e1,
+    private static void wall(LodSource p, List<PlanetMesher.Quad> out, LodSource.Patch t, LodSource.Patch nb, Vector3d e0, Vector3d e1,
             Vector3d mid, int skirt) {
-        int low = nb == null ? Math.max(0, t.height - skirt) : nb.height;
-        if (low >= t.height) return;
-        CubeSphere g = p.grid;
-        double r0 = g.radius(low), r1 = g.radius(t.height);
+        int low = nb == null ? Math.max(0, t.height() - skirt) : nb.height();
+        if (low >= t.height()) return;
+        CubeSphere g = p.grid();
+        double r0 = g.radius(low), r1 = g.radius(t.height());
         Vector3d[] q = {new Vector3d(e0).mul(r0), new Vector3d(e1).mul(r0), new Vector3d(e1).mul(r1), new Vector3d(e0).mul(r1)};
         Vector3d edge = new Vector3d(e0).add(e1).normalize();
         Vector3d away = edge.sub(mid);
@@ -194,12 +168,12 @@ public final class PlanetLod {
             q[3] = tmp;
         }
         // Inner corners first, so the texture's top edge (v 0) runs along the outer ones.
-        out.add(quad(p, t.block, t.cell, q, CubeSphere.I_MINUS, new double[][] {{0, 1}, {1, 1}, {1, 0}, {0, 0}}));
+        out.add(quad(p, t, q, CubeSphere.I_MINUS, new double[][] {{0, 1}, {1, 1}, {1, 0}, {0, 0}}));
     }
 
     /** A quad with the block's texture for that side (its top, or a side), lit by the sun. */
-    private static PlanetMesher.Quad quad(VoxelPlanet p, int block, int cell, Vector3d[] q, int side, double[][] uv) {
-        BlockInfo b = p.blocks.info(block);
+    private static PlanetMesher.Quad quad(LodSource p, LodSource.Patch t, Vector3d[] q, int side, double[][] uv) {
+        BlockInfo b = p.blocks().info(t.block());
         int tile = b.tile(), tint = b.tint();
         ModelQuad pick = null;
         for (ModelQuad mq : b.quads()) {
@@ -215,12 +189,12 @@ public final class PlanetLod {
             tint = pick.tint();
         }
         double sun = PlanetMesher.sun(q);
-        return new PlanetMesher.Quad(q, tile, side, new double[] {sun, sun, sun, sun}, uv, p.tint(cell, tint));
+        return new PlanetMesher.Quad(q, tile, side, new double[] {sun, sun, sun, sun}, uv, p.tint(t, tint));
     }
 
-    private static byte[] displayList(VoxelPlanet p, List<PlanetMesher.Quad> quads, double unitsPerBlock) {
+    private static byte[] displayList(LodSource p, List<PlanetMesher.Quad> quads, double unitsPerBlock) {
         if (quads.isEmpty()) return new byte[0];
-        int cols = p.blocks.atlasColumns(), rows = p.blocks.atlasRows();
+        int cols = p.blocks().atlasColumns(), rows = p.blocks().atlasRows();
         int perDraw = 0xFFFF / 4, draws = (quads.size() + perDraw - 1) / perDraw;
         int size = 3 * draws + quads.size() * 4 * PlanetMesher.VERTEX_BYTES;
         ByteBuffer dl = ByteBuffer.allocate((size + 31) & ~31).order(ByteOrder.BIG_ENDIAN);

@@ -73,6 +73,15 @@ public final class GravityFrame {
         return r.transformInverse(new Vector3d(mc).sub(t)).div(SCALE);
     }
 
+    /**
+     * Start of every tick, before any update: what the frame is now is what drawing between ticks
+     * starts from. A tick that does not turn the frame (the void) then draws still, instead of
+     * swinging back to the last turn's start every tick.
+     */
+    public void startTick() {
+        rPrev.set(r);
+    }
+
     public Vector3d dirToMc(Vector3d d) {
         return r.transform(new Vector3d(d));
     }

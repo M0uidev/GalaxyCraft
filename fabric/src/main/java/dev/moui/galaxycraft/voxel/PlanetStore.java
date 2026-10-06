@@ -97,8 +97,34 @@ public final class PlanetStore {
         Files.move(tmp, file(stage), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 
+    /** A planet file's start: its grid, crust and center, without reading its cells. */
+    public record Header(int n, double core, int layers, int depth, Vector3d center) {
+        /** Radius of its grass surface, blocks. */
+        public double surface() {
+            return core + depth;
+        }
+    }
+
+    public Optional<Header> header(String stage) throws IOException {
+        Path f = file(stage);
+        if (!Files.exists(f)) return Optional.empty();
+        try (DataInputStream in = new DataInputStream(new GZIPInputStream(Files.newInputStream(f)))) {
+            int magic = in.readInt();
+            if (magic != MAGIC && magic != MAGIC_V1) throw new IOException(f + ": not a GalaxyCraft planet");
+            int n = in.readInt();
+            double core = in.readDouble();
+            int layers = in.readInt(), depth = in.readInt();
+            return Optional.of(new Header(n, core, layers, depth, new Vector3d(in.readDouble(), in.readDouble(), in.readDouble())));
+        }
+    }
+
     /** The stage's planet in blocks' ids, if one was saved and the file is sound. */
     public Optional<Saved> read(String stage, Blocks blocks) throws IOException {
+        return read(stage, blocks, blocks::parse);
+    }
+
+    /** As {@link #read(String, Blocks)}, a block's text turned into its id by parse (another thread's lookup). */
+    public Optional<Saved> read(String stage, Blocks blocks, java.util.function.ToIntFunction<String> parse) throws IOException {
         Path f = file(stage);
         if (!Files.exists(f)) return Optional.empty();
         try (DataInputStream in = new DataInputStream(new GZIPInputStream(Files.newInputStream(f)))) {
@@ -108,7 +134,7 @@ public final class PlanetStore {
             double core = in.readDouble();
             int layers = in.readInt(), depth = in.readInt();
             Vector3d center = new Vector3d(in.readDouble(), in.readDouble(), in.readDouble());
-            int[] palette = magic == MAGIC ? palette(in, blocks) : v1Palette(blocks);
+            int[] palette = magic == MAGIC ? palette(in, parse) : v1Palette(blocks);
             int len = in.readInt();
             if (n <= 0 || layers <= 0 || len != 6L * n * n * layers) throw new IOException(f + ": bad size");
             byte[] raw = in.readNBytes(magic == MAGIC ? 2 * len : len);
@@ -145,11 +171,11 @@ public final class PlanetStore {
         }
     }
 
-    private static int[] palette(DataInputStream in, Blocks blocks) throws IOException {
+    private static int[] palette(DataInputStream in, java.util.function.ToIntFunction<String> parse) throws IOException {
         int size = in.readInt();
         if (size < 0 || size > 65536) throw new IOException("bad palette");
         int[] ids = new int[size];
-        for (int i = 0; i < size; i++) ids[i] = blocks.parse(in.readUTF());
+        for (int i = 0; i < size; i++) ids[i] = parse.applyAsInt(in.readUTF());
         return ids;
     }
 

@@ -16,6 +16,7 @@ import dev.moui.galaxycraft.proto.Seqlock;
 import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.view.CameraDistance;
 import dev.moui.galaxycraft.view.CameraMath;
+import dev.moui.galaxycraft.view.IntroCamera;
 import dev.moui.galaxycraft.view.View;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
@@ -266,6 +267,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     }
 
     /** Minecraft's physics chosen (the player walks on its own, Mario goes with it). */
+    /** The player is linked to the galaxy (its frame is up: Mario has gravity and the player follows). */
+    static boolean linkedToGalaxy() {
+        return frame != null;
+    }
+
     public static boolean walking() {
         return GalaxyOptions.MOVEMENT.get() == Movement.MINECRAFT;
     }
@@ -349,6 +355,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         if (player != null) player.sendSystemMessage(Component.literal("GalaxyCraft: " + text));
     }
 
+    /** Ticks a world's galaxy has waited for an anchor that the host will not set again. */
+    private static int unanchoredTicks;
+    private static final int RELINK_TICKS = 20;
+
     private static void resetFrame() {
         frame = null;
         camOffsetGal = camLookGal = camUpGal = null;
@@ -359,6 +369,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static void beforeTick(Minecraft client) {
         bridge.setInWorld(client.level != null && client.player != null);
         bridge.poll();
+        EnteringScreen.tick(client);
         PlanetClient.flushDropAll(bridge);
         LocalPlayer player = client.player;
         if (player == null) return;
@@ -378,7 +389,15 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             // Wait for the host to say where the player is, somewhere with gravity: SMG2's title
             // screen has a Mario too, but nothing to stand on.
             hold(player, true);
-            if (!world.get().anchor() || !world.get().hasGravity() || PlanetClient.waitingToLand()) {
+            // A scene change the host announced again with the same id: a pose sent with the old
+            // frame before the mod read it took the host's anchor away, and it never comes back.
+            // In a world's galaxy, with gravity and nothing to land on first, Mario is where the
+            // player is: after a second without it, the frame is anchored there anyway.
+            boolean stranded = !world.get().anchor() && world.get().hasGravity() && PlanetClient.galaxy() != null
+                    && !PlanetClient.waitingToLand();
+            unanchoredTicks = stranded ? unanchoredTicks + 1 : 0;
+            if (stranded && unanchoredTicks >= RELINK_TICKS) GalaxyCraft.LOG.info("Linked again without the host's anchor");
+            else if (!world.get().anchor() || !world.get().hasGravity() || PlanetClient.waitingToLand()) {
                 // GalaxyCraftSpace: no gravity until the world's planet is up and Mario is on it (any
                 // gravity before is the last stage's Mario's).
                 if (PlanetClient.galaxy() != null) PlanetClient.tick(player, bridge, null, world.get());
@@ -389,6 +408,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             settleTicks = SETTLE_TICKS;
             GalaxyCraft.LOG.info("Linked to galaxy at {}", world.get().queryPos());
         } else {
+            frame.startTick();
             Flight.beforeFrame(player, world.get(), frame, world.get().follow() && !flying && !ownPhysics());
             boolean space = ownPhysics() && Flight.space(player, world.get(), frame);
             // Look and velocity are left alone in Minecraft space, so they turn with the frame
@@ -625,8 +645,42 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             camOffsetGal = CameraMath.offsetGal(frame, cameraMc, feetMc, partialTicks);
             camLookGal = frame.dirToGal(forwardMc, partialTicks);
             camUpGal = frame.dirToGal(upMc, partialTicks);
+            intro();
         }
         sendPose(Minecraft.getInstance());
+    }
+
+    /** Entering a world: the camera's zoom from space down to the player's view (IntroCamera), ms. */
+    private static final long INTRO_MS = 3000;
+    /** When the zoom started (nanoTime; 0: none), and whether the GUI was hidden before it. */
+    private static long introStart;
+    private static boolean guiWasHidden;
+
+    /** The zoom from space starts now (EnteringScreen, once Mario stands on the planet). */
+    static void startIntro() {
+        Minecraft mc = Minecraft.getInstance();
+        if (introStart == 0) guiWasHidden = mc.gui.hud.isHidden();
+        if (!mc.gui.hud.isHidden()) mc.gui.hud.toggle(); // no hand or hotbar in the shot
+        introStart = System.nanoTime();
+    }
+
+    /** During the zoom: the camera this frame on its way in, instead of the player's own. */
+    private static void intro() {
+        if (introStart == 0) return;
+        double t = (System.nanoTime() - introStart) / (INTRO_MS * 1e6);
+        if (t >= 1 || frame == null) {
+            introStart = 0;
+            var hud = Minecraft.getInstance().gui.hud;
+            if (hud.isHidden() != guiWasHidden) hud.toggle();
+            return;
+        }
+        PlanetSession on = PlanetClient.focus();
+        double radius = on.active() ? on.planet().surface() : 48;
+        double far = (radius * 1.5 + 48) / GravityFrame.SCALE; // the planet whole in view, galaxy units
+        IntroCamera.Pose p = IntroCamera.at(t, frame.upGal(), camOffsetGal, camLookGal, camUpGal, far);
+        camOffsetGal = p.offset();
+        camLookGal = p.look();
+        camUpGal = p.up();
     }
 
     private static void sendPose(Minecraft client) {

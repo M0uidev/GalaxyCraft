@@ -160,4 +160,13 @@ class GravityFrameTest {
         int quarter = stepsToTurn(v(0, 1, 0), v(1, 0, 0));
         assertTrue(quarter >= 15 && quarter <= 16, "a quarter took " + quarter);
     }
+
+    @Test void aTickWithoutATurnDrawsStill() {
+        GravityFrame f = new GravityFrame(new Vector3d(), new Vector3d(0, 100, 0), new Vector3d(0, -1, 0));
+        f.startTick();
+        f.update(new Vector3d(0.3, -1, 0), new Vector3d(0, 100, 0)); // a turn this tick
+        f.startTick(); // the next tick turns no more (the void: up stays)
+        Vector3d d = new Vector3d(0, 0, 1);
+        assertTrue(f.dirToGal(d, 0.3).distance(f.dirToGal(d)) < 1e-12, "no swing back to last tick's turn");
+    }
 }
