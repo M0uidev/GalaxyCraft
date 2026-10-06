@@ -277,24 +277,28 @@ typedef struct {
 
 #define GXC_PLANET_MAX_CHUNKS 131072
 
-/* The edges of the cell the player points at (and can break, place against or scoop), drawn as
- * Minecraft's block outline. Corners relative to the planet's center, galaxy units, in the order
- * (di, dj, dk) = (m & 1, m >> 1 & 1, m >> 2) for m = 0..7. */
+/* Minecraft's block outline around what the player points at (and can break, use, place against
+ * or scoop): the edges of the block's shape as Minecraft draws them (no line across a face), each
+ * from one end to the other, relative to the planet's center, galaxy units. Sent with only its
+ * count of edges: 8 + 24 * count bytes. */
+#define GXC_OUTLINE_MAX_EDGES 96
 typedef struct {
-  uint32_t visible; /* the planet's id: corners from its center; 0: none */
-  float corners[8][3];
+  uint32_t visible; /* the planet's id: edges from its center; 0: none (and no edges) */
+  uint32_t count;   /* edges that follow, up to GXC_OUTLINE_MAX_EDGES */
+  float edges[GXC_OUTLINE_MAX_EDGES][2][3];
 } GxcOutline;
 
 /* Minecraft's cracks over the block the player is breaking: the atlas tile of destroy_stage_<stage>
  * on the six sides of the box the corners make (in GxcOutline's order), multiplied into what is
- * drawn under it as Minecraft does (twice texture times screen: mid gray changes nothing). Sent
+ * drawn under it as Minecraft does (twice texture times screen: mid gray changes nothing). Corner m
+ * is (di, dj, dk) = (m & 1, m >> 1 & 1, m >> 2) of the cell, relative to the planet's center. Sent
  * when the stage or the block changes. */
 #define GXC_CRACK_STAGES 10
 typedef struct {
   uint32_t visible; /* the planet's id: corners from its center; 0: none */
   uint32_t stage;   /* 0 .. GXC_CRACK_STAGES - 1 */
   float uv[4];      /* the stage's tile in the block atlas: u0, v0, u1, v1 (0 to 1) */
-  float corners[8][3];
+  float corners[8][3]; /* galaxy units */
 } GxcCrack;
 
 /* What the player holds in the main hand, drawn by the game in Steve's right hand as Minecraft

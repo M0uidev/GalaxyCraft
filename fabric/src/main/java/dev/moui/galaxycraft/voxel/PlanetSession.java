@@ -802,12 +802,25 @@ public final class PlanetSession {
     }
 
     /**
-     * GxcOutline: the corners of the block's outline (its shape's bounds in the cell) from the
-     * planet's center, a little out of it (no z-fighting).
+     * GxcOutline: the edges Minecraft draws around the block's shape (OutlineEdges; its bounds' box
+     * if they are more than the game takes), from the planet's center, a little out of it (no
+     * z-fighting), with only as many edges as there are.
      */
     byte[] outlinePayload(int cell) {
-        ByteBuffer b = ByteBuffer.allocate(100).order(ByteOrder.LITTLE_ENDIAN).putInt(cell >= 0 ? id : 0);
-        if (cell >= 0) putCorners(b, cell, OUTLINE_GROW);
+        if (cell < 0) return ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putInt(0).putInt(0).array();
+        BlockInfo info = planet.info(cell);
+        List<double[]> edges = OutlineEdges.of(info.shape());
+        if (edges.isEmpty() || edges.size() > Layout.OUTLINE_MAX_EDGES) edges = OutlineEdges.of(List.of(info.outline()));
+        double[] o = info.outline();
+        double[] mid = {(o[0] + o[3]) / 2, (o[1] + o[4]) / 2, (o[2] + o[5]) / 2};
+        ByteBuffer b = ByteBuffer.allocate(8 + 24 * edges.size()).order(ByteOrder.LITTLE_ENDIAN).putInt(id).putInt(edges.size());
+        for (double[] e : edges)
+            for (int end = 0; end < 2; end++) {
+                double[] m = new double[3];
+                for (int a = 0; a < 3; a++) m[a] = mid[a] + (e[3 * end + a] - mid[a]) * (1 + OUTLINE_GROW);
+                Vector3d c = CellSpace.point(planet.grid, cell, m[0], m[1], m[2]).mul(unitsPerBlock);
+                b.putFloat((float) c.x).putFloat((float) c.y).putFloat((float) c.z);
+            }
         return b.array();
     }
 

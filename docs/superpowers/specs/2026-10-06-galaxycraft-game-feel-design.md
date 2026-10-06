@@ -23,6 +23,7 @@ was in hand, silently; the shadow's break pieces were the only feedback.
 | Sounds | The block's own `SoundType`: hit every 4 ticks, break, place; Minecraft's volumes and pitches, played where the block is |
 | Particles | Minecraft's crack particle every tick of breaking, its break burst (from the shadow, or the client without one), and a small puff of pieces on placing (GalaxyCraft's own: Minecraft makes none) |
 | Empty hand | Unchanged: the clicks stay Mario's (spin) unless something is in hand or the block aimed at is usable |
+| Block outline | Minecraft's: the edges of the block's real shape (stairs, fences, torches), no line across a face; shown, as before, when a click would act on the block |
 
 ## How it works
 
@@ -48,7 +49,15 @@ was in hand, silently; the shadow's break pieces were the only feedback.
 - `PlanetSession.setCrack` sends `GXC_MSG_CRACK` when the cell, its block or the stage changes, in
   the control queue like the outline.
 
-**Protocol.** `GXC_MSG_CRACK = 115`, `GxcCrack` (120 bytes): planet id (0: none), stage, the
+- `voxel/OutlineEdges` (unit tested) is `VoxelShape.forAllEdges`: the boxes of the block's
+  outline shape cut space into a grid, and a grid line is an edge where the cells around it are
+  one or three inside, or two across a diagonal; touching pieces of a line join. `PlanetSession`
+  sends those edges (its bounds' box past `GXC_OUTLINE_MAX_EDGES`) instead of the bounds' 8
+  corners it sent before.
+
+**Protocol.** `GxcOutline` now carries edges: planet id, count, then count × two ends (8 + 24 ×
+count bytes, up to 96 edges); the host swaps all of its words, the module copies them into a
+`GX_LINES` list as they come (`core/Inbox` `OutlineList`, g++ tested). `GXC_MSG_CRACK = 115`, `GxcCrack` (120 bytes): planet id (0: none), stage, the
 stage's atlas tile (u0, v0, u1, v1), the eight corners of the cell's outline box grown by 0.5%
 (the outline's are 2%), in `GxcOutline`'s order.
 

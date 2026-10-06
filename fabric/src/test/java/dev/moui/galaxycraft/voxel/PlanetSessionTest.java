@@ -499,10 +499,15 @@ class PlanetSessionTest {
         assertEquals(Layout.MSG_OUTLINE, msgs.get(0).type(), "before the chunks");
         ByteBuffer o = le(msgs.get(0));
         assertEquals(s.id(), o.getInt(0), "visible: on this planet");
+        assertEquals(12, o.getInt(4), "a cube's edges");
+        assertEquals(8 + 12 * 24, o.capacity(), "only those");
         Vector3d mid = s.planet().grid.center(cell).mul(80);
-        for (int m = 0; m < 8; m++) {
-            Vector3d c = new Vector3d(o.getFloat(4 + 12 * m), o.getFloat(8 + 12 * m), o.getFloat(12 + 12 * m));
-            assertTrue(c.distance(mid) > 40 && c.distance(mid) < 80, "corner " + m + " " + c.distance(mid));
+        for (int e = 0; e < 12; e++) {
+            Vector3d a = new Vector3d(o.getFloat(8 + 24 * e), o.getFloat(12 + 24 * e), o.getFloat(16 + 24 * e));
+            Vector3d b = new Vector3d(o.getFloat(20 + 24 * e), o.getFloat(24 + 24 * e), o.getFloat(28 + 24 * e));
+            assertTrue(a.distance(mid) > 40 && a.distance(mid) < 80, "edge " + e + " " + a.distance(mid));
+            assertTrue(b.distance(mid) > 40 && b.distance(mid) < 80, "edge " + e + " " + b.distance(mid));
+            assertTrue(a.distance(b) > 60 && a.distance(b) < 100, "a cell's side long: " + a.distance(b));
         }
         s.setOutline(cell);
         assertTrue(drain(s).isEmpty(), "same cell: nothing");

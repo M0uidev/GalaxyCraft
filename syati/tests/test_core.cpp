@@ -476,18 +476,40 @@ static void TestPlanetDropAndViewTranslate()
   CHECK(!SphereOutsideView(ortho, right, 1.f));
 }
 
+static float GetBEF(const u8* p)
+{
+  const u32 u = (u32(p[0]) << 24) | (u32(p[1]) << 16) | (u32(p[2]) << 8) | u32(p[3]);
+  float f;
+  memcpy(&f, &u, 4);
+  return f;
+}
+
 static void TestInboxOutline()
 {
   std::vector<u8> b;
-  Put32(b, 105u << 16), Put32(b, 100), Put32(b, 1);
-  for (int k = 0; k < 24; k++)
+  Put32(b, 105u << 16), Put32(b, 8 + 2 * 24), Put32(b, 1), Put32(b, 2);
+  for (int k = 0; k < 12; k++)
     PutF(b, static_cast<float>(k));
-  Put32(b, 105u << 16), Put32(b, 96);  // short: malformed
+  Put32(b, 105u << 16), Put32(b, 8), Put32(b, 0), Put32(b, 0);  // none
+  Put32(b, 105u << 16), Put32(b, 8 + 24), Put32(b, 1), Put32(b, 2);  // says two, has one: malformed
+  b.resize(b.size() + 24);
   InboxRecord r;
   u32 off = 0;
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::OUTLINE);
-  CHECK(r.outline.visible == 1 && r.outline.corners[0][0] == 0.f && r.outline.corners[7][2] == 23.f);
+  CHECK(r.outline.visible == 1 && r.outline.count == 2);
+  std::vector<u8> dl(OUTLINE_DL_BYTES, 0xEE);
+  OutlineList(r.outline, 6, dl.data());
+  CHECK(OUTLINE_DL_BYTES % 32 == 0 && OUTLINE_DL_BYTES >= 3 + OUTLINE_MAX_EDGES * 24);
+  CHECK(dl[0] == (0xA8 | 6) && dl[1] == 0 && dl[2] == 4);  // GX_LINES, four vertices
+  CHECK(GetBEF(dl.data() + 3) == 0.f && GetBEF(dl.data() + 3 + 11 * 4) == 11.f);
+  CHECK(dl[3 + 48] == 0 && dl[OUTLINE_DL_BYTES - 1] == 0);  // GX_NOP after them
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.outline.visible == 0 && r.outline.count == 0);
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
+  std::vector<u8> many;
+  Put32(many, 105u << 16), Put32(many, 8 + 97 * 24), Put32(many, 1), Put32(many, 97);  // too many
+  many.resize(many.size() + 97 * 24);
+  off = 0;
+  CHECK(!NextInboxRecord(many.data(), many.size(), &off, 512, &r));
 }
 
 static void TestInboxCrack()
@@ -511,14 +533,6 @@ static void TestInboxCrack()
   s.resize(s.size() + 96);
   off = 0;
   CHECK(!NextInboxRecord(s.data(), s.size(), &off, 512, &r));
-}
-
-static float GetBEF(const u8* p)
-{
-  const u32 u = (u32(p[0]) << 24) | (u32(p[1]) << 16) | (u32(p[2]) << 8) | u32(p[3]);
-  float f;
-  memcpy(&f, &u, 4);
-  return f;
 }
 
 static void TestCrackMesh()

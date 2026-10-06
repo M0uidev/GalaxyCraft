@@ -349,10 +349,12 @@ void HostBridge::QueueInbox(const Msg& msg)
       return stale;
     });
   // The held item's sprite and the atlas' texels are GX textures already: only the words before
-  // them are swapped. Entity messages come big-endian whole (fixed 0).
+  // them are swapped. Entity messages come big-endian whole (fixed 0). An outline is words only, as
+  // many as its edges.
+  const u32 outline = std::min<u32>(static_cast<u32>(msg.payload.size()), sizeof(GxcOutline)) & ~3u;
   const u32 fixed = msg.type == GXC_MSG_PLANET  ? sizeof(GxcPlanet) :
                     msg.type == GXC_MSG_CHUNK   ? sizeof(GxcChunk) :
-                    msg.type == GXC_MSG_OUTLINE ? sizeof(GxcOutline) :
+                    msg.type == GXC_MSG_OUTLINE ? (outline < 8 ? 8 : outline) :
                     msg.type == GXC_MSG_CRACK   ? sizeof(GxcCrack) :
                     msg.type == GXC_MSG_HELD    ? offsetof(GxcHeld, sprite) :
                     msg.type == GXC_MSG_ATLAS   ? sizeof(GxcAtlas) :

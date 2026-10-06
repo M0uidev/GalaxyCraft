@@ -19,15 +19,22 @@ Rama `game-feel` (2026-10-06). Diseño: [specs/2026-10-06-galaxycraft-game-feel-
   Minecraft). Al romperse salen los pedazos de siempre, y al colocar un bloque salen unos pocos
   trocitos de él (eso es propio de GalaxyCraft: Minecraft no lo hace).
 
+- **El borde del bloque con su forma real.** El borde oscuro que marca el bloque al que apuntas
+  ya existía, pero era una caja alrededor del bloque. Ahora sigue la forma de verdad, como en
+  Minecraft: la L de una escalera, el poste y las barras de una valla, una antorcha delgada. No
+  dibuja líneas a través de una cara. Sale, como antes, cuando un clic haría algo con el bloque:
+  con algo en la mano, o con la mano vacía sobre puertas, palancas, cofres, etc.
+
 ## Qué falta: probarlo en el PC
 
 En la sesión en la nube no se pudo compilar el mod: los servidores de Minecraft y de Fabric están
 bloqueados ahí. Sí pasaron los tests que no necesitan Minecraft:
 
-- `syati/test.sh`: el mensaje nuevo y la malla de las grietas (491 comprobaciones).
+- `syati/test.sh`: el mensaje nuevo, la malla de las grietas y el borde con aristas (497
+  comprobaciones).
 - `dolphin/galaxycraft/test.sh`: Dolphin pasa el mensaje al juego (99 tests).
-- Las pruebas unitarias del mod: `MiningTest` (los tiempos de Minecraft) y
-  `PlanetSessionTest.cracksGoOutWhenTheirStageOrBlockChanges`.
+- Las pruebas unitarias del mod: `MiningTest` (los tiempos de Minecraft), `OutlineEdgesTest`
+  (las aristas de escaleras, vallas, losas) y `PlanetSessionTest`.
 
 Para la sesión de Claude Code en el PC:
 
@@ -41,7 +48,8 @@ Para la sesión de Claude Code en el PC:
    - `McBlocks`: `crackUv` y las texturas `block/destroy_stage_N`.
    - `ParticleClient`: `crack`, `burst` y `puff`.
 2. Compilar el módulo (`syati/build.sh`) y Dolphin (`dolphin/build.sh`): el mensaje 115 es nuevo
-   en los tres.
+   y el del borde cambió de forma, en los tres. Un mod, un Dolphin o un módulo viejo con los
+   otros nuevos no dibuja el borde.
 3. Jugar (`tools/gxplay.sh`) y revisar:
    - Piedra con pico de madera: unos 1,15 s. Con pico de diamante y Eficiencia V, casi al
      instante. Tierra con pala: rápido. Con la mano equivocada, más lento.
@@ -52,6 +60,7 @@ Para la sesión de Claude Code en el PC:
    - Los trocitos al golpear salen de la cara que miras.
    - En creativo, mantener el botón rompe uno cada ~¼ s.
    - Que no suene dos veces ni rompa dos bloques al cortar pasto rápido.
+   - El borde sobre escaleras, vallas, antorchas, losas y puertas: sigue su forma.
 4. Revisar `destroyProgress`. Deshace la penalización de Minecraft por romper en el aire
    multiplicando por 5 cuando el jugador no está en el suelo. Si en 26.3 esa penalización ya no
    depende de `onGround()` (por ejemplo, si ahora es un atributo), romper saldría 5 veces más

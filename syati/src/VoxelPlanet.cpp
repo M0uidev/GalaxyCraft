@@ -539,33 +539,21 @@ public:
     return false;
   }
 
-  // The outline's 12 edges as a display list of lines (vertex format 6: f32 positions from the
+  // The outline's edges as a display list of lines (vertex format 6: f32 positions from the
   // planet's center). Two, used in turn: the GPU may still be reading last frame's. visible is the
   // planet's id (0: none).
   void SetOutline(const gxc::InboxOutline& o)
   {
     mOutlineOn = false;
-    if (!o.visible)
+    if (!o.visible || !o.count)
       return;
     u8*& dl = mOutlineDl[mOutlineNext];
     if (!dl)
-      dl = Alloc32(OUTLINE_DL_BYTES);
+      dl = Alloc32(gxc::OUTLINE_DL_BYTES);
     if (!dl)
       return;
-    memset(dl, 0, OUTLINE_DL_BYTES);  // the padding: GX_NOP
-    dl[0] = GX_LINES | GX_VTXFMT6;
-    dl[1] = 0, dl[2] = 24;
-    f32* v = reinterpret_cast<f32*>(dl + 3);  // GX takes unaligned vertex data from a list
-    for (int m = 0; m < 8; m++)
-      for (int bit = 1; bit < 8; bit <<= 1)
-        if (!(m & bit))
-          for (int end = 0; end < 2; end++)
-          {
-            const f32* c = o.corners[end ? (m | bit) : m];
-            memcpy(v, c, 12);
-            v += 3;
-          }
-    DCFlushRange(dl, OUTLINE_DL_BYTES);
+    gxc::OutlineList(o, GX_VTXFMT6, dl);
+    DCFlushRange(dl, gxc::OUTLINE_DL_BYTES);
     mOutlineDraw = dl;
     mOutlineNext ^= 1;
     mOutlinePlanet = o.visible;
@@ -1143,7 +1131,7 @@ public:
     f32 pos[12];
     gxc::ViewTranslate(view, center, pos);
     GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(pos), GX_PNMTX0);
-    GXCallDisplayList(mOutlineDraw, OUTLINE_DL_BYTES);
+    GXCallDisplayList(mOutlineDraw, gxc::OUTLINE_DL_BYTES);
   }
 
   // Minecraft's crumbling: the crack tile multiplied into what is under it, twice (2 x texture x
@@ -1173,7 +1161,6 @@ public:
     GXCallDisplayList(mCrackDraw, gxc::CRACK_DL_BYTES);
   }
 
-  static const u32 OUTLINE_DL_BYTES = 320;  // 3 + 24 * 12, padded to 32
   bool mOutlineOn;
   u32 mOutlinePlanet;
   u32 mOutlineNext;

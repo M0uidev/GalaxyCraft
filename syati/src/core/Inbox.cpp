@@ -95,11 +95,13 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   }
   else if (type == InboxRecord::OUTLINE)
   {
-    if (len != 100)
+    if (len < 8)
       return false;
     out->outline.visible = ReadBE32(p);
-    for (int k = 0; k < 24; k++)
-      out->outline.corners[k / 3][k % 3] = ReadF32(p + 4 + 4 * k);
+    out->outline.count = ReadBE32(p + 4);
+    out->outline.edges = p + 8;
+    if (out->outline.count > OUTLINE_MAX_EDGES || len != 8 + out->outline.count * OUTLINE_EDGE_BYTES)
+      return false;
   }
   else if (type == InboxRecord::CRACK)
   {
@@ -218,6 +220,18 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   }
   *offset = at + 8 + ((len + 3) & ~3u);
   return true;
+}
+
+void OutlineList(const InboxOutline& o, u32 fmt, u8 out[OUTLINE_DL_BYTES])
+{
+  const u32 count = o.count > OUTLINE_MAX_EDGES ? OUTLINE_MAX_EDGES : o.count;
+  const u32 bytes = count * OUTLINE_EDGE_BYTES;
+  out[0] = static_cast<u8>(0xA8 | fmt);  // GX_LINES
+  out[1] = static_cast<u8>((2 * count) >> 8), out[2] = static_cast<u8>(2 * count);
+  for (u32 i = 0; i < bytes; i++)
+    out[3 + i] = o.edges[i];  // big-endian f32 already, as GX reads them
+  for (u32 i = 3 + bytes; i < OUTLINE_DL_BYTES; i++)
+    out[i] = 0;  // GX_NOP
 }
 
 void PlanetDrop(const f32 center[3], f32 surface, f32 above, const f32 mario[3], f32 out[3])

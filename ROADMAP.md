@@ -23,7 +23,7 @@ Last updated: 2026-10-06 (smoother level of detail merged; game feel and blocks 
 
 | Feature | Status | Notes |
 |---|---|---|
-| Game feel: breaking and placing blocks | now | Branch `game-feel`: hold to break at Minecraft's speeds (tool, Efficiency, Haste), cracks drawn by the game, block sounds, material particles on hit and place. Written in the cloud without building the mod: needs a build and a playtest on the PC ([docs/SENSACION_BLOQUES.md](docs/SENSACION_BLOQUES.md), [spec](docs/superpowers/specs/2026-10-06-galaxycraft-game-feel-design.md)). |
+| Game feel: breaking and placing blocks | now | Branch `game-feel`: hold to break at Minecraft's speeds (tool, Efficiency, Haste), cracks drawn by the game, block sounds, material particles on hit and place, the block outline in the block's real shape. Written in the cloud without building the mod: needs a build and a playtest on the PC ([docs/SENSACION_BLOQUES.md](docs/SENSACION_BLOQUES.md), [spec](docs/superpowers/specs/2026-10-06-galaxycraft-game-feel-design.md)). |
 
 ## Next
 
