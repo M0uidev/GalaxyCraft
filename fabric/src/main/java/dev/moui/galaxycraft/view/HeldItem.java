@@ -5,8 +5,8 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 
 /**
- * What the player holds in the main hand, as the game draws it in Steve's right hand (GxcHeld in
- * GXC_MSG_HELD): a block by the sprites of its top, sides and bottom, or one sprite the game makes
+ * What the player holds in a hand, as the game draws it in Steve's (GxcHeld in GXC_MSG_HELD; the
+ * main hand's in his right, the off hand's in his left, see {@link #inHand}): a block by the sprites of its top, sides and bottom, or one sprite the game makes
  * a cube or Minecraft's flat item of. The sprites go in bands of a 16×64 texture.
  * Sent when it changes and again to every new scene or host, which start with empty hands. No
  * Minecraft types, so it is unit tested.
@@ -32,6 +32,16 @@ public final class HeldItem {
     /** CUBE, ITEM or TOOL with a 16×16 ARGB sprite (row 0 at the top). */
     public static byte[] sprite(int kind, int[] argb) {
         return payload(kind, new int[][] {argb});
+    }
+
+    /** The main hand. */
+    public static final int MAIN = 0, OFF = 1;
+
+    /** payload for that hand (MAIN, as made, or OFF): GxcHeld's second word. */
+    public static byte[] inHand(byte[] payload, int hand) {
+        byte[] out = payload.clone();
+        ByteBuffer.wrap(out).order(ByteOrder.LITTLE_ENDIAN).putInt(4, hand);
+        return out;
     }
 
     /** GxcHeld: the words little-endian (the host swaps them), the sprites as GX RGB5A3 bands. */

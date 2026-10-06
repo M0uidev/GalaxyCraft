@@ -35,16 +35,20 @@ import net.minecraft.world.level.block.state.BlockState;
 final class HeldClient {
     private static final List<TagKey<Item>> TOOLS =
             List.of(ItemTags.PICKAXES, ItemTags.AXES, ItemTags.SHOVELS, ItemTags.HOES, ItemTags.SWORDS);
-    private static final HeldItem link = new HeldItem();
+    private static final HeldItem link = new HeldItem(), offLink = new HeldItem();
     /** Payloads by item: the sprite is read from the resources once. */
     private static final Map<Item, byte[]> payloads = new HashMap<>();
 
     private HeldClient() {}
 
-    /** Client tick, linked to the game: sends what is held if the game does not have it yet. */
+    /** Client tick, linked to the game: sends what each hand holds if the game does not have it yet. */
     static void tick(LocalPlayer player, BridgeClient bridge, int sceneId) {
-        ItemStack stack = player.getMainHandItem();
-        byte[] held = stack.isEmpty() ? HeldItem.none() : payloads.computeIfAbsent(stack.getItem(), i -> payload(stack));
+        send(link, player.getMainHandItem(), HeldItem.MAIN, bridge, sceneId);
+        send(offLink, player.getOffhandItem(), HeldItem.OFF, bridge, sceneId);
+    }
+
+    private static void send(HeldItem link, ItemStack stack, int hand, BridgeClient bridge, int sceneId) {
+        byte[] held = HeldItem.inHand(stack.isEmpty() ? HeldItem.none() : payloads.computeIfAbsent(stack.getItem(), i -> payload(stack)), hand);
         if (link.due(held, sceneId, bridge.hostPid()) && bridge.send(Layout.MSG_HELD, held))
             link.sent(held, sceneId, bridge.hostPid());
     }

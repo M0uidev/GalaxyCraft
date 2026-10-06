@@ -90,6 +90,13 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftDrawn")) { // tools/gxvoxel.sh drawn: DrawnBlocksProbe in the dev Dolphin
+				vmArg "-Dgalaxycraft.drawn=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftElytra")) { // tools/gxvoxel.sh elytra: ElytraProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.elytra=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"

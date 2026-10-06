@@ -66,6 +66,7 @@ struct InboxCrack
 struct InboxHeld
 {
   u32 kind;  // GXC_HELD_*
+  u32 hand;  // 0 the right (main) hand, 1 the left (off) hand
   const u8* sprite;  // 16x64 GX RGB5A3 (2048 bytes): bands top, sides, bottom (HeldMesh)
 };
 

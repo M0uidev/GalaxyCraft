@@ -46,7 +46,9 @@ public final class EntityTest implements FabricClientGameTest {
             ctx.runOnClient(mc -> PlanetClient.teleport());
             ctx.waitTicks(120);
             ctx.waitFor(mc -> ShadowWorld.entities() != null, 200);
-            check(count() == 0, "nothing drawn before anything is summoned");
+            // A new planet's ground has animals of its own: what is drawn before is the baseline.
+            int before = count();
+            log("drawn before anything is summoned: " + before + " pieces");
 
             // Mario's cell in the shadow, and spots a few blocks around it on his face.
             int cell = ctx.computeOnClient(mc -> s.cellAt(GalaxyCraftClient.galaxyPos().get()));
@@ -55,7 +57,7 @@ public final class EntityTest implements FabricClientGameTest {
             int n = map.grid.n, f = map.grid.face(cell);
             double x0 = map.x(cell) + 0.5, y = map.y(cell) + 1.5, z0 = map.z(cell) + 0.5;
             String[] what = {"pig", "cow", "chicken", "tnt{fuse:400}", "falling_block{BlockState:{Name:\"minecraft:sand\"},Time:1}",
-                    "item{Item:{id:\"minecraft:diamond\",count:1}}"};
+                    "item{Item:{id:\"minecraft:diamond\",count:1}}", "shulker{NoAI:1b,Color:10b}"};
             for (int i = 0; i < what.length; i++) {
                 double a = i * Math.PI * 2 / what.length;
                 double x = clampTo(x0 + 3 * Math.cos(a), f * ShadowMap.STRIDE + 1, n), z = clampTo(z0 + 3 * Math.sin(a), map.z0 + 1, n);
@@ -71,7 +73,7 @@ public final class EntityTest implements FabricClientGameTest {
             check(shadow.contains("pig") && shadow.contains("cow") && shadow.contains("chicken") && shadow.contains("tnt"),
                     "the mobs and the TNT run in the shadow");
             check(PlanetClient.dropCount() == 1, "the diamond lies on the planet");
-            int drawn = count();
+            int drawn = count() - before;
             // Pig, cow and chicken are several pieces each; TNT and the diamond one each.
             check(drawn >= 10, "the game draws them (" + drawn + " pieces)");
             // The pig walks a few blocks: its legs swing by Minecraft's own walk cycle.

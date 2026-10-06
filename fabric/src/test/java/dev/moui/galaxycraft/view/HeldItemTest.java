@@ -7,6 +7,16 @@ import java.nio.ByteOrder;
 import org.junit.jupiter.api.Test;
 
 class HeldItemTest {
+    @Test void theOffHandIsTheSecondWord() {
+        byte[] main = HeldItem.sprite(HeldItem.ITEM, new int[HeldItem.SPRITE * HeldItem.SPRITE]);
+        byte[] off = HeldItem.inHand(main, HeldItem.OFF);
+        ByteBuffer b = ByteBuffer.wrap(off).order(ByteOrder.LITTLE_ENDIAN);
+        assertEquals(HeldItem.ITEM, b.getInt(0));
+        assertEquals(1, b.getInt(4));
+        assertEquals(0, ByteBuffer.wrap(main).order(ByteOrder.LITTLE_ENDIAN).getInt(4));
+        assertArrayEquals(java.util.Arrays.copyOfRange(main, 8, main.length), java.util.Arrays.copyOfRange(off, 8, off.length));
+    }
+
     private static int[] solid(int argb) {
         int[] s = new int[256];
         java.util.Arrays.fill(s, argb);

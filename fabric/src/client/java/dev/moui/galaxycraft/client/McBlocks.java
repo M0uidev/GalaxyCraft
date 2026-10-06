@@ -11,6 +11,7 @@ import dev.moui.galaxycraft.voxel.BoxModel;
 import dev.moui.galaxycraft.voxel.CellSpace;
 import dev.moui.galaxycraft.voxel.CubeSphere;
 import dev.moui.galaxycraft.voxel.Material;
+import dev.moui.galaxycraft.voxel.TileSplit;
 import dev.moui.galaxycraft.voxel.PlanetBiomes;
 import dev.moui.galaxycraft.voxel.ModelQuad;
 import dev.moui.galaxycraft.voxel.Placer;
@@ -97,6 +98,8 @@ public final class McBlocks implements Blocks {
     private final List<int[]> tiles;
     private final int[] materialIds = new int[Material.values().length];
     private final Map<Block, Boolean> usable = new HashMap<>();
+    /** By state id: what its block entity renderer draws, mapped into the atlas (BlockEntityBake). */
+    private final Map<Integer, List<ModelQuad>> baked = new HashMap<>();
     final Atlas atlas;
 
     private McBlocks(Minecraft mc) {
@@ -132,11 +135,95 @@ public final class McBlocks implements Blocks {
             int[] argb = tiles.get(sprites.get(stage));
             for (int i = 0; i < argb.length; i++) if ((argb[i] >>> 24) < 26) argb[i] = 0;
         }
+        bakeBlockEntities(sprites);
         List<Atlas.Anim> anims = animations(sprites.keySet());
         this.atlas = Atlas.of(tiles, anims);
         for (Material m : Material.values()) materialIds[m.ordinal()] = parse(m.state);
         GalaxyCraft.LOG.info("Planet blocks: {} states, {} sprites in a {}x{} atlas", count, tiles.size(), atlas.width(),
                 atlas.height());
+    }
+
+    /**
+     * Blocks whose model has no faces but whose block entity renderer draws them (chests, beds,
+     * signs, banners, heads, shulker boxes...): every state drawn once by its renderer, at rest;
+     * the 16×16 cells of their textures those faces sample become atlas tiles. On the client
+     * thread, at start-up: renderers pose shared model parts, so the mesher's threads only read.
+     */
+    private void bakeBlockEntities(Map<Identifier, Integer> sprites) {
+        long t0 = System.nanoTime();
+        Map<Identifier, NativeImage> textures = new HashMap<>();
+        Map<String, Integer> cells = new HashMap<>();
+        java.util.function.Function<Identifier, int[]> sizeOf = file -> {
+            NativeImage img = textures.computeIfAbsent(file, f -> {
+                try (InputStream in = mc.getResourceManager().open(f)) {
+                    return NativeImage.read(in);
+                } catch (IOException e) {
+                    return null;
+                }
+            });
+            return img == null ? null : new int[] {img.getWidth(), img.getHeight()};
+        };
+        int states = 0;
+        try {
+            for (int id = 0; id < count; id++) {
+                BlockState state = Block.stateById(id);
+                if (state == null || !(state.getBlock() instanceof net.minecraft.world.level.block.EntityBlock)) continue;
+                if (hasFaces(models.get(state))) continue;
+                List<BlockEntityBake.Face> faces = BlockEntityBake.bake(mc, state, sizeOf);
+                if (faces.isEmpty()) continue;
+                List<ModelQuad> quads = new ArrayList<>();
+                for (BlockEntityBake.Face f : faces) {
+                    if (f.sprite() != null) {
+                        Integer tile = sprites.get(f.sprite());
+                        if (tile == null) {
+                            tile = tiles.size();
+                            sprites.put(f.sprite(), tile);
+                            tiles.add(image(f.sprite()));
+                        }
+                        quads.add(new ModelQuad(f.pos(), f.uv(), tile, f.tint(), -1));
+                        continue;
+                    }
+                    NativeImage img = textures.get(f.texture());
+                    for (TileSplit.Piece piece : TileSplit.split(f.pos(), f.uv())) {
+                        String key = f.texture() + "#" + piece.cellX() + "," + piece.cellY();
+                        Integer tile = cells.get(key);
+                        if (tile == null) {
+                            tile = tiles.size();
+                            cells.put(key, tile);
+                            tiles.add(cell(img, piece.cellX(), piece.cellY()));
+                        }
+                        quads.add(new ModelQuad(piece.pos(), piece.uv(), tile, f.tint(), -1));
+                    }
+                }
+                baked.put(id, List.copyOf(quads));
+                states++;
+            }
+        } finally {
+            textures.values().forEach(img -> {
+                if (img != null) img.close();
+            });
+        }
+        GalaxyCraft.LOG.info("Planet blocks: {} states drawn by block entity renderers, {} texture cells, in {} ms", states,
+                cells.size(), (System.nanoTime() - t0) / 1_000_000);
+    }
+
+    private static boolean hasFaces(BlockStateModel model) {
+        for (BlockStateModelPart part : parts(model))
+            for (int d = -1; d < DIRECTIONS.length; d++)
+                if (!part.getQuads(d < 0 ? null : DIRECTIONS[d]).isEmpty()) return true;
+        return false;
+    }
+
+    /** The 16×16 cell (cx, cy) of a texture, ARGB; transparent where the texture ends. */
+    private static int[] cell(NativeImage img, int cx, int cy) {
+        int n = Atlas.TILE;
+        int[] argb = new int[n * n];
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++) {
+                int px = cx * n + x, py = cy * n + y;
+                argb[y * n + x] = px < img.getWidth() && py < img.getHeight() ? img.getPixel(px, py) : 0;
+            }
+        return argb;
     }
 
     /** Where crack stage 0..9's tile is in the atlas: u0, v0, u1, v1 (0 to 1), as GxcCrack takes it. */
@@ -278,8 +365,11 @@ public final class McBlocks implements Blocks {
                 for (int d = -1; d < DIRECTIONS.length; d++)
                     for (BakedQuad q : part.getQuads(d < 0 ? null : DIRECTIONS[d]))
                         quads.add(quad(state, q, d < 0 ? -1 : CellSpace.SIDE_OF_DIRECTION[d]));
-        } else if (!state.isAir() && !outline.isEmpty()) {
-            // Drawn by a block entity renderer in Minecraft: its shape, in its particle texture.
+        }
+        List<ModelQuad> fromRenderer = baked.get(id(state));
+        if (quads.isEmpty() && fromRenderer != null) quads.addAll(fromRenderer);
+        else if (quads.isEmpty() && !state.isAir() && !outline.isEmpty() && state.getRenderShape() != RenderShape.INVISIBLE) {
+            // Nothing of its own to draw: its shape, in its particle texture.
             for (AABB box : outline.toAabbs()) quads.addAll(BoxModel.box(bounds(box), particle, particle, particle, WHITE));
         }
         float hardness = state.getDestroySpeed(none, BlockPos.ZERO);

@@ -202,7 +202,7 @@ enum {
   GXC_MSG_PLANET_TP = 104, /* f32 big-endian: Mario onto the ground at this radius (none: the surface),
                               then u32 big-endian: the planet's id (none: the first one) */
   GXC_MSG_OUTLINE = 105,   /* GxcOutline: the block the player can act on */
-  GXC_MSG_HELD = 106,      /* GxcHeld: what the player holds, drawn in Steve's right hand */
+  GXC_MSG_HELD = 106,      /* GxcHeld: what the player holds in a hand, drawn in Steve's */
   GXC_MSG_ATLAS = 107,     /* GxcAtlas + data: a piece of the block atlas */
   GXC_MSG_SKIN = 108,      /* entity texture, all big-endian (see GXC_ENT_*) */
   GXC_MSG_MODEL = 109,     /* entity model display list, all big-endian */
@@ -314,7 +314,8 @@ typedef struct {
 #define GXC_HELD_BANDS 4   /* the sprite is 16 wide and 4 bands of 16 tall (the last one unused) */
 typedef struct {
   uint32_t kind;     /* GXC_HELD_* */
-  uint32_t reserved[3];
+  uint32_t hand;     /* 0: the right (main) hand; 1: the left (off) hand */
+  uint32_t reserved[2];
   /* GX RGB5A3, 16x64 texels (4x4 texel blocks, big-endian already); alpha 0 is a hole */
   uint8_t sprite[GXC_HELD_SPRITE * GXC_HELD_SPRITE * GXC_HELD_BANDS * 2];
 } GxcHeld;
