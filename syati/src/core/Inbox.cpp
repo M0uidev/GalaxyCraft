@@ -206,6 +206,23 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
       out->hurt.from[k] = ReadF32(p + 4 * k);
     out->hurt.kind = ReadBE32(p + 12);
   }
+  else if (type == InboxRecord::ORIGIN)
+  {
+    if (len != 16)
+      return false;
+    out->origin.epoch = ReadBE32(p);
+    for (int k = 0; k < 3; k++)
+      out->origin.shift[k] = static_cast<s32>(ReadBE32(p + 4 + 4 * k));
+  }
+  else if (type == InboxRecord::STARS)
+  {
+    if (len < 4)
+      return false;
+    out->stars.count = ReadBE32(p);
+    out->stars.list = p + 4;
+    if (out->stars.count > STARS_MAX || len != 4 + out->stars.count * STAR_BYTES)
+      return false;
+  }
   else if (type == InboxRecord::TELEPORT)
   {
     if (len != 0 && len != 4 && len != 8 && len != 20)
@@ -222,6 +239,52 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   }
   *offset = at + 8 + ((len + 3) & ~3u);
   return true;
+}
+
+void StarLists(const InboxStars& s, u32 fmt, u8* out, u32 offset[STAR_CLASSES], u32 bytes[STAR_CLASSES])
+{
+  u32 count[STAR_CLASSES] = {0, 0, 0, 0};
+  static u8 cls[STARS_MAX];  // not on the stack: the game's threads have little
+  const u32 n = s.count > STARS_MAX ? STARS_MAX : s.count;
+  for (u32 i = 0; i < n; i++)
+  {
+    // Pixels across, to the nearest class (sixths of a pixel).
+    const f32 px = ReadF32(s.list + i * STAR_BYTES + 12) * 6.f;
+    u32 k = 0;
+    while (k + 1 < STAR_CLASSES && px > 0.5f * (STAR_SIZES[k] + STAR_SIZES[k + 1]))
+      k++;
+    cls[i] = static_cast<u8>(k);
+    count[k]++;
+  }
+  u32 at = 0;
+  for (u32 k = 0; k < STAR_CLASSES; k++)
+  {
+    offset[k] = at;
+    bytes[k] = 0;
+    if (!count[k])
+      continue;
+    u8* d = out + at;
+    d[0] = static_cast<u8>(0xB8 | fmt);  // GX_POINTS
+    d[1] = static_cast<u8>(count[k] >> 8), d[2] = static_cast<u8>(count[k]);
+    u8* v = d + 3;
+    for (u32 i = 0; i < n; i++)
+    {
+      if (cls[i] != k)
+        continue;
+      const u8* star = s.list + i * STAR_BYTES;
+      for (u32 b = 0; b < 12; b++)
+        v[b] = star[b];  // big-endian f32 already, as GX reads them
+      for (u32 b = 0; b < 4; b++)
+        v[12 + b] = star[16 + b];
+      v += 16;
+    }
+    u32 used = static_cast<u32>(v - d);
+    const u32 padded = (used + 31) & ~31u;
+    while (used < padded)
+      d[used++] = 0;  // GX_NOP
+    bytes[k] = padded;
+    at += padded;
+  }
 }
 
 void OutlineList(const InboxOutline& o, u32 fmt, u8 out[OUTLINE_DL_BYTES])

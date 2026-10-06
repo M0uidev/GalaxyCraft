@@ -44,7 +44,7 @@ class ProtoTest {
         var g = new Vector3d(0, -1, 0);
         assertTrue(new Seqlock.WorldState(1, 1, g, new Vector3d(), Layout.WORLD_FOLLOW).follow());
         assertFalse(new Seqlock.WorldState(1, 1, g, new Vector3d(), Layout.WORLD_ANCHOR).follow());
-        assertEquals(10, Layout.VERSION);
+        assertEquals(11, Layout.VERSION);
     }
 
     @Test void readTextFromTheRing() {

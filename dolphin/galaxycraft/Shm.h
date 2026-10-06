@@ -72,6 +72,7 @@ struct WorldState
   Vec3 gravity;
   Vec3 query_pos;
   u32 flags;
+  u32 origin_epoch = 0;
 };
 
 struct PlayerState
@@ -93,6 +94,7 @@ struct GameCamera
   Vec3 cam_pos, cam_dir, cam_up;
   float fov_y;
   Vec3 mario_pos, mario_front;
+  u32 origin_epoch = 0;
 };
 
 void WriteWorld(Shm& shm, const WorldState& w);

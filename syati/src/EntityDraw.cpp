@@ -312,6 +312,22 @@ void EntityDrawFrame(const gxc::InboxEntities& entities)
   gCount = entities.count;
 }
 
+void EntityDrawShift(const float d[3])
+{
+  for (int k = 0; k < 3; k++)
+    gSeat[k] += d[k], gSeatLast[k] += d[k];
+  // The newest frame's pieces until the next one comes (in the new epoch): moved with the rest. A
+  // piece held in Steve's hand is from his hand, not the galaxy.
+  for (u32 n = 0; gList && n < gCount; n++)
+  {
+    u8* e = gList + n * gxc::ENT_BYTES;
+    if (((u32(e[0]) << 8 | e[1]) & HELD) != 0)
+      continue;
+    f32* mtx = reinterpret_cast<f32*>(e + 12);  // big-endian floats: the game's own
+    mtx[3] += d[0], mtx[7] += d[1], mtx[11] += d[2];
+  }
+}
+
 void EntityDrawHurt(const gxc::InboxHurt& hurt)
 {
   gHurt = hurt;

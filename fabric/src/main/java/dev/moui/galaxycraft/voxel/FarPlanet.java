@@ -1,6 +1,7 @@
 package dev.moui.galaxycraft.voxel;
 
 import dev.moui.galaxycraft.proto.Layout;
+import dev.moui.galaxycraft.universe.GameOrigin;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayDeque;
@@ -70,6 +71,18 @@ public final class FarPlanet {
         id = 0;
     }
 
+    /** The floating origin moved: its planet record, if not sent yet, is made again where it is now. */
+    public void originMoved() {
+        if (id == 0) return;
+        java.util.List<PlanetSession.Msg> q = new java.util.ArrayList<>(queue);
+        queue.clear();
+        for (PlanetSession.Msg m : q) {
+            boolean planet = m.type() == Layout.MSG_PLANET && m.payload().length >= 4
+                    && ByteBuffer.wrap(m.payload()).order(ByteOrder.LITTLE_ENDIAN).getInt() == id;
+            queue.add(planet ? new PlanetSession.Msg(Layout.MSG_PLANET, payload(ByteBuffer.wrap(m.payload()).order(ByteOrder.BIG_ENDIAN).getInt(36))) : m);
+        }
+    }
+
     public PlanetSession.Msg peek() {
         return queue.peek();
     }
@@ -97,7 +110,8 @@ public final class FarPlanet {
     /** GxcPlanet as PlanetSession's: no gravity, no chunks, no occluder; flags big-endian. */
     private byte[] payload(int flags) {
         ByteBuffer b = ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN).putInt(id);
-        b.putFloat((float) center.x).putFloat((float) center.y).putFloat((float) center.z);
+        Vector3d c = GameOrigin.toGame(center);
+        b.putFloat((float) c.x).putFloat((float) c.y).putFloat((float) c.z);
         b.putFloat((float) (surface * unitsPerBlock)).putFloat(0).putInt(0).putFloat(0).putFloat(0);
         b.order(ByteOrder.BIG_ENDIAN).putInt(flags);
         return b.array();

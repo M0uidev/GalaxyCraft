@@ -184,7 +184,22 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 })).then(literal("status").executes(c -> {
                     c.getSource().sendFeedback(Component.literal(status(c.getSource().getPlayer())));
                     return 1;
-                })).then(literal("planet")
+                })).then(literal("origin")
+                        // Debug: pin the floating origin that many blocks out (the game's numbers grow
+                        // as far: far-away floats), or let it follow again.
+                        .then(literal("auto").executes(c -> {
+                            UniverseClient.pin(null);
+                            return 1;
+                        }))
+                        .then(argument("x", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg())
+                                .then(argument("y", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg())
+                                        .then(argument("z", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg()).executes(c -> {
+                                            UniverseClient.pin(new Vector3d(com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(c, "x"),
+                                                    com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(c, "y"),
+                                                    com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(c, "z")));
+                                            return 1;
+                                        })))))
+                        .then(literal("planet")
                         .then(literal("spawn")
                                 .executes(c -> planetCommand(c.getSource(), () -> PlanetClient.requestSpawn(PlanetClient.DEFAULT_RADIUS)))
                                 .then(argument("radius", IntegerArgumentType.integer(VoxelPlanet.MIN_RADIUS, VoxelPlanet.MAX_RADIUS))

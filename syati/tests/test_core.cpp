@@ -551,6 +551,45 @@ static void TestInboxOutline()
   CHECK(!NextInboxRecord(many.data(), many.size(), &off, 512, &r));
 }
 
+static void TestInboxOriginAndStars()
+{
+  std::vector<u8> b;
+  Put32(b, 116u << 16), Put32(b, 16), Put32(b, 7), Put32(b, static_cast<u32>(-3)), Put32(b, 0), Put32(b, 12);
+  // Four stars: 1, 2.4, 3 and 9 pixels.
+  const float px[4] = {1.f, 2.4f, 3.f, 9.f};
+  Put32(b, 117u << 16), Put32(b, 4 + 4 * 20), Put32(b, 4);
+  for (int i = 0; i < 4; i++)
+  {
+    PutF(b, 0.f), PutF(b, 1.f), PutF(b, static_cast<float>(i));
+    PutF(b, px[i]), Put32(b, 0x11223300u + i);
+  }
+  Put32(b, 116u << 16), Put32(b, 12), Put32(b, 7), Put32(b, 0), Put32(b, 0);  // short: malformed
+  InboxRecord r;
+  u32 off = 0;
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::ORIGIN);
+  CHECK(r.origin.epoch == 7 && r.origin.shift[0] == -3 && r.origin.shift[1] == 0 && r.origin.shift[2] == 12);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::STARS && r.stars.count == 4);
+  std::vector<u8> dl(STARS_DL_BYTES, 0xEE);
+  u32 at[STAR_CLASSES], bytes[STAR_CLASSES];
+  StarLists(r.stars, 6, dl.data(), at, bytes);
+  // 1 px -> 6, 2.4 px -> 12, 3 px -> 18, 9 px -> 30 (the biggest class).
+  for (u32 k = 0; k < STAR_CLASSES; k++)
+  {
+    CHECK(bytes[k] == 32 && at[k] == 32 * k);
+    CHECK(dl[at[k]] == (0xB8 | 6) && dl[at[k] + 1] == 0 && dl[at[k] + 2] == 1);  // GX_POINTS, one vertex
+    CHECK(GetBEF(dl.data() + at[k] + 3 + 4) == 1.f && GetBEF(dl.data() + at[k] + 3 + 8) == static_cast<float>(k));
+    CHECK(dl[at[k] + 3 + 12] == 0x11 && dl[at[k] + 3 + 15] == k);  // its color
+    CHECK(dl[at[k] + 19] == 0 && dl[at[k] + 31] == 0);  // GX_NOP after it
+  }
+  CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
+  // More stars than the game takes: refused.
+  std::vector<u8> many;
+  Put32(many, 117u << 16), Put32(many, 4 + (STARS_MAX + 1) * 20), Put32(many, STARS_MAX + 1);
+  many.resize(many.size() + (STARS_MAX + 1) * 20);
+  off = 0;
+  CHECK(!NextInboxRecord(many.data(), many.size(), &off, 512, &r));
+}
+
 static void TestInboxCrack()
 {
   std::vector<u8> b;
@@ -844,6 +883,7 @@ int main()
   TestCodePatch();
   TestInboxOutline();
   TestInboxCrack();
+  TestInboxOriginAndStars();
   TestCrackMesh();
   TestInboxHeld();
   TestInboxEntities();

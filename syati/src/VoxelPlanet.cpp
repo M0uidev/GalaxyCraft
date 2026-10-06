@@ -33,6 +33,7 @@ extern "C" s32 getSize__7JKRHeapFPv(void* heap, void* p);
 extern "C" void free__7JKRHeapFPvP7JKRHeap(void* p, void* heap);
 extern "C" void* create__10JKRExpHeapFUlP7JKRHeapb(u32 size, void* parent, bool errorFlag);
 extern "C" void GXGetProjectionv(f32* p);
+extern "C" void GXSetPointSize(u8 size, GXTexOffset offset);
 // operator new(size, JKRHeap*, alignment)
 extern "C" void* __nw__FUlP7JKRHeapi(u32 size, void* heap, int align);
 
@@ -239,6 +240,15 @@ struct Landing
 };
 Landing gLanding = {false, {0, 0, 0}, {0, 0, 0}, 0};
 u32 gTeleports[3] = {0, 0, 0};  // received, applied, kept for their planet
+// The floating origin (GXC_MSG_ORIGIN): its epoch, and how far the game moved during this frame's
+// records (Mario's anchor, taken before them, moves by as much: VoxelPlanetOrigin).
+u32 gOriginEpoch = 0;
+f32 gOriginMoved[3] = {0, 0, 0};
+// The other systems' stars (GXC_MSG_STARS): display lists of points by size, two used in turn.
+u8* gStarsDl[2] = {0, 0};
+u32 gStarsNext = 0;
+u8* gStarsDraw = 0;
+u32 gStarsAt[gxc::STAR_CLASSES], gStarsBytes[gxc::STAR_CLASSES];
 const u32 LANDING_MAX_FRAMES = 600;  // ten seconds: whatever happens, he is let go
 const f32 LANDING_PROBE_ABOVE = 200.f, LANDING_PROBE_BELOW = 400.f;  // units around where he lands
 
@@ -442,6 +452,14 @@ public:
     {
       EntityDrawHurt(r.hurt);
     }
+    else if (r.type == gxc::InboxRecord::ORIGIN)
+    {
+      MoveOrigin(r.origin);
+    }
+    else if (r.type == gxc::InboxRecord::STARS)
+    {
+      SetStars(r.stars);
+    }
     else if (r.type == gxc::InboxRecord::TELEPORT)
     {
       // Before its planet (in a later batch): kept until the planet comes, not lost (Mario would
@@ -452,6 +470,119 @@ public:
         Teleport(*p, r.teleport);
       else
         gPendingTeleport = r.teleport, gTeleportPending = true, gTeleports[2]++;
+    }
+  }
+
+  // The floating origin moves: everything of the game's that is in galaxy space moves by d at
+  // once, so the numbers stay small wherever the player is in the universe. Whole cells (2^16
+  // units): a float moved by them toward 0 keeps every bit, so nothing jumps. Meshes, far views,
+  // outlines and cracks are relative to their planet's center and stay as they are.
+  void MoveOrigin(const gxc::InboxOrigin& o)
+  {
+    const f32 d[3] = {-gxc::ORIGIN_CELL * static_cast<f32>(o.shift[0]), -gxc::ORIGIN_CELL * static_cast<f32>(o.shift[1]),
+                      -gxc::ORIGIN_CELL * static_cast<f32>(o.shift[2])};
+    for (u32 i = 0; i < MAX_PLANETS; i++)
+    {
+      Planet& p = gPlanets[i];
+      if (!p.id)
+        continue;
+      for (int k = 0; k < 3; k++)
+        p.center[k] += d[k];
+      if (p.gravity)
+      {
+        p.gravity->mLocalPos = TVec3f(p.center[0], p.center[1], p.center[2]);
+        p.gravity->updateIdentityMtx();
+      }
+      // Its collision: the base matrix and the previous one both (resetAllMtx), so the game takes it
+      // for a floor put there, not one that moved 400 blocks in a frame carrying Mario along.
+      TPos3f m;
+      Identity(&m, p.center);
+      for (u32 c = 0; c < p.slot_count; c++)
+        if (p.slots[c].parts)
+          p.slots[c].parts->resetAllMtx(m);
+    }
+    mTranslation.x += d[0], mTranslation.y += d[1], mTranslation.z += d[2];
+    const TVec3f* mario = MR::getPlayerPos();
+    TVec3f* v = MR::getPlayerVelocity();
+    const TVec3f keep = v ? *v : TVec3f(0.f, 0.f, 0.f);
+    MR::setPlayerPos(TVec3f(mario->x + d[0], mario->y + d[1], mario->z + d[2]));
+    if (v)
+      *v = keep;
+    for (int k = 0; k < 3; k++)
+      gLanding.to[k] += d[k], gOriginMoved[k] += d[k];
+    EntityDrawShift(d);
+    gOriginEpoch = o.epoch;
+    gVoxelStats.origin_moves++;
+    gVoxelStats.origin_epoch = o.epoch;
+  }
+
+  // The stars as display lists of points by size (StarLists), drawn on the sky every frame.
+  void SetStars(const gxc::InboxStars& st)
+  {
+    gStarsDraw = 0;
+    gVoxelStats.stars = st.count;
+    if (!st.count)
+      return;
+    u8*& dl = gStarsDl[gStarsNext];
+    if (!dl)
+      dl = Alloc32(gxc::STARS_DL_BYTES);
+    if (!dl)
+    {
+      gVoxelStats.alloc_failed++;
+      return;
+    }
+    gxc::StarLists(st, GX_VTXFMT6, dl, gStarsAt, gStarsBytes);
+    DCFlushRange(dl, gxc::STARS_DL_BYTES);
+    gStarsDraw = dl;
+    gStarsNext ^= 1;
+  }
+
+  // Points of light around the camera at almost its far plane, behind everything else drawn after
+  // them, by direction only: where the origin is does not matter.
+  static void DrawStars(const f32 proj[7])
+  {
+    if (!gStarsDraw)
+      return;
+    const f32 farZ = proj[5] != 0.f ? proj[6] / proj[5] : 0.f;
+    if (farZ <= 0.f)
+      return;
+    const f32 dist = 0.995f * farZ;
+    const MtxPtr cam = MR::getCameraViewMtx();
+    f32 m[12];
+    for (int r = 0; r < 3; r++)
+    {
+      for (int c = 0; c < 3; c++)
+        m[4 * r + c] = cam[r][c] * dist;
+      m[4 * r + 3] = 0.f;
+    }
+    GXClearVtxDesc();
+    GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GXSetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+    GXSetVtxAttrFmt(GX_VTXFMT6, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
+    GXSetVtxAttrFmt(GX_VTXFMT6, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
+    GXSetNumChans(1);
+    GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_VTX, 0, GX_DF_NONE, GX_AF_NONE);
+    GXSetNumTexGens(0);
+    GXSetNumIndStages(0);
+    GXSetNumTevStages(1);
+    GXSetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD_NULL, GX_TEXMAP_NULL, GX_COLOR0A0);
+    GXSetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
+    GXColor black = {0, 0, 0, 0};
+    GXSetFog(GX_FOG_NONE, 0.f, 0.f, 0.f, 0.f, black);
+    GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
+    GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+    GXSetZMode(GX_TRUE, GX_LEQUAL, GX_FALSE);
+    GXSetCullMode(GX_CULL_NONE);
+    GXSetColorUpdate(GX_TRUE);
+    GXSetAlphaUpdate(GX_FALSE);
+    GXSetCurrentMtx(GX_PNMTX0);
+    GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(m), GX_PNMTX0);
+    for (u32 k = 0; k < gxc::STAR_CLASSES; k++)
+    {
+      if (!gStarsBytes[k])
+        continue;
+      GXSetPointSize(gxc::STAR_SIZES[k], GX_TO_ZERO);
+      GXCallDisplayList(gStarsDraw + gStarsAt[k], gStarsBytes[k]);
     }
   }
 
@@ -786,7 +917,7 @@ public:
     bool any = false;
     for (u32 i = 0; i < MAX_PLANETS; i++)
       any = any || gPlanets[i].id;
-    if (!any)
+    if (!any && !gStarsDraw)
       return;
     // The camera's projection: this draw type runs after screen passes (bloom, in the Starship)
     // that leave another projection loaded, and the planet would land off screen.
@@ -794,6 +925,10 @@ public:
     // That projection's sides: chunks wholly beside the view are not drawn.
     f32 proj[7];
     GXGetProjectionv(proj);
+    // The other systems first: every planet is drawn over them.
+    DrawStars(proj);
+    if (!any)
+      return;
     if (!gAtlas.ready)
     {
       if (gHitboxOn)
@@ -964,12 +1099,13 @@ public:
     // camera's): position -Rᵀt, forward -(third row), as GX cameras look down -z.
     f32 eye[3], fwd[3];
     gxc::ViewEye(view, eye, fwd);
+    const f32 eyeAt[3] = {eye[0], eye[1], eye[2]};
     eye[0] -= p.center[0], eye[1] -= p.center[1], eye[2] -= p.center[2];
     const f32 origin[3] = {0.f, 0.f, 0.f};
     // The planet's matrix once, each chunk's from it: chunk centers are whole units from the
     // planet's center, so neighbors' shared corners come out of the same math and leave no seams.
     f32 planet[12];
-    gxc::ViewTranslate(view, p.center, planet);
+    gxc::ViewRelative(view, eyeAt, p.center, planet);
     // The whole planet beside the view (its ground and the room above it): none of it is drawn.
     const f32 whole[3] = {planet[3], planet[7], planet[11]};
     if (gxc::SphereOutsideView(proj, whole, p.surface + 32.f * 80.f))
@@ -993,7 +1129,7 @@ public:
         f32 at[3];
         for (int k = 0; k < 3; k++)
           at[k] = p.center[k] + eye[k] * (1.f - scale);  // camera + (center - camera) * scale
-        gxc::ViewTranslate(view, at, planet);
+        gxc::ViewRelative(view, eyeAt, at, planet);
         for (int r = 0; r < 3; r++)
           for (int c = 0; c < 3; c++)
             planet[4 * r + c] *= scale;
@@ -1219,6 +1355,10 @@ void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size)
   gLanding.active = false;
   gHitboxDl[0] = gHitboxDl[1] = 0;
   gHitboxOn = false;
+  // A new scene starts at the mod's origin again (it moves it once the scene is linked).
+  gOriginEpoch = 0;
+  gStarsDl[0] = gStarsDl[1] = 0;
+  gStarsDraw = 0;
   gGraves.Reset();
   gKclGraves.Reset();
   gVoxelStats.module_bytes = 0;
@@ -1265,6 +1405,8 @@ void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_s
   gVoxelStats.free_mem2 = gModHeap ? getFreeSize__7JKRHeapFv(gModHeap) : 0;
   gVoxelStats.free_mem1 = getFreeSize__7JKRHeapFv(getSceneHeapNapa__2MRFv());
   gVoxelStats.total_free_mem2 = getTotalFreeSize__7JKRHeapFv(getSceneHeapGDDR3__2MRFv());
+  for (int k = 0; k < 3; k++)
+    gOriginMoved[k] = 0.f;
   GxcInboxHeader* h = reinterpret_cast<GxcInboxHeader*>(gInbox);
   if (h->state != 1)
     return;
@@ -1278,6 +1420,13 @@ void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_s
       gActor->Apply(r);
   }
   h->state = 0;
+}
+
+void VoxelPlanetOrigin(uint32_t* epoch, float anchor[3])
+{
+  *epoch = gOriginEpoch;
+  for (int k = 0; k < 3; k++)
+    anchor[k] += gOriginMoved[k];
 }
 
 bool VoxelPlanetHoldLanding()

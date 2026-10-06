@@ -119,6 +119,33 @@ struct InboxTeleport
   f32 dir[3];
 };
 
+// The floating origin moves (GXC_MSG_ORIGIN): to epoch, by shift cells of ORIGIN_CELL units;
+// everything in the game moves the other way, by -shift * ORIGIN_CELL.
+const f32 ORIGIN_CELL = 65536.f;
+struct InboxOrigin
+{
+  u32 epoch;
+  s32 shift[3];
+};
+
+// The other solar systems as points of light (GXC_MSG_STARS): count x STAR_BYTES, big-endian.
+const u32 STARS_MAX = 4096, STAR_BYTES = 20;
+struct InboxStars
+{
+  u32 count;
+  const u8* list;  // per star: f32 dir[3] (unit), f32 size (pixels), u32 rgba
+};
+
+// The stars as display lists of points (vertex format fmt: f32 position, RGBA8 color), one per
+// size class STAR_SIZES[k] (sixths of a pixel, as GXSetPointSize takes them), each at a 32-byte
+// boundary of out and padded with GX_NOP: offset[k] and bytes[k] (0: none of that size). Positions
+// are the unit directions: drawn with the camera's rotation scaled to a distance. out holds
+// STARS_DL_BYTES.
+const u32 STAR_CLASSES = 4;
+const u8 STAR_SIZES[STAR_CLASSES] = {6, 12, 18, 30};
+const u32 STARS_DL_BYTES = STAR_CLASSES * 64 + STARS_MAX * 16;
+void StarLists(const InboxStars& s, u32 fmt, u8* out, u32 offset[STAR_CLASSES], u32 bytes[STAR_CLASSES]);
+
 struct InboxEntities
 {
   u32 count;
@@ -148,6 +175,8 @@ struct InboxRecord
     SEAT = 112,
     SKY = 113,
     CRACK = 115,
+    ORIGIN = 116,
+    STARS = 117,
   };
   u32 type;
   InboxPlanet planet;
@@ -162,6 +191,8 @@ struct InboxRecord
   InboxHurt hurt;
   InboxSeat seat;
   InboxTeleport teleport;
+  InboxOrigin origin;
+  InboxStars stars;
   f32 sky[3];  // SKY: the light of full sky light now, 0 to 1
 };
 

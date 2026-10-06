@@ -1,5 +1,7 @@
 package dev.moui.galaxycraft.client;
 
+import dev.moui.galaxycraft.universe.GameOrigin;
+
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
 import dev.moui.galaxycraft.voxel.gen.PlanetGenerator;
 import dev.moui.galaxycraft.voxel.gen.TerrainNoise;
@@ -516,6 +518,8 @@ public final class PlanetClient {
                 && bridge.send(Layout.MSG_ATLAS, piece); ) atlasLink.sent();
         if (!bridge.stage().equals(stage)) enterStage(bridge.stage());
         boolean space = galaxy != null && Layout.SPACE_STAGE.equals(stage);
+        // The floating origin first: what this tick sends is from wherever it is now.
+        UniverseClient.tick(bridge, world, landPending || generating != null);
         for (ShadowWorld.Bed b; (b = ShadowWorld.pollBed()) != null; ) slept(b, player);
         // The player died and came back (Minecraft made it anew): Mario lands at the bed, else where he stood.
         if (space && lastPlayer != null && player != lastPlayer) {
@@ -652,7 +656,7 @@ public final class PlanetClient {
         // The player hurt by the shadow: Mario reels in the game too.
         for (ShadowWorld.Hurt h; (h = ShadowWorld.pollHurt()) != null; )
             if (session.active() && h.planet() == session.planet()) {
-                Vector3d from = session.galOf(h.from());
+                Vector3d from = GameOrigin.toGame(session.galOf(h.from()));
                 bridge.send(Layout.MSG_HURT, java.nio.ByteBuffer.allocate(16).putFloat((float) from.x).putFloat((float) from.y)
                         .putFloat((float) from.z).putInt(h.kind()).array());
             }
@@ -681,6 +685,12 @@ public final class PlanetClient {
             sinceSave = 0;
             saveNow();
         }
+    }
+
+    /** The floating origin moved: planet records still queued are made again from it. */
+    static void originMoved() {
+        for (PlanetSession s : leaving) s.originMoved();
+        if (stream != null) stream.originMoved();
     }
 
     /** A right click with what is in hand, where the player looks (tests). */
@@ -792,7 +802,7 @@ public final class PlanetClient {
         boolean onSeat = s != null && f.active() && s.planet() == f.planet();
         boolean on = onSeat || walker != null;
         if (on || riding) {
-            Vector3d at = walker != null ? walker : onSeat ? f.galOf(s.pos()) : new Vector3d();
+            Vector3d at = GameOrigin.toGame(walker != null ? walker : onSeat ? f.galOf(s.pos()) : GameOrigin.offset());
             if (bridge.send(Layout.MSG_SEAT, java.nio.ByteBuffer.allocate(16).putFloat((float) at.x).putFloat((float) at.y)
                     .putFloat((float) at.z).putInt(!on ? 0 : walker != null && marioFlies ? 2 : 1).array()))
                 riding = on;
@@ -896,6 +906,7 @@ public final class PlanetClient {
         leaving.clear();
         focus = session;
         dropAllPending = !bridge.send(Layout.MSG_PLANET, PlanetSession.dropAll());
+        UniverseClient.leave(bridge);
         galaxy = null;
         store = null;
         stage = null;
@@ -1049,6 +1060,7 @@ public final class PlanetClient {
             });
         }
         stream = new GalaxyStream(g, store, stage, made);
+        UniverseClient.enter(new dev.moui.galaxycraft.universe.Universe(made.options().seed(), 1 / GravityFrame.SCALE));
         GalaxyCraft.LOG.info("The world's galaxy: {} planets", made.entries().size());
     }
 

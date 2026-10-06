@@ -639,6 +639,8 @@ void MarioMovement(void* self)
   PublishParts(query);
   gOut.mbx.game_flags = (gFollowing ? GXC_MBX_GAME_FOLLOWING : 0u) | (gDemo ? GXC_MBX_GAME_DEMO : 0u);
   VoxelPlanetFrame(gOut.mbx.scene_id, &gOut.mbx.inbox_addr, &gOut.mbx.inbox_size);
+  // Mario was read before the records: if the origin moved among them, so did he.
+  VoxelPlanetOrigin(&gOut.mbx.origin_epoch, gOut.mbx.anchor_pos);
   gOut.mbx.game_seq++;  // last: the host reads a consistent frame when this moves
 }
 

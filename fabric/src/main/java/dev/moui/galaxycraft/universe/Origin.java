@@ -82,15 +82,27 @@ public final class Origin {
      * of (0, 0, 0) on each axis. Null if it is there already.
      */
     public Shift moveTo(UPos at) {
+        Shift s = peek(at);
+        if (s != null) apply(s);
+        return s;
+    }
+
+    /** The move moveTo would make, not made (null if none): applied once the game has it. */
+    public Shift peek(UPos at) {
         long nx = at.cx() + Math.round(at.x() / UPos.CELL), ny = at.cy() + Math.round(at.y() / UPos.CELL),
                 nz = at.cz() + Math.round(at.z() / UPos.CELL);
         if (nx == cx && ny == cy && nz == cz) return null;
-        Shift s = new Shift(++epoch, nx - cx, ny - cy, nz - cz);
-        cx = nx;
-        cy = ny;
-        cz = nz;
+        return new Shift(epoch + 1, nx - cx, ny - cy, nz - cz);
+    }
+
+    /** Makes a move peek gave (the next epoch's). */
+    public void apply(Shift s) {
+        if (s.epoch() != epoch + 1) throw new IllegalArgumentException("not the next move");
+        epoch = s.epoch();
+        cx += s.dx();
+        cy += s.dy();
+        cz += s.dz();
         history.addFirst(s);
         if (history.size() > HISTORY) history.removeLast();
-        return s;
     }
 }

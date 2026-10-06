@@ -311,6 +311,12 @@ final class GalaxyStream {
             for (PlanetSession.Msg m; bulk.getAsBoolean() && (m = f.peek()) != null && bridge.send(m.type(), m.payload()); ) f.sent();
     }
 
+    /** The floating origin moved: far planets' records still queued are made again from it. */
+    void originMoved() {
+        for (FarPlanet f : far.values()) f.originMoved();
+        for (FarPlanet f : farLeaving) f.originMoved();
+    }
+
     /** The world is left (the game drops every planet itself): ids given back, nothing more made. */
     void clear() {
         for (FarPlanet f : far.values()) f.remove();
