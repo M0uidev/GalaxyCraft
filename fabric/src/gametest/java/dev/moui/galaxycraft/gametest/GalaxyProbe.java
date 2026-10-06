@@ -23,14 +23,14 @@ import org.joml.Vector3d;
 /**
  * A galaxy of many planets, only with -Dgalaxycraft.galaxyProbe=true (tools/gxvoxel.sh galaxy,
  * the dev Dolphin booting by itself into GalaxyCraftSpace): Create World's GalaxyCraft tab, a world
- * of 20 planets; from the first one 8 are complete and 12 drawn from afar; Mario taken to the
+ * of 64 planets (the most); from the first one 8 are complete and 56 drawn from afar; Mario taken to the
  * farthest, a block broken there, back to the first and to the farthest again: the edit is kept.
  * Screenshots galaxy-*.png (Dolphin's) and Dolphin's speed at each place.
  */
 public final class GalaxyProbe implements FabricClientGameTest {
     private static final Pattern FLAGS = Pattern.compile("flags=[0-9a-f]+/([0-9a-f]+) .*stage=(\\S+)");
     private static final Pattern MAX_SPEED = Pattern.compile("max_speed=(\\S+)");
-    private static final int COUNT = 20;
+    private static final int COUNT = 64; // the most: far planets must never leave a complete one without room
     private boolean ok = true;
 
     @Override

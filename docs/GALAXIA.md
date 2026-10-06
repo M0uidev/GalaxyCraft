@@ -62,8 +62,8 @@ En la carpeta del mundo, `saves/<mundo>/galaxycraft/`:
 tools/gxvoxel.sh galaxy
 ```
 
-`GalaxyProbe` abre Create World y revisa que exista la pestaña. Luego crea un mundo de 20 planetas y
-comprueba que desde el primero haya 8 completos y 12 lejanos. Después lleva a Mario al planeta del
+`GalaxyProbe` abre Create World y revisa que exista la pestaña. Luego crea un mundo de 64 planetas (el máximo) y
+comprueba que desde el primero haya 8 completos y 56 lejanos. Después lleva a Mario al planeta del
 medio y al más lejano (en cada lugar saca una captura `galaxy-*.png` y anota la velocidad de Dolphin),
 rompe un bloque allí, vuelve al primero y otra vez al más lejano: el bloque sigue roto. No abras el
 juego mientras corre (comparten el canal con Dolphin).

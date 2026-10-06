@@ -72,8 +72,12 @@ struct FarPart
 // (GxcPlanet.chunk_count, 0 if it comes only as its far view) and the slots that have something to
 // draw, so drawing does not walk a big planet's empty chunks.
 // A galaxy's catalog has up to 64 planets: the 8 nearest Mario complete (gravity, chunks or their
-// far view), the others drawn only (gravity_range 0: no gravity, chunk_count 0: no chunks).
-const u32 MAX_PLANETS = 64;
+// far view), the others drawn only (gravity_range 0: no gravity, chunk_count 0: no chunks). The
+// first GRAVITY_SLOTS entries have a gravity of the game's and take the complete ones; the rest
+// only draw, so far planets never leave a complete one without room (and SMG2 gets 16 gravities
+// of ours, not one per entry).
+const u32 GRAVITY_SLOTS = 16;
+const u32 MAX_PLANETS = 96;
 struct Planet
 {
   u32 id;
@@ -319,7 +323,7 @@ public:
     MR::addHitSensorMapObj(this, "body", 8, 0.f, TVec3f(0.f, 0.f, 0.f));
     MR::connectToScene(this, 0x21, -1, -1, 0x0E);  // MovementType_MapObj, DrawType_ElectricRail
     MR::invalidateClipping(this);
-    for (u32 i = 0; i < MAX_PLANETS; i++)
+    for (u32 i = 0; i < GRAVITY_SLOTS; i++)
     {
       PointGravity* g = new PointGravity();
       g->mRange = 1.f;  // off until a planet arrives
@@ -428,10 +432,22 @@ public:
           Drop(gPlanets[i]);
       return;
     }
+    const bool pulls = in.gravity_range > 1.f;
     Planet* p = Find(in.id);
-    for (u32 i = 0; !p && i < MAX_PLANETS; i++)
+    if (p && pulls && !p->gravity)  // drawn only until now, and it pulls from now on: into a slot that can
+    {
+      Drop(*p);
+      p = 0;
+    }
+    // A planet that only draws goes past the gravity slots first, into one of them only if those are full.
+    for (u32 i = pulls ? 0 : GRAVITY_SLOTS; !p && i < MAX_PLANETS; i++)
       if (!gPlanets[i].id)
         p = &gPlanets[i];
+    for (u32 i = 0; !p && !pulls && i < GRAVITY_SLOTS; i++)
+      if (!gPlanets[i].id)
+        p = &gPlanets[i];
+    if (pulls && p && !p->gravity)
+      p = 0;
     if (!p)
     {
       gVoxelStats.alloc_failed++;
@@ -445,10 +461,13 @@ public:
     p->surface = in.surface;
     p->occluder = in.occluder;
     p->mario_radius = in.mario_radius;
-    p->gravity->mLocalPos = TVec3f(p->center[0], p->center[1], p->center[2]);
-    p->gravity->mRange = in.gravity_range > 1.f ? in.gravity_range : 1.f;  // 1: off, as an unused entry's
-    p->gravity->updateIdentityMtx();
-    mTranslation = p->gravity->mLocalPos;
+    if (p->gravity)
+    {
+      p->gravity->mLocalPos = TVec3f(p->center[0], p->center[1], p->center[2]);
+      p->gravity->mRange = pulls ? in.gravity_range : 1.f;  // 1: off, as an unused entry's
+      p->gravity->updateIdentityMtx();
+    }
+    mTranslation = TVec3f(p->center[0], p->center[1], p->center[2]);
   }
 
   void Drop(Planet& p)
@@ -462,8 +481,11 @@ public:
       p.far = 0;
       p.far_count = 0;
     }
-    p.gravity->mRange = 1.f;
-    p.gravity->updateIdentityMtx();
+    if (p.gravity)
+    {
+      p.gravity->mRange = 1.f;
+      p.gravity->updateIdentityMtx();
+    }
     if (mOutlinePlanet == p.id)
       mOutlineOn = false;
     p.id = 0;
@@ -474,7 +496,7 @@ public:
     for (u32 i = 0; i < MAX_PLANETS; i++)
     {
       const Planet& p = gPlanets[i];
-      if (!p.id || p.mario_radius <= 0.f || p.gravity->mRange <= 1.f)
+      if (!p.id || p.mario_radius <= 0.f || !p.gravity || p.gravity->mRange <= 1.f)
         continue;
       const f32 d[3] = {pos[0] - p.center[0], pos[1] - p.center[1], pos[2] - p.center[2]};
       const f32 range = p.gravity->mRange;

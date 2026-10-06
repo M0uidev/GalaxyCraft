@@ -18,7 +18,7 @@
 #                             itself and Mario waits there (tools/gxboot.py; --fresh-nand: no save file)
 #   tools/gxvoxel.sh launch   LauncherProbe: title screen, Create World, the home planet, leave and come
 #                             back (launch-*.png in fabric/build/run/clientGameTest/screenshots)
-#   tools/gxvoxel.sh galaxy   GalaxyProbe: Create World's tab, a galaxy of 20 planets, 8 complete and the
+#   tools/gxvoxel.sh galaxy   GalaxyProbe: Create World's tab, a galaxy of 64 planets, 8 complete and the
 #                             rest far, an edit on the farthest kept (galaxy-*.png)
 set -u
 if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ]; then
