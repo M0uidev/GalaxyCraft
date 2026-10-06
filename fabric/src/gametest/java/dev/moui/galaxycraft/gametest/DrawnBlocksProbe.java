@@ -109,6 +109,7 @@ public final class DrawnBlocksProbe implements FabricClientGameTest {
     private void hold(ClientGameTestContext ctx, TestSingleplayerContext sp, PlanetSession s) {
         ctx.runOnClient(mc -> mc.player.setYRot(0));
         ctx.waitTicks(10);
+        diagonal(ctx, sp, s);
         placeAndWrite(ctx, sp, s);
         write(ctx, sp, s);
         java.util.List<Integer> cells = ctx.computeOnClient(mc -> place(s, HOLD, 3));
@@ -201,6 +202,29 @@ public final class DrawnBlocksProbe implements FabricClientGameTest {
         ctx.getInput().releaseKey(o -> o.keyUse);
         ctx.getInput().pressKey(o -> o.keyTogglePerspective);
         ctx.getInput().pressKey(o -> o.keyTogglePerspective);
+    }
+
+    /** Signs turned between the four sides (22.5, 45, 67.5 degrees): their text shows as on the straight ones. */
+    private void diagonal(ClientGameTestContext ctx, TestSingleplayerContext sp, PlanetSession s) {
+        String[] row = {"oak_sign[rotation={s}]", "oak_sign[rotation={s1}]", "oak_sign[rotation={s2}]", "oak_sign[rotation={s3}]",
+                "oak_hanging_sign[rotation={s2},attached=false]"};
+        java.util.List<Integer> cells = ctx.computeOnClient(mc -> place(s, row, 3));
+        check(cells.size() == row.length, "signs at every angle on the planet");
+        ctx.waitTicks(40);
+        for (int c : cells) {
+            net.minecraft.core.BlockPos pos = dev.moui.galaxycraft.shadow.ShadowWorld.shadowPos(s.planet(), c);
+            if (pos != null)
+                sp.getServer().runCommand("execute in galaxycraft:shadow run data merge block " + pos.getX() + " " + pos.getY() + " "
+                        + pos.getZ() + " {front_text:{messages:[\"Angle\",\"text\",\"\",\"\"]}}");
+        }
+        ctx.waitTicks(60);
+        ctx.waitFor(mc -> s.queued() == 0, 600);
+        ctx.waitTicks(20);
+        shot(ctx, "diagonal");
+        ctx.runOnClient(mc -> {
+            for (int c : cells) s.planet().set(c, Blocks.AIR);
+        });
+        ctx.waitTicks(20);
     }
 
     /**
@@ -360,6 +384,8 @@ public final class DrawnBlocksProbe implements FabricClientGameTest {
             int rotation = Math.floorMod(Math.round((float) Math.toDegrees(Math.atan2(look.x, -look.z)) / 22.5f), 16);
             String name = "minecraft:" + ROW[k].replace("{f}", toward.getSerializedName())
                     .replace("{b}", toward.getOpposite().getSerializedName()).replace("{r}", Integer.toString(rotation))
+                    .replace("{s1}", Integer.toString((rotation + 9) % 16)).replace("{s2}", Integer.toString((rotation + 10) % 16))
+                    .replace("{s3}", Integer.toString((rotation + 11) % 16))
                     .replace("{s}", Integer.toString((rotation + 8) % 16)); // a sign's or banner's front faces the other way from a head's
             int id = blocks.parse(name);
             if (id == Blocks.AIR) continue;

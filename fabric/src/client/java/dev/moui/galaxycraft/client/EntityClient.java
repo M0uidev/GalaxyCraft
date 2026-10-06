@@ -144,7 +144,9 @@ final class EntityClient {
             BlockEntityRenderer r = Minecraft.getInstance().getBlockEntityRenderDispatcher().getRenderer(be);
             if (r == null) return;
             BlockPos pos = be.getBlockPos();
-            double[] f = live.map().frame(pos.getX(), pos.getY(), pos.getZ());
+            // The planet around the block's center, where a cell's bend is best matched by one
+            // frame (from its corner, a diagonal sign's text leaned into its board).
+            double[] f = live.map().frame(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
             if (f == null) return;
             BlockEntityRenderState st = r.createRenderState();
             r.extractRenderState(be, st, pt, eye, null);
@@ -152,7 +154,8 @@ final class EntityClient {
             if (st instanceof net.minecraft.client.renderer.blockentity.state.SignRenderState sign)
                 sign.drawOutline = dev.moui.galaxycraft.voxel.CellSpace.point(session().planet().grid, l.cell(), 0.5, 0.5, 0.5)
                         .distance(mario) < SIGN_OUTLINE;
-            Matrix4d at = new Matrix4d(f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], 0, f[0], f[1], f[2], 1);
+            Matrix4d at = new Matrix4d(f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], 0, f[0], f[1], f[2], 1)
+                    .translate(-0.5, -0.5, -0.5);
             int from = out.size();
             capture.begin(at, out);
             r.submit(st, new PoseStack(), capture, camera);
