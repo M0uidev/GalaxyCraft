@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-05 (galaxy options in playtest)
+Last updated: 2026-10-05 (galaxy options merged)
 
 ---
 
@@ -23,13 +23,13 @@ Last updated: 2026-10-05 (galaxy options in playtest)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Create World: planet options | now | Branch `feat/galaxy-options`: GalaxyCraft tab, up to 64 seeded planets, 8 complete and the rest drawn from afar ([docs/GALAXIA.md](docs/GALAXIA.md)). Playtest fixes in: smooth space flight, look kept entering a planet, far planets at any distance. Retest, then merge. |
-| Launcher: your playtest | now | Merged; waiting for the user's first run of `tools/gxplay.sh` (Minecraft's menu first, a world, quit and relaunch). Guide: [docs/LANZADOR.md](docs/LANZADOR.md). |
+| (nothing in progress) | | Pick the next one from **Next**. |
 
 ## Next
 
 | Feature | Status | Notes |
 |---|---|---|
+| Infinite universe | next | Stage 3 of the galaxy: No Man's Sky-like endless space, planets generated per sector as you explore (the catalog grows), a floating origin (SMG2's floats), faster travel than elytra. Builds on the galaxy options' catalog and streaming. |
 | Flat space stations | next | Player-built **flat** platforms floating in space, to play flat Minecraft (farms, builds) without the sphere's distortion. Hook ready: `CosmicWind` takes any `GravityBody`, not only spheres. |
 
 ---
@@ -38,15 +38,15 @@ Last updated: 2026-10-05 (galaxy options in playtest)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Several planets per galaxy from blueprints | planned | Up to 8 per stage already work (`/galaxycraft planet add`); missing: build them from saved blueprints, and choose where each one goes. |
+| Other planets from blueprints | planned | A world's first planet can be a blueprint; the others are generated. Missing: a mix of blueprints (with weights) for the others. |
 | Planet editor: "Add planet" button | planned | Today only the command adds a planet. |
-| Placement policy | next | Where a new planet appears (today: above the player, then rings). Semi-random for now, set per world when it is created (launcher spec 2). |
+| Placement policy | done | Semi-random by the world's seed, spacing set in Create World (galaxy options, f1ef3ea). |
 | Own galaxy | done | Each Minecraft world is a galaxy (GalaxyCraftSpace) holding its planets (launcher, 926f770). |
 | Non-spherical planets | planned | Arbitrary shapes (old stage 6): cubes, toruses, SMG-style odd shapes. |
 | Structures on generated planets | planned | Villages, temples, etc. Agreed follow-up of planet generation. |
 | Nether and End biomes / planets | planned | Agreed follow-up of planet generation. |
 | Travel between SMG2 galaxies | idea | Left out of elytra on purpose. |
-| Automatic solar systems | idea | Generate a set of planets by itself. Left out of elytra on purpose. |
+| Automatic solar systems | done | A world's galaxy of 1..64 generated planets (galaxy options, f1ef3ea). |
 
 ## Water and fluids
 
@@ -107,6 +107,7 @@ Last updated: 2026-10-05 (galaxy options in playtest)
 | 2026-10-05 | Pause menu, F6 Minecraft movement, `/skin` | 58bcebd |
 | 2026-10-05 | Minecraft movement collides like Minecraft; "Mario at Minecraft's speeds" option | e7e85a9 |
 | 2026-10-05 | Minecraft as the launcher: its menu first, SMG2 boots by itself into GalaxyCraftSpace, each world a galaxy with its planets and your spot, settings kept | 97925d0..926f770 |
+| 2026-10-05 | Create World's planet options: GalaxyCraft tab, up to 64 seeded planets (8 complete, the rest drawn from afar at less and less detail, even past SMG2's draw distance), entering a world with a zoom from space, smooth space and planet flight | f1ef3ea |
 | 2026-10-05 | Elytra: glide and fly between planets in every movement mode; cosmic wind | 7bc2385 |
 | 2026-10-05 | Lag fix: `gxplay.sh` runs Dolphin dual core and stops leftover hidden Minecrafts | beddf73 |
 
@@ -116,7 +117,6 @@ Last updated: 2026-10-05 (galaxy options in playtest)
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
-- 2026-10-05: Infinite universe like No Man's Sky: many procedurally generated planets in endless space (user, starting Create World's planet options). Related to "Automatic solar systems".
 - 2026-10-05: Launcher follow-ups (review): old planets in ~/.local/share/galaxycraft/planets are not moved into a world; closing the Dolphin window can lose the last ≤10 s of planet edits (no save on exit).
 - 2026-10-05: FPS above 60 (user, while playing). SMG2's logic is locked to 60 frames a second,
   so Dolphin cannot draw more by itself. Frame generation (lsfg-vk) needs Lossless Scaling
