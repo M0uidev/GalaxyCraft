@@ -433,6 +433,7 @@ public final class PlanetSession {
                         .putFloat((float) tpDir.x).putFloat((float) tpDir.y).putFloat((float) tpDir.z).array());
                 break;
             }
+            if (parallel && c >= 0 && !premeshed.containsKey(c)) premesh(urgent, urgentSet, c);
             urgentSet.clear(c);
             pendingSet.clear(c);
             build(c);
@@ -447,7 +448,7 @@ public final class PlanetSession {
             builtFar = true;
         }
         while (built == null && !pending.isEmpty() && bulk.getAsBoolean()) {
-            if (parallel && pending.peek() >= 0 && !premeshed.containsKey(pending.peek())) premesh();
+            if (parallel && pending.peek() >= 0 && !premeshed.containsKey(pending.peek())) premesh(pending, pendingSet, -1);
             int c = pending.poll();
             if (c <= HIDE_MARK) { // a tile's chunks are out: its far view goes
                 int t = HIDE_MARK - c;
@@ -471,17 +472,22 @@ public final class PlanetSession {
     }
 
     /**
-     * The next PREFETCH chunks in pending that build would mesh, meshed side by side, with what
+     * The next PREFETCH chunks of a queue (pending, or the urgent lane from first) that build would mesh, meshed side by side, with what
      * build would decide for them as things stand (it checks again).
      */
-    private void premesh() {
+    private void premesh(java.util.Collection<Integer> queue, BitSet queued, int first) {
         List<int[]> jobs = new ArrayList<>(); // chunk, kcl, cullDark
-        for (int c : pending) {
+        java.util.Iterator<Integer> it = first >= 0 ? java.util.stream.Stream.concat(java.util.stream.Stream.of(first), queue.stream()).iterator()
+                : queue.iterator();
+        while (it.hasNext()) {
+            int c = it.next();
             if (jobs.size() >= PREFETCH) break;
-            if (c < 0 || !pendingSet.get(c) || planet.isDirty(c) || premeshed.containsKey(c)) continue;
+            if (c < 0 || c != first && !queued.get(c) || planet.isDirty(c) || premeshed.containsKey(c)) continue;
             boolean kcl = (near.get(c) || mario != null && near.cardinality() < MAX_PARTS && distance(c, mario, ahead) < NEAR)
                     && (withKcl.get(c) || withKcl.cardinality() < MAX_PARTS);
-            if (!kcl && !shown.get(PlanetLod.tileOfChunk(planet, c))) continue; // dropped, not meshed
+            int tile = PlanetLod.tileOfChunk(planet, c);
+            boolean keepDrawn = !kcl && withKcl.get(c) && onGuest.get(c) && !farOnGuest.get(tile); // as build
+            if (!kcl && !shown.get(tile) && !keepDrawn) continue; // dropped, not meshed
             if (!onGuest.get(c) && !planet.mayShow(c)) continue;
             jobs.add(new int[] {c, kcl ? 1 : 0, !kcl && !underground ? 1 : 0});
         }

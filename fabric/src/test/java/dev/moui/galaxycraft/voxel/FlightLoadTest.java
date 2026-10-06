@@ -28,8 +28,7 @@ class FlightLoadTest {
                 BooleanSupplier bulk = () -> System.nanoTime() - end < 0;
                 long t0 = System.nanoTime();
                 for (PlanetSession.Msg m; (m = s.peek(bulk)) != null; ) {
-                    long t1 = System.nanoTime();
-                    boolean isFar = m.type() == dev.moui.galaxycraft.proto.Layout.MSG_CHUNK
+                        boolean isFar = m.type() == dev.moui.galaxycraft.proto.Layout.MSG_CHUNK
                             && (java.nio.ByteBuffer.wrap(m.payload()).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt(0) & PlanetSession.FAR_VIEW) != 0;
                     if (isFar) { farMsgs++; farBytes += m.payload().length; } else { chunkMsgs++; chunkBytes += m.payload().length; }
                     s.sent();
@@ -138,5 +137,37 @@ class FlightLoadTest {
             }
         }
         org.junit.jupiter.api.Assertions.assertEquals(0, resent, "chunks with collision sent again while Mario stood still");
+    }
+
+    @Test void flyingLowNoTickStalls() {
+        // Just over the ground at elytra speed, with PlanetClient's budget: the worst tick, since
+        // Mario's collision (the urgent lane) is built whatever the budget.
+        PlanetSession s = new PlanetSession(80);
+        s.setRenderDistance(96);
+        s.spawn(128, new Vector3d(), new Vector3d(0, 1, 0));
+        double alt = 130;
+        Vector3d dir = new Vector3d(1, 0, 0), up = new Vector3d(0, -1, 0);
+        s.update(3, 100, new Vector3d(up).mul(alt * 80).add(s.center()));
+        while (s.peek() != null) s.sent();
+        long worst = 0, total = 0;
+        int ticks = 0;
+        for (int lap = 0; lap < 2; lap++) // the first lap warms the JIT
+            for (double ang = 0; ang < Math.PI; ang += 2.5 / alt) {
+                Vector3d local = new Vector3d(up).mul(Math.cos(ang)).add(new Vector3d(dir).mul(Math.sin(ang))).mul(alt);
+                long t0 = System.nanoTime();
+                s.update(3, 100, new Vector3d(local).mul(80).add(s.center()));
+                long end = t0 + 6_000_000;
+                for (PlanetSession.Msg m; (m = s.peek(() -> System.nanoTime() - end < 0)) != null; ) s.sent();
+                long dt = System.nanoTime() - t0;
+                if (lap == 1) {
+                    worst = Math.max(worst, dt);
+                    total += dt;
+                    ticks++;
+                }
+            }
+        System.out.printf("flying low: worst tick %.1f ms, average %.1f ms%n", worst / 1e6, total / 1e6 / ticks);
+        // 88 ms once (a hitch of 5 frames) when a tile came in and every chunk of it was asked
+        // whether it may show, walking all its cells.
+        org.junit.jupiter.api.Assertions.assertTrue(worst < 30_000_000, "worst tick " + worst / 1e6 + " ms");
     }
 }
