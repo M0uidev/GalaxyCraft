@@ -28,9 +28,26 @@ final class EnteringScreen extends Screen {
     /** Shown at the first tick with no screen after a world is entered (Minecraft's own loading screen goes first). */
     private static boolean pending;
 
+    /** Joined, not yet known whether the world has a galaxy (GalaxyWorlds.joined runs a task later). */
+    private static boolean joining;
+
+    /** A world is being joined: entering from now on, the game kept silent. */
+    static void joining() {
+        joining = true;
+    }
+
     /** A world was entered. */
     static void show(Minecraft mc) {
         pending = PlanetClient.galaxy() != null;
+        joining = false;
+    }
+
+    /**
+     * Whether the world is still being entered: the screen still to come or up, not yet fading
+     * into the zoom. The game is not heard until then (its galaxy loading, Mario landing).
+     */
+    static boolean entering(Minecraft mc) {
+        return joining || pending || mc.gui.screen() instanceof EnteringScreen s && s.fadeFrom == 0;
     }
 
     /** Every client tick: the screen up once Minecraft's loading screen is gone. */

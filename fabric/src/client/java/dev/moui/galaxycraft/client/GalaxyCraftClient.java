@@ -137,7 +137,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             }
         });
         // On the client's thread: DISCONNECT may come from the network's when the connection drops.
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> client.execute(() -> GalaxyWorlds.joined(client)));
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            EnteringScreen.joining();
+            client.execute(() -> GalaxyWorlds.joined(client));
+        });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
             PlanetClient.leaveWorld(bridge);
             resetFrame();
@@ -368,6 +371,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
 
     private static void beforeTick(Minecraft client) {
         bridge.setInWorld(client.level != null && client.player != null);
+        bridge.setEntering(EnteringScreen.entering(client));
         bridge.poll();
         EnteringScreen.tick(client);
         PlanetClient.flushDropAll(bridge);

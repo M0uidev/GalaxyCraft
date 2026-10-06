@@ -74,6 +74,25 @@ class BridgeClientTest {
         assertEquals(0, seg.get(I, Layout.H_MOD_FLAGS) & Layout.MOD_IN_WORLD);
     }
 
+    @Test void enteringIsReportedOnlyInAWorld() throws Exception {
+        // Dolphin keeps the game silent while a world is entered behind Minecraft's screen.
+        Path p = dir.resolve("shm");
+        var seg = Shm.create(p).seg();
+        seg.set(I, 0, Layout.MAGIC);
+        seg.set(I, 4, Layout.VERSION);
+        seg.set(L, 16, 10_000L);
+        var c = new BridgeClient(p, () -> 10_100L, new Recorder());
+        c.setEntering(true);
+        c.poll();
+        assertEquals(0, seg.get(I, Layout.H_MOD_FLAGS));
+        c.setInWorld(true);
+        c.poll();
+        assertEquals(Layout.MOD_IN_WORLD | Layout.MOD_ENTERING, seg.get(I, Layout.H_MOD_FLAGS));
+        c.setEntering(false);
+        c.poll();
+        assertEquals(Layout.MOD_IN_WORLD, seg.get(I, Layout.H_MOD_FLAGS));
+    }
+
     @Test void staleHeartbeatIsNotLinked() throws Exception {
         Path p = dir.resolve("shm");
         var seg = Shm.create(p).seg();

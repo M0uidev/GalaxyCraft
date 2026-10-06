@@ -60,6 +60,8 @@ public:
   bool BootSpace() const { return m_boot_space; }
   // Booting by ourselves and Minecraft is not in a world: its menus have the screen and the input.
   bool InMenu() const { return m_boot_space && !m_in_world; }
+  // The game unheard: in Minecraft's menus, or while a world is entered behind its screen.
+  bool Silent() const { return InMenu() || (m_boot_space && m_entering); }
   // Minecraft mode with a live mod (or a dev follow): the Wii Remote override belongs to us.
   bool Following() const { return m_following; }
   // Mario is playable: game frames within the last 30 ticks, gravity, no cutscene. Else a menu.
@@ -157,6 +159,7 @@ private:
   bool m_minecraft_mode = true;
   bool m_boot_space = false;
   bool m_in_world = false;
+  bool m_entering = false;
   bool m_relink = false;
   bool m_link_on_save = false;
   bool m_on_title = true;

@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..21be918
+index 0000000..38ce0a5
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,594 @@
+@@ -0,0 +1,596 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -279,10 +279,11 @@ index 0000000..21be918
 +  s_pad = pad;
 +}
 +
-+// Field hook: the game is silent while Minecraft's menus cover it (its own sound plays there).
++// Field hook: the game is silent while Minecraft's menus cover it (its own sound plays there),
++// and while a world is entered behind Minecraft's screen, until the zoom from space.
 +void UpdateMute(State& state)
 +{
-+  const bool mute = state.bridge->InMenu();
++  const bool mute = state.bridge->Silent();
 +  if (mute == state.muted)
 +    return;
 +  state.muted = mute;
@@ -361,13 +362,14 @@ index 0000000..21be918
 +      const auto& perf = Core::System::GetInstance().GetPerfMetrics();
 +      AppendCtlOut(fmt::format("render_focus={} full_focus={} ui_blocks_input={} link={} mod_alive={} "
 +                               "following={} in_game={} focus_gained={} focus_lost={} link_toggles={} "
-+                               "xinput_updates={} fps={:.1f} vps={:.1f} speed={:.0f} max_speed={:.0f} mario_skin_writes={} plus_held={}\n",
++                               "xinput_updates={} fps={:.1f} vps={:.1f} speed={:.0f} max_speed={:.0f} mario_skin_writes={} plus_held={} "
++                               "muted={}\n",
 +                               Host_RendererHasFocus(), Host_RendererHasFullFocus(),
 +                               Host_UIBlocksControllerState(), bridge.MinecraftMode(),
 +                               mod_alive, bridge.Following(), bridge.InGame(), s_focus_gained.load(),
 +                               s_focus_lost.load(), s_link_toggles.load(),
 +                               s_xinput_updates.load(), perf.GetFPS(), perf.GetVPS(), perf.GetSpeed() * 100,
-+                               perf.GetMaxSpeed() * 100, bridge.MarioSkinWrites(), bridge.PlusHeld()));
++                               perf.GetMaxSpeed() * 100, bridge.MarioSkinWrites(), bridge.PlusHeld(), state.muted));
 +    }
 +      break;
 +    case gxc::DevCommand::Keys:
