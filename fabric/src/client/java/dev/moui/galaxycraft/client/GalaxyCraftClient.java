@@ -214,7 +214,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         boolean walker = ownPhysics() && frame != null && mc.player != null && bridge.gameLinked();
         // The elytra in Mario's modes: Mario himself flies there (in his Launch Star pose), not Steve.
         boolean marioFlies = walker && !walking() && mc.player.isFallFlying() && view() != View.FIRST;
-        PlanetClient.frame(bridge, pt, walker ? path.at(pt) : null,
+        PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt))) : null,
                 walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
         SkinClient.frame(bridge);
         bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
@@ -357,14 +357,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
 
     private static void resetFrame() {
         frame = null;
-        path.reset();
         camOffsetGal = camLookGal = camUpGal = null;
         Flight.reset();
         GalaxyCraft.FIELD.setFrame(null);
     }
-
-    /** The player's galaxy path between ticks: where Mario is seated at each frame (Minecraft movement). */
-    private static final dev.moui.galaxycraft.gravity.GalPath path = new dev.moui.galaxycraft.gravity.GalPath();
 
     private static void beforeTick(Minecraft client) {
         bridge.setInWorld(client.level != null && client.player != null);
@@ -616,7 +612,6 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     }
 
     private static void afterTick(Minecraft client) {
-        if (frame != null && client.player != null) path.tick(frame.toGal(vec(client.player.position())));
         sendPose(client);
     }
 
