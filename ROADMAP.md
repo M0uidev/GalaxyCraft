@@ -1,4 +1,4 @@
-# GalaxyCraft roadmap
+# Super Minecraft Galaxy roadmap
 
 Where the game is going: what is being built now, what comes next, and every idea said out loud
 so far. The goal behind all of it: a **Minecraft survival mode inside Super Mario Galaxy 2**, on

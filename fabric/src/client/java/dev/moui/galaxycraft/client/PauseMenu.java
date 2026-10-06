@@ -14,7 +14,7 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 
 /**
  * Esc opens Minecraft's own pause menu (Dolphin gives Escape to Minecraft while Mario is
- * playable), with a row of GalaxyCraft's above Options...: GalaxyCraft... opens
+ * playable), with a row of GalaxyCraft's above Options...: Super Minecraft Galaxy... opens
  * {@link GalaxySettingsScreen}, SMG2 Menu presses the + button that Escape no longer does.
  */
 final class PauseMenu {
@@ -45,9 +45,9 @@ final class PauseMenu {
             at = new int[][] {{options.getX(), y, w}, {right, y, w}};
         } else at = new int[][] {{4, 4, 98}, {106, 4, 98}};
 
-        buttons.add(Button.builder(Component.literal("GalaxyCraft..."), b -> mc.gui.setScreen(new GalaxySettingsScreen(pause)))
+        buttons.add(Button.builder(Component.literal("Super Minecraft Galaxy..."), b -> mc.gui.setScreen(new GalaxySettingsScreen(pause)))
                 .bounds(at[0][0], at[0][1], at[0][2], 20).tooltip(Tooltip.create(Component.literal(
-                        "Movement, skin and GalaxyCraft's other settings")))
+                        "Movement, skin and Super Minecraft Galaxy's other settings")))
                 .build());
         Button smg2 = Button.builder(Component.literal("SMG2 Menu"), b -> {
             mc.gui.setScreen(null);

@@ -10,7 +10,7 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 
 /**
  * Minecraft's title screen is GalaxyCraft's: no Multiplayer nor Realms (worlds are galaxies of
- * this computer's SMG2), "GalaxyCraft" under the logo, and how Super Mario Galaxy 2 is doing
+ * this computer's SMG2), "Super Minecraft Galaxy" under the logo, and how Super Mario Galaxy 2 is doing
  * behind it (Dolphin boots it into GalaxyCraftSpace while this screen shows).
  */
 final class TitleMenu {
@@ -25,7 +25,7 @@ final class TitleMenu {
             trim(Screens.getWidgets(screen));
             ScreenEvents.afterExtract(screen).register((s, g, mouseX, mouseY, a) -> {
                 var font = Minecraft.getInstance().font;
-                g.centeredText(font, "GalaxyCraft", s.width / 2, 78, GOLD);
+                g.centeredText(font, "Super Minecraft Galaxy", s.width / 2, 78, GOLD);
                 g.text(font, GalaxyCraftClient.smg2Status(), 2, 2, GREY);
             });
         });

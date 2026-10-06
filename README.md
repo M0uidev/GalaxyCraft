@@ -1,4 +1,6 @@
-# GalaxyCraft
+# Super Minecraft Galaxy
+
+(Code name and repository: GalaxyCraft.)
 
 Minecraft inside *Super Mario Galaxy 2*. You play as Mario, through Minecraft's eyes, in the real
 game running in Dolphin. Voxel planets that you can dig, build on and flood with water and lava
@@ -62,7 +64,7 @@ Three programs share one world:
 - **Collision that feels like Minecraft.** Mario shrinks to Steve's width on planets, so he
   falls into 1×1 holes and fits in 1×2 tunnels. Press **F3+B** to see his collision.
 - **`/fly`** for free flight, and `/galaxycraft planet spawn|tp|remove` to manage planets.
-- **Pause menu.** Esc opens Minecraft's own pause menu, with **GalaxyCraft...** (movement, skin,
+- **Pause menu.** Esc opens Minecraft's own pause menu, with **Super Minecraft Galaxy...** (movement, skin,
   entity distance, particles, flight, the planet editor) and **SMG2 Menu** (the game's own pause,
   the + button). Settings are kept in `config/galaxycraft.properties`.
 - **Two movements.** *Mario* (SMG2 moves Mario: his jumps and spins) or *Minecraft* (Minecraft

@@ -433,8 +433,8 @@ index 0000000..38ce0a5
 +  state.buttons = 0;
 +  s_xinput_buttons = 0;
 +  NOTICE_LOG_FMT(CORE, "GalaxyCraft: link {}", on ? "on" : "off");
-+  OSD::AddMessage(on ? "GalaxyCraft: Minecraft has the controls" :
-+                       "GalaxyCraft: Wii Remote has the controls (Minecraft paused)",
++  OSD::AddMessage(on ? "Super Minecraft Galaxy: Minecraft has the controls" :
++                       "Super Minecraft Galaxy: Wii Remote has the controls (Minecraft paused)",
 +                  3000);
 +}
 +}  // namespace
@@ -711,7 +711,7 @@ index 0000000..aa4925e
 +// Diagnostics for ctl status: Host::SetRenderFocus reports every focus change here.
 +void NoteRenderFocus(bool focus);
 +
-+// Hotkey "GalaxyCraft: Toggle Minecraft Link" (Ctrl+G by default, under Hotkey Settings > Wii):
++// Hotkey "Super Minecraft Galaxy: Toggle Minecraft Link" (Ctrl+G by default, under Hotkey Settings > Wii):
 +// hand the game to Minecraft or take it back (to use SMG2's menus with the Wii Remote).
 +void ToggleLink();
 +
@@ -797,7 +797,7 @@ index 915dc0d..85da7d9 100644
      _trans("Toggle SD Card"),
      _trans("Toggle USB Keyboard"),
      _trans("Toggle Wii Speak Mute"),
-+    _trans("GalaxyCraft: Toggle Minecraft Link"),
++    _trans("Super Minecraft Galaxy: Toggle Minecraft Link"),
  
      _trans("Next Profile"),
      _trans("Previous Profile"),
@@ -1275,7 +1275,7 @@ index 209e96c..5d7eae9 100644
 +    const ImVec2 size = ImGui::GetIO().DisplaySize;
 +    ImDrawList* list = ImGui::GetBackgroundDrawList();
 +    list->AddRectFilled(ImVec2(0, 0), size, IM_COL32(12, 10, 24, 255));
-+    const char* title = "GalaxyCraft";
++    const char* title = "Super Minecraft Galaxy";
 +    const ImVec2 text = ImGui::CalcTextSize(title);
 +    list->AddText(ImVec2((size.x - text.x) / 2, (size.y - text.y) / 2), IM_COL32(230, 230, 240, 255), title);
 +  }

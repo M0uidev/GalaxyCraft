@@ -167,7 +167,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 })
                 .then(argument("account", StringArgumentType.word()).executes(c -> {
                     String name = StringArgumentType.getString(c, "account");
-                    c.getSource().sendFeedback(Component.literal("GalaxyCraft: looking up " + name + "'s skin..."));
+                    c.getSource().sendFeedback(Component.literal("Super Minecraft Galaxy: looking up " + name + "'s skin..."));
                     if (name.equals(GalaxyOptions.SKIN.get())) SkinClient.wear(name, GalaxyCraftClient::say); // again
                     else GalaxyOptions.SKIN.set(name);
                     return 1;
@@ -355,7 +355,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     /** A line in the chat, from GalaxyCraft. */
     static void say(String text) {
         LocalPlayer player = Minecraft.getInstance().player;
-        if (player != null) player.sendSystemMessage(Component.literal("GalaxyCraft: " + text));
+        if (player != null) player.sendSystemMessage(Component.literal("Super Minecraft Galaxy: " + text));
     }
 
     /** Ticks a world's galaxy has waited for an anchor that the host will not set again. */
@@ -716,16 +716,16 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static int planetCommand(net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource source,
             Runnable action) {
         action.run();
-        source.sendFeedback(Component.literal("GalaxyCraft: " + PlanetClient.status()));
+        source.sendFeedback(Component.literal("Super Minecraft Galaxy: " + PlanetClient.status()));
         return 1;
     }
 
     private static String status(LocalPlayer player) {
-        if (!bridge.linked()) return "GalaxyCraft: not linked (is fake_galaxy.py or Dolphin running?)";
-        if (frame == null || player == null) return "GalaxyCraft: linked, waiting for player";
+        if (!bridge.linked()) return "Super Minecraft Galaxy: not linked (is fake_galaxy.py or Dolphin running?)";
+        if (frame == null || player == null) return "Super Minecraft Galaxy: linked, waiting for player";
         Vector3d gal = frame.toGal(vec(player.position()));
         Vector3d up = frame.upGal();
-        return String.format("GalaxyCraft: linked | galaxy pos (%.0f, %.0f, %.0f) | up (%.2f, %.2f, %.2f) | on ground %s",
+        return String.format("Super Minecraft Galaxy: linked | galaxy pos (%.0f, %.0f, %.0f) | up (%.2f, %.2f, %.2f) | on ground %s",
                 gal.x, gal.y, gal.z, up.x, up.y, up.z, player.onGround());
     }
 

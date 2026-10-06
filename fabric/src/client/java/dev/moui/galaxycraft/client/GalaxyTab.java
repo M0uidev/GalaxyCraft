@@ -39,7 +39,7 @@ final class GalaxyTab extends GridLayoutTab {
     private GalaxyCatalog.Spacing spacing;
 
     GalaxyTab(CreateWorldScreen screen) {
-        super(Component.literal("GalaxyCraft"));
+        super(Component.literal("Galaxy"));
         this.screen = screen;
         GalaxyCatalog.Options o = CHOSEN.getOrDefault(screen, GalaxyCatalog.Options.defaults(0));
         count = o.count();

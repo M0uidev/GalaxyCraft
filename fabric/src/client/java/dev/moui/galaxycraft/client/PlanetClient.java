@@ -259,7 +259,7 @@ public final class PlanetClient {
     }
 
     private static void say(LocalPlayer player, String text) {
-        if (player != null) player.sendSystemMessage(Component.literal("GalaxyCraft: " + text));
+        if (player != null) player.sendSystemMessage(Component.literal("Super Minecraft Galaxy: " + text));
     }
 
     /** Minecraft's blocks for the planets, once its models are loaded (null before the first tick). */

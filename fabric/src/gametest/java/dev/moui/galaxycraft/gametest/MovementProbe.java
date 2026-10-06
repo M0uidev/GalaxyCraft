@@ -80,14 +80,14 @@ public final class MovementProbe implements FabricClientGameTest {
         List<String> labels = ctx.computeOnClient(mc -> Screens.getWidgets(mc.gui.screen()).stream()
                 .map(w -> w.getMessage().getString()).toList());
         log("pause menu: " + labels);
-        check(labels.contains("GalaxyCraft...") && labels.contains("SMG2 Menu"), "the pause menu has GalaxyCraft's buttons");
+        check(labels.contains("Super Minecraft Galaxy...") && labels.contains("SMG2 Menu"), "the pause menu has GalaxyCraft's buttons");
         gxdev("ctl", "shot move-pause");
         ctx.takeScreenshot("move-pause-menu");
         ctx.waitTicks(10);
 
-        click(ctx, "GalaxyCraft...");
+        click(ctx, "Super Minecraft Galaxy...");
         ctx.waitTicks(10);
-        check(ctx.computeOnClient(mc -> mc.gui.screen() instanceof GalaxySettingsScreen), "GalaxyCraft... opens its settings");
+        check(ctx.computeOnClient(mc -> mc.gui.screen() instanceof GalaxySettingsScreen), "Super Minecraft Galaxy... opens its settings");
         gxdev("ctl", "shot move-settings");
         ctx.waitTicks(10);
         ctx.runOnClient(mc -> mc.gui.screen().onClose());

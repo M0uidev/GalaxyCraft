@@ -43,7 +43,7 @@ public final class GalaxyProbe implements FabricClientGameTest {
         ctx.waitForScreen(CreateWorldScreen.class);
         boolean tab = ctx.computeOnClient(mc -> Screens.getWidgets(mc.gui.screen()).stream()
                 .filter(w -> w instanceof TabNavigationBar).map(w -> (TabNavigationBar) w)
-                .anyMatch(bar -> bar.getTabs().stream().anyMatch(t -> t.getTabTitle().getString().equals("GalaxyCraft"))));
+                .anyMatch(bar -> bar.getTabs().stream().anyMatch(t -> t.getTabTitle().getString().equals("Galaxy"))));
         check(tab, "Create World has a GalaxyCraft tab");
         ctx.runOnClient(mc -> Screens.getWidgets(mc.gui.screen()).stream().filter(w -> w instanceof TabNavigationBar)
                 .forEach(w -> ((TabNavigationBar) w).selectTab(3, false)));
