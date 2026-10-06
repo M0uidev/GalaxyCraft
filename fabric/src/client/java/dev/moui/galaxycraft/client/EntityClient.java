@@ -387,6 +387,11 @@ final class EntityClient {
         return entitySkin(texture);
     }
 
+    /** The texture a render type draws with (null if it has none or it cannot be read). */
+    static Identifier renderTypeTexture(RenderType type) {
+        return textureOf(type).orElse(null);
+    }
+
     private static java.util.Optional<Identifier> textureOf(RenderType type) {
         try {
             java.lang.reflect.Field state = RenderType.class.getDeclaredField("state");

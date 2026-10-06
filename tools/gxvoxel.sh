@@ -14,6 +14,7 @@
 #   tools/gxvoxel.sh movement MovementProbe instead: Esc's menu, Minecraft's movement, /skin (move-*.png)
 #   tools/gxvoxel.sh memory   MemoryProbe instead: the game's memory with several big generated planets
 #   tools/gxvoxel.sh mining   MiningProbe instead: holding to break, cracks, the stairs' outline (mining-*.png)
+#   tools/gxvoxel.sh drawn    DrawnBlocksProbe instead: chests, beds, signs and the like on a planet (drawn-*.png)
 #   tools/gxvoxel.sh elytra   ElytraProbe instead: elytra from planet to planet, the void, the wind (elytra-*.png)
 #   tools/gxvoxel.sh boot     GalaxyCraft's own boot, no Minecraft: SMG2 reaches GalaxyCraftSpace by
 #                             itself and Mario waits there (tools/gxboot.py; --fresh-nand: no save file)
@@ -54,6 +55,7 @@ elif [ "${1:-}" = perf ]; then TEST=PerfProbe PROP=galaxycraftPerf TAG=perf
 elif [ "${1:-}" = walk ]; then TEST=WalkProbe PROP=galaxycraftWalk TAG=walk
 elif [ "${1:-}" = movement ]; then TEST=MovementProbe PROP=galaxycraftMovement TAG=movement
 elif [ "${1:-}" = mining ]; then TEST=MiningProbe PROP=galaxycraftMining TAG=mining
+elif [ "${1:-}" = drawn ]; then TEST=DrawnBlocksProbe PROP=galaxycraftDrawn TAG=drawn
 elif [ "${1:-}" = elytra ]; then TEST=ElytraProbe PROP=galaxycraftElytra TAG=elytra
 elif [ "${1:-}" = memory ]; then TEST=MemoryProbe PROP=galaxycraftMemory TAG=memory
 elif [ "${1:-}" = lod ]; then TEST=LodProbe PROP=galaxycraftLod TAG=lod

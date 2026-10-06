@@ -55,10 +55,61 @@ public final class BlockRulesProbe implements FabricClientGameTest {
                 return lines;
             });
             for (String l : out) System.out.println("[GalaxyCraft blocks] " + l);
+            List<String> drawn = ctx.computeOnClient(BlockRulesProbe::drawn);
+            for (String f : drawn) System.out.println("[GalaxyCraft blocks] FAIL " + f);
+            System.out.println("[GalaxyCraft blocks] drawn " + (drawn.isEmpty() ? "PASS" : "FAIL"));
             List<String> fails = ctx.computeOnClient(BlockRulesProbe::walls);
             for (String f : fails) System.out.println("[GalaxyCraft blocks] FAIL " + f);
             System.out.println("[GalaxyCraft blocks] walls " + (fails.isEmpty() ? "PASS" : "FAIL"));
         }
+    }
+
+    /** Blocks Minecraft draws with a block entity renderer: each of their states. */
+    private static final String[] DRAWN = {"chest", "trapped_chest", "ender_chest", "white_bed", "red_bed", "oak_sign",
+            "oak_wall_sign", "oak_hanging_sign", "white_banner", "skeleton_skull", "player_head", "shulker_box",
+            "red_shulker_box", "decorated_pot", "bell", "lectern", "enchanting_table", "conduit", "copper_chest"};
+
+    /**
+     * Every state of those blocks has faces (none invisible), each face's tile is inside the atlas,
+     * and a chest's faces stay inside its block. The failures.
+     */
+    private static List<String> drawn(net.minecraft.client.Minecraft mc) {
+        McBlocks blocks = McBlocks.create(mc);
+        java.util.ArrayList<String> fails = new java.util.ArrayList<>();
+        int tiles = blocks.atlasColumns() * blocks.atlasRows();
+        for (String name : DRAWN) {
+            var block = BuiltInRegistries.BLOCK.getValue(Identifier.withDefaultNamespace(name));
+            if (block == net.minecraft.world.level.block.Blocks.AIR) {
+                System.out.println("[GalaxyCraft blocks] (no " + name + " in this version)");
+                continue;
+            }
+            int states = 0, quads = 0;
+            for (var state : block.getStateDefinition().getPossibleStates()) {
+                String text = net.minecraft.commands.arguments.blocks.BlockStateParser.serialize(state);
+                var info = blocks.info(blocks.parse(text));
+                states++;
+                quads += info.quads().size();
+                if (info.quads().isEmpty()) fails.add(text + " has no faces");
+                for (var q : info.quads()) {
+                    if (q.tile() < 0 || q.tile() >= tiles) fails.add(name + " face tile " + q.tile() + " outside the atlas");
+                    if (name.endsWith("chest"))
+                        for (float c : q.pos())
+                            if (c < -0.01f || c > 1.01f) {
+                                fails.add(name + " face outside its block: " + java.util.Arrays.toString(q.pos()));
+                                break;
+                            }
+                }
+            }
+            float[] lo = {9, 9, 9}, hi = {-9, -9, -9};
+            for (var q : blocks.info(blocks.parse("minecraft:" + name)).quads())
+                for (int k = 0; k < 12; k++) {
+                    lo[k % 3] = Math.min(lo[k % 3], q.pos()[k]);
+                    hi[k % 3] = Math.max(hi[k % 3], q.pos()[k]);
+                }
+            System.out.println("[GalaxyCraft blocks] " + name + ": " + states + " states, " + quads / Math.max(1, states)
+                    + " faces each, default from " + java.util.Arrays.toString(lo) + " to " + java.util.Arrays.toString(hi));
+        }
+        return fails;
     }
 
     /** Clicked onto a wall's side from each of its four ways (looking a little down), the wall's version. */
