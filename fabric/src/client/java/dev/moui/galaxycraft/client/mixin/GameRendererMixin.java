@@ -13,17 +13,12 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Frame hooks: host input before rendering, transparent clear, overlay export after the GUI. */
+/** Frame hooks: transparent clear, overlay export after the GUI (the frame's start: MinecraftMixin). */
 @Mixin(GameRenderer.class)
 abstract class GameRendererMixin {
     private static final Vector4fc TRANSPARENT = new Vector4f(0, 0, 0, 0);
 
     @Shadow @Final private RenderTarget mainRenderTarget;
-
-    @Inject(method = "render", at = @At("HEAD"))
-    private void galaxycraft$frameStart(CallbackInfo ci) {
-        GalaxyCraftClient.onFrameStart();
-    }
 
     @ModifyArg(method = "render", at = @At(value = "INVOKE",
             target = "Lcom/mojang/renderpearl/api/commands/CommandEncoder;clearColorAndDepthTextures(Lcom/mojang/renderpearl/api/textures/GpuTexture;Lorg/joml/Vector4fc;Lcom/mojang/renderpearl/api/textures/GpuTexture;D)V"),
