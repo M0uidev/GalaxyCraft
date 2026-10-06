@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (blocks that work done; blocks show what they hold next; official name Super Minecraft Galaxy)
+Last updated: 2026-10-06 (blocks show what they hold done)
 
 ---
 
@@ -29,7 +29,6 @@ Last updated: 2026-10-06 (blocks that work done; blocks show what they hold next
 
 | Feature | Status | Notes |
 |---|---|---|
-| Blocks show what they hold | next | What the working blocks keep, drawn on the planet: a sign's text (it is saved, not shown yet), banner patterns, a player head's own skin, items on shelves and campfires, chest lids opening, the shield's raised pose. Each needs the block's own data in the planet's mesh (and Minecraft's font as tiles for text). |
 | Infinite universe | next | Stage 3 of the galaxy: No Man's Sky-like endless space, planets generated per sector as you explore (the catalog grows), a floating origin (SMG2's floats), faster travel than elytra. Builds on the galaxy options' catalog and streaming. |
 | Flat space stations | next | Player-built **flat** platforms floating in space, to play flat Minecraft (farms, builds) without the sphere's distortion. Hook ready: `CosmicWind` takes any `GravityBody`, not only spheres. |
 
@@ -117,6 +116,7 @@ Last updated: 2026-10-06 (blocks that work done; blocks show what they hold next
 | 2026-10-06 | Entering a world is silent (no SMG2 boot, music or landing sounds) until the zoom from space | edd62e6 |
 | 2026-10-06 | Chests (also trapped, ender and copper), beds, signs and hanging signs, banners, mob heads, shulker boxes, decorated pots, bells, lecterns, conduits drawn on planets as Minecraft draws them, at no cost per frame; the off hand's item in Steve's left hand | 793e34d |
 | 2026-10-06 | Blocks that work on planets: beds and the straw bed (respawn point, sleeping the night through), signs (typing their text), charged respawn anchors (respawn point, no explosion), the lit TNT drawn, ender chests, shelves, rails with Mario riding the minecart; landing after a teleport waits for the ground (no more falling to a planet's core on entering a world) | 40c23e9 |
+| 2026-10-06 | Blocks show what they hold: signs' text (colors, glowing text), banner patterns, a player head's own skin, items on shelves and campfires, pot sherds, chest and shulker box lids opening, all lit by the planet; the shield as Minecraft's model (with its banner) in Steve's hand, raised to block | 687a92a |
 | 2026-10-06 | The game is called **Super Minecraft Galaxy** everywhere players see it (menus, chat, Dolphin, game list, README); code keeps the galaxycraft ids so worlds carry over. Discord server renamed to match | 0e844e7 |
 
 ---
@@ -124,6 +124,12 @@ Last updated: 2026-10-06 (blocks that work done; blocks show what they hold next
 ## Inbox
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
+
+- 2026-10-06: Follow-ups of "blocks show what they hold" (Claude): the enchanting table's book
+  turning to the player and the bell swinging (still drawn at rest); a crowd of 100 signs and 50
+  banners costs ~2.7 ms a frame, could be made cheaper (pieces that do not move sent once).
+- 2026-10-06: Watch the in-game tests (user): `GXC_GUI=1 tools/gxvoxel.sh <test>` runs them in a
+  Dolphin window.
 
 - 2026-10-06: Seen in test screenshots (Claude): a green dome with white, pink and blue pillars upside
   down in the sky over the planet (HeldItemTest, EntityTest). Probably another planet's far view
