@@ -26,6 +26,8 @@
 set -u
 # GXC_GUI=1 runs Dolphin in a window, to watch the test as it plays.
 GUI="${GXC_GUI:+--gui}"
+# Under gdb (crash backtraces in the log) the windowed Dolphin quits at once: not with GXC_GUI.
+GDB="--gdb"; [ -z "$GUI" ] || GDB=""
 if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ]; then
   # LauncherProbe (or GalaxyProbe, a world of many planets): the dev Dolphin boots by itself (no
   # savestate), Minecraft starts at its title.
@@ -77,13 +79,14 @@ if [ -n "${GXC_SAV:-}" ]; then
 elif [ -z "${GXC_REUSE:-}" ] || [ ! -f "$SAV" ]; then
   syati/build.sh > /dev/null 2>&1 || fail "syati/build.sh"
   $G stop > /dev/null
-  $G start $GUI --speed 0 || fail "dolphin did not start"
+  # Headless even with GXC_GUI: the route's inputs do not reach a windowed Dolphin (it stays at the title).
+  $G start --speed 0 || fail "dolphin did not start"
   sleep 8
   python3 tools/gxroute.py new-game || fail "route to the prologue"
   $G ctl "save $SAV" --wait 30 | grep -q "ok save" || fail "save $SAV"
 fi
 $G stop > /dev/null
-$G start $GUI --speed 1 --gdb || fail "dolphin did not start"
+$G start $GUI --speed 1 $GDB || fail "dolphin did not start"
 for _ in $(seq 60); do
   $G ctl mbx 2> /dev/null | grep -q '^at=' && break
   sleep 1

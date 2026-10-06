@@ -111,6 +111,7 @@ public final class DrawnBlocksProbe implements FabricClientGameTest {
         ctx.waitTicks(10);
         java.util.List<Integer> cells = ctx.computeOnClient(mc -> place(s, HOLD, 3));
         check(cells.size() == HOLD.length, "every block that holds something is on the planet (" + cells.size() + ")");
+        if (cells.size() != HOLD.length) return; // Mario is not on the planet: nothing more to look at
         ctx.waitTicks(40);
         log("after the banners: " + gxdev("ctl", "mbx").strip().replace("\n", " | "));
         shot(ctx, "hold-crowd-banners");
