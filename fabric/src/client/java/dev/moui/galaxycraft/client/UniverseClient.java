@@ -8,6 +8,7 @@ import dev.moui.galaxycraft.proto.Seqlock;
 import dev.moui.galaxycraft.universe.GameOrigin;
 import dev.moui.galaxycraft.universe.Origin;
 import dev.moui.galaxycraft.universe.OriginPolicy;
+import dev.moui.galaxycraft.universe.StarField;
 import dev.moui.galaxycraft.universe.UPos;
 import dev.moui.galaxycraft.universe.Universe;
 import dev.moui.galaxycraft.voxel.PlanetLayout;
@@ -37,6 +38,14 @@ public final class UniverseClient {
     private static Vector3d pinned;
     private static Universe universe;
     private static int moves;
+    /** Stars on the sky (GXC_MSG_STARS): sent from here, the sector it was in, the nearest one's distance (units). */
+    private static Vector3d starsFrom;
+    private static Universe.Sector starsSector;
+    private static double starsNearest;
+    private static int starsSent;
+    /** Systems within this many sectors are stars; nearer than STAR_SKIP_BLOCKS their planets show instead. */
+    static final int STAR_SECTORS = 8;
+    static final double STAR_SKIP_BLOCKS = GalaxyStream.LOAD_BLOCKS;
     /** The epoch the game said its last reading is in (it echoes a move once it made it). */
     private static int gameEpoch;
 
@@ -61,6 +70,19 @@ public final class UniverseClient {
         return gameEpoch;
     }
 
+    private static boolean starsHidden;
+
+    /** Tests: the stars off (an empty GXC_MSG_STARS) or back on (sent again). */
+    public static void hideStars(boolean hide) {
+        starsHidden = hide;
+        starsFrom = null;
+    }
+
+    /** Stars in the last GXC_MSG_STARS sent (tests). */
+    public static int starsSent() {
+        return starsSent;
+    }
+
     /** Pins the origin at that many blocks from the universe's (0, 0, 0); null lets it follow again. */
     public static void pin(Vector3d blocks) {
         pinned = blocks == null ? null : new Vector3d(blocks).mul(UNITS);
@@ -81,6 +103,8 @@ public final class UniverseClient {
             scene = world.sceneId();
             host = bridge.hostPid();
             told = false;
+            starsFrom = null;
+        bridge.send(Layout.MSG_STARS, new byte[4]); // none: the menus' game has no universe // a new scene has none
         }
         if (!told) told = bridge.send(Layout.MSG_ORIGIN, GameOrigin.message(GameOrigin.now()));
         if (!told) return;
@@ -102,6 +126,28 @@ public final class UniverseClient {
             goal = OriginPolicy.target(GameOrigin.origin(), at, system, clear);
         }
         goal.ifPresent(g -> move(bridge, g));
+        if (mario != null && universe != null && PlanetClient.ENDLESS) stars(bridge, mario);
+    }
+
+    /**
+     * The other systems on the sky, again when Mario changes sector or has moved a tenth of the way to
+     * the nearest star (their directions shift: parallax).
+     */
+    private static void stars(BridgeClient bridge, Vector3d mario) {
+        UPos at = UPos.of(mario);
+        Universe.Sector sector = Universe.sectorOf(at);
+        if (starsFrom != null && sector.equals(starsSector) && starsFrom.distance(mario) < starsNearest / 10) return;
+        List<Universe.Star> stars = starsHidden ? List.of() : universe.around(at, STAR_SECTORS);
+        byte[] m = StarField.message(stars, at, STAR_SKIP_BLOCKS, UNITS);
+        if (!bridge.send(Layout.MSG_STARS, m)) return;
+        starsFrom = new Vector3d(mario);
+        starsSector = sector;
+        starsSent = java.nio.ByteBuffer.wrap(m).getInt();
+        starsNearest = Double.MAX_VALUE;
+        for (Universe.Star s : stars) {
+            double d = s.center().minus(at).length();
+            if (d >= STAR_SKIP_BLOCKS * UNITS) starsNearest = Math.min(starsNearest, d);
+        }
     }
 
     private static void move(BridgeClient bridge, UPos goal) {
@@ -118,6 +164,7 @@ public final class UniverseClient {
     static void leave(BridgeClient bridge) {
         universe = null;
         pinned = null;
+        starsFrom = null;
         if (GameOrigin.origin().peek(UPos.ZERO) != null && GameOrigin.moveTo(UPos.ZERO, m -> bridge.send(Layout.MSG_ORIGIN, m)) == null)
             GameOrigin.reset(); // not linked: the next scene is told anew
         told = false;

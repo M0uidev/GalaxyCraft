@@ -537,8 +537,9 @@ public:
     gStarsNext ^= 1;
   }
 
-  // Points of light around the camera at almost its far plane, behind everything else drawn after
-  // them, by direction only: where the origin is does not matter.
+  // Points of light around the camera at almost its far plane, by direction only: where the origin
+  // is does not matter. No depth test: the sky drawn before writes a nearer depth than theirs
+  // (measured: tested, none showed); every planet is drawn after them, over them.
   static void DrawStars(const f32 proj[7])
   {
     if (!gStarsDraw)
@@ -571,7 +572,7 @@ public:
     GXSetFog(GX_FOG_NONE, 0.f, 0.f, 0.f, 0.f, black);
     GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
     GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
-    GXSetZMode(GX_TRUE, GX_LEQUAL, GX_FALSE);
+    GXSetZMode(GX_FALSE, GX_ALWAYS, GX_FALSE);
     GXSetCullMode(GX_CULL_NONE);
     GXSetColorUpdate(GX_TRUE);
     GXSetAlphaUpdate(GX_FALSE);

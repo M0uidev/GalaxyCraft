@@ -52,6 +52,18 @@ public final class UniverseProbe implements FabricClientGameTest {
         ctx.waitTicks(100);
         check(ctx.computeOnClient(mc -> UniverseClient.universe() != null), "the world has its universe");
 
+        waitReal(ctx, mc -> UniverseClient.starsSent() > 0, 30);
+        log("stars on the sky: " + ctx.computeOnClient(mc -> UniverseClient.starsSent()));
+        check(ctx.computeOnClient(mc -> UniverseClient.starsSent()) > 100, "the other systems are stars on the sky");
+        ctx.runOnClient(mc -> mc.player.setXRot(-30));
+        ctx.waitTicks(20);
+        gxdev("ctl", "shot universe-stars");
+        ctx.runOnClient(mc -> UniverseClient.hideStars(true));
+        ctx.waitTicks(20);
+        gxdev("ctl", "shot universe-nostars");
+        ctx.runOnClient(mc -> UniverseClient.hideStars(false));
+        ctx.waitTicks(10);
+        ctx.runOnClient(mc -> mc.player.setXRot(0));
         origin(ctx);
         voidFlight(ctx);
         systems(ctx);
@@ -78,7 +90,7 @@ public final class UniverseProbe implements FabricClientGameTest {
         log(String.format("a million blocks out, standing still: Mario moves %.3f units at most", far));
         gxdev("ctl", "shot universe-million");
         boolean broke = ctx.computeOnClient(mc -> {
-            PlanetSession s = PlanetClient.focus();
+            PlanetSession s = PlanetClient.standingOn();
             Vector3d feet = GalaxyCraftClient.galaxyPos().orElseThrow();
             Vector3d up = GalaxyCraftClient.galaxyUp().orElseThrow();
             return s.breakBlock(new Vector3d(up).mul(160).add(feet), new Vector3d(up).negate(), true);
@@ -102,9 +114,10 @@ public final class UniverseProbe implements FabricClientGameTest {
         ctx.waitTicks(40);
         Vector3d dir = new Vector3d(0, 1, 0);
         Vector3d start = new Vector3d(dir).mul(4500 * U);
+        // Counted from home: out there it follows Mario, or goes to a system's center if he flies into one.
+        int moves = ctx.computeOnClient(mc -> UniverseClient.moves());
         ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(start));
         ctx.waitTicks(60);
-        int moves = ctx.computeOnClient(mc -> UniverseClient.moves());
         List<Vector3d> path = new ArrayList<>();
         // 6000 blocks more, 25 a tick: the origin should move once or twice on the way.
         for (int t = 0; t < 240; t++) {
