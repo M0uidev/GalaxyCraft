@@ -35,6 +35,8 @@ public final class GravityFrame {
     /** r as it was before this tick's update: drawing between ticks turns smoothly from it. */
     private final Quaterniond rPrev = new Quaterniond();
     private final Vector3d t = new Vector3d();
+    /** How far slide moved the player this tick (galaxy units): drawing between ticks moves it gradually. */
+    private final Vector3d slid = new Vector3d();
 
     public GravityFrame(Vector3d galStart, Vector3d mcStart, Vector3d gStart) {
         if (gStart.lengthSquared() > 1e-12) {
@@ -59,6 +61,7 @@ public final class GravityFrame {
         r.set(o.r);
         rPrev.set(o.rPrev);
         t.set(o.t);
+        slid.set(o.slid);
     }
 
     public GravityFrame copy() {
@@ -80,6 +83,22 @@ public final class GravityFrame {
      */
     public void startTick() {
         rPrev.set(r);
+        slid.zero();
+    }
+
+    /**
+     * Moves the player by d in the galaxy (galaxy units) while it stays where it is in Minecraft:
+     * the pulse, faster than Minecraft lets a player move (its server would pull it back, and it would
+     * fill the void overworld with chunks).
+     */
+    public void slide(Vector3d galUnits) {
+        t.sub(r.transform(new Vector3d(galUnits).mul(SCALE)));
+        slid.add(galUnits);
+    }
+
+    /** toGal for drawing between ticks (partial 0: the last tick, 1: this one): a slide comes in gradually. */
+    public Vector3d toGal(Vector3d mc, double partial) {
+        return toGal(mc).sub(new Vector3d(slid).mul(1 - partial));
     }
 
     public Vector3d dirToMc(Vector3d d) {

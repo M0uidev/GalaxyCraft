@@ -169,4 +169,16 @@ class GravityFrameTest {
         Vector3d d = new Vector3d(0, 0, 1);
         assertTrue(f.dirToGal(d, 0.3).distance(f.dirToGal(d)) < 1e-12, "no swing back to last tick's turn");
     }
+
+    @Test void aSlideMovesThePlayerInTheGalaxyNotInMinecraft() {
+        GravityFrame f = new GravityFrame(v(1000, 2000, 3000), v(5, 100, 7), v(0.3, -1, 0.2));
+        Vector3d mc = v(5, 100, 7);
+        f.startTick();
+        f.slide(v(800, 0, -1600));
+        org.junit.jupiter.api.Assertions.assertTrue(f.toGal(mc).distance(v(1800, 2000, 1400)) < 1e-6, "moved by the slide");
+        org.junit.jupiter.api.Assertions.assertTrue(f.toGal(mc, 0).distance(v(1000, 2000, 3000)) < 1e-6, "drawn from where it was");
+        org.junit.jupiter.api.Assertions.assertTrue(f.toGal(mc, 0.5).distance(v(1400, 2000, 2200)) < 1e-6, "halfway between ticks");
+        f.startTick();
+        org.junit.jupiter.api.Assertions.assertTrue(f.toGal(mc, 0).distance(v(1800, 2000, 1400)) < 1e-6, "next tick starts there");
+    }
 }

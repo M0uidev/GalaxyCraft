@@ -234,7 +234,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         boolean walker = ownPhysics() && frame != null && mc.player != null && bridge.gameLinked();
         // The elytra in Mario's modes: Mario himself flies there (in his Launch Star pose), not Steve.
         boolean marioFlies = walker && !walking() && mc.player.isFallFlying() && view() != View.FIRST;
-        PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt))) : null,
+        PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt)), pt) : null,
                 walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
         SkinClient.frame(bridge);
         bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
@@ -407,6 +407,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         bridge.setEntering(EnteringScreen.entering(client));
         bridge.poll();
         EnteringScreen.tick(client);
+        Warp.tick(client);
         PlanetClient.flushDropAll(bridge);
         LocalPlayer player = client.player;
         if (player == null) return;

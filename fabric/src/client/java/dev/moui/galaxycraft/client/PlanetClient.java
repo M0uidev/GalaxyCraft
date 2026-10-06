@@ -1065,6 +1065,11 @@ public final class PlanetClient {
         landPending = true;
     }
 
+    /** Every planet streamed (complete or far), its gravity: universe units. */
+    static java.util.List<PlanetLayout.Sphere> streamedSpheres() {
+        return stream == null ? java.util.List.of() : stream.spheres();
+    }
+
     /** Where that planet's file is (end-to-end tests); null out of a world. */
     public static java.nio.file.Path planetFile(int index) {
         return store == null || stage == null ? null : store.file(PlanetStore.key(stage, index));

@@ -102,6 +102,13 @@ final class GalaxyStream {
         return all;
     }
 
+    /** Every streamed planet's gravity (universe units): what a pulse slows down for. */
+    List<PlanetLayout.Sphere> spheres() {
+        List<PlanetLayout.Sphere> out = new ArrayList<>();
+        for (GalaxyCatalog.Entry e : all()) out.add(new PlanetLayout.Sphere(e.center(), PlanetSession.gravityRadius(e.radius()) * UNITS));
+        return out;
+    }
+
     /** That planet's entry; a generated system's is made then if its system is not in yet. */
     Optional<GalaxyCatalog.Entry> entry(int index) {
         Optional<GalaxyCatalog.Entry> e = all().stream().filter(x -> x.index() == index).findFirst();
