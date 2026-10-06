@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (blocks show what they hold done)
+Last updated: 2026-10-06 (blocks show what they hold done; signs open their editor when put down)
 
 ---
 
@@ -116,6 +116,7 @@ Last updated: 2026-10-06 (blocks show what they hold done)
 | 2026-10-06 | Entering a world is silent (no SMG2 boot, music or landing sounds) until the zoom from space | edd62e6 |
 | 2026-10-06 | Chests (also trapped, ender and copper), beds, signs and hanging signs, banners, mob heads, shulker boxes, decorated pots, bells, lecterns, conduits drawn on planets as Minecraft draws them, at no cost per frame; the off hand's item in Steve's left hand | 793e34d |
 | 2026-10-06 | Blocks that work on planets: beds and the straw bed (respawn point, sleeping the night through), signs (typing their text), charged respawn anchors (respawn point, no explosion), the lit TNT drawn, ender chests, shelves, rails with Mario riding the minecart; landing after a teleport waits for the ground (no more falling to a planet's core on entering a world) | 40c23e9 |
+| 2026-10-06 | Signs as in Minecraft: putting one down opens its editor; clicking Done no longer breaks the sign (a button held as a screen closes is ignored until let go) | 1a73a2b |
 | 2026-10-06 | Blocks show what they hold: signs' text (colors, glowing text), banner patterns, a player head's own skin, items on shelves and campfires, pot sherds, chest and shulker box lids opening, all lit by the planet; the shield as Minecraft's model (with its banner) in Steve's hand, raised to block | 687a92a |
 | 2026-10-06 | The game is called **Super Minecraft Galaxy** everywhere players see it (menus, chat, Dolphin, game list, README); code keeps the galaxycraft ids so worlds carry over. Discord server renamed to match | 0e844e7 |
 
