@@ -123,6 +123,15 @@ public final class WorkingBlocksProbe implements FabricClientGameTest {
                         .map(net.minecraft.network.chat.Component::getString).toList())
                 : "no sign at " + pos);
         report(text.contains("Hola/GalaxyCraft"), "what is typed stays on the sign (" + text + ")");
+        run(ctx, 20);
+        String after = ctx.computeOnClient(mc -> {
+            var live = ShadowWorld.live();
+            return net.minecraft.world.level.block.Block.stateById(s.planet().get(cell)) + ", hidden " + s.planet().hidden(cell) + ", live "
+                    + (live != null && live.list().stream().anyMatch(l -> l.cell() == cell));
+        });
+        System.out.println("[GalaxyCraft working] the sign after writing: " + after);
+        report(s.planet().get(cell) != dev.moui.galaxycraft.voxel.Blocks.AIR && !s.planet().hidden(cell),
+                "the written sign is still on the planet, its board in the mesh (" + after + ")");
     }
 
     /** A shelf takes the item in hand, clicked on its front. */

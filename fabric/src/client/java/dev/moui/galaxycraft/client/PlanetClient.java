@@ -152,6 +152,9 @@ public final class PlanetClient {
     private static MinecraftServer worldgenServer;
     static final BlueprintStore blueprints = new BlueprintStore(planetDir().resolveSibling("blueprints"));
     private static int lastButtons;
+    /** Buttons held since a screen had them: not the game's until let go. */
+    private static int screenButtons;
+    private static boolean screenLast;
     private static boolean lastP;
     private static int sinceSave;
     private static final ShadowLink shadow = new ShadowLink(() -> focus);
@@ -559,6 +562,12 @@ public final class PlanetClient {
         int buttons = in.map(Seqlock.InputState::buttons).orElse(0);
         boolean p = in.map(i -> (i.keys()[SC_P / 8] >> (SC_P % 8) & 1) != 0).orElse(false);
         boolean screen = Minecraft.getInstance().gui.screen() != null; // the clicks are the screen's
+        // As Minecraft: a button pressed on a screen (Done on a sign's editor) is not the game's
+        // once the screen closes, until it is let go (else it breaks what the crosshair is on).
+        // The tick after it closes too: the click that closed it may land between two ticks.
+        screenButtons = screen || screenLast ? buttons : screenButtons & buttons;
+        screenLast = screen;
+        buttons &= ~screenButtons;
         PlanetSession was = focus;
         focus = nearest(world.queryPos());
         if (focus != was) {
@@ -1139,6 +1148,10 @@ public final class PlanetClient {
                     return;
                 }
                 placed(focus);
+                int cell = focus.lastPlaced();
+                if (cell >= 0 && shadow.available()
+                        && blocks.state(focus.planet().get(cell)).getBlock() instanceof net.minecraft.world.level.block.SignBlock)
+                    ShadowWorld.placedSign(focus.planet(), cell, player.getUUID());
                 if (!creative) useUp(player, hand, held);
             };
             if (aim == null || !shadow.available()) place.run();

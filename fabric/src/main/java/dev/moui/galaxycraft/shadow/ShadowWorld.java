@@ -463,12 +463,29 @@ public final class ShadowWorld {
         }
         var slot = proxy != null && !proxy.isRemoved() ? sign.getSlotPlayerIsFacing(proxy)
                 : net.minecraft.world.level.block.entity.SignTextSlot.FRONT;
+        openEditor(sp, pos, state, sign, slot);
+        return InteractionResult.SUCCESS;
+    }
+
+    /** A sign the player just put down: its editor opens on the front, as Minecraft's sign item opens it. */
+    public static void placedSign(VoxelPlanet p, int cell, UUID player) {
+        ops.add(level -> {
+            if (p != planet || map == null) return;
+            BlockPos pos = new BlockPos(map.x(cell), map.y(cell), map.z(cell));
+            ServerPlayer sp = level.getServer().getPlayerList().getPlayer(player);
+            if (sp != null && level.getBlockEntity(pos) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign && !sign.isWaxed())
+                openEditor(sp, pos, level.getBlockState(pos), sign, net.minecraft.world.level.block.entity.SignTextSlot.FRONT);
+        });
+    }
+
+    private static void openEditor(ServerPlayer sp, BlockPos pos, BlockState state, net.minecraft.world.level.block.entity.SignBlockEntity sign,
+            net.minecraft.world.level.block.entity.SignTextSlot slot) {
+        if (signEditor == null) return;
         editing.put(sp.getUUID(), pos);
         SignEdit edit = new SignEdit(pos, state, sign.getText(net.minecraft.world.level.block.entity.SignTextSlot.FRONT),
                 sign.getText(net.minecraft.world.level.block.entity.SignTextSlot.BACK), slot);
         Consumer<SignEdit> open = signEditor;
         toClient.add(() -> open.accept(edit));
-        return InteractionResult.SUCCESS;
     }
 
     /**

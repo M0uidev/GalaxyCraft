@@ -109,6 +109,8 @@ public final class DrawnBlocksProbe implements FabricClientGameTest {
     private void hold(ClientGameTestContext ctx, TestSingleplayerContext sp, PlanetSession s) {
         ctx.runOnClient(mc -> mc.player.setYRot(0));
         ctx.waitTicks(10);
+        placeAndWrite(ctx, sp, s);
+        write(ctx, sp, s);
         java.util.List<Integer> cells = ctx.computeOnClient(mc -> place(s, HOLD, 3));
         check(cells.size() == HOLD.length, "every block that holds something is on the planet (" + cells.size() + ")");
         if (cells.size() != HOLD.length) return; // Mario is not on the planet: nothing more to look at
@@ -199,6 +201,81 @@ public final class DrawnBlocksProbe implements FabricClientGameTest {
         ctx.getInput().releaseKey(o -> o.keyUse);
         ctx.getInput().pressKey(o -> o.keyTogglePerspective);
         ctx.getInput().pressKey(o -> o.keyTogglePerspective);
+    }
+
+    /**
+     * As a player: a sign put down with a right click opens its editor, and Done clicked with the
+     * left button (still held as the editor closes) does not break the sign it was written on.
+     */
+    private void placeAndWrite(ClientGameTestContext ctx, TestSingleplayerContext sp, PlanetSession s) {
+        sp.getServer().runCommand("item replace entity @a weapon.mainhand with oak_sign");
+        ctx.runOnClient(mc -> {
+            mc.player.setYRot(0);
+            mc.player.setXRot(45);
+        });
+        ctx.waitTicks(20);
+        gxdev("ctl", "keys rmb");
+        ctx.waitTicks(4);
+        gxdev("ctl", "keys");
+        ctx.waitTicks(20);
+        int cell = ctx.computeOnClient(mc -> s.lastPlaced());
+        String placed = ctx.computeOnClient(mc -> cell < 0 ? "nothing" : net.minecraft.world.level.block.Block.stateById(s.planet().get(cell)).toString());
+        check(placed.contains("sign"), "a right click puts a sign down (" + placed + ")");
+        String screen = ctx.computeOnClient(mc -> mc.gui.screen() == null ? "none" : mc.gui.screen().getClass().getSimpleName());
+        check(screen.contains("Sign"), "putting a sign down opens its editor (" + screen + ")");
+        if (!screen.contains("Sign")) return;
+        ctx.getInput().typeChars("Puesto");
+        shot(ctx, "place-editor");
+        gxdev("ctl", "keys lmb"); // the left button down as Done is clicked, and held a while after
+        ctx.waitTicks(4);
+        ctx.clickScreenButton("gui.done");
+        ctx.waitTicks(40);
+        gxdev("ctl", "keys");
+        ctx.waitTicks(20);
+        String after = ctx.computeOnClient(mc -> net.minecraft.world.level.block.Block.stateById(s.planet().get(cell)).toString());
+        check(after.contains("sign"), "the sign written on stays after Done with the button held (" + after + ")");
+        shot(ctx, "place-after");
+        ctx.runOnClient(mc -> s.planet().set(cell, Blocks.AIR));
+        sp.getServer().runCommand("item replace entity @a weapon.mainhand with air");
+        ctx.runOnClient(mc -> mc.player.setXRot(30));
+        ctx.waitTicks(20);
+    }
+
+    /** A sign and a hanging sign written on with Minecraft's sign editor, as a player does: they stay, with the text. */
+    private void write(ClientGameTestContext ctx, TestSingleplayerContext sp, PlanetSession s) {
+        java.util.List<Integer> cells = ctx.computeOnClient(mc -> place(s, new String[] {"oak_sign[rotation={s}]",
+                "oak_hanging_sign[rotation={s},attached=false]"}, 2));
+        check(cells.size() == 2, "a sign and a hanging sign on the planet");
+        if (cells.size() != 2) return;
+        sp.getServer().runCommand("item replace entity @a weapon.mainhand with air");
+        ctx.waitFor(mc -> s.queued() == 0, 600);
+        ctx.waitTicks(40);
+        shot(ctx, "write-before");
+        for (int k = 0; k < 2; k++) {
+            int cell = cells.get(k);
+            ctx.runOnClient(mc -> dev.moui.galaxycraft.shadow.ShadowWorld.use(s.planet(), cell, CubeSphere.TOP,
+                    new net.minecraft.world.phys.Vec3(0.5, 0.5, 0.5), mc.player.getUUID(), net.minecraft.world.InteractionHand.MAIN_HAND, () -> {}));
+            ctx.waitTicks(10);
+            String screen = ctx.computeOnClient(mc -> mc.gui.screen() == null ? "none" : mc.gui.screen().getClass().getSimpleName());
+            check(screen.contains("Sign"), "the editor opens (" + screen + ")");
+            if (!screen.contains("Sign")) continue;
+            ctx.getInput().typeChars("Hola");
+            ctx.getInput().pressKey(com.mojang.blaze3d.platform.InputConstants.KEY_RETURN);
+            ctx.getInput().typeChars("Galaxy");
+            ctx.clickScreenButton("gui.done");
+            ctx.waitTicks(10);
+        }
+        ctx.waitTicks(40);
+        for (int c : cells) {
+            String state = ctx.computeOnClient(mc -> net.minecraft.world.level.block.Block.stateById(s.planet().get(c)) + ", hidden "
+                    + s.planet().hidden(c));
+            log("written: " + state);
+        }
+        shot(ctx, "write-after");
+        ctx.runOnClient(mc -> {
+            for (int c : cells) s.planet().set(c, Blocks.AIR);
+        });
+        ctx.waitTicks(20);
     }
 
     /** 100 signs with text and 50 banners in view: the emulator's spare speed without and with them. */
