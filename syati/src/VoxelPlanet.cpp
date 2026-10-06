@@ -883,6 +883,25 @@ public:
     const bool translucent = pass == PASS_CLEAR;
     if (p.far && pass == PASS_FAR)
     {
+      // Past the camera's far plane the GPU would clip it away: drawn smaller and nearer by the
+      // same factor, about the camera, it looks the same and stays in front of that plane.
+      // GX's perspective: m22 = -n/(f-n), m23 = -fn/(f-n), so f = m23/m22.
+      const f32 farZ = proj[5] != 0.f ? proj[6] / proj[5] : 0.f;
+      const f32 dist = gxc::Sqrt(eye[0] * eye[0] + eye[1] * eye[1] + eye[2] * eye[2]);
+      const f32 reach = dist + p.surface + 32.f * 80.f;
+      f32 scale = 1.f;
+      if (farZ > 0.f && reach > 0.9f * farZ)  // its far side kept under 0.99 f, nearer ones nearer
+        scale = farZ * (0.9f + 0.09f * (1.f - 0.9f * farZ / reach)) / reach;
+      if (scale < 1.f)
+      {
+        f32 at[3];
+        for (int k = 0; k < 3; k++)
+          at[k] = p.center[k] + eye[k] * (1.f - scale);  // camera + (center - camera) * scale
+        gxc::ViewTranslate(view, at, planet);
+        for (int r = 0; r < 3; r++)
+          for (int c = 0; c < 3; c++)
+            planet[4 * r + c] *= scale;
+      }
       GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(planet), GX_PNMTX0);
       for (u32 f = 0; f < p.far_count; f++)
       {
@@ -892,7 +911,7 @@ public:
         f32 pos[12];
         gxc::ViewTranslate(planet, part.sphere, pos);
         const f32 at[3] = {pos[3], pos[7], pos[11]};
-        if (gxc::SphereOutsideView(proj, at, part.sphere[3]))
+        if (gxc::SphereOutsideView(proj, at, part.sphere[3] * scale))
           continue;
         GXCallDisplayList(part.dl, part.dl_size);
         (*far)++;

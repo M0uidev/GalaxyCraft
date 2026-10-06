@@ -107,6 +107,8 @@ class PlanetLayoutTest {
         assertEquals(12, PlanetLayout.farPatches(r, 500 * 80, 0));   // ~23 degrees
         assertEquals(6, PlanetLayout.farPatches(r, 4000 * 80, 0));   // ~2.9 degrees
         assertEquals(3, PlanetLayout.farPatches(r, 9000 * 80, 0));   // ~1.3 degrees
+        assertEquals(2, PlanetLayout.farPatches(r, 30000 * 80, 0));  // ~0.38 degrees
+        assertEquals(1, PlanetLayout.farPatches(r, 80000 * 80, 0));  // ~0.14 degrees: a cube
         double six = r / Math.tan(Math.toRadians(3)); // exactly 6 degrees across
         assertEquals(12, PlanetLayout.farPatches(r, six * 1.05, 12), "a little smaller keeps 12");
         assertEquals(6, PlanetLayout.farPatches(r, six * 0.95, 6), "a little bigger keeps 6");

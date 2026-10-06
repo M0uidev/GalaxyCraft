@@ -264,7 +264,7 @@ final class GalaxyStream {
         try {
             if (fromCells.contains(e.index())) {
                 // Its cells are gone with its session: the patches it had, until it is complete again.
-                for (int p : new int[] {12, 6, 3}) {
+                for (int p : new int[] {12, 6, 3, 2, 1}) {
                     PlanetLod.Part[] had = meshes.get(e.index() << 4 | p);
                     if (had != null) return had;
                 }

@@ -105,14 +105,22 @@ public final class PlanetLayout {
         return out;
     }
 
+    /** A far view's patches along a face's edge, and the angle (degrees) a planet must span for each. */
+    static final int[] FAR_PATCHES = {12, 6, 3, 2, 1};
+    static final double[] FAR_ANGLES = {6, 2, 0.7, 0.25};
+
     /**
-     * Patches along a face's edge for a planet drawn from afar: 12 while it spans more than 6
-     * degrees of view, 6 above 2, else 3; had (its patches now, 0: none) moves only 20% past a
-     * threshold, so it does not flicker there.
+     * Patches along a face's edge for a planet drawn from afar: fewer the smaller it looks (12
+     * while it spans more than 6 degrees of view, down to 1, a cube, under 0.25); had (its
+     * patches now, 0: none) moves only 20% past a threshold, so it does not flicker there.
      */
     public static int farPatches(double radius, double distance, int had) {
         double angle = Math.toDegrees(2 * Math.atan(radius / Math.max(distance, 1e-9)));
-        double up12 = had == 12 ? 6 * 0.8 : 6 * 1.2, up6 = had >= 6 ? 2 * 0.8 : 2 * 1.2;
-        return angle > up12 ? 12 : angle > up6 ? 6 : 3;
+        for (int k = 0; k < FAR_ANGLES.length; k++) {
+            // Level k (or finer) now: it stays until 20% under; coarser now: it goes up only 20% over.
+            double needed = FAR_ANGLES[k] * (had >= FAR_PATCHES[k] ? 0.8 : 1.2);
+            if (angle > needed) return FAR_PATCHES[k];
+        }
+        return 1;
     }
 }

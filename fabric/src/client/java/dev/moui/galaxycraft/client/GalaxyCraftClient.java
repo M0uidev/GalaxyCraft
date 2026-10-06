@@ -213,7 +213,8 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         boolean walker = ownPhysics() && frame != null && mc.player != null && bridge.gameLinked();
         // The elytra in Mario's modes: Mario himself flies there (in his Launch Star pose), not Steve.
         boolean marioFlies = walker && !walking() && mc.player.isFallFlying() && view() != View.FIRST;
-        PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt))) : null,
+        PlanetClient.frame(bridge, pt, walker ? frame.toGal(new Vector3d(mc.player.xo, mc.player.yo, mc.player.zo),
+                vec(mc.player.position()), pt) : null,
                 walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
         SkinClient.frame(bridge);
         bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
@@ -389,6 +390,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             settleTicks = SETTLE_TICKS;
             GalaxyCraft.LOG.info("Linked to galaxy at {}", world.get().queryPos());
         } else {
+            frame.startTick();
             Flight.beforeFrame(player, world.get(), frame, world.get().follow() && !flying && !ownPhysics());
             boolean space = ownPhysics() && Flight.space(player, world.get(), frame);
             // Look and velocity are left alone in Minecraft space, so they turn with the frame
@@ -400,7 +402,9 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             } else if (Flight.active() && !player.onGround()) {
                 // Elytra: up turns to the gravity that pulls, at a flight's pace; in the void
                 // (no gravity) it stays as it was.
-                if (!space) frame.update(Flight.upToward(frame, gravity).negate(), pos);
+                // The look stays where it was in the galaxy: flying into a planet's pull turns up, not
+                // where the player faces.
+                if (!space) keepLook(player, frame.update(Flight.upToward(frame, gravity).negate(), pos));
             } else if (world.get().follow() && world.get().hasGravity() && !ownPhysics()) {
                 // Nobody walks by Minecraft's physics here, so the frame may lag the gravity a
                 // little: the camera's up turns smoothly instead of snapping at planet edges.
@@ -491,6 +495,22 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             if (holding) hold(player, false);
             player.setNoGravity(true);
         }
+    }
+
+    /** After a re-aim of the frame: the look turned with it, so it points where it did in the galaxy. */
+    private static void keepLook(LocalPlayer player, GravityFrame.Update u) {
+        if (!u.rotated()) return;
+        double[] t = LookMath.turned(player.getYRot(), player.getXRot(), u.deltaMc());
+        float yaw = (float) t[0], pitch = (float) t[1];
+        float dy = yaw - player.getYRot(), dx = pitch - player.getXRot();
+        player.setYRot(yaw);
+        player.setXRot(pitch);
+        player.yRotO += dy;
+        player.xRotO += dx;
+        player.yHeadRot += dy;
+        player.yHeadRotO += dy;
+        player.yBodyRot += dy;
+        player.yBodyRotO += dy;
     }
 
     /**
