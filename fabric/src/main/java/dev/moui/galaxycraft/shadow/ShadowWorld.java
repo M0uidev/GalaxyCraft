@@ -356,10 +356,10 @@ public final class ShadowWorld {
      * A right click on cell's side face at hit (its model space), as Minecraft's
      * ServerPlayerGameMode.useItemOn does it, but leaving block items and buckets to the planet:
      * the block's use (a door opens, a lever flips, a chest opens its menu), else the held item's
-     * use on it (flint and steel, bone meal, a hoe). If neither does anything, onPass runs on the
-     * client thread.
+     * use on it (flint and steel, bone meal, a hoe), with what is in hand. If neither does anything,
+     * onPass runs on the client thread.
      */
-    public static void use(VoxelPlanet p, int cell, int face, Vec3 hit, UUID player, Runnable onPass) {
+    public static void use(VoxelPlanet p, int cell, int face, Vec3 hit, UUID player, InteractionHand hand, Runnable onPass) {
         ops.add(level -> {
             ServerPlayer sp = server.getPlayerList().getPlayer(player);
             if (p != planet || map == null || sp == null) {
@@ -370,18 +370,19 @@ public final class ShadowWorld {
             mirrorNow(level, pos);
             BlockHitResult h = new BlockHitResult(Vec3.atLowerCornerOf(pos).add(hit),
                     Direction.values()[CellSpace.DIRECTION_OF_SIDE[face]], pos, false);
-            if (!use(level, sp, h).consumesAction()) toClient.add(onPass);
+            if (!use(level, sp, hand, h).consumesAction()) toClient.add(onPass);
         });
     }
 
-    private static InteractionResult use(ServerLevel level, ServerPlayer sp, BlockHitResult h) {
+    private static InteractionResult use(ServerLevel level, ServerPlayer sp, InteractionHand hand, BlockHitResult h) {
         BlockState state = level.getBlockState(h.getBlockPos());
-        ItemStack stack = sp.getMainHandItem();
+        ItemStack stack = sp.getItemInHand(hand);
         InteractionResult r = InteractionResult.PASS;
         boolean handsFull = !stack.isEmpty() || !sp.getOffhandItem().isEmpty();
         if (!(sp.isSecondaryUseActive() && handsFull)) {
-            r = state.useItemOn(stack, level, sp, InteractionHand.MAIN_HAND, h);
-            if (r instanceof InteractionResult.TryEmptyHandInteraction) r = state.useWithoutItem(level, sp, h);
+            r = state.useItemOn(stack, level, sp, hand, h);
+            if (r instanceof InteractionResult.TryEmptyHandInteraction && hand == InteractionHand.MAIN_HAND)
+                r = state.useWithoutItem(level, sp, h);
         }
         if (r.consumesAction() || stack.isEmpty() || stack.getItem() instanceof BlockItem
                 || stack.getItem() instanceof BucketItem || sp.getCooldowns().isOnCooldown(stack))
@@ -397,11 +398,11 @@ public final class ShadowWorld {
             return r;
         }
         int count = stack.getCount();
-        r = stack.useOn(new UseOnContext(level, sp, InteractionHand.MAIN_HAND, stack, h));
+        r = stack.useOn(new UseOnContext(level, sp, hand, stack, h));
         if (sp.hasInfiniteMaterials()) stack.setCount(count);
         else if (r instanceof InteractionResult.Success s && s.heldItemTransformedTo() != null
                 && s.heldItemTransformedTo() != stack)
-            sp.setItemInHand(InteractionHand.MAIN_HAND, s.heldItemTransformedTo());
+            sp.setItemInHand(hand, s.heldItemTransformedTo());
         return r;
     }
 

@@ -2,6 +2,7 @@ package dev.moui.galaxycraft.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import dev.moui.galaxycraft.GalaxyCraft;
+import dev.moui.galaxycraft.client.mixin.BlockItemInvoker;
 import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.voxel.Atlas;
 import dev.moui.galaxycraft.voxel.BlockInfo;
@@ -497,15 +498,20 @@ public final class McBlocks implements Blocks {
     }
 
     /**
-     * How the held block item goes onto a planet, by Minecraft's rules: getStateForPlacement with
-     * the player turned (for that call) to its look in the cell's axes, clicking the cell's face
-     * and point; what it then becomes next to its neighbors (updateShape); refused where it cannot
-     * stay (canSurvive). Doors and tall plants take the cell above too, beds the one at their head.
-     * Null for anything but a block item.
+     * How the held block item goes onto a planet, by Minecraft's rules: the item's
+     * getPlacementState (a torch, head or sign clicked onto a wall's side becomes its wall
+     * version) with the player turned (for that call) to its look in the cell's axes, clicking the
+     * face of the block cell is against, at the point clicked; what it then becomes next to its
+     * neighbors (updateShape); refused where it cannot stay (canSurvive). Doors and tall plants
+     * take the cell above too, beds the one at their head. Null for anything but a block item.
      */
     public Placer placer(ItemStack stack) {
+        return placer(stack, InteractionHand.MAIN_HAND);
+    }
+
+    /** placer(stack), held in hand. */
+    public Placer placer(ItemStack stack, InteractionHand hand) {
         if (!(stack.getItem() instanceof BlockItem item)) return null;
-        Block block = item.getBlock();
         return (p, cell, face, hit, look) -> {
             BlockState placed = withNeighborhood(p, cell, (level, pos) -> {
                 LocalPlayer player = mc.player;
@@ -520,8 +526,13 @@ public final class McBlocks implements Blocks {
                     player.setXRot(pitch);
                     player.yRotO = yaw;
                     player.xRotO = pitch;
-                    s = block.getStateForPlacement(new BlockPlaceContext(player, InteractionHand.MAIN_HAND, stack,
-                            new BlockHitResult(at, clicked, pos, false)));
+                    // Clicked on the block it goes against, as in Minecraft: that face's way is tried
+                    // first (a wall torch on the wall), not only the look's (a torch on the floor below).
+                    // Into short grass with air behind, the grass itself was clicked.
+                    BlockPos against = pos.relative(clicked.getOpposite());
+                    if (level.getBlockState(against).canBeReplaced()) against = pos;
+                    s = ((BlockItemInvoker) item).galaxycraft$placementState(new BlockPlaceContext(player, hand, stack,
+                            new BlockHitResult(at, clicked, against, false)));
                 } finally {
                     player.setYRot(yRot);
                     player.setXRot(xRot);
