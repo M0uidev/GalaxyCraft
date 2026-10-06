@@ -47,6 +47,7 @@ const u32 AFTER_FILE_SELECT = 0x804D62C0;
 const u32 AFTER_FILE_SELECT_FIRST = 0x9421FFF0;
 
 bool gSpaceStage, gTeleported;
+uint32_t gMusicFrames;  // BootMusicFrames
 u32 gOriginal[2];  // the replaced instruction and a branch back: the game's own function
 bool gOriginalReady;
 
@@ -193,6 +194,14 @@ void BootTeleported()
 void BootPlanetsDropped()
 {
   gTeleported = false;
+}
+
+uint32_t BootMusicFrames()
+{
+  const bool playing = gSpaceStage && MR::isPlayingStageBgm();
+  if (playing)
+    gMusicFrames++;
+  return gMusicFrames << 1 | (playing ? 1u : 0u);
 }
 
 // FileSelector's vtable: control (+ 0x50).

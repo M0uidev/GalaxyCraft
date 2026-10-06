@@ -489,6 +489,30 @@ TEST(boot_space_holds_mario_while_minecraft_is_in_its_menus)
   CHECK(f.bridge.InMenu() && f.mem.GetU32(MBX + 52) == (GXC_MBX_BOOT_SPACE | GXC_MBX_HOLD));
 }
 
+TEST(boot_space_is_silent_until_the_world_is_entered)
+{
+  // Entering a world, Minecraft's screen covers the game while it loads its galaxy and lands
+  // Mario: nothing of it is heard until that screen gives way to the zoom from space.
+  Fixture f;
+  f.bridge.SetBootSpace(true);
+  f.ModReports(1, {10, 20, 30});
+  f.Tick();
+  CHECK(f.bridge.Silent());  // Minecraft's title
+  f.shm->SetU32(offsetof(GxcHeader, mod_flags), GXC_MOD_IN_WORLD | GXC_MOD_ENTERING);
+  f.ModReports(2, {10, 20, 30});
+  f.Tick();
+  CHECK(f.bridge.Silent() && !f.bridge.InMenu());  // in the world, still entering
+  f.shm->SetU32(offsetof(GxcHeader, mod_flags), GXC_MOD_IN_WORLD);
+  f.ModReports(3, {10, 20, 30});
+  f.Tick();
+  CHECK(!f.bridge.Silent());  // the zoom: heard from here on
+  f.bridge.SetBootSpace(false);
+  f.shm->SetU32(offsetof(GxcHeader, mod_flags), GXC_MOD_IN_WORLD | GXC_MOD_ENTERING);
+  f.ModReports(4, {10, 20, 30});
+  f.Tick();
+  CHECK(!f.bridge.Silent());  // SMG2 played as itself: never silenced
+}
+
 TEST(boot_space_stays_in_the_world_through_a_stall_of_minecraft)
 {
   Fixture f;

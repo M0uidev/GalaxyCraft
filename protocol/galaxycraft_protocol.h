@@ -41,6 +41,8 @@
 
 /* mod_flags: Minecraft is in a world (else its title, world list or another menu). */
 #define GXC_MOD_IN_WORLD 2u
+/* mod_flags: entering that world, its screen still over the game (the galaxy loads, Mario lands): silent. */
+#define GXC_MOD_ENTERING 4u
 
 /* Heartbeat older than this means the other side is gone. */
 #define GXC_HEARTBEAT_TIMEOUT_MS 2000

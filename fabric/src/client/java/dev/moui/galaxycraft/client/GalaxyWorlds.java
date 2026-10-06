@@ -25,7 +25,10 @@ final class GalaxyWorlds {
 
     static void joined(Minecraft client) {
         MinecraftServer server = client.getSingleplayerServer();
-        if (server == null) return; // another's server: no galaxy of ours
+        if (server == null) { // another's server: no galaxy of ours
+            EnteringScreen.show(client);
+            return;
+        }
         GalaxySave galaxy = GalaxySave.of(server.getWorldPath(LevelResource.ROOT));
         if (galaxy.isNew()) {
             // Only a world just made gets Mario's rules and the starter hotbar; one made elsewhere

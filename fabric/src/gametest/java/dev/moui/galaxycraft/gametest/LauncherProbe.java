@@ -41,6 +41,7 @@ public final class LauncherProbe implements FabricClientGameTest {
         String[] mbx = mbxFlags();
         check(mbx[1].equals("GalaxyCraftSpace"), "SMG2 booted into GalaxyCraftSpace by itself");
         check(hostFlags(mbx) == (BOOT_SPACE | HOLD), "at the title, Mario is held (host flags " + mbx[0] + ")");
+        check(muted(), "at the title, the game is silent");
         ctx.takeScreenshot("launch-title");
 
         ctx.runOnClient(mc -> CreateWorldScreen.openFresh(mc, () -> mc.gui.setScreen(new TitleScreen())));
@@ -87,8 +88,27 @@ public final class LauncherProbe implements FabricClientGameTest {
 
         ctx.runOnClient(mc -> mc.createWorldOpenFlows().openWorld(world, () -> mc.gui.setScreen(new TitleScreen())));
         waitReal(ctx, mc -> mc.player != null && mc.level != null, 60);
+        // Entering, behind Minecraft's screen, the game is not heard: only once the zoom has begun.
+        // The sound comes back as the screen fades into the zoom (its last 300 ms): heard only then.
+        int samples = 0, loud = 0, lastQuiet = 0;
+        // The entering screen comes up the tick after Minecraft's loading screen goes.
+        for (int t = 0; t < 40 && ctx.computeOnClient(mc -> mc.gui.screen() == null); t++) ctx.waitTicks(1);
+        long end = System.nanoTime() + 120_000_000_000L;
+        while (ctx.computeOnClient(mc -> mc.gui.screen() != null) && System.nanoTime() < end) {
+            samples++;
+            if (muted()) lastQuiet = samples;
+            else loud++;
+            ctx.waitTicks(5);
+        }
+        check(lastQuiet > 0 && loud <= 2 && samples - lastQuiet == loud,
+                "entering a world, the game is silent until the fade (" + lastQuiet + " quiet, then " + loud + " heard)");
         waitReal(ctx, mc -> onSurface(), 120);
+        waitReal(ctx, mc -> mc.gui.screen() == null, 30);
         ctx.waitTicks(60);
+        check(!muted(), "after the zoom from space the game is heard again");
+        // GalaxyCraftSpace plays no music of its own: Minecraft's is the world's.
+        int music = debugWord(DBG_MUSIC);
+        check(music == 0, "SMG2's galaxy music never played (" + (music >>> 1) + " frames)");
         int again = ctx.computeOnClient(mc -> PlanetClient.focus().active()
                 ? Arrays.hashCode(PlanetClient.focus().planet().cells()) : 0);
         check(again == cells, "the planet comes back as it was left");
@@ -144,6 +164,26 @@ public final class LauncherProbe implements FabricClientGameTest {
 
     private static void log(String msg) {
         System.out.println("[GalaxyCraft launch] " + msg);
+    }
+
+    /** Debug.music (syati GalaxyCraft.cpp, BootMusicFrames): right after the mailbox (4048 bytes), 112 words in. */
+    private static final int DBG_MUSIC = 4048 + 4 * 112;
+
+    /** A word of the module's debug block, from the dev Dolphin (-1 if the mailbox is not found). */
+    private static int debugWord(int offset) {
+        Matcher m = java.util.regex.Pattern.compile("^at=([0-9a-f]+)", java.util.regex.Pattern.MULTILINE)
+                .matcher(gxdev("ctl", "mbx"));
+        if (!m.find()) return -1;
+        long at = Long.parseLong(m.group(1), 16) + offset;
+        String[] parts = gxdev("ctl", "peek 0x" + Long.toHexString(at) + " 4").strip().split("\\s+");
+        int v = 0;
+        for (int i = parts.length - 4; i < parts.length; i++) v = (v << 8) | Integer.parseInt(parts[i], 16);
+        return v;
+    }
+
+    /** Whether the dev Dolphin has the game's sound off. */
+    private static boolean muted() {
+        return gxdev("ctl", "status").contains("muted=true");
     }
 
     /** Runs tools/gxdev.py (the dev Dolphin's control channel) and returns its output. */

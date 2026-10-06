@@ -20,3 +20,6 @@ bool BootHoldMario();
 void BootTeleported();
 // The mod dropped every planet (it left its world): Mario waits at the origin again.
 void BootPlanetsDropped();
+// Every frame: the frames the galaxy's music has played in GalaxyCraftSpace (Minecraft plays its
+// own; none is expected, and MR::stopStageBGM every frame froze the game). Bit 0: playing now.
+uint32_t BootMusicFrames();

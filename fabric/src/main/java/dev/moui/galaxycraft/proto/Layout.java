@@ -35,6 +35,8 @@ public final class Layout {
     public static final int HOST_SPACE_READY = 4;
     /** mod_flags: Minecraft is in a world (else Dolphin shows its menus over the game). */
     public static final int MOD_IN_WORLD = 2;
+    /** mod_flags: entering that world, its screen still over the game: silent (GXC_MOD_ENTERING). */
+    public static final int MOD_ENTERING = 4;
 
     public static final long HEARTBEAT_TIMEOUT_MS = 2000;
     public static final int KCL_CHUNK_MAX = 65536;
