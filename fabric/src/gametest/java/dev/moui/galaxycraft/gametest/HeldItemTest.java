@@ -68,6 +68,22 @@ public final class HeldItemTest implements FabricClientGameTest {
                 slot(ctx, i);
                 gxdev("ctl", "shot held-side-" + i + "-" + ITEMS[i - 1]);
             }
+            // A torch in the off hand, the sword in the main one: one in each of Steve's hands.
+            ctx.runOnClient(mc -> mc.player.setYRot(mc.player.getYRot() - 90));
+            slot(ctx, 8);
+            sp.getServer().runCommand("item replace entity @a weapon.offhand with torch");
+            ctx.waitTicks(20);
+            int both = heldKind();
+            check((both & 0xFF) == HeldItem.TOOL && (both >> 8) == HeldItem.ITEM,
+                    "the sword in the right hand and the torch in the left (" + Integer.toHexString(both) + ")");
+            gxdev("ctl", "shot held-offhand");
+            ctx.runOnClient(mc -> mc.player.setYRot(mc.player.getYRot() + 180));
+            ctx.waitTicks(20);
+            gxdev("ctl", "shot held-offhand-left");
+            ctx.runOnClient(mc -> mc.player.setYRot(mc.player.getYRot() - 180));
+            sp.getServer().runCommand("item replace entity @a weapon.offhand with air");
+            ctx.waitTicks(20);
+            check(heldKind() >> 8 == HeldItem.NONE, "the left hand empty again");
             // The Galaxy view (the game's camera) shows him too.
             ctx.getInput().pressKey(o -> o.keyTogglePerspective);
             ctx.getInput().pressKey(o -> o.keyTogglePerspective);

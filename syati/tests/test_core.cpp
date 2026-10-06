@@ -588,12 +588,17 @@ static void TestInboxHeld()
   Put32(b, 106u << 16), Put32(b, 2064), Put32(b, 1), Put32(b, 0), Put32(b, 0), Put32(b, 0);
   for (int k = 0; k < 2048; k++)
     b.push_back(static_cast<u8>(k));
+  Put32(b, 106u << 16), Put32(b, 2064), Put32(b, 3), Put32(b, 1), Put32(b, 0), Put32(b, 0);  // the off hand
+  b.resize(b.size() + 2048);
+  Put32(b, 106u << 16), Put32(b, 2064), Put32(b, 3), Put32(b, 2), Put32(b, 0), Put32(b, 0);  // no hand 2
+  b.resize(b.size() + 2048);
   Put32(b, 106u << 16), Put32(b, 2064), Put32(b, 5), Put32(b, 0), Put32(b, 0), Put32(b, 0);  // no kind 5
   b.resize(b.size() + 2048);
   InboxRecord r;
   u32 off = 0;
   CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::HELD);
-  CHECK(r.held.kind == HELD_BLOCK && r.held.sprite == b.data() + 24 && r.held.sprite[2047] == 255);
+  CHECK(r.held.kind == HELD_BLOCK && r.held.hand == 0 && r.held.sprite == b.data() + 24 && r.held.sprite[2047] == 255);
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.held.kind == HELD_ITEM && r.held.hand == 1);
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
 }
 

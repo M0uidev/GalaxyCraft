@@ -1,4 +1,4 @@
-// What the player holds in Minecraft, in Steve's right hand inside SMG2: Minecraft's model of it
+// What the player holds in Minecraft, in Steve's hands inside SMG2 (the off hand's in the left): Minecraft's model of it
 // (a cube, or the sprite as a flat item; core/HeldMesh) placed on his forearm as Minecraft's third
 // person places it (build/gen/held.h, from Mario's skeleton by tools/steve/build.py), so it follows
 // Mario's animations. Drawn only while Steve is: not in first person, where Minecraft draws the hand.
@@ -18,11 +18,16 @@ struct Model
   u8* dl;  // HELD_DL_MAX bytes
   u8* sprite;  // 16x64 RGB5A3 (HELD_SPRITE_BYTES)
 };
-Model gModels[2] = {{0, 0}, {0, 0}};
-u32 gNext = 0;
-const Model* gDraw = 0;  // null: nothing in hand
-u32 gDrawSize = 0;
-u32 gKind = 0;
+// By hand: 0 the right (main), 1 the left (off).
+struct Hand
+{
+  Model models[2];
+  u32 next;
+  const Model* draw;  // null: nothing in hand
+  u32 size;
+  u32 kind;
+};
+Hand gHands[2];
 const LiveActor* gMario = 0;
 bool gShown = false;
 
@@ -40,10 +45,17 @@ public:
 
   virtual void draw() const
   {
-    if (!gDraw || !gShown || !gMario)
+    if (!gShown || !gMario || (!gHands[0].draw && !gHands[1].draw))
       return;
     MR::loadProjectionMtx();  // as VoxelPlanet's draw: another pass may have left its own
-    const MtxPtr joint = MR::getJointMtx(gMario, GXC_HELD_JOINT);
+    for (int h = 0; h < 2; h++)
+      if (gHands[h].draw)
+        DrawHand(gHands[h], h == 0 ? GXC_HELD_JOINT : GXC_HELD_JOINT_L, h == 0 ? gHeldMtx : gHeldMtxL);
+  }
+
+  static void DrawHand(const Hand& hand, const char* jointName, const f32 (*placement)[12])
+  {
+    const MtxPtr joint = MR::getJointMtx(gMario, jointName);
     if (!joint)
       return;
     f32 j[12], view[12], arm[12], pos[12];
@@ -54,7 +66,7 @@ public:
         j[4 * r + c] = joint[r][c];
         view[4 * r + c] = cam[r][c];
       }
-    gxc::Mul34(j, gHeldMtx[gKind - 1], arm);
+    gxc::Mul34(j, placement[hand.kind - 1], arm);
     gxc::Mul34(view, arm, pos);
 
     GXClearVtxDesc();
@@ -70,7 +82,7 @@ public:
     GXSetNumTexGens(1);
     GXSetTexCoordGen2(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY, GX_FALSE, GX_PTIDENTITY);
     GXTexObj tex;
-    GXInitTexObj(&tex, gDraw->sprite, gxc::HELD_SPRITE, gxc::HELD_SPRITE * gxc::HELD_BANDS, GX_TF_RGB5A3, GX_CLAMP,
+    GXInitTexObj(&tex, hand.draw->sprite, gxc::HELD_SPRITE, gxc::HELD_SPRITE * gxc::HELD_BANDS, GX_TF_RGB5A3, GX_CLAMP,
                  GX_CLAMP, GX_FALSE);
     GXInitTexObjLOD(&tex, GX_NEAR, GX_NEAR, 0.f, 0.f, 0.f, GX_FALSE, GX_FALSE, GX_ANISO_1);
     GXLoadTexObj(&tex, GX_TEXMAP0);
@@ -94,7 +106,7 @@ public:
     GXSetDstAlpha(GX_FALSE, 0);
     GXSetCurrentMtx(GX_PNMTX0);
     GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(pos), GX_PNMTX0);
-    GXCallDisplayList(gDraw->dl, gDrawSize);
+    GXCallDisplayList(hand.draw->dl, hand.size);
     GXSetZCompLoc(GX_TRUE);
   }
 };
@@ -103,8 +115,7 @@ public:
 void HeldItemCreate()
 {
   // A new scene: the old one's heap (and the models in it) is gone.
-  gModels[0].dl = gModels[0].sprite = gModels[1].dl = gModels[1].sprite = 0;
-  gDraw = 0;
+  memset(gHands, 0, sizeof(gHands));
   gMario = 0;
   gShown = false;
   HeldItemActor* actor = new HeldItemActor();
@@ -113,10 +124,11 @@ void HeldItemCreate()
 
 void HeldItemSet(const gxc::InboxHeld& held)
 {
-  gDraw = 0;
+  Hand& hand = gHands[held.hand & 1];
+  hand.draw = 0;
   if (held.kind == gxc::HELD_NONE)
     return;
-  Model& m = gModels[gNext];
+  Model& m = hand.models[hand.next];
   if (!m.dl)
     m.dl = VoxelPlanetAlloc32(gxc::HELD_DL_MAX);
   if (!m.sprite)
@@ -129,10 +141,10 @@ void HeldItemSet(const gxc::InboxHeld& held)
   if (size == 0)
     return;
   DCFlushRange(m.dl, size);
-  gDraw = &m;
-  gDrawSize = size;
-  gKind = held.kind;
-  gNext ^= 1;
+  hand.draw = &m;
+  hand.size = size;
+  hand.kind = held.kind;
+  hand.next ^= 1;
 }
 
 void HeldItemFrame(const LiveActor* mario, bool shown)
@@ -143,5 +155,5 @@ void HeldItemFrame(const LiveActor* mario, bool shown)
 
 uint32_t HeldItemKind()
 {
-  return gDraw ? gKind : 0;
+  return (gHands[0].draw ? gHands[0].kind : 0) | (gHands[1].draw ? gHands[1].kind << 8 : 0);
 }
