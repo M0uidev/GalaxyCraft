@@ -130,17 +130,47 @@ public final class LauncherProbe implements FabricClientGameTest {
             int seconds) {
         long end = System.nanoTime() + seconds * 1_000_000_000L;
         while (!ctx.computeOnClient(what::test)) {
-            if (System.nanoTime() > end) throw new AssertionError("Timed out after " + seconds + " s");
+            if (System.nanoTime() > end) {
+                log("stuck: " + ctx.computeOnClient(mc -> state()) + " | host " + gxdev("ctl", "mbx").strip());
+                throw new AssertionError("Timed out after " + seconds + " s");
+            }
             ctx.waitTicks(5);
         }
     }
 
-    /** The player stands on a planet: within 3 blocks of its surface (not held at its center). */
+    /** Where the mod has the player, for a stuck wait: frame, position, planets and how far from their surfaces. */
+    private static String state() {
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        StringBuilder b = new StringBuilder();
+        Vector3d feet = GalaxyCraftClient.galaxyPos().orElse(null);
+        b.append("linked=").append(GalaxyCraftClient.linked()).append(" frame=").append(GalaxyCraftClient.frame() != null)
+                .append(" waitingToLand=").append(PlanetClient.waitingToLand()).append(" feet=").append(feet)
+                .append(" mcPos=").append(mc.player == null ? null : mc.player.position())
+                .append(" screen=").append(mc.gui.screen() == null ? null : mc.gui.screen().getClass().getSimpleName());
+        for (PlanetSession s : PlanetClient.planets())
+            if (s != null && s.active()) {
+                b.append(" | planet c=").append(s.center()).append(" surface=").append(s.planet().surface())
+                        .append(" queued=").append(s.queued());
+                if (feet != null) b.append(" height=").append(String.format("%.1f", s.localOf(feet).length() - s.planet().surface()));
+            }
+        return b.toString();
+    }
+
+    /**
+     * The player stands on a planet: a solid block within 2 blocks under the feet (generated
+     * planets have hills and trees: the ground is not at the planet's nominal surface).
+     */
     private static boolean onSurface() {
         PlanetSession s = PlanetClient.standingOn();
         Vector3d feet = GalaxyCraftClient.galaxyPos().orElse(null);
         if (s == null || feet == null) return false;
-        return Math.abs(s.localOf(feet).length() - s.planet().surface()) < 3;
+        Vector3d local = s.localOf(feet);
+        Vector3d down = new Vector3d(local).normalize().negate();
+        for (double d = 0.25; d <= 2; d += 0.25) {
+            int cell = s.planet().grid.cellAt(new Vector3d(down).mul(d).add(local));
+            if (cell >= 0 && s.planet().info(cell).collides()) return true;
+        }
+        return false;
     }
 
     private void check(boolean that, String what) {

@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (quiet entry done; entering hang noted in Polish)
+Last updated: 2026-10-06 (the entering hang was the test's, not the game's: removed; Windows support: seamless goal noted)
 
 ---
 
@@ -76,7 +76,7 @@ Last updated: 2026-10-06 (quiet entry done; entering hang noted in Polish)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Windows support | planned | Research done, nothing changed yet: [docs/WINDOWS.md](docs/WINDOWS.md). |
+| Windows support | planned | Research done, nothing changed yet: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. |
 | Multiplayer | idea | Out of the first design's scope. |
 | Minecraft on one PC, Dolphin on another | idea | Would need a network transport instead of shared memory. |
 
@@ -87,8 +87,7 @@ Last updated: 2026-10-06 (quiet entry done; entering hang noted in Polish)
 | `gxroute.py sky` route broken | planned | Can't regenerate `sky.sav`, so `MarioPerspectivesTest` / `gxe2e.sh` fail. |
 | Far view at ~40 blocks still draws chunks | planned | Costs speed (~123%). |
 | Rare LodProbe send stall | planned | Not reproduced. |
-| Teleport lands inside a planet | planned | Not reproduced; the mod logs it now. Report the log lines if it happens. |
-| Entering a new world sometimes never lands | planned | Seen 2026-10-06 in `LauncherProbe` on master and with the sound off alike (about 2 runs in 3 on a new world): Dolphin announces the galaxy's scene again after Mario was teleported, the mod relinks without the host's anchor and the player is never on the surface (180 s timeout). Same "scene announced twice" family as the old stuck-after-Replace. |
+| Teleport lands inside a planet | planned | Reproduced 2026-10-06 in `LauncherProbe` (reopening a world, 1 of 2 runs): "lands at 48.0 (ground 48.0, surface 48.0)", then Mario is found at the planet's center (47.5 blocks under the surface). Same runs sometimes fail "the planet comes back as it was left": the planet may come back incomplete. |
 | Non-cube blocks never checked visually in SMG2 | planned | Slabs, stairs, flowers on a planet: needs a screenshot pass. |
 
 ---
