@@ -86,6 +86,19 @@ class PlanetSessionTest {
         assertTrue(first < last, "nearest first: y " + first + " then " + last);
     }
 
+    @Test void marioAtThePlanetsCoreIsStuckThere() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(32, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, new Vector3d(s.center()).add(0, 33 * 80, 0)); // on its top
+        assertFalse(s.marioAtCore());
+        s.update(3, 100, new Vector3d(s.center()).add(0, 10 * 80, 0)); // deep in a mine
+        assertFalse(s.marioAtCore());
+        s.update(3, 100, new Vector3d(s.center()).add(0, 80, 40)); // fallen through to its middle
+        assertTrue(s.marioAtCore());
+        s.update(3, 100, null);
+        assertFalse(s.marioAtCore());
+    }
+
     @Test void collisionOnlyNearMario() {
         PlanetSession s = new PlanetSession(80);
         s.spawn(64, MARIO, new Vector3d(0, 1, 0));

@@ -64,6 +64,8 @@ struct Debug
   u32 riding;          // bit 0: Mario sits on a minecart or boat (GXC_MSG_SEAT); above: seat records seen
   uint32_t boot[4];       // Boot.h: file selector, its nerve (r13 - N), frames in it, steps taken
   u32 music;              // BootMusicFrames: bit 0 the galaxy's music plays, above: frames it played
+  u32 landing_frames;     // VoxelPlanetLandingFrames: frames the last landing was held for its ground
+  uint32_t teleports[3];  // VoxelPlanetTeleports: received, applied, kept for their planet
 };
 
 struct Published
@@ -504,8 +506,10 @@ void MarioMovement(void* self)
   for (u32 i = 0; i < sizeof(gCameraStickPatches) / sizeof(gCameraStickPatches[0]); i++)
     SetWordPatch(gCameraStickPatches[i], gFollowing && !gDemo && !GalaxyView());
   // GalaxyCraftSpace: Mario waits at the origin until the mod puts him on a planet.
-  const bool held = BootHoldMario();
+  const bool held = BootHoldMario() || VoxelPlanetHoldLanding();
   gOut.dbg.music = BootMusicFrames();
+  gOut.dbg.landing_frames = VoxelPlanetLandingFrames();
+  VoxelPlanetTeleports(gOut.dbg.teleports);
   SetWordPatch(gAbyssKillPatch, EntityDrawSafeFromAbyss() || held);
   // Steve (Mario's model) is hidden only in first person; cutscenes always show him.
   gHidden = !gxc::MarioVisible(gFollowing, gDemo, (gOut.mbx.host_flags & GXC_MBX_THIRD_PERSON) != 0) &&

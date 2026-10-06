@@ -27,6 +27,18 @@ class GalaxySaveTest {
         assertEquals(spot, GalaxySave.of(world).spot().orElseThrow());
     }
 
+    @Test void theBedIsKeptApartFromTheSpot() throws Exception {
+        GalaxySave g = GalaxySave.of(world);
+        assertTrue(g.bed().isEmpty());
+        GalaxySave.Spot bed = new GalaxySave.Spot(1, 0, 3900, 0, 0, 0), spot = new GalaxySave.Spot(1, 10, 3880, 0, 5, 0);
+        g.writeBed(bed);
+        g.writeSpot(spot);
+        assertEquals(bed, GalaxySave.of(world).bed().orElseThrow());
+        assertEquals(spot, GalaxySave.of(world).spot().orElseThrow());
+        g.clearBed();
+        assertTrue(GalaxySave.of(world).bed().isEmpty());
+    }
+
     @Test void aBrokenSpotIsNoSpot() throws Exception {
         GalaxySave g = GalaxySave.of(world);
         g.markMade();

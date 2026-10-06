@@ -9,6 +9,14 @@ void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size);
 void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_size);
 // Mario moved this frame (before VoxelPlanetFrame): replaced collision may go once he has moved a while.
 void VoxelPlanetMarioMoved();
+// After Mario's movement: right after a teleport he is held where he lands until the game has the
+// ground there (the planet's collision can come a few frames after him; he would fall through
+// to its core). True while held.
+bool VoxelPlanetHoldLanding();
+// Frames the last landing has been held so far, for the dev harness.
+uint32_t VoxelPlanetLandingFrames();
+// Teleports received, applied, and kept waiting for their planet, for the dev harness.
+void VoxelPlanetTeleports(uint32_t out[3]);
 // The collision sphere Mario should have at pos (galaxy units) in the planet's gravity, if the
 // mod gave one (GxcPlanet.mario_radius): his own is 1.5 blocks wide and fits no tunnel.
 bool VoxelPlanetMarioRadius(const float pos[3], float* radius);

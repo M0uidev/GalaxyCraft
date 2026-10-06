@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -55,6 +56,7 @@ public final class LauncherProbe implements FabricClientGameTest {
         waitReal(ctx, mc -> PlanetClient.galaxy() != null && onSurface(), 180);
         check(PlanetClient.galaxy() != null, "the world has a galaxy");
         check(ctx.computeOnClient(mc -> onSurface()), "the player stands on the home planet's surface");
+        logLanding();
         String world = ctx.computeOnClient(mc -> mc.getSingleplayerServer().getWorldPath(
                 net.minecraft.world.level.storage.LevelResource.ROOT).normalize().getFileName().toString());
         ctx.waitTicks(60);
@@ -74,7 +76,7 @@ public final class LauncherProbe implements FabricClientGameTest {
         check(broke, "a block under the player is broken");
         ctx.waitTicks(120); // the spot is saved every 5 s
         waitReal(ctx, mc -> onSurface(), 30);
-        int cells = ctx.computeOnClient(mc -> Arrays.hashCode(PlanetClient.focus().planet().cells()));
+        char[] cells = ctx.computeOnClient(mc -> PlanetClient.focus().planet().cells().clone());
         Vector3d before = ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyPos().orElseThrow());
 
         ctx.runOnClient(mc -> mc.disconnectWithSavingScreen());
@@ -109,9 +111,19 @@ public final class LauncherProbe implements FabricClientGameTest {
         // GalaxyCraftSpace plays no music of its own: Minecraft's is the world's.
         int music = debugWord(DBG_MUSIC);
         check(music == 0, "SMG2's galaxy music never played (" + (music >>> 1) + " frames)");
-        int again = ctx.computeOnClient(mc -> PlanetClient.focus().active()
-                ? Arrays.hashCode(PlanetClient.focus().planet().cells()) : 0);
-        check(again == cells, "the planet comes back as it was left");
+        char[] again = ctx.computeOnClient(mc -> PlanetClient.focus().active() ? PlanetClient.focus().planet().cells().clone() : new char[0]);
+        logLanding();
+        // Cell by cell: what Minecraft's own ticks change meanwhile (grass spreading, leaves, crops)
+        // is the world going on; anything else came back wrong.
+        List<String> changed = ctx.computeOnClient(mc -> {
+            List<String> out = new java.util.ArrayList<>();
+            if (again.length != cells.length) return List.of("the planet is not there (" + again.length + " cells)");
+            for (int c = 0; c < cells.length; c++)
+                if (cells[c] != again[c]) out.add(PlanetClient.blocks().name(cells[c]) + " -> " + PlanetClient.blocks().name(again[c]));
+            return out;
+        });
+        log(changed.size() + " cells differ" + (changed.isEmpty() ? "" : ": " + changed.subList(0, Math.min(12, changed.size()))));
+        check(changed.stream().allMatch(LauncherProbe::ticked), "the planet comes back as it was left");
         Vector3d after = ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyPos().orElse(new Vector3d(1e9)));
         check(after.distance(before) < 200, String.format("the player is back where they stood (%.0f units off)",
                 after.distance(before)));
@@ -119,6 +131,7 @@ public final class LauncherProbe implements FabricClientGameTest {
         ctx.runOnClient(mc -> mc.disconnectWithSavingScreen());
         waitReal(ctx, mc -> mc.level == null, 60);
         ctx.setScreen(TitleScreen::new); // as the pause menu's Save and Quit does; game tests end there
+        log("host: " + gxdev("ctl", "status").replaceAll(".*(republished=\\S+).*", "$1").strip());
         log(ok ? "PASS" : "FAIL");
     }
 
@@ -131,7 +144,8 @@ public final class LauncherProbe implements FabricClientGameTest {
         long end = System.nanoTime() + seconds * 1_000_000_000L;
         while (!ctx.computeOnClient(what::test)) {
             if (System.nanoTime() > end) {
-                log("stuck: " + ctx.computeOnClient(mc -> state()) + " | host " + gxdev("ctl", "mbx").strip());
+                log("stuck: " + ctx.computeOnClient(mc -> state()) + " | host " + gxdev("ctl", "mbx").strip() + " | "
+                        + gxdev("ctl", "status").strip());
                 throw new AssertionError("Timed out after " + seconds + " s");
             }
             ctx.waitTicks(5);
@@ -209,6 +223,23 @@ public final class LauncherProbe implements FabricClientGameTest {
         int v = 0;
         for (int i = parts.length - 4; i < parts.length; i++) v = (v << 8) | Integer.parseInt(parts[i], 16);
         return v;
+    }
+
+    /** The module's landing: frames the last one was held for its ground; teleports received, applied, kept. */
+    private static void logLanding() {
+        log("landing held " + debugWord(DBG_MUSIC + 4) + " frames; teleports received " + debugWord(DBG_MUSIC + 8) + ", applied "
+                + debugWord(DBG_MUSIC + 12) + ", kept for their planet " + debugWord(DBG_MUSIC + 16));
+    }
+
+    /** A change Minecraft's own ticks make in a while ("from -> to" block names). */
+    private static boolean ticked(String change) {
+        String[] ab = change.split(" -> ");
+        if (ab.length != 2) return false;
+        String a = ab[0].replaceAll("\\[.*", ""), b = ab[1].replaceAll("\\[.*", "");
+        return a.equals(b) // the same block, another state: leaves' distance, crops' age, snowy grass
+                || (a.endsWith("dirt") || a.endsWith("grass_block") || a.endsWith("mycelium")) && (b.endsWith("dirt") || b.endsWith("grass_block") || b.endsWith("mycelium"))
+                || a.endsWith("_leaves") && b.equals("minecraft:air") // decay
+                || b.endsWith("snow") || a.endsWith("snow") || b.equals("minecraft:ice") || a.equals("minecraft:water");
     }
 
     /** Whether the dev Dolphin has the game's sound off. */

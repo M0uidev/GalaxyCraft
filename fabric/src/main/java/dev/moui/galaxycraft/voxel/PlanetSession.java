@@ -320,6 +320,22 @@ public final class PlanetSession {
         return teleportToward(mario == null || mario.lengthSquared() < 1 ? new Vector3d(0, 1, 0) : mario);
     }
 
+    /** Blocks from the center within which Mario can only be after falling through the planet. */
+    static final double CORE = 2.5;
+
+    /**
+     * Mario is at the planet's core: fallen through it (the game lost its ground under him for a
+     * moment). No one digs there; he is to be landed on the ground again.
+     */
+    public boolean marioAtCore() {
+        return planet != null && mario != null && mario.length() < CORE;
+    }
+
+    /** A teleport waits for its landing ground to go first: not on its way to the game yet. */
+    public boolean teleportQueued() {
+        return tpQueued;
+    }
+
     /** Lands Mario on the ground straight out from the planet's center along toward (planet space); where, planet blocks. */
     public Vector3d teleportToward(Vector3d toward) {
         if (planet == null) return null;
@@ -434,6 +450,7 @@ public final class PlanetSession {
             int c = urgent.poll();
             if (c == TP_MARK) {
                 tpQueued = false;
+                dev.moui.galaxycraft.GalaxyCraft.LOG.info("Teleport onto planet {} on its way to the game", id);
                 built = new Msg(Layout.MSG_PLANET_TP, ByteBuffer.allocate(20).putFloat(tpGround).putInt(id) // big-endian: passed on as is
                         .putFloat((float) tpDir.x).putFloat((float) tpDir.y).putFloat((float) tpDir.z).array());
                 break;

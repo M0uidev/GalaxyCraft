@@ -226,6 +226,21 @@ struct Atlas
   u32 frame;            // frames drawn since, to step them
 };
 Atlas gAtlas;
+// A teleport that came before its planet, applied when the planet does (Apply, ApplyPlanet).
+gxc::InboxTeleport gPendingTeleport;
+bool gTeleportPending = false;
+// After a teleport, Mario is held where he lands until the game has the ground there
+// (VoxelPlanetHoldLanding): the planet's collision may come a few frames after him.
+struct Landing
+{
+  bool active;
+  f32 to[3], up[3];
+  u32 frames;
+};
+Landing gLanding = {false, {0, 0, 0}, {0, 0, 0}, 0};
+u32 gTeleports[3] = {0, 0, 0};  // received, applied, kept for their planet
+const u32 LANDING_MAX_FRAMES = 600;  // ten seconds: whatever happens, he is let go
+const f32 LANDING_PROBE_ABOVE = 200.f, LANDING_PROBE_BELOW = 400.f;  // units around where he lands
 
 u8* Alloc32(u32 size);
 
@@ -429,20 +444,37 @@ public:
     }
     else if (r.type == gxc::InboxRecord::TELEPORT)
     {
+      // Before its planet (in a later batch): kept until the planet comes, not lost (Mario would
+      // wait at the galaxy's center, inside the planet there, for a teleport already gone).
       const Planet* p = Find(r.teleport.planet);
-      if (!p)
-        return;
-      const TVec3f* mario = MR::getPlayerPos();
-      f32 m[3] = {mario->x, mario->y, mario->z};
-      if (r.teleport.aimed)  // where the mod measured the ground, not above wherever Mario is now
-        for (int k = 0; k < 3; k++)
-          m[k] = p->center[k] + 100.f * r.teleport.dir[k];
-      f32 to[3];
-      // Onto the ground under him (a hill, something built), not into it.
-      gxc::PlanetDrop(p->center, r.teleport.ground > 0.f ? r.teleport.ground : p->surface, DROP_ABOVE, m, to);
-      MR::setPlayerPos(TVec3f(to[0], to[1], to[2]));
-      BootTeleported();
+      gTeleports[0]++;
+      if (p)
+        Teleport(*p, r.teleport);
+      else
+        gPendingTeleport = r.teleport, gTeleportPending = true, gTeleports[2]++;
     }
+  }
+
+  static void Teleport(const Planet& p, const gxc::InboxTeleport& tp)
+  {
+    gTeleportPending = false;
+    gTeleports[1]++;
+    const TVec3f* mario = MR::getPlayerPos();
+    f32 m[3] = {mario->x, mario->y, mario->z};
+    if (tp.aimed)  // where the mod measured the ground, not above wherever Mario is now
+      for (int k = 0; k < 3; k++)
+        m[k] = p.center[k] + 100.f * tp.dir[k];
+    f32 to[3];
+    // Onto the ground under him (a hill, something built), not into it.
+    gxc::PlanetDrop(p.center, tp.ground > 0.f ? tp.ground : p.surface, DROP_ABOVE, m, to);
+    MR::setPlayerPos(TVec3f(to[0], to[1], to[2]));
+    BootTeleported();
+    f32 up[3] = {to[0] - p.center[0], to[1] - p.center[1], to[2] - p.center[2]};
+    const f32 len = gxc::Sqrt(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
+    gLanding.active = len > 0.f;
+    gLanding.frames = 0;
+    for (int k = 0; k < 3; k++)
+      gLanding.to[k] = to[k], gLanding.up[k] = len > 0.f ? up[k] / len : 0.f;
   }
 
   // id 0 drops every planet; GONE drops that one; otherwise it is new or changed (a chunk_count of
@@ -452,7 +484,7 @@ public:
     if (in.id == 0 || (in.flags & gxc::PLANET_GONE))
     {
       if (in.id == 0)
-        BootPlanetsDropped();
+        BootPlanetsDropped(), gTeleportPending = false, gLanding.active = false;
       for (u32 i = 0; i < MAX_PLANETS; i++)
         if (gPlanets[i].id && (in.id == 0 || gPlanets[i].id == in.id))
           Drop(gPlanets[i]);
@@ -494,6 +526,8 @@ public:
       p->gravity->updateIdentityMtx();
     }
     mTranslation = TVec3f(p->center[0], p->center[1], p->center[2]);
+    if (gTeleportPending && (gPendingTeleport.planet == 0 || gPendingTeleport.planet == p->id))
+      Teleport(*p, gPendingTeleport);
   }
 
   void Drop(Planet& p)
@@ -1181,6 +1215,8 @@ void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size)
 {
   // A new scene: the old one's heap (chunks, parts, inbox) is gone, so forget it, don't free it.
   memset(gPlanets, 0, sizeof(gPlanets));
+  gTeleportPending = false;
+  gLanding.active = false;
   gHitboxDl[0] = gHitboxDl[1] = 0;
   gHitboxOn = false;
   gGraves.Reset();
@@ -1242,4 +1278,43 @@ void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_s
       gActor->Apply(r);
   }
   h->state = 0;
+}
+
+bool VoxelPlanetHoldLanding()
+{
+  if (!gLanding.active)
+    return false;
+  if (++gLanding.frames > LANDING_MAX_FRAMES)
+  {
+    gLanding.active = false;
+    return false;
+  }
+  // The ground under where he lands, in the game's own collision: once it is there, he goes.
+  TVec3f from(gLanding.to[0] + LANDING_PROBE_ABOVE * gLanding.up[0], gLanding.to[1] + LANDING_PROBE_ABOVE * gLanding.up[1],
+              gLanding.to[2] + LANDING_PROBE_ABOVE * gLanding.up[2]);
+  const f32 reach = -(LANDING_PROBE_ABOVE + LANDING_PROBE_BELOW);
+  TVec3f down(reach * gLanding.up[0], reach * gLanding.up[1], reach * gLanding.up[2]);
+  TVec3f hit;
+  Triangle tri;
+  if (MR::getFirstPolyOnLineToMap(&hit, &tri, from, down))
+  {
+    gLanding.active = false;
+    return false;
+  }
+  MR::setPlayerPos(TVec3f(gLanding.to[0], gLanding.to[1], gLanding.to[2]));
+  TVec3f* v = MR::getPlayerVelocity();
+  if (v)
+    v->set(0.f, 0.f, 0.f);
+  return true;
+}
+
+uint32_t VoxelPlanetLandingFrames()
+{
+  return gLanding.frames;
+}
+
+void VoxelPlanetTeleports(uint32_t out[3])
+{
+  for (int k = 0; k < 3; k++)
+    out[k] = gTeleports[k];
 }

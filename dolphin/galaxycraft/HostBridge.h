@@ -60,6 +60,8 @@ public:
   bool BootSpace() const { return m_boot_space; }
   // Booting by ourselves and Minecraft is not in a world: its menus have the screen and the input.
   bool InMenu() const { return m_boot_space && !m_in_world; }
+  // Scenes published to the mod again, by why: after HELLO, new scenes, relinks.
+  const u32* Republished() const { return m_republished; }
   // The game unheard: in Minecraft's menus, or while a world is entered behind its screen.
   bool Silent() const { return InMenu() || (m_boot_space && m_entering); }
   // Minecraft mode with a live mod (or a dev follow): the Wii Remote override belongs to us.
@@ -161,6 +163,7 @@ private:
   bool m_in_world = false;
   bool m_entering = false;
   bool m_relink = false;
+  u32 m_republished[3] = {0, 0, 0};  // scenes published again: after HELLO, new scenes, relinks
   bool m_link_on_save = false;
   bool m_on_title = true;
   u32 m_host_seq = 0;

@@ -263,7 +263,7 @@ public final class PlanetClient {
     }
 
     /** Minecraft's blocks for the planets, once its models are loaded (null before the first tick). */
-    static McBlocks blocks() {
+    public static McBlocks blocks() {
         return blocks;
     }
 
@@ -513,6 +513,13 @@ public final class PlanetClient {
                 && bridge.send(Layout.MSG_ATLAS, piece); ) atlasLink.sent();
         if (!bridge.stage().equals(stage)) enterStage(bridge.stage());
         boolean space = galaxy != null && Layout.SPACE_STAGE.equals(stage);
+        for (ShadowWorld.Bed b; (b = ShadowWorld.pollBed()) != null; ) slept(b, player);
+        // The player died and came back (Minecraft made it anew): Mario lands at the bed, else where he stood.
+        if (space && lastPlayer != null && player != lastPlayer) {
+            landOn = respawnSpot();
+            landPending = true;
+        }
+        lastPlayer = player;
         // A world's galaxy: its catalog (made now on its first visit), its planets streamed from it.
         if (space && stream == null && !homeAsked && worldgen() != null) {
             homeAsked = true;
@@ -569,7 +576,7 @@ public final class PlanetClient {
         if (space && frame == null && !landPending && !world.hasGravity()) {
             if (unlandedSince == 0) unlandedSince = System.nanoTime();
             else if (System.nanoTime() - unlandedSince > RELAND_NANOS) {
-                landOn = galaxy.spot().orElse(null);
+                landOn = respawnSpot();
                 landPending = true;
                 unlandedSince = 0;
             }
@@ -659,6 +666,7 @@ public final class PlanetClient {
         for (PlanetSession s : leaving)
             for (PlanetSession.Msg m; (m = s.peek(bulk)) != null && bridge.send(m.type(), m.payload()); ) s.sent();
         leaving.removeIf(s -> s.queued() == 0);
+        rescue();
         if (stream != null) stream.send(bridge, bulk);
         if (++sinceSave >= SAVE_TICKS) {
             sinceSave = 0;
@@ -671,6 +679,79 @@ public final class PlanetClient {
         Vector3d eye = frame.toGal(vec(player.getEyePosition()));
         Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
         use(player, eye, look, marioFeetGal, focus.aim(eye, look));
+    }
+
+    /** The player of the last tick: another one is the same player after dying. */
+    private static LocalPlayer lastPlayer;
+
+    /** A bed slept in: its top is where the player comes back after dying (saved with the world). */
+    private static void slept(ShadowWorld.Bed b, LocalPlayer player) {
+        GalaxySave g = galaxy;
+        if (g == null) return;
+        for (PlanetSession s : planets())
+            if (s.active() && s.planet() == b.planet()) {
+                Vector3d d = s.galOf(CellSpace.point(s.planet().grid, b.cell(), 0.5, 1, 0.5)).sub(s.center());
+                GalaxySave.Spot spot = new GalaxySave.Spot(indexOf(s), d.x, d.y, d.z, player.getYRot(), player.getXRot());
+                saver.execute(() -> {
+                    try {
+                        g.writeBed(spot);
+                    } catch (IOException e) {
+                        GalaxyCraft.LOG.warn("Could not save the bed slept in: {}", e.toString());
+                    }
+                });
+                return;
+            }
+    }
+
+    /**
+     * Where Mario lands after dying: on the last bed slept in, if it is still there (as Minecraft's
+     * respawn); else where the player last stood.
+     */
+    private static GalaxySave.Spot respawnSpot() {
+        GalaxySave g = galaxy;
+        if (g == null) return null;
+        GalaxySave.Spot bed = g.bed().orElse(null);
+        if (bed != null)
+            for (PlanetSession s : planets())
+                if (s.active() && indexOf(s) == bed.planet()) {
+                    Vector3d top = s.localOf(new Vector3d(bed.dx(), bed.dy(), bed.dz()).add(s.center()));
+                    int under = s.planet().grid.cellAt(new Vector3d(top).normalize(top.length() - 0.5));
+                    String there = under < 0 ? "" : blocks.name(s.planet().get(under));
+                    if (there.contains("_bed[") || there.startsWith("minecraft:respawn_anchor[") && !there.contains("charges=0")) return bed;
+                    saver.execute(() -> {
+                        try {
+                            g.clearBed();
+                        } catch (IOException e) {
+                            GalaxyCraft.LOG.warn("Could not forget the bed: {}", e.toString());
+                        }
+                    });
+                    Minecraft.getInstance().player.sendSystemMessage(Component.translatable("block.minecraft.spawn.not_valid"));
+                    return g.spot().orElse(null);
+                }
+        return bed != null ? bed : g.spot().orElse(null);
+    }
+
+    /**
+     * Ticks Mario must stay at a planet's core before he is rescued: right after a teleport he
+     * still waits at the galaxy's center (the home planet's) for the game to apply it.
+     */
+    private static final int AT_CORE_TICKS = 40;
+    private static int atCore;
+
+    /**
+     * Mario stuck at a planet's core (a teleport the game never applied, or a fall through it) is
+     * landed on its ground again, as P does, once he has been there AT_CORE_TICKS.
+     */
+    private static void rescue() {
+        PlanetSession stuck = null;
+        for (PlanetSession s : planets())
+            if (s.active() && s.marioAtCore() && !s.teleportQueued()) stuck = s;
+        atCore = stuck == null || waitingToLand() ? 0 : atCore + 1;
+        if (atCore < AT_CORE_TICKS) return;
+        atCore = 0;
+        GalaxyCraft.LOG.warn("Mario stuck at the core of planet {}: landed on its ground again", indexOf(stuck));
+        focus = stuck;
+        land(stuck);
     }
 
     /** Particles alive on the planet (tests). */

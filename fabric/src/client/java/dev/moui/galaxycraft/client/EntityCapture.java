@@ -121,6 +121,71 @@ final class EntityCapture implements SubmitNodeCollector {
         }
     }
 
+    /**
+     * Fabric's renderer hands block models over as a mesh (the parts list then empty): a lit TNT,
+     * a minecart's block. Its quads are taken as the block's baked ones.
+     */
+    @Override
+    public void submitBlockModel(PoseStack poseStack, java.util.function.Function<net.minecraft.client.renderer.chunk.ChunkSectionLayer, RenderType> types,
+            boolean flag, List<BlockStateModelPart> parts, net.fabricmc.fabric.api.client.renderer.v1.mesh.Mesh mesh, int[] tints, int light,
+            int overlay, int outline) {
+        if (parts != null && !parts.isEmpty()) submitBlockModel(poseStack, (RenderType) null, parts, tints, light, overlay, outline);
+        List<BakedQuad> quads = meshQuads(mesh);
+        if (!quads.isEmpty())
+            owner.quadPieces(meshKey(quads), quads, tints, place(new Matrix4f(poseStack.last().pose())), overlay(overlay), out);
+    }
+
+    @Override
+    public void submitItem(PoseStack poseStack, ItemDisplayContext context, int light, int overlay, int outline, int[] tints, ItemQuads quads,
+            net.fabricmc.fabric.api.client.renderer.v1.mesh.MeshView mesh, ItemStackRenderState.FoilType foil) {
+        submitItem(poseStack, context, light, overlay, outline, tints, quads, foil);
+        List<BakedQuad> extra = meshQuads(mesh);
+        if (!extra.isEmpty())
+            owner.quadPieces(meshKey(extra), extra, tints, place(new Matrix4f(poseStack.last().pose())), overlay(overlay), out);
+    }
+
+    /** A mesh's quads as baked ones, each with its sprite (found by where it samples the block or item atlas). */
+    private static List<BakedQuad> meshQuads(net.fabricmc.fabric.api.client.renderer.v1.mesh.MeshView mesh) {
+        List<BakedQuad> quads = new ArrayList<>();
+        if (mesh == null || mesh.size() == 0) return quads;
+        mesh.forEach(q -> {
+            TextureAtlasSprite sprite = finder().find(q);
+            if (sprite != null) quads.add(q.toBakedQuad(sprite));
+        });
+        return quads;
+    }
+
+    private static net.fabricmc.fabric.api.client.renderer.v1.sprite.SpriteFinder finder;
+
+    /** The block atlas' sprite finder (the atlas a block's quads sample). */
+    private static net.fabricmc.fabric.api.client.renderer.v1.sprite.SpriteFinder finder() {
+        if (finder == null) {
+            var mc = net.minecraft.client.Minecraft.getInstance();
+            var any = mc.getModelManager().getBlockStateModelSet().get(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+            var atlas = (net.minecraft.client.renderer.texture.TextureAtlas) mc.getTextureManager()
+                    .getTexture(any.particleMaterial().sprite().atlasLocation());
+            finder = ((net.fabricmc.fabric.api.client.renderer.v1.sprite.FabricTextureAtlas) atlas).spriteFinder();
+        }
+        return finder;
+    }
+
+    /** By their content: the same quads (a mesh made anew each frame) are the same model, made once. */
+    private static final java.util.Map<Long, Object> meshKeys = new java.util.HashMap<>();
+
+    private static Object meshKey(List<BakedQuad> quads) {
+        long h = 1;
+        for (BakedQuad q : quads) {
+            h = h * 31 + System.identityHashCode(q.materialInfo().sprite());
+            for (int k = 0; k < 4; k++) {
+                h = h * 31 + Float.floatToIntBits(q.position(k).x());
+                h = h * 31 + Float.floatToIntBits(q.position(k).y());
+                h = h * 31 + Float.floatToIntBits(q.position(k).z());
+                h = h * 31 + q.packedUV(k);
+            }
+        }
+        return meshKeys.computeIfAbsent(h, k -> new Object());
+    }
+
     @Override
     public void submitMovingBlock(PoseStack poseStack, MovingBlockRenderState state, int light) {
         Matrix4d m = new Matrix4d(at).mul(new Matrix4d(poseStack.last().pose())).translate(0.5, 0.5, 0.5).scale(1 / 16.0, -1 / 16.0, 1 / 16.0);

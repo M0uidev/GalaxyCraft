@@ -7,6 +7,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 
 import dev.moui.galaxycraft.GalaxyCraft;
+import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.bridge.BridgeClient;
 import dev.moui.galaxycraft.gravity.Follow;
 import dev.moui.galaxycraft.gravity.GravityFrame;
@@ -97,6 +98,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        ShadowWorld.signEditor = GalaxyCraftClient::editSign;
         bridge = new BridgeClient(Path.of(Layout.SHM_PATH), () -> System.nanoTime() / 1_000_000L,
                 new BridgeClient.PartListener() {
                     @Override public void onUpsert(int partId, double[] mtx, byte[] kcl) {
@@ -232,6 +234,22 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             if (exporter == null) exporter = new OverlayExporter(seg);
             exporter.capture(target);
         }, () -> exporter = null);
+    }
+
+    /**
+     * Minecraft's sign editor, on a copy of a planet's sign (the shadow's, where it is): what is
+     * written goes back to the server as for any sign, and from there to the shadow's.
+     */
+    private static void editSign(ShadowWorld.SignEdit edit) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null
+                || !(edit.state().getBlock() instanceof net.minecraft.world.level.block.EntityBlock block)
+                || !(block.newBlockEntity(edit.pos(), edit.state()) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign))
+            return;
+        sign.setLevel(mc.level);
+        sign.setText(edit.front(), net.minecraft.world.level.block.entity.SignTextSlot.FRONT);
+        sign.setText(edit.back(), net.minecraft.world.level.block.entity.SignTextSlot.BACK);
+        mc.player.openTextEdit(sign, edit.slot());
     }
 
     /** The local player's galaxy position, if linked and the frame is set up. */

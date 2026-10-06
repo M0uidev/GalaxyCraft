@@ -217,6 +217,14 @@ void HostBridge::Tick(GuestMemory& mem)
   }
   m_shm.SetU32(offsetof(GxcHeader, host_flags), 1u | ready);
 
+  // Why the scene goes to the mod again, counted for the dev harness (ctl status): HELLO, a new
+  // scene, or Minecraft back in its world after its menus.
+  if (republish)
+    m_republished[0]++;
+  else if (!m_scene || *m_scene != mbx.scene_id)
+    m_republished[1]++;
+  else if (m_relink)
+    m_republished[2]++;
   if (!m_scene || *m_scene != mbx.scene_id || m_relink)
     republish = true;
   m_relink = false;
