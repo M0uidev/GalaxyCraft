@@ -74,6 +74,11 @@ final class GalaxyStream {
         return entries.stream().filter(e -> e.index() == index).findFirst();
     }
 
+    /** That planet could not be made (it is not waited for). */
+    boolean failed(int index) {
+        return failed.contains(index);
+    }
+
     /** Complete planets and far ones (tests). */
     int[] tiers() {
         int near = 0;

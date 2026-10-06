@@ -801,6 +801,9 @@ public final class PlanetClient {
         if (landOn != null)
             for (PlanetSession p : planets())
                 if (p.active() && indexOf(p) == landOn.planet()) on = p;
+        // A galaxy's planet being made (it is far from where Mario waits): waited for, not another one.
+        if (on == null && landOn != null && stream != null && stream.entry(landOn.planet()).isPresent()
+                && !stream.failed(landOn.planet())) return;
         Vector3d dir = on != null ? new Vector3d(landOn.dx(), landOn.dy(), landOn.dz()) : new Vector3d(0, 1, 0);
         if (on == null) on = planets().stream().filter(PlanetSession::active).findFirst().orElse(null);
         if (on == null || on.queued() > 0) return; // the planet still being made, or on its way to the game
@@ -882,6 +885,12 @@ public final class PlanetClient {
     /** Complete planets and far ones in the game (end-to-end tests); {0, 0} without a galaxy. */
     public static int[] tiers() {
         return stream == null ? new int[2] : stream.tiers();
+    }
+
+    /** Mario onto that catalog planet (end-to-end tests): it is made complete first, as when entering the world there. */
+    public static void travelTo(int index) {
+        landOn = new GalaxySave.Spot(index, 0, 1, 0, 0, 0);
+        landPending = true;
     }
 
     /** The galaxy's catalog (end-to-end tests); empty without one. */

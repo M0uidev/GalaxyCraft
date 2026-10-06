@@ -18,19 +18,23 @@
 #                             itself and Mario waits there (tools/gxboot.py; --fresh-nand: no save file)
 #   tools/gxvoxel.sh launch   LauncherProbe: title screen, Create World, the home planet, leave and come
 #                             back (launch-*.png in fabric/build/run/clientGameTest/screenshots)
+#   tools/gxvoxel.sh galaxy   GalaxyProbe: Create World's tab, a galaxy of 20 planets, 8 complete and the
+#                             rest far, an edit on the farthest kept (galaxy-*.png)
 set -u
-if [ "${1:-}" = launch ]; then
-  # LauncherProbe: the dev Dolphin boots by itself (no savestate), Minecraft starts at its title.
+if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ]; then
+  # LauncherProbe (or GalaxyProbe, a world of many planets): the dev Dolphin boots by itself (no
+  # savestate), Minecraft starts at its title.
   G="python3 tools/gxdev.py"
-  LOG="$HOME/.local/share/galaxycraft-dev/launch-minecraft.log"
+  if [ "$1" = galaxy ]; then NAME=GalaxyProbe GPROP=galaxycraftGalaxy GTAG=galaxy; else NAME=LauncherProbe GPROP=galaxycraftLauncher GTAG=launch; fi
+  LOG="$HOME/.local/share/galaxycraft-dev/$GTAG-minecraft.log"
   syati/build.sh > /dev/null 2>&1 || { echo "gxvoxel: FAILED: syati/build.sh" >&2; exit 1; }
   $G stop > /dev/null
   GALAXYCRAFT_BOOT=space $G start --speed 1 || { echo "gxvoxel: FAILED: dolphin did not start" >&2; exit 1; }
-  echo "gxvoxel: running LauncherProbe (log: $LOG)"
-  (cd fabric && ./gradlew runClientGameTest -PgalaxycraftLauncher ${GXC_ARGS:-} --console=plain) > "$LOG" 2>&1
-  grep "\[GalaxyCraft launch\]" "$LOG"
+  echo "gxvoxel: running $NAME (log: $LOG)"
+  (cd fabric && ./gradlew runClientGameTest -P$GPROP ${GXC_ARGS:-} --console=plain) > "$LOG" 2>&1
+  grep "\[GalaxyCraft $GTAG\]" "$LOG"
   [ -n "${GXC_KEEP:-}" ] || $G stop > /dev/null
-  grep -q "\[GalaxyCraft launch\] PASS" "$LOG" || { echo "gxvoxel: FAILED: LauncherProbe (see $LOG)" >&2; exit 1; }
+  grep -q "\[GalaxyCraft $GTAG\] PASS" "$LOG" || { echo "gxvoxel: FAILED: $NAME (see $LOG)" >&2; exit 1; }
   echo "gxvoxel: PASS"
   exit 0
 fi
