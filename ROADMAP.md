@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (game feel in Now; block visibility and interactive blocks in the Inbox)
+Last updated: 2026-10-06 (game feel merged to Done)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-06 (game feel in Now; block visibility and interactive blo
 
 | Feature | Status | Notes |
 |---|---|---|
-| Game feel: breaking and placing blocks | now | Branch `game-feel`: hold to break at Minecraft's speeds (tool, Efficiency, Haste), cracks drawn by the game, block sounds, material particles on hit and place, the block outline in the block's real shape. Written in the cloud without building the mod: needs a build and a playtest on the PC ([docs/SENSACION_BLOQUES.md](docs/SENSACION_BLOQUES.md), [spec](docs/superpowers/specs/2026-10-06-galaxycraft-game-feel-design.md)). |
+| (nothing in progress) | | Pick the next one from **Next**. |
 
 ## Next
 
@@ -112,6 +112,7 @@ Last updated: 2026-10-06 (game feel in Now; block visibility and interactive blo
 | 2026-10-05 | Elytra: glide and fly between planets in every movement mode; cosmic wind | 7bc2385 |
 | 2026-10-05 | Lag fix: `gxplay.sh` runs Dolphin dual core and stops leftover hidden Minecrafts | beddf73 |
 | 2026-10-06 | Smoother level of detail: blocks first when nearing a planet, far view finer near the blocks (Distant Horizons-style), parallel meshing, nearest chunks first, block distance 96 and far view detail settings; no hangs flying fast (collision zone overflow) or standing still (Wii Remote auto-sleep, stale collision); quiet F1-F8 and invalid-access dialogs | adfd848 |
+| 2026-10-06 | Game feel: hold to break at Minecraft's speeds, cracks, block sounds and particles, the block outline in its real shape (and drawn again) | 7fd037b |
 
 ---
 
