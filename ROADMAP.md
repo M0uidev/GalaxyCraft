@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (smoother level of detail merged; game feel and blocks in Now, on branch `game-feel`)
+Last updated: 2026-10-06 (game feel in Now; block visibility and interactive blocks in the Inbox)
 
 ---
 
@@ -118,6 +118,14 @@ Last updated: 2026-10-06 (smoother level of detail merged; game feel and blocks 
 ## Inbox
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
+
+- 2026-10-06: Blocks that don't show or don't work yet (user), and the others like them. Visible:
+  TNT drawn whole, chests (invisible), shulker boxes, and shulkers (the mob); End crystals already
+  work. Working: rails with minecarts together, signs, shelves, every bed (the straw bed too),
+  ender chests with their shared inventory. Lead found: chests, ender chests, beds, signs and
+  shulker boxes are drawn by Minecraft's block entity renderers (their block model has no
+  faces), so the planet draws nothing; they could go through `EntityCapture` like mobs do. Needs
+  Minecraft 26.3's sources, which the cloud session can't download.
 
 
 - 2026-10-05: Launcher follow-ups (review): old planets in ~/.local/share/galaxycraft/planets are not moved into a world; closing the Dolphin window can lose the last ≤10 s of planet edits (no save on exit).
