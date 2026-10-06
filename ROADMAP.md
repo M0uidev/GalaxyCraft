@@ -29,8 +29,7 @@ Last updated: 2026-10-06 (the entering hang was the test's, not the game's: remo
 
 | Feature | Status | Notes |
 |---|---|---|
-| Blocks drawn by renderers | next | First of the blocks work (order chosen: walls → drawn → working). Chests, ender chests, shulker boxes, beds, signs and their text, banners, heads, decorated pots, bells, books on lecterns and enchanting tables, items on shelves and campfires: Minecraft draws them with block entity renderers (their block model has no faces), so the planet draws nothing. Also the primed TNT drawn whole, the shulker mob, and the off hand's item in Steve's hand with the shield raised. Efficiency: the still shape baked once into the chunk mesh, only moving parts (a chest lid, a bell) through the entity path while they move. |
-| Blocks that work | next | After the drawn blocks. Beds (spawn point, skipping the night, every bed including the straw bed), signs (typing text), ender chests (shared inventory), shelves, rails with minecarts; and the like: respawn anchors, lecterns, jukeboxes, chiseled bookshelves, item frames, armor stands, flower pots, the other minecarts (chest, hopper, furnace, TNT) and powered/detector/activator rails. Lead: the shadow uses the real player, who is in another dimension (beds refuse, the sign editor opens on the wrong level). |
+| Blocks that work | next | The drawn blocks are done. Beds (spawn point, skipping the night, every bed including the straw bed), signs (typing text), ender chests (shared inventory), shelves, rails with minecarts; and the like: respawn anchors, lecterns, jukeboxes, chiseled bookshelves, item frames, armor stands, flower pots, the other minecarts (chest, hopper, furnace, TNT) and powered/detector/activator rails (EntityTest: "the minecart rolls along its rails" fails today). Also what the drawn blocks left out: sign text, banner patterns, a player head's own skin, items on shelves and campfires, chest lids opening, the shield's raised pose. Lead: the shadow uses the real player, who is in another dimension (beds refuse, the sign editor opens on the wrong level). |
 | Infinite universe | next | Stage 3 of the galaxy: No Man's Sky-like endless space, planets generated per sector as you explore (the catalog grows), a floating origin (SMG2's floats), faster travel than elytra. Builds on the galaxy options' catalog and streaming. |
 | Flat space stations | next | Player-built **flat** platforms floating in space, to play flat Minecraft (farms, builds) without the sphere's distortion. Hook ready: `CosmicWind` takes any `GravityBody`, not only spheres. |
 
@@ -117,6 +116,7 @@ Last updated: 2026-10-06 (the entering hang was the test's, not the game's: remo
 | 2026-10-06 | Game feel: hold to break at Minecraft's speeds, cracks, block sounds and particles, the block outline in its real shape (and drawn again) | 7fd037b |
 | 2026-10-06 | Torches, heads, signs, banners, coral fans, levers and buttons on walls (all four sides); heads on the floor turned to the player; the off hand places and uses when the main hand does nothing | ea7a354 |
 | 2026-10-06 | Entering a world is silent (no SMG2 boot, music or landing sounds) until the zoom from space | edd62e6 |
+| 2026-10-06 | Chests (also trapped, ender and copper), beds, signs and hanging signs, banners, mob heads, shulker boxes, decorated pots, bells, lecterns, conduits drawn on planets as Minecraft draws them, at no cost per frame; the off hand's item in Steve's left hand | 793e34d |
 
 ---
 
@@ -124,6 +124,10 @@ Last updated: 2026-10-06 (the entering hang was the test's, not the game's: remo
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-06: Seen in test screenshots (Claude): a green dome with white, pink and blue pillars upside
+  down in the sky over the planet (HeldItemTest, EntityTest). Probably another planet's far view
+  seen from below; to check. Lit TNT "drawn whole" (user): not reproduced in EntityTest; what is
+  missing on screen?
 - 2026-10-05: Launcher follow-ups (review): old planets in ~/.local/share/galaxycraft/planets are not moved into a world; closing the Dolphin window can lose the last ≤10 s of planet edits (no save on exit).
 - 2026-10-05: FPS above 60 (user, while playing). SMG2's logic is locked to 60 frames a second,
   so Dolphin cannot draw more by itself. Frame generation (lsfg-vk) needs Lossless Scaling
