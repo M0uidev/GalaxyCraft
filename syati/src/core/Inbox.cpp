@@ -312,4 +312,16 @@ void ViewTranslate(const f32 view[12], const f32 t[3], f32 out[12])
     out[4 * r + 3] = v[0] * t[0] + v[1] * t[1] + v[2] * t[2] + v[3];
   }
 }
+
+void ViewRelative(const f32 view[12], const f32 eye[3], const f32 t[3], f32 out[12])
+{
+  const double d[3] = {static_cast<double>(t[0]) - eye[0], static_cast<double>(t[1]) - eye[1],
+                       static_cast<double>(t[2]) - eye[2]};
+  for (int r = 0; r < 3; r++)
+  {
+    const f32* v = view + 4 * r;
+    out[4 * r] = v[0], out[4 * r + 1] = v[1], out[4 * r + 2] = v[2];
+    out[4 * r + 3] = static_cast<f32>(v[0] * d[0] + v[1] * d[1] + v[2] * d[2]);
+  }
+}
 }  // namespace gxc

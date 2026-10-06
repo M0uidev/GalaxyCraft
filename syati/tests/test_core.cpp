@@ -450,6 +450,45 @@ static void TestPlanetDropAndViewTranslate()
     CHECK(Near(e[0], 1.f) && Near(e[1], 2.f) && Near(e[2], 3.f));
     CHECK(Near(f[0], -1.f) && Near(f[1], 0.f) && Near(f[2], 0.f));
   }
+  // 100,000 blocks out (8e6 units), planets up to 2000 blocks from the camera, cameras every way:
+  // ViewTranslate's float sum of two big numbers that cancel is off by units; ViewRelative is
+  // as good as the floats it is given (the floating origin keeps those small).
+  {
+    const f32 up[3] = {0, 1, 0};
+    f32 v[12], rel[12], abs_[12];
+    f32 worst_rel = 0.f, worst_abs = 0.f;
+    u32 seed = 12345u;
+    for (int i = 0; i < 500; i++)
+    {
+      f32 r[9];
+      for (int k = 0; k < 9; k++)
+        r[k] = static_cast<f32>((seed = seed * 1664525u + 1013904223u) >> 8) / 8388608.f - 1.f;  // [-1, 1)
+      const f32 eye[3] = {r[0] * 8.0e6f, r[1] * 8.0e6f, r[2] * 8.0e6f}, look[3] = {r[3], r[4], r[5]};
+      const f32 t[3] = {eye[0] + r[6] * 160000.f, eye[1] + r[7] * 160000.f, eye[2] + r[8] * 160000.f};
+      LookAtView(eye, look, up, v);
+      ViewRelative(v, eye, t, rel);
+      ViewTranslate(v, t, abs_);
+      for (int row = 0; row < 3; row++)
+      {
+        double exact = 0;
+        for (int k = 0; k < 3; k++)
+          exact += static_cast<double>(v[4 * row + k]) * (static_cast<double>(t[k]) - eye[k]);
+        const f32 a = static_cast<f32>(rel[4 * row + 3] - exact), b = static_cast<f32>(abs_[4 * row + 3] - exact);
+        worst_rel = a > worst_rel ? a : (-a > worst_rel ? -a : worst_rel);
+        worst_abs = b > worst_abs ? b : (-b > worst_abs ? -b : worst_abs);
+      }
+    }
+    CHECK(worst_rel < 0.02f);  // the last bit of a float near 160000
+    CHECK(worst_abs > 0.5f);   // why it exists
+    const f32 look[3] = {0.6f, 0.f, -0.8f};
+    // Near the origin both agree.
+    const f32 eye0[3] = {10.f, 20.f, 30.f}, b0[3] = {12.f, 21.f, 27.f};
+    LookAtView(eye0, look, up, v);
+    ViewRelative(v, eye0, b0, rel);
+    ViewTranslate(v, b0, abs_);
+    for (int k = 0; k < 12; k++)
+      CHECK(Near(rel[k], abs_[k], 1e-4f));
+  }
   // A ball of radius 100 at the origin, the camera at (0, 0, 300) looking at it (-z).
   const f32 cam[3] = {0, 0, 300}, fwd[3] = {0, 0, -1}, o[3] = {0, 0, 0};
   const f32 front[3] = {0, 0, 110}, back[3] = {0, 0, -110}, side[3] = {110, 0, 0}, behind[3] = {0, 0, 400};

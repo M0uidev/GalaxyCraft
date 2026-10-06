@@ -64,8 +64,8 @@ against Syati's SMG2 headers:
   floats per register, the CPU's only SIMD. The GPU (GX's transform unit) takes 32-bit matrices.
   The level files store 32-bit floats too. Changing that means rewriting most of the game's code.
 - **It would be slower**, not faster: doubles lose the paired-single SIMD the whole engine uses.
-- **But the Gekko's normal FPU does doubles natively**, at the same speed as floats. So the code
-  we write ourselves can use 64 bits for free.
+- **But the Gekko's normal FPU does doubles natively**, nearly as fast as floats. So the code
+  we write ourselves can use 64 bits almost for free.
 
 So it is a hybrid, and the design below already uses it:
 
@@ -74,6 +74,13 @@ So it is a hybrid, and the design below already uses it:
 | The mod (Java) | `double` + `long` cells (`UPos`) | endless |
 | Our module's own math (planet and view matrices, drops, teleports) | `double` where a big number meets a small one: e.g. the planet's matrix computed camera-relative (`center - eye` in double, then to float) | endless, and steady between origin moves |
 | SMG2's engine (Mario, collision, gravity, camera, GX) | 32-bit float, unchanged | kept small by the floating origin (§4.3): never past 13,107 blocks, 1/8 unit or better |
+
+Measured (`syati/tests/test_core.cpp`, `gxc::ViewRelative` against today's `ViewTranslate`, a
+planet up to 2000 blocks from the camera, 20,000 random cameras): the float way is off by 0.05 units
+at 1,000 blocks, 0.19 at 10,000, **2 at 100,000 and 17 at a million**; the double, camera-relative
+way stays at 0.008 units (the last bit of the result) everywhere. It does not fix SMG2's own
+floats (Mario, collision), which is the floating origin's job, but it makes our drawing as exact
+as its inputs.
 
 What Syati's headers also settle for §4.4:
 

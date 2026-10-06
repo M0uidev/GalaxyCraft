@@ -182,6 +182,12 @@ void ViewEye(const f32 view[12], f32 eye[3], f32 fwd[3]);
 // view (3x4 row-major) times a translation by t: the position matrix of something placed at t.
 void ViewTranslate(const f32 view[12], const f32 t[3], f32 out[12]);
 
+// The same matrix built camera-relative: view's rotation, and its translation R (t - eye) worked
+// out in double (the Gekko's FPU does doubles natively, nearly as fast). ViewTranslate adds R t to -R eye,
+// two big numbers that cancel and leave the last bits of a float far from the origin; this keeps
+// whatever precision t - eye has, so what is near the camera is drawn steady at any distance.
+void ViewRelative(const f32 view[12], const f32 eye[3], const f32 t[3], f32 out[12]);
+
 // Whether a sphere (c, r) cannot be seen from cam: wholly behind the camera (fwd: unit view
 // direction), or in the shadow of the opaque ball (center, occluder radius) seen from cam.
 bool SphereHidden(const f32 cam[3], const f32 fwd[3], const f32 center[3], f32 occluder, const f32 c[3], f32 r);
