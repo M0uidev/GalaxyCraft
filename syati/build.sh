@@ -62,7 +62,7 @@ desc = {
     "type": "dolphin-game-mod-descriptor",
     "version": 1,
     "base-file": sys.argv[1],
-    "display-name": "Super Mario Galaxy 2 (GalaxyCraft)",
+    "display-name": "Super Mario Galaxy 2 (Super Minecraft Galaxy)",
     "riivolution": {"patches": [{
         "xml": os.path.join(build, "galaxycraft.xml"),
         "root": build,

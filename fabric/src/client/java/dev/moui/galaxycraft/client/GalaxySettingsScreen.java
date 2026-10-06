@@ -24,7 +24,7 @@ public final class GalaxySettingsScreen extends Screen {
     private final List<Label> labels = new ArrayList<>();
 
     public GalaxySettingsScreen(Screen parent) {
-        super(Component.literal("GalaxyCraft Settings"));
+        super(Component.literal("Super Minecraft Galaxy Settings"));
         this.parent = parent;
     }
 

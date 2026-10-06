@@ -62,7 +62,7 @@ public final class PlanetEditorScreen extends Screen {
 
     /** The editor on that blueprint (tests). */
     public PlanetEditorScreen(PlanetBlueprint b) {
-        super(Component.literal("GalaxyCraft planets"));
+        super(Component.literal("Super Minecraft Galaxy planets"));
         edit(b);
         refreshSaved();
     }

@@ -12,7 +12,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 
 /**
- * Everything GalaxyCraft's settings screen (Esc, then GalaxyCraft...) shows, in its order: the
+ * Everything GalaxyCraft's settings screen (Esc, then Super Minecraft Galaxy...) shows, in its order: the
  * settings kept between sessions, then buttons that do something now. Adding one here is all it
  * takes: {@link GalaxySettingsScreen} lays them out by kind, {@link Settings} keeps them.
  */
