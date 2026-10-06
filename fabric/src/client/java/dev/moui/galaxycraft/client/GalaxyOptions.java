@@ -49,7 +49,7 @@ public final class GalaxyOptions {
             2, 16, 1, 10, " blocks"));
     public static final Setting.Range BLOCK_DISTANCE = SETTINGS.add(new Setting.Range("blockDistance", "Planet Block Distance",
             "How far around Mario a planet is its real blocks; past that, its far view. Farther costs more of the game's memory and time",
-            32, 160, 16, (int) PlanetSession.DEFAULT_RENDER, " blocks"));
+            32, 160, 16, 96, " blocks"));
     public static final Setting.Range FAR_VIEW_DETAIL = SETTINGS.add(new Setting.Range("farViewDetail", "Far View Detail",
             "How far the far view stays fine past the blocks: next to them it is almost block by block, and each step farther "
                     + "its patches are twice as wide. Higher: finer farther out, more memory",

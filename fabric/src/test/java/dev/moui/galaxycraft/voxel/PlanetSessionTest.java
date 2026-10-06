@@ -669,6 +669,29 @@ class PlanetSessionTest {
         assertTrue(bytes < 10_000_000, bytes + " bytes");
     }
 
+    @Test void chunksMeshedInParallelAreTheSameAndAnEditIsNeverLost() {
+        List<byte[]> serial = new ArrayList<>(), parallel = new ArrayList<>();
+        for (boolean par : new boolean[] {false, true}) {
+            PlanetSession s = new PlanetSession(80);
+            s.setParallelMeshing(par);
+            s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+            Vector3d top = onTop(s, 64);
+            s.update(3, 100, top);
+            // A few messages, an edit under Mario, then the rest: the edited chunks as they are now.
+            for (int i = 0; i < 20 && s.peek() != null; i++) s.sent();
+            assertTrue(s.breakBlock(top, new Vector3d(0, 1, 0)));
+            s.update(3, 100, top);
+            for (PlanetSession.Msg m : drain(s)) {
+                byte[] b = m.payload().clone(); // each session has its own planet id
+                if (m.type() == Layout.MSG_CHUNK) b[3] = 0;
+                else if (b.length >= 4) b[0] = b[1] = b[2] = b[3] = 0;
+                (par ? parallel : serial).add(b);
+            }
+        }
+        assertEquals(serial.size(), parallel.size());
+        for (int i = 0; i < serial.size(); i++) assertArrayEquals(serial.get(i), parallel.get(i), "message " + i);
+    }
+
     static boolean wasShown(List<PlanetSession.Msg> msgs, int t) {
         return msgs.stream().anyMatch(m -> covered(m) && tile(le(m)) == t);
     }

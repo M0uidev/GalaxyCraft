@@ -516,6 +516,11 @@ public final class VoxelPlanet {
         return ++versions[chunk];
     }
 
+    /** Whether a chunk changed since takeDirty last asked (a mesh made before may be old). */
+    public boolean isDirty(int chunk) {
+        return dirty.get(chunk);
+    }
+
     /** Chunks changed since last asked; clears the set. */
     public int[] takeDirty() {
         int[] out = dirty.stream().toArray();

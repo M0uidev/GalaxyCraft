@@ -136,6 +136,23 @@ public final class PlanetSession {
     private int[] farWant = new int[0]; // per tile, the patch columns its far view should have
     private int[] farCols = new int[0]; // and those the game has
     private int builtCols;
+    /**
+     * Chunks meshed ahead on MESHERS, a batch at a time while the tick waits (nothing edits the
+     * planet meanwhile); each is taken only as build would make it now (same collision and caves,
+     * its chunk unchanged since), else made again.
+     */
+    private static final java.util.concurrent.ForkJoinPool MESHERS = new java.util.concurrent.ForkJoinPool(
+            Math.max(1, Runtime.getRuntime().availableProcessors() - 2), pool -> {
+                var w = java.util.concurrent.ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
+                w.setName("GalaxyCraft mesher " + w.getPoolIndex());
+                w.setDaemon(true);
+                w.setPriority(Thread.NORM_PRIORITY - 1);
+                return w;
+            }, null, false);
+    static final int PREFETCH = 2 * Math.max(1, Runtime.getRuntime().availableProcessors() - 2);
+    private record Premeshed(boolean kcl, boolean cullDark, PlanetMesher.ChunkMesh mesh) {}
+    private final java.util.Map<Integer, Premeshed> premeshed = new java.util.HashMap<>();
+    private boolean parallel = true;
     private final java.util.LinkedHashSet<Integer> farLater = new java.util.LinkedHashSet<>(); // a level finer or coarser, once the chunks are out
     private BitSet shown = new BitSet();      // tiles the game gets as chunks (the rest: their far view)
     private BitSet farOnGuest = new BitSet(); // tiles whose far view the game may draw near (not covered)
@@ -341,6 +358,7 @@ public final class PlanetSession {
         }
         if (planet.fluids().tick()) unsaved = true;
         for (int c : planet.takeDirty()) {
+            premeshed.remove(c); // meshed before the edit
             int t = PlanetLod.tileOfChunk(planet, c);
             if (detail && near.get(c)) queueUrgent(c); // an edit under Mario: its collision now
             else if (detail && shown.get(t)) queue(c);
@@ -408,6 +426,7 @@ public final class PlanetSession {
             builtFar = true;
         }
         while (built == null && !pending.isEmpty() && bulk.getAsBoolean()) {
+            if (parallel && pending.peek() >= 0 && !premeshed.containsKey(pending.peek())) premesh();
             int c = pending.poll();
             if (c <= HIDE_MARK) { // a tile's chunks are out: its far view goes
                 int t = HIDE_MARK - c;
@@ -428,6 +447,36 @@ public final class PlanetSession {
             return peek(bulk);
         }
         return built;
+    }
+
+    /**
+     * The next PREFETCH chunks in pending that build would mesh, meshed side by side, with what
+     * build would decide for them as things stand (it checks again).
+     */
+    private void premesh() {
+        List<int[]> jobs = new ArrayList<>(); // chunk, kcl, cullDark
+        for (int c : pending) {
+            if (jobs.size() >= PREFETCH) break;
+            if (c < 0 || !pendingSet.get(c) || planet.isDirty(c) || premeshed.containsKey(c)) continue;
+            boolean kcl = near.get(c) || mario != null && near.cardinality() < MAX_PARTS && distance(c, mario, ahead) < NEAR;
+            if (!kcl && !shown.get(PlanetLod.tileOfChunk(planet, c))) continue; // dropped, not meshed
+            if (!onGuest.get(c) && !planet.mayShow(c)) continue;
+            jobs.add(new int[] {c, kcl ? 1 : 0, !kcl && !underground ? 1 : 0});
+        }
+        if (jobs.size() < 2) return;
+        if (premeshed.size() > 4 * PREFETCH) premeshed.clear(); // chunks that left the queue unbuilt
+        VoxelPlanet p = planet;
+        double units = unitsPerBlock;
+        List<PlanetMesher.ChunkMesh> meshes = MESHERS.submit(() -> jobs.parallelStream()
+                .map(j -> PlanetMesher.mesh(p, j[0], units, j[1] == 1, j[2] == 1)).toList()).join();
+        for (int i = 0; i < jobs.size(); i++)
+            premeshed.put(jobs.get(i)[0], new Premeshed(jobs.get(i)[1] == 1, jobs.get(i)[2] == 1, meshes.get(i)));
+    }
+
+    /** Meshing side by side (true by default), or all on the caller's thread (tests compare them). */
+    void setParallelMeshing(boolean on) {
+        parallel = on;
+        premeshed.clear();
     }
 
     /** Meshes a chunk into built, unless it has nothing to send. */
@@ -452,7 +501,9 @@ public final class PlanetSession {
         }
         if (!onGuest.get(c) && !planet.mayShow(c)) return;
         boolean cullDark = !kcl && !underground;
-        PlanetMesher.ChunkMesh m = PlanetMesher.mesh(planet, c, unitsPerBlock, kcl, cullDark);
+        Premeshed pre = premeshed.remove(c);
+        PlanetMesher.ChunkMesh m = pre != null && pre.kcl() == kcl && pre.cullDark() == cullDark && !planet.isDirty(c) ? pre.mesh()
+                : PlanetMesher.mesh(planet, c, unitsPerBlock, kcl, cullDark);
         darkCut.set(c, m.darkCut());
         if (cullDark) hasDark.set(c, m.darkCut());
         if (m.empty() && !onGuest.get(c)) return;
@@ -826,6 +877,7 @@ public final class PlanetSession {
         outline = outlineId = -1;
         pending.clear();
         pendingSet.clear();
+        premeshed.clear();
         urgent.clear();
         urgentSet.clear();
         built = null;
@@ -956,6 +1008,11 @@ public final class PlanetSession {
     /** Blocks between levels of the far view (the next level out has patches twice as wide). */
     public void setFarStep(double blocks) {
         farStep = Math.max(8, blocks);
+    }
+
+    /** Whether the game draws a tile's far view up close (not covered by its chunks; tests). */
+    boolean farDrawnNear(int t) {
+        return farOnGuest.get(t);
     }
 
     /** Patch columns of the far view the game has for a tile (0: none yet; tests). */

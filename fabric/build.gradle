@@ -98,6 +98,8 @@ loom {
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 				if (project.hasProperty("memoryRadius")) vmArg "-Dgalaxycraft.memoryRadius=${project.property("memoryRadius")}"
 			}
+			// GXC_ARGS=-PrenderDistance=128: blocks around Mario in any probe (the player's setting otherwise)
+			if (project.hasProperty("renderDistance")) vmArg "-Dgalaxycraft.renderDistance=${project.property("renderDistance")}"
 			if (project.hasProperty("galaxycraftLod")) { // tools/gxvoxel.sh lod: LodProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.lod=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
