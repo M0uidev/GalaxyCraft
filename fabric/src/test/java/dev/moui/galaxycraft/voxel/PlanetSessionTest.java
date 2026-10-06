@@ -596,6 +596,42 @@ class PlanetSessionTest {
         assertTrue(drain(s).stream().anyMatch(m -> m.type() == Layout.MSG_CHUNK && !far(m)));
     }
 
+    @Test void nearingAPlanetSendsItsChunksNotItsFarViewAgain() {
+        // From afar the game has the planet's far view; Mario comes near: detail on.
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = onTop(s, 64);
+        s.setDetail(false);
+        s.update(3, 100, top);
+        drain(s);
+        s.setDetail(true);
+        s.update(3, 100, top);
+        List<PlanetSession.Msg> msgs = drain(s);
+        assertTrue(msgs.stream().anyMatch(m -> m.type() == Layout.MSG_CHUNK && !far(m)), "its chunks");
+        assertTrue(msgs.stream().noneMatch(m -> far(m) && le(m).getInt(8) > 0), "its far view, which the game has, not again");
+        // Each tile of chunks covered once (after them), the others left as they are.
+        VoxelPlanet p = s.planet();
+        for (int t = 0; t < PlanetLod.tileCount(p); t++) {
+            int tt = t;
+            long covers = msgs.stream().filter(m -> covered(m) && tile(le(m)) == tt).count();
+            assertEquals(s.tileShown(t) ? 1 : 0, covers, "tile " + t);
+        }
+        // Away again: only the covered tiles get their far view back, uncovered.
+        s.setDetail(false);
+        s.update(3, 100, top);
+        List<PlanetSession.Msg> back = drain(s);
+        for (int t = 0; t < PlanetLod.tileCount(p); t++) {
+            int tt = t;
+            long sent = back.stream().filter(m -> far(m) && tile(le(m)) == tt).count();
+            assertEquals(s.tileShown(t) || wasShown(msgs, t) ? 1 : 0, sent, "tile " + t);
+            assertTrue(back.stream().noneMatch(m -> covered(m) && tile(le(m)) == tt), "drawn near again: not covered");
+        }
+    }
+
+    static boolean wasShown(List<PlanetSession.Msg> msgs, int t) {
+        return msgs.stream().anyMatch(m -> covered(m) && tile(le(m)) == t);
+    }
+
     @Test void diggingNearMarioRefreshesTheFarViewSeenFromAfar() {
         PlanetSession s = new PlanetSession(80);
         s.spawn(64, MARIO, new Vector3d(0, 1, 0));

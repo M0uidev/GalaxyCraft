@@ -124,10 +124,12 @@ public final class PlanetSession {
     private double render = RENDER;
     private BitSet shown = new BitSet();      // tiles the game gets as chunks (the rest: their far view)
     private BitSet farOnGuest = new BitSet(); // tiles whose far view the game may draw near (not covered)
+    private BitSet farHeld = new BitSet();    // tiles whose far view the game has, covered or not
     private float[] tileSpheres;              // per tile: center (blocks), radius
     private boolean builtFarMark; // built hides a tile's far view (a mark in pending): builtTile's
     private int builtTile;
     private boolean builtFarShows; // the far view built (farPending's first) shows its tile, not covered
+    private BitSet keptOnGuest = new BitSet(), keptHeld = new BitSet(), keptStale = new BitSet(); // sendAll's, across clearQueues
     private boolean guestHasIt; // the next sendAll is to a game that has this planet already
     private int sinceFar;
     private int scene = Integer.MIN_VALUE, host = Integer.MIN_VALUE;
@@ -458,6 +460,7 @@ public final class PlanetSession {
             int t = farPending.poll();
             farPendingSet.clear(t);
             farOnGuest.set(t, builtFarShows); // what it carried, whatever the tile is by now
+            farHeld.set(t);
             if (builtFarShows && shown.get(t)) pending.add(HIDE_MARK - t); // chunks there since: hidden after them
             return;
         }
@@ -810,15 +813,28 @@ public final class PlanetSession {
 
     /** The game has nothing: the planet, then every chunk that may show, nearest Mario first. */
     private void sendAll() {
+        keptOnGuest = farOnGuest;
+        keptHeld = farHeld;
+        keptStale = (BitSet) farDirty.clone(); // edited, or still to send: theirs is old
+        keptStale.or(farPendingSet);
         clearQueues();
         control.add(new Msg(Layout.MSG_PLANET, planetPayload(id, 0)));
         planet.takeDirty();
-        // The game may have any tile's far view (the same planet, with or without detail before).
         int tileCount = PlanetLod.tileCount(planet);
-        if (guestHasIt) farOnGuest.set(0, tileCount);
-        guestHasIt = false;
         tiles(mario, ahead, false);
-        for (int t = 0; t < tileCount; t++) queueFar(t);
+        if (guestHasIt) {
+            // The same planet in the same scene, with or without detail before: the game keeps the
+            // far view it has. Only what it lacks goes (and the tiles no longer chunks uncovered),
+            // so nearing a planet its chunks are not held up behind hundreds of tiles it has.
+            farOnGuest = (BitSet) keptOnGuest.clone();
+            farHeld = (BitSet) keptHeld.clone();
+            for (int t = 0; t < tileCount; t++)
+                if (keptStale.get(t) || !farHeld.get(t) || !shown.get(t) && !farOnGuest.get(t)) queueFar(t);
+        } else {
+            farHeld = new BitSet();
+            for (int t = 0; t < tileCount; t++) queueFar(t);
+        }
+        guestHasIt = false;
         if (tpQueued) { // after the planet, Mario's landing ground, then the teleport, as teleportToward queued them
             if (landing != null) for (int c : residency(landing, landing)) queueUrgent(c);
             urgent.add(TP_MARK);
