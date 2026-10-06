@@ -355,6 +355,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         if (player != null) player.sendSystemMessage(Component.literal("GalaxyCraft: " + text));
     }
 
+    /** Ticks a world's galaxy has waited for an anchor that the host will not set again. */
+    private static int unanchoredTicks;
+    private static final int RELINK_TICKS = 20;
+
     private static void resetFrame() {
         frame = null;
         camOffsetGal = camLookGal = camUpGal = null;
@@ -385,7 +389,15 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             // Wait for the host to say where the player is, somewhere with gravity: SMG2's title
             // screen has a Mario too, but nothing to stand on.
             hold(player, true);
-            if (!world.get().anchor() || !world.get().hasGravity() || PlanetClient.waitingToLand()) {
+            // A scene change the host announced again with the same id: a pose sent with the old
+            // frame before the mod read it took the host's anchor away, and it never comes back.
+            // In a world's galaxy, with gravity and nothing to land on first, Mario is where the
+            // player is: after a second without it, the frame is anchored there anyway.
+            boolean stranded = !world.get().anchor() && world.get().hasGravity() && PlanetClient.galaxy() != null
+                    && !PlanetClient.waitingToLand();
+            unanchoredTicks = stranded ? unanchoredTicks + 1 : 0;
+            if (stranded && unanchoredTicks >= RELINK_TICKS) GalaxyCraft.LOG.info("Linked again without the host's anchor");
+            else if (!world.get().anchor() || !world.get().hasGravity() || PlanetClient.waitingToLand()) {
                 // GalaxyCraftSpace: no gravity until the world's planet is up and Mario is on it (any
                 // gravity before is the last stage's Mario's).
                 if (PlanetClient.galaxy() != null) PlanetClient.tick(player, bridge, null, world.get());
