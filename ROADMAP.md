@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (walls and off hand done; drawn blocks next, then working blocks)
+Last updated: 2026-10-06 (quiet entry done; entering hang noted in Polish)
 
 ---
 
@@ -88,6 +88,7 @@ Last updated: 2026-10-06 (walls and off hand done; drawn blocks next, then worki
 | Far view at ~40 blocks still draws chunks | planned | Costs speed (~123%). |
 | Rare LodProbe send stall | planned | Not reproduced. |
 | Teleport lands inside a planet | planned | Not reproduced; the mod logs it now. Report the log lines if it happens. |
+| Entering a new world sometimes never lands | planned | Seen 2026-10-06 in `LauncherProbe` on master and with the sound off alike (about 2 runs in 3 on a new world): Dolphin announces the galaxy's scene again after Mario was teleported, the mod relinks without the host's anchor and the player is never on the surface (180 s timeout). Same "scene announced twice" family as the old stuck-after-Replace. |
 | Non-cube blocks never checked visually in SMG2 | planned | Slabs, stairs, flowers on a planet: needs a screenshot pass. |
 
 ---
@@ -116,6 +117,7 @@ Last updated: 2026-10-06 (walls and off hand done; drawn blocks next, then worki
 | 2026-10-06 | Smoother level of detail: blocks first when nearing a planet, far view finer near the blocks (Distant Horizons-style), parallel meshing, nearest chunks first, block distance 96 and far view detail settings; no hangs flying fast (collision zone overflow) or standing still (Wii Remote auto-sleep, stale collision); quiet F1-F8 and invalid-access dialogs | adfd848 |
 | 2026-10-06 | Game feel: hold to break at Minecraft's speeds, cracks, block sounds and particles, the block outline in its real shape (and drawn again) | 7fd037b |
 | 2026-10-06 | Torches, heads, signs, banners, coral fans, levers and buttons on walls (all four sides); heads on the floor turned to the player; the off hand places and uses when the main hand does nothing | ea7a354 |
+| 2026-10-06 | Entering a world is silent (no SMG2 boot, music or landing sounds) until the zoom from space | edd62e6 |
 
 ---
 
