@@ -47,15 +47,18 @@ public final class WorkingBlocksProbe implements FabricClientGameTest {
                 link = new ShadowLink(() -> s);
                 mario = new Vector3d(0, s.planet().surface() + 0.5, 0).add(s.center());
                 return new int[] {place("ender_chest", 2), place("red_bed", 4), place("straw_bed", 7), place("oak_sign", 10),
-                        place("oak_shelf", 12), place("rail", 14), place("rail", 15), place("rail", 16), place("rail", 17)};
+                        place("oak_shelf", 12), place("rail", 14), place("rail", 15), place("rail", 16), place("rail", 17),
+                        place("respawn_anchor", 19)};
             });
             run(ctx, 60); // the shadow takes the planet in
             enderChest(ctx, sp, cells[0]);
             bed(ctx, sp, cells[1], "red_bed");
             bed(ctx, sp, cells[2], "straw_bed");
-            sign(ctx, cells[3]);
+            sign(ctx, sp, cells[3]);
             shelf(ctx, sp, cells[4]);
             minecart(ctx, sp, cells[5], cells[8]);
+            anchor(ctx, sp, cells[9]);
+            ctx.runOnClient(mc -> System.out.println("[GalaxyCraft working] lit TNT's renderer submits: " + tntSubmits(mc)));
             System.out.println("[GalaxyCraft working] " + (fails.isEmpty() ? "PASS" : "FAIL " + fails));
         }
     }
@@ -75,33 +78,63 @@ public final class WorkingBlocksProbe implements FabricClientGameTest {
         sp.getServer().runOnServer(server -> player(server).closeContainer());
     }
 
-    /** At night a bed lets the player sleep and sets where he comes back. */
+    /** At night a bed is slept in: the night goes, and the bed is where the player comes back. */
     private void bed(ClientGameTestContext ctx, TestSingleplayerContext sp, int cell, String name) {
         sp.getServer().runCommand("time set midnight");
+        run(ctx, 5);
+        while (ShadowWorld.pollBed() != null) {}
         hold(sp, ItemStack.EMPTY);
         use(ctx, cell);
         run(ctx, 10);
-        String state = sp.getServer().computeOnServer(server -> {
-            ServerPlayer p = player(server);
-            return "sleeping " + p.isSleeping() + ", respawn " + p.getRespawnConfig();
-        });
-        report(state.contains("sleeping true") || !state.contains("respawn null"), name + " used at night (" + state + ")");
-        sp.getServer().runOnServer(server -> player(server).stopSleeping());
+        boolean day = sp.getServer().computeOnServer(server -> server.overworld().isBrightOutside());
+        ShadowWorld.Bed bed = ShadowWorld.pollBed();
+        report(day && bed != null, name + " slept in at night: morning " + day + ", the bed kept " + (bed != null));
     }
 
-    /** Using a sign with an empty hand opens its editor. */
-    private void sign(ClientGameTestContext ctx, int cell) {
+    /** Using a sign with an empty hand opens its editor; what is typed there stays on the sign. */
+    private void sign(ClientGameTestContext ctx, TestSingleplayerContext sp, int cell) {
+        hold(sp, ItemStack.EMPTY);
         use(ctx, cell);
         run(ctx, 10);
         String screen = ctx.computeOnClient(mc -> mc.gui.screen() == null ? "none" : mc.gui.screen().getClass().getSimpleName());
         report(screen.contains("Sign"), "the sign opens its editor (" + screen + ")");
-        ctx.runOnClient(mc -> mc.gui.setScreen(null));
+        if (!screen.contains("Sign")) return;
+        ctx.getInput().typeChars("Hola");
+        ctx.getInput().pressKey(com.mojang.blaze3d.platform.InputConstants.KEY_RETURN);
+        ctx.getInput().typeChars("GalaxyCraft");
+        System.out.println("[GalaxyCraft working] the editor holds " + ctx.computeOnClient(mc -> {
+            try {
+                var f = net.minecraft.client.gui.screens.inventory.AbstractSignEditScreen.class.getDeclaredField("messages");
+                f.setAccessible(true);
+                return java.util.Arrays.toString((String[]) f.get(mc.gui.screen()));
+            } catch (ReflectiveOperationException | ClassCastException e) {
+                return e.toString();
+            }
+        }));
+        ctx.clickScreenButton("gui.done");
+        run(ctx, 10);
+        var map = dev.moui.galaxycraft.shadow.ShadowMap.of(s.planet(), "probe");
+        net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(map.x(cell), map.y(cell), map.z(cell));
+        String text = sp.getServer().computeOnServer(server -> server.getLevel(ShadowWorld.KEY).getBlockEntity(pos)
+                instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign
+                ? String.join("/", sign.getText(net.minecraft.world.level.block.entity.SignTextSlot.FRONT).getMessages(false).stream()
+                        .map(net.minecraft.network.chat.Component::getString).toList()) + " | back "
+                        + String.join("/", sign.getText(net.minecraft.world.level.block.entity.SignTextSlot.BACK).getMessages(false).stream()
+                        .map(net.minecraft.network.chat.Component::getString).toList())
+                : "no sign at " + pos);
+        report(text.contains("Hola/GalaxyCraft"), "what is typed stays on the sign (" + text + ")");
     }
 
-    /** A shelf takes the item in hand. */
+    /** A shelf takes the item in hand, clicked on its front. */
     private void shelf(ClientGameTestContext ctx, TestSingleplayerContext sp, int cell) {
         hold(sp, new ItemStack(Items.APPLE, 3));
-        use(ctx, cell);
+        String name = ctx.computeOnClient(mc -> blocks.name(s.planet().get(cell)));
+        var facing = net.minecraft.core.Direction.byName(name.replaceAll(".*facing=(\\w+).*", "$1"));
+        int side = dev.moui.galaxycraft.voxel.CellSpace.SIDE_OF_DIRECTION[facing.ordinal()];
+        int[] st = dev.moui.galaxycraft.voxel.CellSpace.STEP[side];
+        ctx.runOnClient(mc -> ShadowWorld.use(s.planet(), cell, side, new Vec3(0.5 + 0.49 * st[0], 0.5 + 0.49 * st[1], 0.5 + 0.49 * st[2]),
+                mc.player.getUUID(), InteractionHand.MAIN_HAND, () -> {}));
+        run(ctx, 3);
         run(ctx, 10);
         String hand = sp.getServer().computeOnServer(server -> player(server).getMainHandItem().toString());
         report(!hand.contains("3 minecraft:apple"), "the shelf takes the apples in hand (hand now " + hand + ")");
@@ -132,6 +165,45 @@ public final class WorkingBlocksProbe implements FabricClientGameTest {
         });
         System.out.println("[GalaxyCraft working] minecart after a push: " + moved);
         report(!moved.equals("none") && !moved.startsWith(cart.replaceAll(".* at (\\S+, \\S+, \\S+) on .*", "$1")), "the minecart rolls");
+    }
+
+    /** A respawn anchor charged with glowstone, then used: it keeps where the player comes back, and is not blown up. */
+    private void anchor(ClientGameTestContext ctx, TestSingleplayerContext sp, int cell) {
+        while (ShadowWorld.pollBed() != null) {}
+        hold(sp, new ItemStack(Items.GLOWSTONE, 2));
+        use(ctx, cell);
+        run(ctx, 5);
+        hold(sp, ItemStack.EMPTY);
+        use(ctx, cell);
+        run(ctx, 10);
+        String block = ctx.computeOnClient(mc -> blocks.name(s.planet().get(cell)));
+        report(block.contains("charges=1") && ShadowWorld.pollBed() != null, "the respawn anchor is charged and keeps the spawn (" + block + ")");
+    }
+
+    /** What a lit TNT's own renderer submits (by kind of submit), as the game's entity capture sees it. */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static String tntSubmits(net.minecraft.client.Minecraft mc) {
+        var tnt = new net.minecraft.world.entity.item.PrimedTnt(mc.level, 0, 100, 0, null);
+        tnt.setFuse(60);
+        java.util.Map<String, Integer> seen = new java.util.TreeMap<>();
+        var collector = (net.minecraft.client.renderer.SubmitNodeCollector) java.lang.reflect.Proxy.newProxyInstance(
+                WorkingBlocksProbe.class.getClassLoader(), new Class<?>[] {net.minecraft.client.renderer.SubmitNodeCollector.class},
+                (proxy, m, args) -> {
+                    String what = m.getName();
+                    if (args != null)
+                        for (Object a : args) {
+                            if (a instanceof List<?> l) what += " list " + l.size();
+                            if (a != null && a.getClass().isArray() && !a.getClass().getComponentType().isPrimitive())
+                                what += " array " + ((Object[]) a).length;
+                        }
+                    what += " " + java.util.Arrays.toString(m.getParameterTypes()).replaceAll("class [a-z.]*\\.", "");
+                    seen.merge(what, 1, Integer::sum);
+                    return m.getName().equals("order") ? proxy : null;
+                });
+        net.minecraft.client.renderer.entity.EntityRenderer r = mc.getEntityRenderDispatcher().getRenderer(tnt);
+        var st = r.createRenderState(tnt, 0f);
+        r.submit(st, new com.mojang.blaze3d.vertex.PoseStack(), collector, new net.minecraft.client.renderer.state.level.CameraRenderState());
+        return seen.toString();
     }
 
     private static ServerPlayer player(net.minecraft.server.MinecraftServer server) {

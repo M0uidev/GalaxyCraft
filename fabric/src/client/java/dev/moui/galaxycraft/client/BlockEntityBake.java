@@ -166,6 +166,36 @@ final class BlockEntityBake implements SubmitNodeCollector {
         }
     }
 
+    /** Fabric's renderer hands block models over as a mesh: its quads, as the block's baked ones. */
+    @Override
+    public void submitBlockModel(PoseStack poseStack, java.util.function.Function<net.minecraft.client.renderer.chunk.ChunkSectionLayer, RenderType> types,
+            boolean flag, List<BlockStateModelPart> parts, net.fabricmc.fabric.api.client.renderer.v1.mesh.Mesh mesh, int[] tints, int light,
+            int overlay, int outline) {
+        if (parts != null && !parts.isEmpty()) submitBlockModel(poseStack, (RenderType) null, parts, tints, light, overlay, outline);
+        if (mesh == null || mesh.size() == 0) return;
+        Matrix4f m = new Matrix4f(poseStack.last().pose());
+        var mc = Minecraft.getInstance();
+        var any = mc.getModelManager().getBlockStateModelSet().get(net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        var finder = ((net.fabricmc.fabric.api.client.renderer.v1.sprite.FabricTextureAtlas) mc.getTextureManager()
+                .getTexture(any.particleMaterial().sprite().atlasLocation())).spriteFinder();
+        mesh.forEach(q -> {
+            TextureAtlasSprite sprite = finder.find(q);
+            if (sprite == null) return;
+            float du = sprite.getU1() - sprite.getU0(), dv = sprite.getV1() - sprite.getV0();
+            float[] pos = new float[12], uv = new float[8];
+            for (int k = 0; k < 4; k++) {
+                Vector3f p = m.transformPosition(q.x(k), q.y(k), q.z(k), new Vector3f());
+                pos[3 * k] = p.x;
+                pos[3 * k + 1] = p.y;
+                pos[3 * k + 2] = p.z;
+                uv[2 * k] = du == 0 ? 0 : (q.u(k) - sprite.getU0()) / du;
+                uv[2 * k + 1] = dv == 0 ? 0 : (q.v(k) - sprite.getV0()) / dv;
+            }
+            int tint = q.tintIndex() >= 0 && tints.length > q.tintIndex() ? tints[q.tintIndex()] & 0xFFFFFF : 0xFFFFFF;
+            out.add(new Face(pos, uv, null, 0, 0, sprite.contents().name(), tint));
+        });
+    }
+
     // ---- not baked: items, text, custom geometry and the rest belong to the block entity's data ----
 
     @Override

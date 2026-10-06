@@ -79,6 +79,7 @@ public final class ShadowWorld {
     private static final ConcurrentLinkedQueue<Change> changes = new ConcurrentLinkedQueue<>();
     private static final ConcurrentLinkedQueue<Runnable> toClient = new ConcurrentLinkedQueue<>();
     private static final ConcurrentLinkedQueue<Drop> drops = new ConcurrentLinkedQueue<>();
+    private static final ConcurrentLinkedQueue<Bed> beds = new ConcurrentLinkedQueue<>();
     private static volatile int applied;
     private static volatile boolean available, catchThrown;
 
@@ -256,6 +257,22 @@ public final class ShadowWorld {
     }
 
     /** What the server hands back to the client thread (a click that used nothing places a block). */
+    /** A sign to edit, as the client's editor takes it: the shadow's sign, its texts, the side the player faces. */
+    public record SignEdit(BlockPos pos, BlockState state, net.minecraft.world.level.block.entity.SignText front,
+            net.minecraft.world.level.block.entity.SignText back, net.minecraft.world.level.block.entity.SignTextSlot slot) {}
+
+    /** Set by the client: opens Minecraft's sign editor on a copy of the shadow's sign (on the client thread). */
+    public static volatile Consumer<SignEdit> signEditor;
+    /** By player: the shadow's sign their editor is open for (server thread). */
+    private static final java.util.Map<UUID, BlockPos> editing = new java.util.HashMap<>();
+
+    /** A bed slept in (any bed, straw too): the player comes back to its cell's top after dying. */
+    public record Bed(VoxelPlanet planet, int cell) {}
+
+    public static Bed pollBed() {
+        return beds.poll();
+    }
+
     public static Runnable pollClient() {
         return toClient.poll();
     }
@@ -376,11 +393,21 @@ public final class ShadowWorld {
 
     private static InteractionResult use(ServerLevel level, ServerPlayer sp, InteractionHand hand, BlockHitResult h) {
         BlockState state = level.getBlockState(h.getBlockPos());
+        if (state.getBlock() instanceof net.minecraft.world.level.block.AbstractBedBlock && !sp.isSecondaryUseActive())
+            return sleep(level, sp, h.getBlockPos(), state);
+        if (state.getBlock() instanceof net.minecraft.world.level.block.RespawnAnchorBlock && !sp.isSecondaryUseActive()
+                && state.getValue(net.minecraft.world.level.block.RespawnAnchorBlock.CHARGE) > 0
+                && !(sp.getItemInHand(hand).is(net.minecraft.world.item.Items.GLOWSTONE)
+                        && state.getValue(net.minecraft.world.level.block.RespawnAnchorBlock.CHARGE) < 4))
+            return anchor(sp, h.getBlockPos());
         ItemStack stack = sp.getItemInHand(hand);
         InteractionResult r = InteractionResult.PASS;
         boolean handsFull = !stack.isEmpty() || !sp.getOffhandItem().isEmpty();
         if (!(sp.isSecondaryUseActive() && handsFull)) {
             r = state.useItemOn(stack, level, sp, hand, h);
+            if (r instanceof InteractionResult.TryEmptyHandInteraction && hand == InteractionHand.MAIN_HAND
+                    && state.getBlock() instanceof net.minecraft.world.level.block.SignBlock)
+                return editSign(level, sp, h.getBlockPos(), state);
             if (r instanceof InteractionResult.TryEmptyHandInteraction && hand == InteractionHand.MAIN_HAND)
                 r = state.useWithoutItem(level, sp, h);
         }
@@ -404,6 +431,94 @@ public final class ShadowWorld {
                 && s.heldItemTransformedTo() != stack)
             sp.setItemInHand(hand, s.heldItemTransformedTo());
         return r;
+    }
+
+    /**
+     * A sign used with nothing to put on it (dye, glow ink and honeycomb go Minecraft's own way): its
+     * editor opens on the player's screen, for the side Mario faces. Minecraft's would look for the
+     * sign where the player is, not in the shadow; what is written comes back through
+     * {@link #signEdited}.
+     */
+    private static InteractionResult editSign(ServerLevel level, ServerPlayer sp, BlockPos pos, BlockState state) {
+        if (!(level.getBlockEntity(pos) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign) || signEditor == null)
+            return InteractionResult.PASS;
+        if (sign.isWaxed()) {
+            level.playSound(null, pos, sign.getSignInteractionFailedSoundEvent(), net.minecraft.sounds.SoundSource.BLOCKS);
+            return InteractionResult.SUCCESS;
+        }
+        var slot = proxy != null && !proxy.isRemoved() ? sign.getSlotPlayerIsFacing(proxy)
+                : net.minecraft.world.level.block.entity.SignTextSlot.FRONT;
+        editing.put(sp.getUUID(), pos);
+        SignEdit edit = new SignEdit(pos, state, sign.getText(net.minecraft.world.level.block.entity.SignTextSlot.FRONT),
+                sign.getText(net.minecraft.world.level.block.entity.SignTextSlot.BACK), slot);
+        Consumer<SignEdit> open = signEditor;
+        toClient.add(() -> open.accept(edit));
+        return InteractionResult.SUCCESS;
+    }
+
+    /**
+     * What the player wrote on a sign (the server's sign update, on the server thread): true if the
+     * sign is the shadow's (written there, as Minecraft writes it: only by whom it was opened for,
+     * never on a waxed one), false for one of the player's own level.
+     */
+    public static boolean signEdited(ServerPlayer sp, BlockPos pos, net.minecraft.world.level.block.entity.SignTextSlot slot,
+            List<net.minecraft.server.network.FilteredText> lines) {
+        if (server == null) return false;
+        ServerLevel level = server.getLevel(KEY);
+        if (level == null || level == sp.level() || !pos.equals(editing.get(sp.getUUID()))) return false;
+        editing.remove(sp.getUUID());
+        if (!level.isLoaded(pos) || !(level.getBlockEntity(pos) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign))
+            return true;
+        // Minecraft lets only a player within reach in the sign's level keep editing it, and the
+        // player is not in the shadow: the editor opened for them here is their leave.
+        sign.setAllowedPlayerEditor(sp.getUUID());
+        sign.updateSignText(sp, slot, lines);
+        return true;
+    }
+
+    /**
+     * A charged respawn anchor used: where the player comes back after dying, as a bed (the shadow
+     * is no Nether, and Minecraft would blow it up). Charging it with glowstone stays Minecraft's.
+     */
+    private static InteractionResult anchor(ServerPlayer sp, BlockPos pos) {
+        int cell = map == null ? -1 : map.cell(pos.getX(), pos.getY(), pos.getZ());
+        if (cell >= 0) beds.add(new Bed(planet, cell));
+        sp.sendSystemMessage(net.minecraft.network.chat.Component.translatable("block.minecraft.set_spawn"), true);
+        return InteractionResult.SUCCESS;
+    }
+
+    /**
+     * A bed used, as Minecraft's own: where the player comes back after dying from now on, and at
+     * night, with no monster about, the night is slept through. The player is not in the shadow
+     * (Minecraft's BedBlock would find no bed where he is), so it is done here; the straw bed does
+     * what every bed does.
+     */
+    private static InteractionResult sleep(ServerLevel level, ServerPlayer sp, BlockPos pos, BlockState state) {
+        BlockPos head = state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.BED_PART)
+                == net.minecraft.world.level.block.state.properties.BedPart.HEAD ? pos
+                : pos.relative(state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING));
+        int cell = map == null ? -1 : map.cell(head.getX(), head.getY(), head.getZ());
+        if (cell >= 0) beds.add(new Bed(planet, cell));
+        sp.sendSystemMessage(net.minecraft.network.chat.Component.translatable("block.minecraft.set_spawn"), true);
+        ServerLevel overworld = server.overworld();
+        if (!overworld.isDarkOutside() && !overworld.isThundering()) {
+            sp.sendSystemMessage(net.minecraft.network.chat.Component.translatable("block.minecraft.bed.no_sleep"), true);
+            return InteractionResult.SUCCESS;
+        }
+        var monsters = level.getEntitiesOfClass(net.minecraft.world.entity.monster.Monster.class,
+                new net.minecraft.world.phys.AABB(head).inflate(8, 5, 8), m -> m.isPreventingPlayerRest(level, sp));
+        if (!monsters.isEmpty()) {
+            sp.sendSystemMessage(net.minecraft.network.chat.Component.translatable("block.minecraft.bed.not_safe"), true);
+            return InteractionResult.SUCCESS;
+        }
+        // As ServerLevel.tick once everyone sleeps: the clock to the morning, the rain gone.
+        var rules = overworld.getGameRules();
+        if ((Boolean) rules.get(net.minecraft.world.level.gamerules.GameRules.ADVANCE_TIME))
+            overworld.dimensionType().defaultClock().ifPresent(clock -> server.clockManager().moveToTimeMarker(clock,
+                    net.minecraft.world.clock.ClockTimeMarkers.WAKE_UP_FROM_SLEEP));
+        if ((Boolean) rules.get(net.minecraft.world.level.gamerules.GameRules.ADVANCE_WEATHER) && overworld.isRaining())
+            overworld.resetWeatherCycle();
+        return InteractionResult.SUCCESS;
     }
 
     // ---- server thread ----

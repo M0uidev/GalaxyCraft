@@ -14,7 +14,8 @@
     "ShadowParticleMixin",
     "ShadowReachMixin",
     "ShadowRideMixin",
-    "ShadowSpawnMixin"
+    "ShadowSpawnMixin",
+    "SignUpdateMixin"
   ],
   "injectors": {
     "defaultRequire": 1

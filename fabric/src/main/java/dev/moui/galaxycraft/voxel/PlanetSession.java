@@ -331,6 +331,11 @@ public final class PlanetSession {
         return planet != null && mario != null && mario.length() < CORE;
     }
 
+    /** A teleport waits for its landing ground to go first: not on its way to the game yet. */
+    public boolean teleportQueued() {
+        return tpQueued;
+    }
+
     /** Lands Mario on the ground straight out from the planet's center along toward (planet space); where, planet blocks. */
     public Vector3d teleportToward(Vector3d toward) {
         if (planet == null) return null;
@@ -445,6 +450,7 @@ public final class PlanetSession {
             int c = urgent.poll();
             if (c == TP_MARK) {
                 tpQueued = false;
+                dev.moui.galaxycraft.GalaxyCraft.LOG.info("Teleport onto planet {} on its way to the game", id);
                 built = new Msg(Layout.MSG_PLANET_TP, ByteBuffer.allocate(20).putFloat(tpGround).putInt(id) // big-endian: passed on as is
                         .putFloat((float) tpDir.x).putFloat((float) tpDir.y).putFloat((float) tpDir.z).array());
                 break;

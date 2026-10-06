@@ -95,7 +95,25 @@ public final class GalaxySave {
     }
 
     public Optional<Spot> spot() {
-        Path f = dir.resolve("player.json");
+        return read("player.json");
+    }
+
+    /** Where the player comes back after dying: the last bed slept in (its top), if any. */
+    public Optional<Spot> bed() {
+        return read("bed.json");
+    }
+
+    public void writeBed(Spot s) throws IOException {
+        write("bed.json", s);
+    }
+
+    /** The bed is gone: the player comes back where they last stood. */
+    public void clearBed() throws IOException {
+        Files.deleteIfExists(dir.resolve("bed.json"));
+    }
+
+    private Optional<Spot> read(String name) {
+        Path f = dir.resolve(name);
         if (!Files.isRegularFile(f)) return Optional.empty();
         try {
             Spot s = GSON.fromJson(Files.readString(f, StandardCharsets.UTF_8), Spot.class);
@@ -107,9 +125,13 @@ public final class GalaxySave {
 
     /** Written whole and atomically: a crash midway leaves the last spot. */
     public void writeSpot(Spot s) throws IOException {
+        write("player.json", s);
+    }
+
+    private void write(String name, Spot s) throws IOException {
         Files.createDirectories(dir);
-        Path tmp = dir.resolve("player.json.tmp");
+        Path tmp = dir.resolve(name + ".tmp");
         Files.writeString(tmp, GSON.toJson(s), StandardCharsets.UTF_8);
-        Files.move(tmp, dir.resolve("player.json"), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        Files.move(tmp, dir.resolve(name), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 }

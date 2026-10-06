@@ -93,6 +93,7 @@ public final class EntityTest implements FabricClientGameTest {
                 gxdev("ctl", "shot entities-walk-" + k);
                 ctx.waitTicks(3);
             }
+            litTnt(ctx, sp, s, cell);
             fight(ctx, sp, map, x0, y, z0);
             ctx.getInput().pressKey(o -> o.keyTogglePerspective);
             ctx.waitTicks(20);
@@ -262,13 +263,24 @@ public final class EntityTest implements FabricClientGameTest {
         ctx.waitTicks(5);
         check(ctx.computeOnClient(mc -> mc.player.getMainHandItem().is(net.minecraft.world.item.Items.MILK_BUCKET)), "the cow is milked");
 
-        // Rails a few blocks off, a minecart on them: Mario gets in and rides it along.
-        double rz = Math.min(z0 + 3, map.z0 + map.grid.n - 1.5);
-        int ry = (int) Math.floor(y - 1.5);
-        sp.getServer().runCommand(String.format(java.util.Locale.ROOT, "execute in galaxycraft:shadow run fill %d %d %d %d %d %d minecraft:rail",
-                (int) Math.floor(x0 - 4), ry, (int) Math.floor(rz), (int) Math.floor(x0 + 4), ry, (int) Math.floor(rz)));
+        // Rails on the planet two blocks to his side, as a player lays them, a minecart on the first:
+        // Mario gets in and rides it along.
+        int first = ctx.computeOnClient(mc -> {
+            PlanetSession ps = PlanetClient.session();
+            var g = ps.planet().grid;
+            int marioCell = ps.cellAt(GalaxyCraftClient.galaxyPos().get());
+            int c = g.neighbor(g.neighbor(marioCell, dev.moui.galaxycraft.voxel.CubeSphere.I_PLUS), dev.moui.galaxycraft.voxel.CubeSphere.I_PLUS);
+            int start = c;
+            for (int k = 0; k < 9 && c >= 0; k++) {
+                ps.planet().set(g.neighbor(c, dev.moui.galaxycraft.voxel.CubeSphere.BOTTOM), ps.planet().blocks.parse("minecraft:stone"));
+                ps.planet().set(c, ps.planet().blocks.parse("minecraft:rail"));
+                c = g.neighbor(c, dev.moui.galaxycraft.voxel.CubeSphere.J_PLUS);
+            }
+            return start;
+        });
+        ctx.waitTicks(40); // the shadow takes the rails in
         sp.getServer().runCommand(String.format(java.util.Locale.ROOT, "execute in galaxycraft:shadow run summon minecraft:minecart %.2f %d %.2f",
-                Math.floor(x0 - 3) + 0.5, ry, Math.floor(rz) + 0.5));
+                map.x(first) + 0.5, map.y(first), map.z(first) + 0.5));
         ctx.waitTicks(10);
         int[] cart = new int[1];
         ctx.runOnClient(mc -> {
@@ -332,6 +344,35 @@ public final class EntityTest implements FabricClientGameTest {
     /** v kept on the face's box from lo, n cells wide, a block in from its edges. */
     private static double clampTo(double v, int lo, int n) {
         return Math.clamp(v, lo + 1.5, lo + n - 1.5);
+    }
+
+    /** A TNT block on the planet lit with flint and steel: it goes, and the lit TNT is drawn where it was. */
+    private void litTnt(ClientGameTestContext ctx, TestSingleplayerContext sp, PlanetSession s, int marioCell) {
+        int cell = ctx.computeOnClient(mc -> {
+            var g = s.planet().grid;
+            int c = g.neighbor(g.neighbor(g.neighbor(marioCell, dev.moui.galaxycraft.voxel.CubeSphere.J_PLUS),
+                    dev.moui.galaxycraft.voxel.CubeSphere.J_PLUS), dev.moui.galaxycraft.voxel.CubeSphere.J_PLUS);
+            s.planet().set(c, s.planet().blocks.parse("minecraft:tnt"));
+            return c;
+        });
+        sp.getServer().runCommand("item replace entity @a weapon.mainhand with flint_and_steel");
+        ctx.waitTicks(30);
+        int before = count();
+        ctx.runOnClient(mc -> ShadowWorld.use(s.planet(), cell, dev.moui.galaxycraft.voxel.CubeSphere.TOP,
+                new net.minecraft.world.phys.Vec3(0.5, 1, 0.5), mc.player.getUUID(), net.minecraft.world.InteractionHand.MAIN_HAND, () -> {}));
+        ctx.waitTicks(15);
+        long lit = ctx.computeOnClient(mc -> ShadowWorld.entities().list().stream()
+                .filter(e -> e instanceof net.minecraft.world.entity.item.PrimedTnt).count());
+        String block = ctx.computeOnClient(mc -> PlanetClient.blockName(cell));
+        int after = count();
+        log("lit TNT: " + lit + " in the shadow, its cell now " + block + ", pieces " + before + " -> " + after);
+        gxdev("ctl", "shot entities-lit-tnt");
+        check(lit >= 1 && block.equals("minecraft:air"), "flint and steel lights the planet's TNT");
+        check(after > before, "the lit TNT is drawn");
+        sp.getServer().runCommand("item replace entity @a weapon.mainhand with air");
+        // Lit TNT gone before the fight: its blast would take the zombie that is to hit Mario.
+        sp.getServer().runCommand("execute in galaxycraft:shadow run kill @e[type=tnt]");
+        ctx.waitTicks(10);
     }
 
     private static int count() {
