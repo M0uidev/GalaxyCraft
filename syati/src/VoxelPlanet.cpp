@@ -102,6 +102,11 @@ const f32 FAR_VIEW_ABOVE = 96.f * 80.f;
 // chunks a frame: the graves hold thousands, first in first out.
 const u32 GRAVE_FRAMES = 8;
 gxc::Graves gGraves;
+// A replaced chunk's collision: Mario's binder may keep the triangle he stands on without looking
+// again while he stands still (away from the keyboard, then water flows or a block changes next to
+// him), and SMG2 reads it every frame: it waits for frames in which he moved.
+gxc::Graves gKclGraves;
+bool gMarioMoved;
 
 // The module's own heap, in the scene's MEM2 heap. That one is a JKRSolidHeap (read live: its
 // vtable is JKRSolidHeap's): it only grows and frees nothing until the scene ends, so every chunk
@@ -141,9 +146,17 @@ void Bury(void* p)
   gGraves.Bury(p, GRAVE_FRAMES, FreeHeap);
 }
 
+void BuryKcl(void* p)
+{
+  gKclGraves.Bury(p, GRAVE_FRAMES, FreeHeap);
+}
+
 void TickGraves()
 {
   gGraves.Tick(FreeHeap);
+  if (gMarioMoved)
+    gKclGraves.Tick(FreeHeap);
+  gMarioMoved = false;
 }
 
 // Mario's hitbox (VoxelPlanetHitbox): lines with a color each, built in turn in two lists.
@@ -683,7 +696,7 @@ public:
       p.slots[last].drawn = s.drawn;
     }
     Bury(s.dl);
-    Bury(s.kcl);
+    BuryKcl(s.kcl);
     s.dl = s.kcl = 0;
     s.parts = 0;
     s.dl_size = 0;
@@ -1118,6 +1131,7 @@ void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size)
   gHitboxDl[0] = gHitboxDl[1] = 0;
   gHitboxOn = false;
   gGraves.Reset();
+  gKclGraves.Reset();
   gVoxelStats.module_bytes = 0;
   gModHeap = 0;  // went with the old scene's heap
   gInbox = static_cast<u8*>(operator new(INBOX_BYTES));
@@ -1144,6 +1158,11 @@ uint8_t* VoxelPlanetAlloc32(uint32_t size)
 bool VoxelPlanetMarioRadius(const float pos[3], float* radius)
 {
   return gActor && gActor->MarioRadius(pos, radius);
+}
+
+void VoxelPlanetMarioMoved()
+{
+  gMarioMoved = true;
 }
 
 void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_size)

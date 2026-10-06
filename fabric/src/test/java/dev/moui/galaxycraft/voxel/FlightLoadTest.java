@@ -116,4 +116,27 @@ class FlightLoadTest {
         }
         org.junit.jupiter.api.Assertions.assertTrue(maxParts <= PlanetSession.MAX_PARTS, maxParts + " collision parts in the game");
     }
+
+    @Test void standingStillNothingUnderMarioIsSentAgain() {
+        // Away from the keyboard: the chunks with collision under Mario stay as the game has them
+        // (SMG2 may keep the triangle he stands on without looking again; a new part frees the old).
+        PlanetSession s = new PlanetSession(80);
+        s.setRenderDistance(96);
+        s.spawn(64, new Vector3d(), new Vector3d(0, 1, 0));
+        Vector3d at = new Vector3d(s.center()).add(0, -65 * 80, 0);
+        for (int i = 0; i < 40; i++) {
+            s.update(3, 100, at);
+            while (s.peek() != null) s.sent();
+        }
+        int resent = 0;
+        for (int i = 0; i < 600; i++) {
+            s.update(3, 100, at);
+            for (PlanetSession.Msg m; (m = s.peek()) != null; s.sent()) {
+                java.nio.ByteBuffer b = java.nio.ByteBuffer.wrap(m.payload()).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+                if (m.type() == dev.moui.galaxycraft.proto.Layout.MSG_CHUNK && (b.getInt(0) & PlanetSession.FAR_VIEW) == 0
+                        && s.collides(b.getInt(0) & 0x7FFFFF)) resent++;
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertEquals(0, resent, "chunks with collision sent again while Mario stood still");
+    }
 }

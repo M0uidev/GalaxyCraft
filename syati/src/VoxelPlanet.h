@@ -7,6 +7,8 @@
 // with the old scene's heap) with records meant for this scene.
 void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size);
 void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_size);
+// Mario moved this frame (before VoxelPlanetFrame): replaced collision may go once he has moved a while.
+void VoxelPlanetMarioMoved();
 // The collision sphere Mario should have at pos (galaxy units) in the planet's gravity, if the
 // mod gave one (GxcPlanet.mario_radius): his own is 1.5 blocks wide and fits no tunnel.
 bool VoxelPlanetMarioRadius(const float pos[3], float* radius);
