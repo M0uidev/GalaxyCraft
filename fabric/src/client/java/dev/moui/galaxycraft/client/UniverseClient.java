@@ -66,8 +66,13 @@ public final class UniverseClient {
         pinned = blocks == null ? null : new Vector3d(blocks).mul(UNITS);
     }
 
-    /** Before the planets' messages of the tick. landing: a teleport or landing is under way. */
-    static void tick(BridgeClient bridge, Seqlock.WorldState world, boolean landing) {
+    /**
+     * Before the planets' messages of the tick. landing: a teleport or landing is under way;
+     * landingAt: where Mario is about to land (universe units), if known: the origin goes to that
+     * system's center first (Mario is held while he lands, nothing to disturb), so he never lands
+     * with the game's numbers far out.
+     */
+    static void tick(BridgeClient bridge, Seqlock.WorldState world, boolean landing, Vector3d landingAt) {
         // Only GalaxyCraftSpace is empty but for what the module draws: in another stage the
         // stage's own ground would stay where it is.
         if (!Layout.SPACE_STAGE.equals(bridge.stage())) return;
@@ -83,6 +88,10 @@ public final class UniverseClient {
         Optional<UPos> goal;
         if (pinned != null) goal = Optional.of(UPos.of(pinned));
         else if (!ON || mario == null) goal = Optional.empty();
+        else if (landingAt != null && universe != null) {
+            Optional<Universe.Star> to = universe.systemAt(UPos.of(landingAt), OriginPolicy.SYSTEM_MARGIN);
+            goal = to.map(Universe.Star::center).filter(c -> GameOrigin.origin().peek(c) != null);
+        }
         else {
             List<PlanetLayout.Sphere> spheres = new ArrayList<>();
             for (PlanetSession s : PlanetClient.planets())

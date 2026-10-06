@@ -34,6 +34,8 @@ if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ] || [ "${1:-}" = universe ]; th
   # LauncherProbe (or GalaxyProbe, a world of many planets): the dev Dolphin boots by itself (no
   # savestate), Minecraft starts at its title.
   G="python3 tools/gxdev.py"
+  : "${JAVA_HOME:=$(ls -d "$HOME"/.local/opt/jdk-25* 2>/dev/null | head -1)}"
+  export JAVA_HOME
   if [ "$1" = galaxy ]; then NAME=GalaxyProbe GPROP=galaxycraftGalaxy GTAG=galaxy
   elif [ "$1" = universe ]; then NAME=UniverseProbe GPROP=galaxycraftUniverse GTAG=universe
   else NAME=LauncherProbe GPROP=galaxycraftLauncher GTAG=launch; fi

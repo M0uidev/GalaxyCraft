@@ -7,6 +7,9 @@ import dev.moui.galaxycraft.client.PlanetClient;
 import dev.moui.galaxycraft.client.UniverseClient;
 import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.universe.GameOrigin;
+import dev.moui.galaxycraft.universe.SystemIndex;
+import dev.moui.galaxycraft.universe.UPos;
+import dev.moui.galaxycraft.universe.Universe;
 import dev.moui.galaxycraft.voxel.GalaxyCatalog;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import java.io.IOException;
@@ -51,6 +54,7 @@ public final class UniverseProbe implements FabricClientGameTest {
 
         origin(ctx);
         voidFlight(ctx);
+        systems(ctx);
 
         ctx.runOnClient(mc -> mc.disconnectWithSavingScreen());
         waitReal(ctx, mc -> mc.level == null, 60);
@@ -122,11 +126,80 @@ public final class UniverseProbe implements FabricClientGameTest {
         check(game.length() < 5 * 65536, "the game's numbers stay small out there");
         gxdev("ctl", "shot universe-void");
         // Home again.
+        log("before going home: " + republished());
         ctx.runOnClient(mc -> PlanetClient.travelTo(PlanetClient.catalog().getFirst().index()));
+        for (int i = 0; i < 6; i++) {
+            ctx.waitTicks(10);
+            log(String.format("  +%d ticks: %s, landing %s, Mario at %.0f blocks from home", 10 * i + 10, republished(),
+                    ctx.computeOnClient(mc -> PlanetClient.waitingToLand()),
+                    ctx.computeOnClient(mc -> PlanetClient.marioUniverse() == null ? -1 : PlanetClient.marioUniverse().length() / U)));
+        }
         waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface(), 180);
         ctx.waitTicks(100);
         check(ctx.computeOnClient(mc -> onSurface()), "back home on the first planet");
         ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MARIO));
+    }
+
+    /**
+     * Another solar system: onto its first planet (the origin goes to its center), a block broken,
+     * home and back: the block is still broken, kept in the planet's own file.
+     */
+    private void systems(ClientGameTestContext ctx) {
+        Universe.Star star = ctx.computeOnClient(mc -> UniverseClient.universe().around(UPos.ZERO, 1).stream()
+                .filter(s -> !s.home()).findFirst().orElseThrow());
+        int index = SystemIndex.index(star.sector(), 0);
+        Vector3d center = star.center().minus(UPos.ZERO);
+        log(String.format("system %s, %.0f blocks from home, %d planets asked", SystemIndex.name(star.sector()), center.length() / U,
+                star.planets()));
+        ctx.runOnClient(mc -> PlanetClient.travelTo(index));
+        waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(index), 240);
+        ctx.waitTicks(60);
+        check(ctx.computeOnClient(mc -> on(index)), "Mario stands on the other system's first planet");
+        check(ctx.computeOnClient(mc -> GameOrigin.offset().distance(center) < 65536), "the origin is that system's center");
+        int[] t = ctx.computeOnClient(mc -> PlanetClient.tiers());
+        log(String.format("there: %d planets complete, %d far", t[0], t[1]));
+        check(t[0] >= 1, "its planets stream in");
+        gxdev("ctl", "shot universe-system");
+        // The block under his feet: which cell, what it was, broken.
+        int[] cellWas = ctx.computeOnClient(mc -> {
+            PlanetSession s = PlanetClient.standingOn();
+            Vector3d feet = GalaxyCraftClient.galaxyPos().orElseThrow();
+            Vector3d up = GalaxyCraftClient.galaxyUp().orElseThrow();
+            Vector3d eye = new Vector3d(up).mul(160).add(feet), down = new Vector3d(up).negate();
+            PlanetSession.Aim aim = s.aim(eye, down);
+            if (aim == null) return null;
+            int was = s.planet().get(aim.cell());
+            return s.breakBlock(eye, down, true) ? new int[] {aim.cell(), was, s.planet().get(aim.cell())} : null;
+        });
+        check(cellWas != null && cellWas[1] != cellWas[2], "a block is broken there");
+        ctx.waitTicks(60);
+        int settled = ctx.computeOnClient(mc -> PlanetClient.standingOn().planet().get(cellWas[0]));
+        log(String.format("the cell: was %s, broken %s, 3 s later %s", name(ctx, cellWas[1]), name(ctx, cellWas[2]), name(ctx, settled)));
+        cellWas[2] = settled; // what the world made of it (water may flow in): kept as that
+        int home = ctx.computeOnClient(mc -> PlanetClient.catalog().getFirst().index());
+        ctx.runOnClient(mc -> PlanetClient.travelTo(home));
+        waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(home), 240);
+        ctx.waitTicks(100);
+        check(ctx.computeOnClient(mc -> GameOrigin.offset().length() == 0), "home again, the origin is home's center");
+        java.nio.file.Path file = ctx.computeOnClient(mc -> PlanetClient.planetFile(index));
+        waitReal(ctx, mc -> java.nio.file.Files.isRegularFile(file), 30);
+        check(file.getFileName().toString().contains(".s" + SystemIndex.name(star.sector()) + ".p0"), "its file is named by its sector: " + file.getFileName());
+        ctx.runOnClient(mc -> PlanetClient.travelTo(index));
+        waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(index), 240);
+        ctx.waitTicks(60);
+        int again = ctx.computeOnClient(mc -> PlanetClient.standingOn().planet().get(cellWas[0]));
+        check(again == cellWas[2], "back there, the block is still broken (" + again + ", broken " + cellWas[2] + ", was " + cellWas[1] + ")");
+        ctx.runOnClient(mc -> PlanetClient.travelTo(home));
+        waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(home), 240);
+    }
+
+    private static String name(ClientGameTestContext ctx, int state) {
+        return state + " " + ctx.computeOnClient(mc -> PlanetClient.stateName(state));
+    }
+
+    private static boolean on(int index) {
+        PlanetSession s = PlanetClient.standingOn();
+        return s != null && PlanetClient.entry(index).map(e -> e.center().distance(s.center()) < 1).orElse(false);
     }
 
     /** How far Mario's reported position strays over two seconds standing still (units). */
@@ -145,7 +218,9 @@ public final class UniverseProbe implements FabricClientGameTest {
         PlanetSession s = PlanetClient.standingOn();
         Vector3d feet = GalaxyCraftClient.galaxyPos().orElse(null);
         if (s == null || feet == null) return false;
-        return Math.abs(s.localOf(feet).length() - s.planet().surface()) < 3;
+        // Generated planets have hills and valleys: anywhere on the ground near the surface.
+        double h = s.localOf(feet).length() - s.planet().surface();
+        return h > -24 && h < 48;
     }
 
     private static void waitReal(ClientGameTestContext ctx, java.util.function.Predicate<net.minecraft.client.Minecraft> what,
@@ -160,6 +235,14 @@ public final class UniverseProbe implements FabricClientGameTest {
     private void check(boolean that, String what) {
         log((that ? "ok " : "FAILED ") + what);
         ok &= that;
+    }
+
+    private static final Pattern REPUBLISHED = Pattern.compile("republished=(\\S+)");
+
+    /** Why the host sent the scene again (hello, new scene, relink), from its status. */
+    private static String republished() {
+        Matcher m = REPUBLISHED.matcher(gxdev("ctl", "status"));
+        return "republished " + (m.find() ? m.group(1) : "?");
     }
 
     private static String stage() {

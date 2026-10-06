@@ -89,6 +89,16 @@ class UniverseTest {
         assertTrue(u.systemAt(UPos.of(new Vector3d((Universe.SYSTEM_BLOCKS + 10) * U, 0, 0)), 20).isPresent());
     }
 
+    @Test void aBigHomeGalaxyKeepsItsNeighborsAway() {
+        // 7000 blocks: a world's galaxy of 64 planets far apart.
+        Universe u = new Universe(3, U).withHome(7000);
+        for (Universe.Star s : u.around(UPos.ZERO, 2))
+            if (!s.home()) assertTrue(s.center().minus(UPos.ZERO).length() / U >= 7000 + Universe.SYSTEM_BLOCKS + Universe.GAP_BLOCKS);
+        assertTrue(u.systemAt(UPos.of(new Vector3d(6900 * U, 0, 0)), 0).orElseThrow().home(), "home reaches that far");
+        assertFalse(new Universe(3, U).systemAt(UPos.of(new Vector3d(6900 * U, 0, 0)), 0).map(Universe.Star::home).orElse(false),
+                "a home of the usual size does not");
+    }
+
     @Test void manySectorsAreCheap() {
         Universe u = new Universe(4, U);
         u.around(UPos.ZERO, 8);

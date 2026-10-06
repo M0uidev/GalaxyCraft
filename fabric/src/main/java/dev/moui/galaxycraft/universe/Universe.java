@@ -61,6 +61,11 @@ public final class Universe {
 
     private final long seed;
     private final double unitsPerBlock;
+    /**
+     * How far the world's own galaxy reaches from (0, 0, 0), blocks: its catalog may be bigger than a
+     * generated system (64 planets, far apart). No other system comes within GAP_BLOCKS of it.
+     */
+    private double homeReach = SYSTEM_BLOCKS;
     private final Map<Sector, GalaxyCatalog.Result> systems = new LinkedHashMap<>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<Sector, GalaxyCatalog.Result> e) {
@@ -71,6 +76,18 @@ public final class Universe {
     public Universe(long seed, double unitsPerBlock) {
         this.seed = seed;
         this.unitsPerBlock = unitsPerBlock;
+    }
+
+    /** The world's galaxy reaches this far (blocks; at least a system's reach). */
+    public Universe withHome(double reachBlocks) {
+        homeReach = Math.max(SYSTEM_BLOCKS, reachBlocks);
+        systems.clear();
+        return this;
+    }
+
+    /** How far a system reaches from its center, blocks. */
+    public double reach(Star s) {
+        return s.home() ? homeReach : SYSTEM_BLOCKS;
     }
 
     /** How far a system's center strays from its sector's, units on each axis at most. */
@@ -95,6 +112,9 @@ public final class Universe {
                 oz = home ? 0 : (2 * rnd.nextDouble() - 1) * j;
         UPos c = s.center();
         UPos center = UPos.of(c.cx(), c.cy(), c.cz(), ox, oy, oz);
+        // A big world's galaxy takes its neighbors' room.
+        if (!home && center.minus(UPos.ZERO).length() < (homeReach + SYSTEM_BLOCKS + GAP_BLOCKS) * unitsPerBlock)
+            return Optional.empty();
         int planets = MIN_PLANETS + rnd.nextInt(MAX_PLANETS - MIN_PLANETS + 1);
         int a = GalaxyCatalog.MIN_RADIUS + rnd.nextInt(GalaxyCatalog.MAX_RADIUS - GalaxyCatalog.MIN_RADIUS + 1);
         int b = GalaxyCatalog.MIN_RADIUS + rnd.nextInt(GalaxyCatalog.MAX_RADIUS - GalaxyCatalog.MIN_RADIUS + 1);
@@ -118,12 +138,17 @@ public final class Universe {
     }
 
     /**
-     * The system p is in (within its reach plus margin blocks of its center), if any. Only p's own
-     * sector can hold it: every system stays inside its sector.
+     * The system p is in (within its reach plus margin blocks of its center), if any: the world's
+     * galaxy, or the system of p's own sector (every generated system stays inside its sector).
      */
     public Optional<Star> systemAt(UPos p, double marginBlocks) {
-        double reach = (SYSTEM_BLOCKS + marginBlocks) * unitsPerBlock;
-        return star(sectorOf(p)).filter(s -> s.center().minus(p).lengthSquared() <= reach * reach);
+        // The world's galaxy may reach past its own sector; every other system stays inside its own.
+        java.util.function.Predicate<Star> in = s -> {
+            double reach = (reach(s) + marginBlocks) * unitsPerBlock;
+            return s.center().minus(p).lengthSquared() <= reach * reach;
+        };
+        Optional<Star> home = star(Sector.HOME).filter(in);
+        return home.isPresent() ? home : star(sectorOf(p)).filter(in);
     }
 
     /**

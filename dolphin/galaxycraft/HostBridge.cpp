@@ -189,7 +189,9 @@ void HostBridge::Tick(GuestMemory& mem)
   {
     const u64 hb = m_shm.GetU64(offsetof(GxcHeader, mod_heartbeat_ms));
     const u32 flags = m_shm.GetU32(offsetof(GxcHeader, mod_flags));
-    m_in_world = hb != 0 && now - hb < IN_WORLD_TIMEOUT_MS && (flags & GXC_MOD_IN_WORLD) != 0;
+    // The mod may beat after now was read (WaitForMod waits for exactly that): not an age in the
+    // future, which unsigned would make huge, Minecraft out of its world, and a relink.
+    m_in_world = hb != 0 && (now > hb ? now - hb : 0) < IN_WORLD_TIMEOUT_MS && (flags & GXC_MOD_IN_WORLD) != 0;
     m_entering = m_in_world && (flags & GXC_MOD_ENTERING) != 0;
   }
   if (m_boot_space)
@@ -256,7 +258,7 @@ void HostBridge::Tick(GuestMemory& mem)
     m_player = p;
   }
   const u64 mod_hb = m_shm.GetU64(offsetof(GxcHeader, mod_heartbeat_ms));
-  const bool mod_alive = mod_hb != 0 && now - mod_hb < GXC_HEARTBEAT_TIMEOUT_MS;
+  const bool mod_alive = mod_hb != 0 && (now > mod_hb ? now - mod_hb : 0) < GXC_HEARTBEAT_TIMEOUT_MS;
 
   // SMG2 owns the movement: the player follows Mario, so the query is always where Mario is.
   WorldState w{mbx.scene_id, m_frame, mbx.gravity, mbx.anchor,

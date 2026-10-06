@@ -46,6 +46,7 @@ public final class PlanetStore {
      * first file ends like another's.
      */
     public static String key(String stage, int index) {
+        if (dev.moui.galaxycraft.universe.SystemIndex.generated(index)) return dev.moui.galaxycraft.universe.SystemIndex.key(stage, index);
         return index == 0 ? stage : stage + ".p" + index;
     }
 

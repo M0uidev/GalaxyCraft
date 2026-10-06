@@ -2,6 +2,9 @@ package dev.moui.galaxycraft.client;
 
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.gravity.CosmicWind;
+import dev.moui.galaxycraft.universe.OriginPolicy;
+import dev.moui.galaxycraft.universe.UPos;
+import dev.moui.galaxycraft.universe.Universe;
 import dev.moui.galaxycraft.gravity.GravityBody;
 import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.proto.Seqlock;
@@ -124,7 +127,8 @@ final class Flight {
         if (fromSpace) player.resetFallDistance();
         Vector3d posBlocks = frame.toGal(vec(player.position())).mul(GravityFrame.SCALE);
         Vector3d velGal = frame.dirToGal(vec(player.getDeltaMovement()));
-        Vector3d dv = CosmicWind.push(voidNow && !player.isFallFlying(), posBlocks, velGal, bodies());
+        boolean stranded = voidNow && !player.isFallFlying();
+        Vector3d dv = CosmicWind.push(stranded, posBlocks, velGal, windBodies(posBlocks, stranded));
         if (dv.lengthSquared() > 0) {
             Vector3d mc = frame.dirToMc(dv);
             player.setDeltaMovement(player.getDeltaMovement().add(mc.x, mc.y, mc.z));
@@ -140,6 +144,22 @@ final class Flight {
         landed = 0;
         lastMario = null;
         turn.reset();
+    }
+
+    /**
+     * What the wind pulls toward: the planets, inside a system. Out between systems (endless
+     * universe) a glide is free, and a stranded player drifts to the nearest system's planets
+     * (its whole reach as one body).
+     */
+    static List<GravityBody> windBodies(Vector3d posBlocks, boolean stranded) {
+        Universe u = UniverseClient.universe();
+        if (u == null || !PlanetClient.ENDLESS) return bodies();
+        UPos at = UPos.of(new Vector3d(posBlocks).div(GravityFrame.SCALE));
+        if (u.systemAt(at, OriginPolicy.SYSTEM_MARGIN).isPresent()) return bodies();
+        if (!stranded) return List.of();
+        return u.around(at, 1).stream().findFirst()
+                .<List<GravityBody>>map(s -> List.of(new GravityBody.Sphere(s.center().minus(UPos.ZERO).mul(GravityFrame.SCALE), u.reach(s))))
+                .orElse(List.of());
     }
 
     /** Every planet's gravity, blocks. */
