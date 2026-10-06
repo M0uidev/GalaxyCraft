@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (game feel merged to Done)
+Last updated: 2026-10-06 (blocks: walls, heads, similar blocks and the off hand added to the Inbox)
 
 ---
 
@@ -120,6 +120,15 @@ Last updated: 2026-10-06 (game feel merged to Done)
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-06: The off hand (user): placing blocks and using things with the left hand, and what
+  comes with it. Today every right click, placement, bucket and held-item drawing uses only the
+  main hand.
+- 2026-10-06: Blocks, continued (user): torches and other directional blocks fixed to walls (X and
+  Z sides), mob heads placed freely on the floor and walls with their rotations, and the blocks
+  with mechanics like the ones below that don't work yet either. Must stay efficient without
+  changing how it looks. Lead found: placement calls the block's `getStateForPlacement` directly,
+  which skips `StandingAndWallBlockItem` (the item that picks wall torches, wall heads, wall
+  signs, wall banners, coral fans).
 - 2026-10-06: Blocks that don't show or don't work yet (user), and the others like them. Visible:
   TNT drawn whole, chests (invisible), shulker boxes, and shulkers (the mob); End crystals already
   work. Working: rails with minecarts together, signs, shelves, every bed (the straw bed too),
