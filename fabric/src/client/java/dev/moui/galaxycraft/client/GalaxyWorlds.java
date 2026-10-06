@@ -37,7 +37,39 @@ final class GalaxyWorlds {
                 GalaxyCraft.LOG.warn("Could not make the world's galaxy folder: {}", e.toString());
             }
         }
+        server.execute(() -> clearStartPlatform(server));
         PlanetClient.enterWorld(galaxy);
+        EnteringScreen.show(client);
+    }
+
+    /**
+     * Worlds made before the GalaxyCraft preset turned features off have Minecraft's void start
+     * platform at the origin (stone, cobblestone in the middle; VoidStartPlatformFeature): drawn on
+     * top of the game, it stood where no planet is. Taken away once, on the server's thread.
+     */
+    private static void clearStartPlatform(MinecraftServer server) {
+        java.nio.file.Path mark = server.getWorldPath(LevelResource.ROOT).resolve("galaxycraft").resolve("start-platform-gone");
+        if (java.nio.file.Files.exists(mark)) return;
+        var level = server.overworld();
+        if (!(level.getChunkSource().getGenerator() instanceof net.minecraft.world.level.levelgen.FlatLevelSource)) return;
+        var pos = new net.minecraft.core.BlockPos.MutableBlockPos();
+        int gone = 0;
+        for (int x = -8; x <= 24; x++)
+            for (int z = -8; z <= 24; z++)
+                for (int y = level.getMinY(); y < level.getMaxY(); y++) {
+                    var b = level.getBlockState(pos.set(x, y, z));
+                    if (b.is(net.minecraft.world.level.block.Blocks.STONE) || b.is(net.minecraft.world.level.block.Blocks.COBBLESTONE)) {
+                        level.setBlock(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 2);
+                        gone++;
+                    }
+                }
+        try {
+            java.nio.file.Files.createDirectories(mark.getParent());
+            java.nio.file.Files.writeString(mark, "");
+        } catch (IOException e) {
+            GalaxyCraft.LOG.warn("Could not mark the start platform gone: {}", e.toString());
+        }
+        GalaxyCraft.LOG.info("Minecraft's start platform taken away ({} blocks)", gone);
     }
 
     private static void firstVisit(MinecraftServer server) {

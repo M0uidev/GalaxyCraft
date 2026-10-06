@@ -266,6 +266,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     }
 
     /** Minecraft's physics chosen (the player walks on its own, Mario goes with it). */
+    /** The player is linked to the galaxy (its frame is up: Mario has gravity and the player follows). */
+    static boolean linkedToGalaxy() {
+        return frame != null;
+    }
+
     public static boolean walking() {
         return GalaxyOptions.MOVEMENT.get() == Movement.MINECRAFT;
     }
@@ -363,6 +368,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     private static void beforeTick(Minecraft client) {
         bridge.setInWorld(client.level != null && client.player != null);
         bridge.poll();
+        EnteringScreen.tick(client);
         PlanetClient.flushDropAll(bridge);
         LocalPlayer player = client.player;
         if (player == null) return;

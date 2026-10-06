@@ -6,7 +6,7 @@
         "type": "minecraft:flat",
         "settings": {
           "biome": "minecraft:the_void",
-          "features": true,
+          "features": false,
           "lakes": false,
           "layers": [
             {
