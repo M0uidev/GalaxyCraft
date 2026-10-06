@@ -35,8 +35,6 @@ public final class GravityFrame {
     /** r as it was before this tick's update: drawing between ticks turns smoothly from it. */
     private final Quaterniond rPrev = new Quaterniond();
     private final Vector3d t = new Vector3d();
-    /** t as it was at the start of this tick (with rPrev: where last tick's positions are). */
-    private final Vector3d tPrev = new Vector3d();
 
     public GravityFrame(Vector3d galStart, Vector3d mcStart, Vector3d gStart) {
         if (gStart.lengthSquared() > 1e-12) {
@@ -44,7 +42,6 @@ public final class GravityFrame {
         }
         t.set(mcStart).sub(r.transform(new Vector3d(galStart).mul(SCALE)));
         rPrev.set(r);
-        tPrev.set(t);
     }
 
     /** Parses a units-per-block setting; anything missing or absurd gives the default. */
@@ -62,7 +59,6 @@ public final class GravityFrame {
         r.set(o.r);
         rPrev.set(o.rPrev);
         t.set(o.t);
-        tPrev.set(o.tPrev);
     }
 
     public GravityFrame copy() {
@@ -78,23 +74,12 @@ public final class GravityFrame {
     }
 
     /**
-     * Where a player drawn between ticks is in the galaxy: its last tick's place (prevMc, in the
-     * frame as it was then) to this tick's (mc), partial of the way. A frame turning in a tick
-     * moves Minecraft space under the player; this keeps the galaxy path smooth across it.
-     */
-    public Vector3d toGal(Vector3d prevMc, Vector3d mc, double partial) {
-        Vector3d before = rPrev.transformInverse(new Vector3d(prevMc).sub(tPrev)).div(SCALE);
-        return before.lerp(toGal(mc), partial);
-    }
-
-    /**
      * Start of every tick, before any update: what the frame is now is what drawing between ticks
      * starts from. A tick that does not turn the frame (the void) then draws still, instead of
      * swinging back to the last turn's start every tick.
      */
     public void startTick() {
         rPrev.set(r);
-        tPrev.set(t);
     }
 
     public Vector3d dirToMc(Vector3d d) {
@@ -151,7 +136,6 @@ public final class GravityFrame {
         Vector3d gal = toGal(playerMc);
         Vector3d np = new Vector3d(playerMc.x, REBASE_Y, playerMc.z);
         t.set(np).sub(r.transform(gal.mul(SCALE)));
-        tPrev.add(0, np.y - playerMc.y, 0); // the caller moves last tick's place by the same
         return Optional.of(np);
     }
 

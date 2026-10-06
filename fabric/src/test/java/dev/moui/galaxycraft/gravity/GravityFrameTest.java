@@ -169,26 +169,4 @@ class GravityFrameTest {
         Vector3d d = new Vector3d(0, 0, 1);
         assertTrue(f.dirToGal(d, 0.3).distance(f.dirToGal(d)) < 1e-12, "no swing back to last tick's turn");
     }
-
-    @Test void betweenTicksThePlayerMovesSmoothlyInTheGalaxyWhileTheFrameTurns() {
-        GravityFrame f = new GravityFrame(new Vector3d(), new Vector3d(0, 100, 0), new Vector3d(0, -1, 0));
-        f.startTick();
-        Vector3d p0 = new Vector3d(0, 100, 0), p1 = new Vector3d(0, 100, 2);
-        Vector3d g0 = f.toGal(p0);
-        f.update(new Vector3d(0.5, -1, 0), p0);
-        Vector3d g1 = f.toGal(p1);
-        assertTrue(f.toGal(p0, p1, 0).distance(g0) < 1e-9);
-        assertTrue(f.toGal(p0, p1, 1).distance(g1) < 1e-9);
-        assertTrue(f.toGal(p0, p1, 0.5).distance(new Vector3d(g0).lerp(g1, 0.5)) < 1e-9);
-    }
-
-    @Test void aRebaseKeepsTheLastTicksPlaceBetweenTicks() {
-        GravityFrame f = new GravityFrame(new Vector3d(), new Vector3d(0, 100, 0), new Vector3d(0, -1, 0));
-        f.startTick();
-        Vector3d p0 = new Vector3d(0, 170, 0);
-        Vector3d g0 = f.toGal(p0);
-        Vector3d np = f.rebase(p0).orElseThrow();
-        Vector3d shiftedOld = new Vector3d(p0).add(0, np.y - p0.y, 0); // as the caller moves yo
-        assertTrue(f.toGal(shiftedOld, np, 0).distance(g0) < 1e-9);
-    }
 }
