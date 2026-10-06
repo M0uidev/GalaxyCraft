@@ -119,6 +119,7 @@ public final class LauncherProbe implements FabricClientGameTest {
         ctx.runOnClient(mc -> mc.disconnectWithSavingScreen());
         waitReal(ctx, mc -> mc.level == null, 60);
         ctx.setScreen(TitleScreen::new); // as the pause menu's Save and Quit does; game tests end there
+        log("host: " + gxdev("ctl", "status").replaceAll(".*(republished=\\S+).*", "$1").strip());
         log(ok ? "PASS" : "FAIL");
     }
 
@@ -131,7 +132,8 @@ public final class LauncherProbe implements FabricClientGameTest {
         long end = System.nanoTime() + seconds * 1_000_000_000L;
         while (!ctx.computeOnClient(what::test)) {
             if (System.nanoTime() > end) {
-                log("stuck: " + ctx.computeOnClient(mc -> state()) + " | host " + gxdev("ctl", "mbx").strip());
+                log("stuck: " + ctx.computeOnClient(mc -> state()) + " | host " + gxdev("ctl", "mbx").strip() + " | "
+                        + gxdev("ctl", "status").strip());
                 throw new AssertionError("Timed out after " + seconds + " s");
             }
             ctx.waitTicks(5);

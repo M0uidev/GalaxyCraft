@@ -226,6 +226,9 @@ struct Atlas
   u32 frame;            // frames drawn since, to step them
 };
 Atlas gAtlas;
+// A teleport that came before its planet, applied when the planet does (Apply, ApplyPlanet).
+gxc::InboxTeleport gPendingTeleport;
+bool gTeleportPending = false;
 
 u8* Alloc32(u32 size);
 
@@ -429,20 +432,29 @@ public:
     }
     else if (r.type == gxc::InboxRecord::TELEPORT)
     {
+      // Before its planet (in a later batch): kept until the planet comes, not lost (Mario would
+      // wait at the galaxy's center, inside the planet there, for a teleport already gone).
       const Planet* p = Find(r.teleport.planet);
-      if (!p)
-        return;
-      const TVec3f* mario = MR::getPlayerPos();
-      f32 m[3] = {mario->x, mario->y, mario->z};
-      if (r.teleport.aimed)  // where the mod measured the ground, not above wherever Mario is now
-        for (int k = 0; k < 3; k++)
-          m[k] = p->center[k] + 100.f * r.teleport.dir[k];
-      f32 to[3];
-      // Onto the ground under him (a hill, something built), not into it.
-      gxc::PlanetDrop(p->center, r.teleport.ground > 0.f ? r.teleport.ground : p->surface, DROP_ABOVE, m, to);
-      MR::setPlayerPos(TVec3f(to[0], to[1], to[2]));
-      BootTeleported();
+      if (p)
+        Teleport(*p, r.teleport);
+      else
+        gPendingTeleport = r.teleport, gTeleportPending = true;
     }
+  }
+
+  static void Teleport(const Planet& p, const gxc::InboxTeleport& tp)
+  {
+    gTeleportPending = false;
+    const TVec3f* mario = MR::getPlayerPos();
+    f32 m[3] = {mario->x, mario->y, mario->z};
+    if (tp.aimed)  // where the mod measured the ground, not above wherever Mario is now
+      for (int k = 0; k < 3; k++)
+        m[k] = p.center[k] + 100.f * tp.dir[k];
+    f32 to[3];
+    // Onto the ground under him (a hill, something built), not into it.
+    gxc::PlanetDrop(p.center, tp.ground > 0.f ? tp.ground : p.surface, DROP_ABOVE, m, to);
+    MR::setPlayerPos(TVec3f(to[0], to[1], to[2]));
+    BootTeleported();
   }
 
   // id 0 drops every planet; GONE drops that one; otherwise it is new or changed (a chunk_count of
@@ -452,7 +464,7 @@ public:
     if (in.id == 0 || (in.flags & gxc::PLANET_GONE))
     {
       if (in.id == 0)
-        BootPlanetsDropped();
+        BootPlanetsDropped(), gTeleportPending = false;
       for (u32 i = 0; i < MAX_PLANETS; i++)
         if (gPlanets[i].id && (in.id == 0 || gPlanets[i].id == in.id))
           Drop(gPlanets[i]);
@@ -494,6 +506,8 @@ public:
       p->gravity->updateIdentityMtx();
     }
     mTranslation = TVec3f(p->center[0], p->center[1], p->center[2]);
+    if (gTeleportPending && (gPendingTeleport.planet == 0 || gPendingTeleport.planet == p->id))
+      Teleport(*p, gPendingTeleport);
   }
 
   void Drop(Planet& p)
@@ -1181,6 +1195,7 @@ void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size)
 {
   // A new scene: the old one's heap (chunks, parts, inbox) is gone, so forget it, don't free it.
   memset(gPlanets, 0, sizeof(gPlanets));
+  gTeleportPending = false;
   gHitboxDl[0] = gHitboxDl[1] = 0;
   gHitboxOn = false;
   gGraves.Reset();

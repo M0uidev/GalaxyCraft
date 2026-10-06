@@ -659,6 +659,7 @@ public final class PlanetClient {
         for (PlanetSession s : leaving)
             for (PlanetSession.Msg m; (m = s.peek(bulk)) != null && bridge.send(m.type(), m.payload()); ) s.sent();
         leaving.removeIf(s -> s.queued() == 0);
+        rescue();
         if (stream != null) stream.send(bridge, bulk);
         if (++sinceSave >= SAVE_TICKS) {
             sinceSave = 0;
@@ -671,6 +672,29 @@ public final class PlanetClient {
         Vector3d eye = frame.toGal(vec(player.getEyePosition()));
         Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
         use(player, eye, look, marioFeetGal, focus.aim(eye, look));
+    }
+
+    /**
+     * Ticks Mario must stay at a planet's core before he is rescued: right after a teleport he
+     * still waits at the galaxy's center (the home planet's) for the game to apply it.
+     */
+    private static final int AT_CORE_TICKS = 40;
+    private static int atCore;
+
+    /**
+     * Mario stuck at a planet's core (a teleport the game never applied, or a fall through it) is
+     * landed on its ground again, as P does, once he has been there AT_CORE_TICKS.
+     */
+    private static void rescue() {
+        PlanetSession stuck = null;
+        for (PlanetSession s : planets())
+            if (s.active() && s.marioAtCore()) stuck = s;
+        atCore = stuck == null || waitingToLand() ? 0 : atCore + 1;
+        if (atCore < AT_CORE_TICKS) return;
+        atCore = 0;
+        GalaxyCraft.LOG.warn("Mario stuck at the core of planet {}: landed on its ground again", indexOf(stuck));
+        focus = stuck;
+        land(stuck);
     }
 
     /** Particles alive on the planet (tests). */
