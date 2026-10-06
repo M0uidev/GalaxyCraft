@@ -596,6 +596,106 @@ class PlanetSessionTest {
         assertTrue(drain(s).stream().anyMatch(m -> m.type() == Layout.MSG_CHUNK && !far(m)));
     }
 
+    @Test void nearingAPlanetSendsItsChunksNotItsFarViewAgain() {
+        // From afar the game has the planet's far view; Mario comes near: detail on.
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = onTop(s, 64);
+        s.setDetail(false);
+        s.update(3, 100, top);
+        drain(s);
+        s.setDetail(true);
+        s.update(3, 100, top);
+        List<PlanetSession.Msg> msgs = drain(s);
+        assertTrue(msgs.stream().anyMatch(m -> m.type() == Layout.MSG_CHUNK && !far(m)), "its chunks");
+        // Its far view, which the game has, not again ahead of them: only tiles a level finer, after.
+        int lastChunk = -1, firstFar = Integer.MAX_VALUE;
+        for (int i = 0; i < msgs.size(); i++) {
+            if (msgs.get(i).type() == Layout.MSG_CHUNK && !far(msgs.get(i))) lastChunk = i;
+            if (far(msgs.get(i)) && le(msgs.get(i)).getInt(8) > 0) firstFar = Math.min(firstFar, i);
+        }
+        assertTrue(firstFar > lastChunk, "chunks first: " + lastChunk + ", " + firstFar);
+        // Each tile of chunks covered once (after them), the others left as they are.
+        VoxelPlanet p = s.planet();
+        for (int t = 0; t < PlanetLod.tileCount(p); t++) {
+            int tt = t;
+            long covers = msgs.stream().filter(m -> covered(m) && tile(le(m)) == tt).count();
+            assertEquals(s.tileShown(t) ? 1 : 0, covers, "tile " + t);
+        }
+        // Away again: only the covered tiles get their far view back, uncovered.
+        s.setDetail(false);
+        s.update(3, 100, top);
+        List<PlanetSession.Msg> back = drain(s);
+        for (int t = 0; t < PlanetLod.tileCount(p); t++) {
+            int tt = t;
+            long sent = back.stream().filter(m -> far(m) && tile(le(m)) == tt).count();
+            // Covered ones uncovered; finer ones coarse again (no chunks to hand off to); once each.
+            assertEquals(PlanetLod.tilePatchColumns(p.grid.n), s.farColumns(t), "tile " + t + " coarse");
+            if (wasShown(msgs, t)) assertEquals(1, sent, "tile " + t);
+            else assertTrue(sent <= 1, "tile " + t);
+            assertTrue(back.stream().noneMatch(m -> covered(m) && tile(le(m)) == tt), "drawn near again: not covered");
+        }
+    }
+
+    @Test void theFarViewIsFinerNearTheChunksAndCoarserFartherOut() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(128, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = onTop(s, 128);
+        s.update(3, 100, top);
+        Sent got = sent(drain(s));
+        VoxelPlanet p = s.planet();
+        int coarse = PlanetLod.tilePatchColumns(p.grid.n);
+        int finest = Integer.MAX_VALUE, coarsest = 0;
+        for (int t : got.far().keySet()) {
+            finest = Math.min(finest, s.farColumns(t));
+            coarsest = Math.max(coarsest, s.farColumns(t));
+        }
+        assertEquals(PlanetSession.FINEST_COLUMNS, finest, "next to the chunks, nearly block by block");
+        assertEquals(coarse, coarsest, "far away, as before");
+        // Walking to the other side: the tiles there get finer, the ones left behind coarser.
+        Vector3d other = new Vector3d(s.center()).add(0, 129 * 80, 0);
+        int under = PlanetLod.tileOfChunk(p, p.chunkOf(s.cellAt(new Vector3d(s.center()).add(0, 127.5 * 80, 0))));
+        int wasThere = s.farColumns(under);
+        for (int i = 0; i < PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, other);
+        drain(s);
+        assertTrue(s.tileShown(under) && wasThere == coarse);
+        int behind = PlanetLod.tileOfChunk(p, p.chunkOf(s.cellAt(new Vector3d(s.center()).add(0, -127.5 * 80, 0))));
+        assertFalse(s.tileShown(behind));
+        assertEquals(coarse, s.farColumns(behind), "left behind: coarse again");
+        long bytes = got.chunks().values().stream().mapToLong(Integer::longValue).sum()
+                + got.far().values().stream().mapToLong(Integer::longValue).sum()
+                + got.covered().values().stream().mapToLong(Integer::longValue).sum();
+        System.out.printf("graded far view, radius 128: %.1f MB%n", bytes / 1e6);
+        assertTrue(bytes < 10_000_000, bytes + " bytes");
+    }
+
+    @Test void chunksMeshedInParallelAreTheSameAndAnEditIsNeverLost() {
+        List<byte[]> serial = new ArrayList<>(), parallel = new ArrayList<>();
+        for (boolean par : new boolean[] {false, true}) {
+            PlanetSession s = new PlanetSession(80);
+            s.setParallelMeshing(par);
+            s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+            Vector3d top = onTop(s, 64);
+            s.update(3, 100, top);
+            // A few messages, an edit under Mario, then the rest: the edited chunks as they are now.
+            for (int i = 0; i < 20 && s.peek() != null; i++) s.sent();
+            assertTrue(s.breakBlock(top, new Vector3d(0, 1, 0)));
+            s.update(3, 100, top);
+            for (PlanetSession.Msg m : drain(s)) {
+                byte[] b = m.payload().clone(); // each session has its own planet id
+                if (m.type() == Layout.MSG_CHUNK) b[3] = 0;
+                else if (b.length >= 4) b[0] = b[1] = b[2] = b[3] = 0;
+                (par ? parallel : serial).add(b);
+            }
+        }
+        assertEquals(serial.size(), parallel.size());
+        for (int i = 0; i < serial.size(); i++) assertArrayEquals(serial.get(i), parallel.get(i), "message " + i);
+    }
+
+    static boolean wasShown(List<PlanetSession.Msg> msgs, int t) {
+        return msgs.stream().anyMatch(m -> covered(m) && tile(le(m)) == t);
+    }
+
     @Test void diggingNearMarioRefreshesTheFarViewSeenFromAfar() {
         PlanetSession s = new PlanetSession(80);
         s.spawn(64, MARIO, new Vector3d(0, 1, 0));

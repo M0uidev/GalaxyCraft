@@ -7,6 +7,8 @@
 // with the old scene's heap) with records meant for this scene.
 void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size);
 void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_size);
+// Mario moved this frame (before VoxelPlanetFrame): replaced collision may go once he has moved a while.
+void VoxelPlanetMarioMoved();
 // The collision sphere Mario should have at pos (galaxy units) in the planet's gravity, if the
 // mod gave one (GxcPlanet.mario_radius): his own is 1.5 blocks wide and fits no tunnel.
 bool VoxelPlanetMarioRadius(const float pos[3], float* radius);
@@ -29,7 +31,7 @@ uint8_t* VoxelPlanetAlloc32(uint32_t size);
 // collision parts made, last chunk slot and version seen, chunks dropped for lack of memory, free
 // bytes of the scene's MEM2 and MEM1 heaps (at the last batch), collision parts alive, chunks
 // drawn last frame (the rest were behind the camera or the horizon), chunks left without
-// collision because the stage's main collision zone was missing, the block atlas being put
+// collision because the stage's main collision zone was missing or full, the block atlas being put
 // together (its id, bytes of it in, 1 once complete: planets are drawn only then). Chunks and
 // parts count every planet's.
 struct VoxelStats

@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..cdc3939
+index 0000000..40d8968
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,559 @@
+@@ -0,0 +1,591 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -158,6 +158,7 @@ index 0000000..cdc3939
 +std::atomic<int> s_focus_gained{0};
 +std::atomic<int> s_focus_lost{0};
 +std::atomic<int> s_link_toggles{0};
++std::atomic<bool> s_running{false};  // Start to Stop: the bridge is up
 +std::atomic<int> s_xinput_updates{0};
 +thread_local bool t_dev_savestate = false;  // a ctl save/load is calling into State
 +u32 s_xinput_buttons = 0;  // under s_mutex
@@ -473,6 +474,7 @@ index 0000000..cdc3939
 +
 +  std::lock_guard lock(s_mutex);
 +  s_state = std::move(state);
++  s_running = true;
 +  NOTICE_LOG_FMT(CORE, "GalaxyCraft: bridge running on /dev/shm{}", GXC_SHM_NAME);
 +  std::fprintf(stderr, "GalaxyCraft: bridge running on /dev/shm%s\n", GXC_SHM_NAME);
 +}
@@ -484,10 +486,40 @@ index 0000000..cdc3939
 +    std::lock_guard lock(s_mutex);
 +    state = std::move(s_state);
 +  }
++  s_running = false;
 +  if (state && state->override_on)
 +    SetWiimoteOverride(false);
 +  // Destroying the hook here (outside the lock) waits for nothing: the hook takes s_mutex and
 +  // sees s_state == nullptr if it runs concurrently.
++}
++
++bool OnInvalidAccess(u32 address, u32 pc, u32 lr, bool write)
++{
++  if (!s_running.load(std::memory_order_relaxed))
++    return false;
++  // The first time from each PC and every 1000th after: enough to find it, not a flood.
++  static std::mutex mutex;
++  static std::array<std::pair<u32, u64>, 64> seen{};
++  u64 count = 0;
++  {
++    std::lock_guard lock(mutex);
++    for (auto& [at, n] : seen)
++      if (at == pc || n == 0)
++      {
++        at = pc;
++        count = ++n;
++        break;
++      }
++  }
++  if (count == 1 || (count != 0 && count % 1000 == 0))  // 0: 64 PCs logged already
++  {
++    WARN_LOG_FMT(CORE, "GalaxyCraft: invalid {} {:#010x}, PC = {:#010x}, LR = {:#010x} ({} times)",
++                 write ? "write to" : "read from", address, pc, lr, count);
++    std::fprintf(stderr, "GalaxyCraft: invalid %s 0x%08x, PC = 0x%08x, LR = 0x%08x (%llu times)\n",
++                 write ? "write to" : "read from", address, pc, lr,
++                 static_cast<unsigned long long>(count));
++  }
++  return true;
 +}
 +
 +bool SavestatesAllowed()
@@ -614,10 +646,10 @@ index 0000000..cdc3939
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..f6436d8
+index 0000000..aa4925e
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,69 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -660,6 +692,10 @@ index 0000000..f6436d8
 +// Savestates roll the game's RAM back but not Minecraft, so they are off: only the dev control
 +// channel (save/load, for the test scripts) may use them, on the thread it runs them from.
 +bool SavestatesAllowed();
++
++// CPU thread, a read or write of unmapped memory (no MMU emulation): with the bridge running it
++// is logged (address, PC, LR, how often) instead of a dialog each time, and true is returned.
++bool OnInvalidAccess(u32 address, u32 pc, u32 lr, bool write);
 +
 +// CPU thread, after a savestate is loaded: the bridge has the mod send the game everything again.
 +void OnStateLoaded();
@@ -789,8 +825,31 @@ index 6a1b754..662cd8f 100644
  
    HK_NEXT_WIIMOTE_PROFILE_1,
    HK_PREV_WIIMOTE_PROFILE_1,
+diff --git a/Source/Core/Core/PowerPC/MMU.cpp b/Source/Core/Core/PowerPC/MMU.cpp
+index 940e93c..925153c 100644
+--- a/Source/Core/Core/PowerPC/MMU.cpp
++++ b/Source/Core/Core/PowerPC/MMU.cpp
+@@ -25,6 +25,8 @@
+ 
+ #include "Core/PowerPC/MMU.h"
+ 
++#include "Core/GalaxyCraft.h"
++
+ #include <algorithm>
+ #include <bit>
+ #include <cstddef>
+@@ -1213,6 +1215,9 @@ void MMU::GenerateDSIException(u32 effective_address, bool write)
+   // DSI exceptions are only supported in MMU mode.
+   if (!m_system.IsMMUMode())
+   {
++    if (GalaxyCraft::OnInvalidAccess(effective_address, m_ppc_state.pc, m_ppc_state.spr[SPR_LR],
++                                      write))
++      return;
+     if (write)
+     {
+       PanicAlertFmtT(
 diff --git a/Source/Core/Core/State.cpp b/Source/Core/Core/State.cpp
-index 2dcd2ca..a1af941 100644
+index 2dcd2ca..5756c52 100644
 --- a/Source/Core/Core/State.cpp
 +++ b/Source/Core/Core/State.cpp
 @@ -39,6 +39,7 @@
@@ -813,17 +872,15 @@ index 2dcd2ca..a1af941 100644
  }
  
  // Returns the required size, or 0 on failure.
-@@ -496,8 +500,19 @@ static void SaveAsFromCore(Core::System& system, std::string filename)
+@@ -496,8 +500,17 @@ static void SaveAsFromCore(Core::System& system, std::string filename)
    }
  }
  
 +// GalaxyCraft: Minecraft would not go back in time with the game; see GalaxyCraft::SavestatesAllowed.
 +static bool GalaxyCraftAllowsStates()
 +{
-+  if (GalaxyCraft::SavestatesAllowed())
-+    return true;
-+  Core::DisplayMessage("Savestates are disabled in GalaxyCraft", 2000);
-+  return false;
++  // Silently: F1-F8 load states by default, and F5 is Minecraft's camera key.
++  return GalaxyCraft::SavestatesAllowed();
 +}
 +
  void SaveAs(Core::System& system, std::string filename)
@@ -833,7 +890,7 @@ index 2dcd2ca..a1af941 100644
    Core::RunOnCPUThread(
        system, [&system, filename = std::move(filename), lock = GetStateSaveTaskLock()]() mutable {
          SaveAsFromCore(system, std::move(filename));
-@@ -871,6 +886,8 @@ static void LoadAsFromCore(Core::System& system, std::string filename)
+@@ -871,6 +884,8 @@ static void LoadAsFromCore(Core::System& system, std::string filename)
  
  void LoadAs(Core::System& system, std::string filename)
  {
@@ -842,7 +899,7 @@ index 2dcd2ca..a1af941 100644
    if (!CheckIfStateLoadIsAllowed(system))
      return;
  
-@@ -914,6 +931,8 @@ void Load(Core::System& system, u32 slot)
+@@ -914,6 +929,8 @@ void Load(Core::System& system, u32 slot)
  
  void LoadLastSaved(Core::System& system, int i)
  {
@@ -851,7 +908,7 @@ index 2dcd2ca..a1af941 100644
    if (!CheckIfStateLoadIsAllowed(system))
      return;
  
-@@ -935,6 +954,8 @@ void LoadLastSaved(Core::System& system, int i)
+@@ -935,6 +952,8 @@ void LoadLastSaved(Core::System& system, int i)
  
  void SaveFirstSaved(Core::System& system)
  {
@@ -860,7 +917,7 @@ index 2dcd2ca..a1af941 100644
    Core::RunOnCPUThread(system, [&system, lock = GetStateSaveTaskLock()] {
      // Data must reach the filesystem for up to date "UsedSlots".
      s_compress_and_dump_thread.WaitForCompletion();
-@@ -955,6 +976,8 @@ void SaveFirstSaved(Core::System& system)
+@@ -955,6 +974,8 @@ void SaveFirstSaved(Core::System& system)
  // Load the last state before loading the state
  void UndoLoadState(Core::System& system)
  {

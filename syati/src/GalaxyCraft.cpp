@@ -457,12 +457,23 @@ void McFeelJump(void* self, const f32 before[3])
   gMcWasOnGround = ground;
 }
 
+// The Wii Remote's auto-sleep, minutes (WPAD's, r13 - 2042; SMG2 sets 5): with the keyboard and
+// mouse as its buttons, a player standing still for that long saw "Communications with the Wii
+// Remote have been interrupted" and the game stopped. 0 turns it off (WPADiManageHandler skips it).
+u8* const WPAD_SLEEP_MINUTES = reinterpret_cast<u8*>(0x807D7320 - 2042);
+
 void MarioMovement(void* self)
 {
+  *WPAD_SLEEP_MINUTES = 0;
   const TVec3f* at = MR::getPlayerPos();
   const f32 before[3] = {at->x, at->y, at->z};
   McFeelSpeed(self);
   movement__10MarioActorFv(self);
+  {
+    const f32 dx = at->x - before[0], dy = at->y - before[1], dz = at->z - before[2];
+    if (dx * dx + dy * dy + dz * dz > 0.01f)
+      VoxelPlanetMarioMoved();
+  }
   EntityDrawAfterMario();
   {
     const u8* mb = reinterpret_cast<const u8*>(reinterpret_cast<const MarioActor*>(self)->mMario);

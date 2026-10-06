@@ -22,6 +22,8 @@ public final class VoxelPlanet {
     private final int[] solid;  // opaque full cubes per chunk (hiding everything around them)
     private final Fluids fluids;
     private final BitSet dirty = new BitSet();
+    /** mayShow's answers per chunk (0 not known yet, 1 no, 2 yes), forgotten when it or a neighbor changes. */
+    private byte[] showable;
     private final int chunksPerEdge, chunkLayers;
     private float[] spheres; // per chunk: center x y z (blocks), radius; computed on first use
     private Listener listener; // told of every change but those set quietly
@@ -195,11 +197,15 @@ public final class VoxelPlanet {
     /** A cell's light changed: what shows its light (its chunk, and its neighbors' faces toward it) is drawn anew. */
     private void lightChanged(int cell) {
         dirty.set(chunkOf(cell));
+        forgetShowable(chunkOf(cell));
         int i = grid.i(cell) % CHUNK, j = grid.j(cell) % CHUNK, k = grid.k(cell) % CHUNK;
         if (i == 0 || j == 0 || k == 0 || i == CHUNK - 1 || j == CHUNK - 1 || k == CHUNK - 1)
             for (int s = 0; s < 6; s++) {
                 int nb = grid.neighbor(cell, s);
-                if (nb >= 0) dirty.set(chunkOf(nb));
+                if (nb >= 0) {
+                    dirty.set(chunkOf(nb));
+                    forgetShowable(chunkOf(nb));
+                }
             }
     }
 
@@ -345,9 +351,13 @@ public final class VoxelPlanet {
         filled[chunk] += (b != Blocks.AIR ? 1 : 0) - (was != Blocks.AIR ? 1 : 0);
         solid[chunk] += (blocks.info(b).occludes() ? 1 : 0) - (blocks.info(was).occludes() ? 1 : 0);
         dirty.set(chunk);
+        forgetShowable(chunk);
         for (int s = 0; s < 6; s++) {
             int nb = grid.neighbor(cell, s);
-            if (nb >= 0) dirty.set(chunkOf(nb));
+            if (nb >= 0) {
+                dirty.set(chunkOf(nb));
+                forgetShowable(chunkOf(nb));
+            }
         }
         fluids.touched(cell);
         if (listener != null) listener.changed(cell, b);
@@ -452,6 +462,19 @@ public final class VoxelPlanet {
      * block or a neighbor chunk that is not wholly blocks. Cheap; {@link PlanetMesher} gives the exact answer.
      */
     public boolean mayShow(int chunk) {
+        if (showable == null) showable = new byte[chunkCount()];
+        byte known = showable[chunk];
+        if (known != 0) return known == 2;
+        boolean show = computeMayShow(chunk);
+        showable[chunk] = (byte) (show ? 2 : 1);
+        return show;
+    }
+
+    private void forgetShowable(int chunk) {
+        if (showable != null) showable[chunk] = 0;
+    }
+
+    private boolean computeMayShow(int chunk) {
         if (filled[chunk] == 0) return false;
         int[] cs = cellsOf(chunk);
         if (solid[chunk] < cs.length) return true;
@@ -514,6 +537,11 @@ public final class VoxelPlanet {
     /** Next version of a chunk, for a message about to be sent. */
     public int bump(int chunk) {
         return ++versions[chunk];
+    }
+
+    /** Whether a chunk changed since takeDirty last asked (a mesh made before may be old). */
+    public boolean isDirty(int chunk) {
+        return dirty.get(chunk);
     }
 
     /** Chunks changed since last asked; clears the set. */

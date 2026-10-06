@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-05 (galaxy options merged)
+Last updated: 2026-10-06 (LOD handoff and graded far view on fix/lod-handoff)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-05 (galaxy options merged)
 
 | Feature | Status | Notes |
 |---|---|---|
-| (nothing in progress) | | Pick the next one from **Next**. |
+| Smoother level of detail | now | Branch `fix/lod-handoff`, awaiting playtest: blocks no longer wait behind the far view when nearing a planet; far view finer next to the blocks and coarser farther out (Distant Horizons-style); Planet Block Distance and Far View Detail settings; Dolphin's F1-F8 savestate message and invalid-access dialogs silenced. |
 
 ## Next
 

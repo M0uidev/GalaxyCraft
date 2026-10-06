@@ -90,10 +90,15 @@ public final class PlanetLod {
 
     /** A tile's part of the far view (its display list empty if it has no ground at all). */
     public static Part tile(VoxelPlanet p, int tile, double unitsPerBlock) {
+        return tile(p, tile, tilePatchColumns(p.grid.n), unitsPerBlock);
+    }
+
+    /** A tile's part with patches of s × s columns (finer next to the chunks: PlanetSession's levels). */
+    public static Part tile(VoxelPlanet p, int tile, int s, double unitsPerBlock) {
         int t = tilesPerEdge(p), n = p.grid.n, cols = TILE_CHUNKS * VoxelPlanet.CHUNK;
         int f = tile / (t * t), ti = tile / t % t, tj = tile % t;
         return region(LodSource.of(p), f, ti * cols, Math.min(n, ti * cols + cols), tj * cols, Math.min(n, tj * cols + cols),
-                tilePatchColumns(n), unitsPerBlock);
+                s, unitsPerBlock);
     }
 
     /**
