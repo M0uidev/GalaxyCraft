@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (the entering hang was the test's, not the game's: removed; Windows support: seamless goal noted)
+Last updated: 2026-10-06 (drawn blocks and the off hand's item done, blocks that work next; Windows support: seamless goal noted)
 
 ---
 
