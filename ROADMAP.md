@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (drawn blocks and the off hand's item done, blocks that work next; Windows support: seamless goal noted)
+Last updated: 2026-10-06 (official name is now Super Minecraft Galaxy)
 
 ---
 
@@ -117,6 +117,7 @@ Last updated: 2026-10-06 (drawn blocks and the off hand's item done, blocks that
 | 2026-10-06 | Torches, heads, signs, banners, coral fans, levers and buttons on walls (all four sides); heads on the floor turned to the player; the off hand places and uses when the main hand does nothing | ea7a354 |
 | 2026-10-06 | Entering a world is silent (no SMG2 boot, music or landing sounds) until the zoom from space | edd62e6 |
 | 2026-10-06 | Chests (also trapped, ender and copper), beds, signs and hanging signs, banners, mob heads, shulker boxes, decorated pots, bells, lecterns, conduits drawn on planets as Minecraft draws them, at no cost per frame; the off hand's item in Steve's left hand | 793e34d |
+| 2026-10-06 | The game is called **Super Minecraft Galaxy** everywhere players see it (menus, chat, Dolphin, game list, README); code keeps the galaxycraft ids so worlds carry over. Discord server renamed to match | 0e844e7 |
 
 ---
 
