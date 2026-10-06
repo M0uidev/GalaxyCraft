@@ -27,6 +27,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -40,7 +41,7 @@ import org.joml.Vector3d;
 /**
  * The voxel planet in Minecraft's hands: /galaxycraft planet, the clicks that break and place
  * blocks (any of Minecraft's, by its placement rules; and pour and fill buckets of water and lava)
- * while something is in the main hand and no screen is open (Dolphin then keeps them from Mario), P
+ * while something is in either hand and no screen is open (Dolphin then keeps them from Mario), P
  * to land on the planet, and the messages that carry it to the game, the block atlas first. Up to
  * PlanetLayout.MAX_PLANETS planets per stage (galaxy), each saved in ~/.local/share/galaxycraft/planets
  * (see planetDir, PlanetStore.key) and loaded again when the stage is; /galaxycraft planet add puts
@@ -299,8 +300,14 @@ public final class PlanetClient {
         return 0;
     }
 
+    /** Whether a right click would scoop with an empty bucket (the outline then goes on fluids). */
+    private static boolean bucketFirst(LocalPlayer player) {
+        ItemStack main = player.getMainHandItem();
+        return main.is(Items.BUCKET) || main.isEmpty() && player.getOffhandItem().is(Items.BUCKET);
+    }
+
     public static boolean itemActive(LocalPlayer player) {
-        return player != null && (!player.getMainHandItem().isEmpty() || aimUsable);
+        return player != null && (!player.getMainHandItem().isEmpty() || !player.getOffhandItem().isEmpty() || aimUsable);
     }
 
     /** /galaxycraft planet spawn [radius]: next tick, above the player, replacing the one in focus. */
@@ -593,7 +600,7 @@ public final class PlanetClient {
             aimUsable = target == null && aim != null && shadow.available() && blocks.usable(session.planet().get(aim.cell()));
             boolean item = itemActive(player) && !screen;
             // Minecraft's outline on the block the clicks would act on, only with something in hand.
-            session.setOutline(item && target == null ? session.target(eye, look, player.getMainHandItem().is(Items.BUCKET)) : -1);
+            session.setOutline(item && target == null ? session.target(eye, look, bucketFirst(player)) : -1);
             // Mario stands where he is in the shadow too, so mobs chase him and his blows land.
             ShadowWorld.mario(new ShadowWorld.MarioAt(session.planet(), session.localOf(world.queryPos()), new Vector3d(look),
                     player.getUUID()));
@@ -1014,30 +1021,75 @@ public final class PlanetClient {
     }
 
     /**
-     * Right click: a bucket pours or fills (and turns into the other one, outside creative mode, as
-     * in Minecraft); otherwise, as in Minecraft, the block aimed at is used, or the held item on it,
-     * and if neither does anything a block item is placed.
+     * Right click, as in Minecraft: with the main hand, then, if that does nothing at all, with
+     * the off hand (torches in the off hand go down while a pickaxe is in the main one).
      */
     private static void use(LocalPlayer player, Vector3d eye, Vector3d look, Vector3d feet, PlanetSession.Aim aim) {
-        ItemStack stack = player.getMainHandItem();
+        use(player, InteractionHand.MAIN_HAND, eye, look, feet, aim, () -> {
+            // Minecraft uses the main hand's item in the air by itself (eats, throws, draws a bow):
+            // then that was the click, and the off hand stays out of it.
+            if (!usesInAir(player.getMainHandItem()))
+                use(player, InteractionHand.OFF_HAND, eye, look, feet, aim, () -> {});
+        });
+    }
+
+    /**
+     * A right click with what is in hand: a bucket pours or fills (and turns into the other one,
+     * outside creative mode, as in Minecraft); otherwise the block aimed at is used, or the held
+     * item on it, and if neither does anything a block item is placed. If none of it happens,
+     * next runs.
+     */
+    private static void use(LocalPlayer player, InteractionHand hand, Vector3d eye, Vector3d look, Vector3d feet,
+            PlanetSession.Aim aim, Runnable next) {
+        ItemStack stack = player.getItemInHand(hand);
         boolean creative = player.getAbilities().instabuild;
         if (stack.is(Items.BUCKET)) {
             Material got = focus.scoop(eye, look);
-            if (got != null && !creative) setMainHand(player, got == Material.WATER ? Items.WATER_BUCKET : Items.LAVA_BUCKET);
+            if (got == null) next.run();
+            else if (!creative) setHand(player, hand, got == Material.WATER ? Items.WATER_BUCKET : Items.LAVA_BUCKET);
         } else if (stack.is(Items.WATER_BUCKET) || stack.is(Items.LAVA_BUCKET)) {
-            if (focus.pour(eye, look, stack.is(Items.WATER_BUCKET) ? Material.WATER : Material.LAVA) && !creative)
-                setMainHand(player, Items.BUCKET);
+            if (!focus.pour(eye, look, stack.is(Items.WATER_BUCKET) ? Material.WATER : Material.LAVA)) next.run();
+            else if (!creative) setHand(player, hand, Items.BUCKET);
         } else {
             ItemStack held = stack.copy();
             Runnable place = () -> {
-                if (!focus.placeBlock(eye, look, blocks.placer(held), feet)) return;
+                if (!focus.placeBlock(eye, look, blocks.placer(held, hand), feet)) {
+                    next.run();
+                    return;
+                }
                 placed(focus);
-                if (!creative) useUp(player, held);
+                if (!creative) useUp(player, hand, held);
             };
             if (aim == null || !shadow.available()) place.run();
             else ShadowWorld.use(focus.planet(), aim.cell(), aim.face(),
-                    new net.minecraft.world.phys.Vec3(aim.hit().x, aim.hit().y, aim.hit().z), player.getUUID(), place);
+                    new net.minecraft.world.phys.Vec3(aim.hit().x, aim.hit().y, aim.hit().z), player.getUUID(), hand, place);
         }
+    }
+
+    /** By item class: whether it overrides Item.use (a bow, a pearl, a potion). */
+    private static final ClassValue<Boolean> OWN_USE = new ClassValue<>() {
+        @Override protected Boolean computeValue(Class<?> c) {
+            try {
+                return c.getMethod("use", net.minecraft.world.level.Level.class,
+                        net.minecraft.world.entity.player.Player.class, InteractionHand.class).getDeclaringClass() != Item.class;
+            } catch (NoSuchMethodException e) {
+                return false;
+            }
+        }
+    };
+
+    /**
+     * Whether a right click in the air does something with stack, as Item.use and its overrides
+     * do: food and potions, armor put on, a shield raised, a spear, a bow, a thrown pearl. Not
+     * buckets: the planet's are poured and filled here, and with nothing to do they pass.
+     */
+    static boolean usesInAir(ItemStack stack) {
+        if (stack.isEmpty() || stack.getItem() instanceof net.minecraft.world.item.BlockItem
+                || stack.getItem() instanceof net.minecraft.world.item.BucketItem) return false;
+        if (stack.has(DataComponents.CONSUMABLE) || stack.has(DataComponents.BLOCKS_ATTACKS)
+                || stack.has(DataComponents.KINETIC_WEAPON)) return true;
+        var equippable = stack.get(DataComponents.EQUIPPABLE);
+        return equippable != null && equippable.swappable() || OWN_USE.get(stack.getItem().getClass());
     }
 
     /**
@@ -1118,25 +1170,25 @@ public final class PlanetClient {
             ShadowWorld.destroy(focus.planet(), aim.cell(), player.getUUID());
     }
 
-    /** A block placed outside creative: one fewer of it in the main hand (on the server, which syncs back). */
-    private static void useUp(LocalPlayer player, ItemStack placed) {
+    /** A block placed outside creative: one fewer of it in hand (on the server, which syncs back). */
+    private static void useUp(LocalPlayer player, InteractionHand hand, ItemStack placed) {
         MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
         if (server == null) return;
         java.util.UUID id = player.getUUID();
         server.execute(() -> {
             ServerPlayer sp = server.getPlayerList().getPlayer(id);
-            if (sp != null && sp.getMainHandItem().is(placed.getItem())) sp.getMainHandItem().shrink(1);
+            if (sp != null && sp.getItemInHand(hand).is(placed.getItem())) sp.getItemInHand(hand).shrink(1);
         });
     }
 
     /** The inventory is the integrated server's: the item changes there and syncs back. */
-    private static void setMainHand(LocalPlayer player, Item item) {
+    private static void setHand(LocalPlayer player, InteractionHand hand, Item item) {
         MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
         if (server == null) return;
         java.util.UUID id = player.getUUID();
         server.execute(() -> {
             ServerPlayer sp = server.getPlayerList().getPlayer(id);
-            if (sp != null) sp.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(item));
+            if (sp != null) sp.setItemInHand(hand, new ItemStack(item));
         });
     }
 

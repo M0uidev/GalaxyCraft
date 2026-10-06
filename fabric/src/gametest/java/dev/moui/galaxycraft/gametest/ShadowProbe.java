@@ -93,7 +93,7 @@ public final class ShadowProbe implements FabricClientGameTest {
     private void use(ClientGameTestContext ctx, int cell, boolean expectUsed) {
         AtomicBoolean passed = new AtomicBoolean();
         ctx.runOnClient(mc -> ShadowWorld.use(s.planet(), cell, CubeSphere.TOP, new Vec3(0.5, 0.5, 0.5),
-                mc.player.getUUID(), () -> passed.set(true)));
+                mc.player.getUUID(), net.minecraft.world.InteractionHand.MAIN_HAND, () -> passed.set(true)));
         run(ctx, 3);
         if (passed.get() == expectUsed) fails.add(blocks.name(s.planet().get(cell)) + (expectUsed ? " not used" : " used"));
     }

@@ -23,7 +23,8 @@ import org.joml.Vector3d;
  * Breaking blocks as in Minecraft, in the real game, only with -Dgalaxycraft.mining=true
  * (tools/gxvoxel.sh mining): the left button held with a pickaxe looking down digs a shaft a block
  * after another at Minecraft's speeds, the cracks grow on the block and go when the button is let
- * go, and the outline of stairs follows their shape. Screenshots: mining-*.png.
+ * go, and the outline of stairs follows their shape; torches in the off hand go down when the main
+ * hand does nothing with the click. Screenshots: mining-*.png.
  */
 public final class MiningProbe implements FabricClientGameTest {
     private boolean failed;
@@ -63,6 +64,7 @@ public final class MiningProbe implements FabricClientGameTest {
             sp.getServer().runCommand("item replace entity @a hotbar.0 with wooden_pickaxe");
             ctx.waitTicks(10);
             dig(ctx, s);
+            offHand(ctx, s, sp);
             ctx.runOnClient(mc -> PlanetClient.remove());
             ctx.waitTicks(10);
             log(failed ? "FAIL" : "PASS");
@@ -124,6 +126,36 @@ public final class MiningProbe implements FabricClientGameTest {
         // Not the first: the button may have found a block half done.
         for (Broke b : broke.subList(Math.min(1, broke.size()), broke.size()))
             check(b.ticks() >= 5, "no block goes at once with a wooden pickaxe: " + b);
+    }
+
+    /**
+     * Torches in the off hand: a right click places one when the main hand holds a pickaxe or
+     * nothing (one fewer left), and none when the main hand's bread takes the click.
+     */
+    private void offHand(ClientGameTestContext ctx, PlanetSession s, TestSingleplayerContext sp) {
+        sp.getServer().runCommand("item replace entity @a weapon.offhand with torch 4");
+        String[][] cases = {{"wooden_pickaxe", "minecraft:torch"}, {"bread", "minecraft:air"}, {"air", "minecraft:torch"}};
+        for (String[] c : cases) {
+            sp.getServer().runCommand("item replace entity @a hotbar.0 with " + c[0]);
+            ctx.runOnClient(mc -> mc.player.setXRot(90));
+            ctx.waitTicks(10);
+            int[] ground = ctx.computeOnClient(mc -> aimed(s, mc.player.getYRot(), mc.player.getXRot()));
+            if (ground[0] < 0) {
+                check(false, "the ground is aimed at for the off hand");
+                return;
+            }
+            int above = s.planet().grid.neighbor(ground[0], dev.moui.galaxycraft.voxel.CubeSphere.TOP);
+            int left = ctx.computeOnClient(mc -> mc.player.getOffhandItem().getCount());
+            ctx.runOnClient(mc -> PlanetClient.useHeld(mc.player, GalaxyCraftClient.frame(), GalaxyCraftClient.galaxyPos().get()));
+            ctx.waitTicks(10);
+            String got = ctx.computeOnClient(mc -> PlanetClient.blockName(above));
+            int now = ctx.computeOnClient(mc -> mc.player.getOffhandItem().getCount());
+            log("off hand torch, main hand " + c[0] + ": " + got + ", torches " + left + " -> " + now);
+            check(got.equals(c[1]), "with " + c[0] + " in the main hand the off hand's torch gives " + c[1] + " (" + got + ")");
+            check(now == (c[1].equals("minecraft:air") ? left : left - 1), "the off hand's torches used up as placed");
+            ctx.runOnClient(mc -> s.planet().set(above, dev.moui.galaxycraft.voxel.Blocks.AIR));
+        }
+        sp.getServer().runCommand("item replace entity @a weapon.offhand with air");
     }
 
     /** Stairs placed in front: their outline follows their shape (screenshot). */
