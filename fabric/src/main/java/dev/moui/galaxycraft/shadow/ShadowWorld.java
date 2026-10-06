@@ -123,6 +123,21 @@ public final class ShadowWorld {
         return entities;
     }
 
+    private static volatile LiveBlocks.Snapshot live;
+    /** Server thread: the cells live last tick (they leave a little farther than they come). */
+    private static final Set<Integer> liveCells = new HashSet<>();
+
+    /** Where a cell of the running planet is in the shadow; null if p is not running. */
+    public static BlockPos shadowPos(VoxelPlanet p, int cell) {
+        ShadowMap m = map;
+        return m == null || p != planet ? null : new BlockPos(m.x(cell), m.y(cell), m.z(cell));
+    }
+
+    /** The running planet's live blocks as of the last server tick (see {@link LiveBlocks}); null: none. */
+    public static LiveBlocks.Snapshot live() {
+        return live;
+    }
+
     /** Where Mario is on the running planet (blocks, its space), where he looks, and who plays him. */
     public record MarioAt(VoxelPlanet planet, org.joml.Vector3d feet, org.joml.Vector3d look, UUID player) {}
 
@@ -541,6 +556,12 @@ public final class ShadowWorld {
         moveProxy(level);
         animate(level);
         entities = map == null ? null : new Entities(planet, map, collect(level));
+        MarioAt at = marioAt;
+        List<LiveBlocks.Live> blocks = map == null ? List.of()
+                : LiveBlocks.collect(level, planet, map, mirrored, at == null || at.planet() != planet ? null : at.feet(), liveCells);
+        liveCells.clear();
+        for (LiveBlocks.Live l : blocks) liveCells.add(l.cell());
+        live = map == null ? null : new LiveBlocks.Snapshot(planet, map, List.copyOf(blocks));
     }
 
     private static final net.minecraft.util.RandomSource ANIMATE = net.minecraft.util.RandomSource.create();

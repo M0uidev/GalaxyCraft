@@ -46,6 +46,20 @@ class PlanetMesherTest {
         assertTrue(q.stream().allMatch(x -> x.side() == CubeSphere.TOP && x.tile() == 0)); // grass top
     }
 
+    @Test void aHiddenCellDrawsNothingAndItsNeighborsStillCullAgainstIt() {
+        VoxelPlanet p = VoxelPlanet.standard();
+        int before = all(p).size();
+        int cell = p.grid.index(0, 5, 5, 8); // a grass block on the surface (as in the digging test)
+        p.takeDirty();
+        p.hide(cell, true);
+        assertArrayEquals(new int[] {p.chunkOf(cell)}, p.takeDirty());
+        assertEquals(before - 1, all(p).size()); // its grass top only: the blocks around keep their faces hidden
+        p.hide(cell, true);
+        assertEquals(0, p.takeDirty().length); // no change, no new mesh
+        p.hide(cell, false);
+        assertEquals(before, all(p).size());
+    }
+
     @Test void diggingAddsTheFacesAroundTheHole() {
         VoxelPlanet p = VoxelPlanet.standard();
         int before = all(p).size();

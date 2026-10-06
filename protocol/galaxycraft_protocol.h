@@ -312,10 +312,13 @@ typedef struct {
 #define GXC_HELD_TOOL 4u  /* the same, held as a tool (item/handheld) */
 #define GXC_HELD_SPRITE 16 /* texels a side of a band */
 #define GXC_HELD_BANDS 4   /* the sprite is 16 wide and 4 bands of 16 tall (the last one unused) */
+#define GXC_HELD_POSE_NONE 0u  /* the arm as Mario's animation has it */
+#define GXC_HELD_POSE_BLOCK 1u /* raised to block with a shield (Minecraft's ArmPose.BLOCK) */
 typedef struct {
   uint32_t kind;     /* GXC_HELD_* */
   uint32_t hand;     /* 0: the right (main) hand; 1: the left (off) hand */
-  uint32_t reserved[2];
+  uint32_t pose;     /* GXC_HELD_POSE_*: how that arm is held */
+  uint32_t reserved;
   /* GX RGB5A3, 16x64 texels (4x4 texel blocks, big-endian already); alpha 0 is a hole */
   uint8_t sprite[GXC_HELD_SPRITE * GXC_HELD_SPRITE * GXC_HELD_BANDS * 2];
 } GxcHeld;
@@ -342,13 +345,14 @@ typedef struct {
  *   SKIN:     u32 id, u32 width, u32 height (multiples of 4, at most 256), GX RGB5A3 texels
  *   MODEL:    u32 id, u32 dl_size (a multiple of 32), display list: GX_QUADS in GXC_ENT_VTXFMT,
  *             position s16 xyz (1/16 of a model pixel), color RGBA8, texcoord s16 st (1/4096)
- *   ENTITIES: u32 count, then count x { u16 model (bit 15: faces the camera, a particle), u16 skin, u8 overlay[4] (RGBA: the color
+ *   ENTITIES: u32 count, then count x { u16 model (bit 15: faces the camera, a particle; bit 14: held in Steve's hand,
+ *             mtx from Minecraft's hand frame, bit 13: the left one), u16 skin, u8 overlay[4] (RGBA: the color
  *             mixed over the piece by A/255, red when hurt, white when TNT flashes), u8 tint[4] (RGBA
  *             the piece is multiplied by: dyed wool and leather, tinted leaves),
  *             f32 mtx[12] (3x4 row-major, model pixels -> galaxy) } */
 #define GXC_ENT_MAX_SKINS 256
 #define GXC_ENT_MAX_MODELS 2048
-#define GXC_ENT_MAX 768
+#define GXC_ENT_MAX 1536
 #define GXC_ENT_BYTES 60
 #define GXC_ENT_SKIN_MAX 256
 #define GXC_ENT_DL_MAX 65536

@@ -39,8 +39,16 @@ public final class HeldItem {
 
     /** payload for that hand (MAIN, as made, or OFF): GxcHeld's second word. */
     public static byte[] inHand(byte[] payload, int hand) {
+        return inHand(payload, hand, POSE_NONE);
+    }
+
+    /** GxcHeld's third word: the arm as it hangs, or raised to block (a shield). */
+    public static final int POSE_NONE = 0, POSE_BLOCK = 1;
+
+    /** payload for that hand with that arm pose (GxcHeld's second and third words). */
+    public static byte[] inHand(byte[] payload, int hand, int pose) {
         byte[] out = payload.clone();
-        ByteBuffer.wrap(out).order(ByteOrder.LITTLE_ENDIAN).putInt(4, hand);
+        ByteBuffer.wrap(out).order(ByteOrder.LITTLE_ENDIAN).putInt(4, hand).putInt(8, pose);
         return out;
     }
 

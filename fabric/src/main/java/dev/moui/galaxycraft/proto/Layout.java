@@ -58,7 +58,7 @@ public final class Layout {
     /** Edges a GxcOutline carries at most. */
     public static final int OUTLINE_MAX_EDGES = 96;
     public static final int HURT_HIT = 0, HURT_FIRE = 1, HURT_EXPLOSION = 2;
-    public static final int ENT_MAX_SKINS = 256, ENT_MAX_MODELS = 2048, ENT_MAX = 768, ENT_BYTES = 60;
+    public static final int ENT_MAX_SKINS = 256, ENT_MAX_MODELS = 2048, ENT_MAX = 1536, ENT_BYTES = 60;
     public static final int ENT_SKIN_MAX = 256, ENT_DL_MAX = 65536, ENT_VTXFMT = 3;
     public static final int PLANET_MAX_CHUNKS = 131072;
     public static final int MSG_PAD = 0xFFFF;

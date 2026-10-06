@@ -5,11 +5,14 @@
 #include "syati.h"
 
 #include "EntityDraw.h"
+#include "HeldItem.h"
 #include "ViewMath.h"
 #include "VoxelPlanet.h"
 
 namespace
 {
+// Model id flags (GXC_ENT_*): drawn facing the camera (a particle); held in a hand of Steve's, the left one.
+const u32 BILLBOARD = 0x8000, HELD = 0x4000, LEFT = 0x2000;
 struct Skin
 {
   u8* data;
@@ -191,7 +194,7 @@ public:
     for (u32 n = 0; n < gCount; n++)
     {
       const u8* e = gList + n * gxc::ENT_BYTES;
-      const u32 raw = (u32(e[0]) << 8) | e[1], model = raw & 0x7FFF, skin = (u32(e[2]) << 8) | e[3];
+      const u32 raw = (u32(e[0]) << 8) | e[1], model = raw & 0x1FFF, skin = (u32(e[2]) << 8) | e[3];
       if (model >= gxc::ENT_MAX_MODELS || skin >= gxc::ENT_MAX_SKINS || !gModels[model].size || !gSkins[skin].data)
         continue;  // not here yet (or lost): drawn once it is
       if (skin != loaded)
@@ -211,9 +214,19 @@ public:
       f32 m[12], pos[12];
       for (int k = 0; k < 12; k++)
         m[k] = ReadF32(e + 12 + 4 * k);
+      if (raw & HELD)
+      {
+        // Held in Steve's hand (the shield): m is in Minecraft's hand frame, the hand where he is now.
+        f32 hand[12], world[12];
+        if (!HeldItemHandMtx((raw & LEFT) ? 1 : 0, hand))
+          continue;
+        gxc::Mul34(hand, m, world);
+        for (int k = 0; k < 12; k++)
+          m[k] = world[k];
+      }
       gxc::Mul34(view, m, pos);
       // Particles are soft (smoke, puffs): blended by their alpha, without hiding what is behind.
-      const bool particle = (raw & 0x8000) != 0;
+      const bool particle = (raw & BILLBOARD) != 0;
       if (particle != blending)
       {
         blending = particle;

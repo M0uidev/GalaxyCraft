@@ -7,6 +7,7 @@ import dev.moui.galaxycraft.bridge.BridgeClient;
 import dev.moui.galaxycraft.client.mixin.ModelPartAccessor;
 import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.proto.Layout;
+import dev.moui.galaxycraft.shadow.LiveBlocks;
 import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.view.EntityWire;
 import dev.moui.galaxycraft.view.HeldItem;
@@ -26,6 +27,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.builders.UVPair;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
+import net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
@@ -68,7 +73,7 @@ final class EntityClient {
     private final CameraRenderState camera = new CameraRenderState();
     private final Map<RenderType, java.util.Optional<Identifier>> textures = new IdentityHashMap<>();
     /** Custom shapes made at most (they are made by their looks, which may keep changing). */
-    static final int MAX_CUSTOM = 256;
+    static final int MAX_CUSTOM = 1024;
     private int customModels;
     /** Shadow entities drawn last frame and the shadow's frame around each (what the clicks can hit). */
     private final List<Seen> seen = new ArrayList<>();
@@ -97,10 +102,74 @@ final class EntityClient {
         return particles.all().size();
     }
 
-    /** Client tick: the particles move. */
+    /** Client tick: the particles move; live blocks leave the chunk mesh (and baked ones come back). */
     void tick() {
         particles.tick(session().active() ? session().planet() : null);
+        hideLive();
     }
+
+    // ---- live blocks (LiveBlocks): drawn by their own renderer, not baked ----
+
+    /** The planet whose cells are hidden now (null: none). */
+    private dev.moui.galaxycraft.voxel.VoxelPlanet hiddenOn;
+
+    private void hideLive() {
+        var p = session().active() ? session().planet() : null;
+        LiveBlocks.Snapshot live = ShadowWorld.live();
+        Set<Integer> want = new HashSet<>();
+        McBlocks blocks = PlanetClient.blocks();
+        // Only a block its renderer draws whole leaves the mesh: a shelf keeps its own, its items come on top.
+        if (p != null && live != null && live.planet() == p && blocks != null)
+            for (LiveBlocks.Live l : live.list())
+                if (blocks.drawnByRenderer(p.get(l.cell()))) want.add(l.cell());
+        if (hiddenOn != null && hiddenOn != p)
+            for (int c : hiddenOn.hiddenCells()) hiddenOn.hide(c, false);
+        hiddenOn = p;
+        if (p == null) return;
+        for (int c : p.hiddenCells())
+            if (!want.contains(c)) p.hide(c, false);
+        for (int c : want) p.hide(c, true);
+    }
+
+    /** A live block drawn by its own renderer where its cell is, lit by that cell. */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void liveBlock(LiveBlocks.Snapshot live, LiveBlocks.Live l, Vector3d mario, net.minecraft.world.phys.Vec3 eye, float pt,
+            List<EntityWire.Piece> out) {
+        BlockEntity be = l.entity();
+        // Not before its baked shape has left the mesh (one tick), so the two never show together.
+        McBlocks blocks = PlanetClient.blocks();
+        int id = session().planet().get(l.cell());
+        if (failed.contains(be.getClass()) || blocks == null || blocks.drawnByRenderer(id) && !session().planet().hidden(l.cell())) return;
+        try {
+            BlockEntityRenderer r = Minecraft.getInstance().getBlockEntityRenderDispatcher().getRenderer(be);
+            if (r == null) return;
+            BlockPos pos = be.getBlockPos();
+            double[] f = live.map().frame(pos.getX(), pos.getY(), pos.getZ());
+            if (f == null) return;
+            BlockEntityRenderState st = r.createRenderState();
+            r.extractRenderState(be, st, pt, eye, null);
+            // Glowing text's outline shows near the player: Mario here (Minecraft's player is not in the shadow).
+            if (st instanceof net.minecraft.client.renderer.blockentity.state.SignRenderState sign)
+                sign.drawOutline = dev.moui.galaxycraft.voxel.CellSpace.point(session().planet().grid, l.cell(), 0.5, 0.5, 0.5)
+                        .distance(mario) < SIGN_OUTLINE;
+            Matrix4d at = new Matrix4d(f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], 0, f[0], f[1], f[2], 1);
+            int from = out.size();
+            capture.begin(at, out);
+            r.submit(st, new PoseStack(), capture, camera);
+            for (int i = from; i < out.size(); i++) cellOf.put(i, l.cell());
+        } catch (RuntimeException ex) {
+            failed.add(be.getClass());
+            GalaxyCraft.LOG.warn("Not drawing {} in the game: {}", be.getType(), ex.toString());
+        }
+    }
+
+    /** Glowing sign text has its outline within this many blocks (AbstractSignRenderer's 16). */
+    static final double SIGN_OUTLINE = 16;
+
+    /** This frame's pieces lit by a given cell (a live block's), by index; the others by where they are. */
+    private final Map<Integer, Integer> cellOf = new HashMap<>();
+    /** This frame's pieces that light nothing dims (glowing sign text), by index. */
+    final Set<Integer> glowing = new HashSet<>();
 
     /**
      * The mob nearest along the look from eye (planet space) whose box it meets within reach
@@ -141,7 +210,11 @@ final class EntityClient {
         List<EntityWire.Piece> out = new ArrayList<>(pieces.size());
         for (EntityWire.Piece piece : pieces) {
             double[] m = piece.mtx();
-            int cell = session().cellAt(new Vector3d(m[3], m[7], m[11]));
+            int cell = cellOf.getOrDefault(out.size(), session().cellAt(new Vector3d(m[3], m[7], m[11])));
+            if (glowing.contains(out.size())) {
+                out.add(piece);
+                continue;
+            }
             int light = byCell.computeIfAbsent(cell, c -> {
                 if (c < 0) return sky;
                 int up = p.grid.neighbor(c, dev.moui.galaxycraft.voxel.CubeSphere.TOP);
@@ -173,6 +246,8 @@ final class EntityClient {
         }
         List<EntityWire.Piece> pieces = new ArrayList<>();
         seen.clear();
+        cellOf.clear();
+        glowing.clear();
         if (session().active() && marioFeetGal != null) {
             Vector3d mario = session().localOf(marioFeetGal);
             for (PlanetDrops.Drop<ItemStack> d : drops.all())
@@ -180,14 +255,22 @@ final class EntityClient {
             ShadowWorld.Entities shadow = ShadowWorld.entities();
             if (shadow != null && shadow.planet() == session().planet())
                 for (Entity e : shadow.list()) shadowEntity(shadow, e, mario, pt, pieces);
+            LiveBlocks.Snapshot live = ShadowWorld.live();
+            if (live != null && live.planet() == session().planet()) {
+                int mc = session().planet().grid.cellAt(mario);
+                net.minecraft.world.phys.Vec3 eye = mc < 0 ? net.minecraft.world.phys.Vec3.ZERO
+                        : new net.minecraft.world.phys.Vec3(live.map().x(mc) + 0.5, live.map().y(mc) + 1.6, live.map().z(mc) + 0.5);
+                for (LiveBlocks.Live l : live.list()) liveBlock(live, l, mario, eye, pt, pieces);
+            }
             if (GalaxyOptions.PARTICLES.get())
                 for (ParticleClient.Live l : particles.all()) particle(l, mario, pt, pieces);
         }
         if (self != null) self(self, pt, pieces);
+        else if (session().active() && marioFeetGal != null) heldPieces(session().cellAt(marioFeetGal), pieces);
         if (pieces.isEmpty() && wasEmpty) return;
         pieces = lit(pieces);
         for (EntityWire.Piece p : pieces) {
-            if (!send(bridge, Layout.MSG_MODEL, p.model() & ~EntityWire.BILLBOARD, models, sentModels)) return;
+            if (!send(bridge, Layout.MSG_MODEL, p.model() & ~(EntityWire.BILLBOARD | HELD | LEFT), models, sentModels)) return;
             if (!send(bridge, Layout.MSG_SKIN, p.skin(), skins, sentSkins)) return;
         }
         if (bridge.send(Layout.MSG_ENTITIES, EntityWire.frame(pieces))) wasEmpty = pieces.isEmpty();
@@ -410,6 +493,11 @@ final class EntityClient {
         return java.util.Optional.empty();
     }
 
+    /** A font page as a skin; -1 until it has been read back. */
+    int fontSkin(com.mojang.renderpearl.api.textures.GpuTexture page) {
+        return FontPages.skin(page, (wh, argb) -> addSkin(wh[0], wh[1], argb));
+    }
+
     /** A sprite's own image (its first frame), as a skin. */
     int spriteSkin(TextureAtlasSprite s) {
         Identifier name = s.contents().name();
@@ -486,19 +574,30 @@ final class EntityClient {
         Integer id = skinIds.get(texture);
         if (id != null) return id;
         int result = -1;
-        try (InputStream in = Minecraft.getInstance().getResourceManager().open(texture); NativeImage img = NativeImage.read(in)) {
-            int w = img.getWidth(), h = firstFrame ? Math.min(img.getHeight(), img.getWidth()) : img.getHeight(), div = 1;
-            while (w / div > Layout.ENT_SKIN_MAX || h / div > Layout.ENT_SKIN_MAX) div *= 2;
-            int sw = w / div, sh = h / div;
-            int[] argb = new int[sw * sh];
-            for (int y = 0; y < sh; y++)
-                for (int x = 0; x < sw; x++) argb[y * sw + x] = img.getPixel(x * div, y * div);
-            result = addSkin(sw, sh, argb);
-        } catch (Exception ex) {
-            GalaxyCraft.LOG.warn("No texture {} for the game: {}", texture, ex.toString());
-        }
+        // A downloaded one (a player head's skin) is no resource: Minecraft keeps its pixels.
+        if (texture.getPath().startsWith("skins/") // only there: getTexture would load any other
+                && Minecraft.getInstance().getTextureManager().getTexture(texture) instanceof net.minecraft.client.renderer.texture.DynamicTexture dt
+                && dt.getPixels() != null)
+            result = skinOf(dt.getPixels(), false);
+        else
+            try (InputStream in = Minecraft.getInstance().getResourceManager().open(texture); NativeImage img = NativeImage.read(in)) {
+                result = skinOf(img, firstFrame);
+            } catch (Exception ex) {
+                GalaxyCraft.LOG.warn("No texture {} for the game: {}", texture, ex.toString());
+            }
         skinIds.put(texture, result);
         return result;
+    }
+
+    /** An image as a skin, at most ENT_SKIN_MAX a side (larger ones shrink). */
+    private int skinOf(NativeImage img, boolean firstFrame) {
+        int w = img.getWidth(), h = firstFrame ? Math.min(img.getHeight(), img.getWidth()) : img.getHeight(), div = 1;
+        while (w / div > Layout.ENT_SKIN_MAX || h / div > Layout.ENT_SKIN_MAX) div *= 2;
+        int sw = w / div, sh = h / div;
+        int[] argb = new int[sw * sh];
+        for (int y = 0; y < sh; y++)
+            for (int x = 0; x < sw; x++) argb[y * sw + x] = img.getPixel(x * div, y * div);
+        return addSkin(sw, sh, argb);
     }
 
     private int addSkin(int w, int h, int[] argb) {
@@ -545,6 +644,42 @@ final class EntityClient {
         } finally {
             galaxy = null;
             playerSkin = -1;
+        }
+    }
+
+    /** EntityWire model id flags: the piece is held in Steve's hand (its matrix in Minecraft's hand frame), the left one. */
+    static final int HELD = 0x4000, LEFT = 0x2000;
+
+    /**
+     * What Minecraft draws with its own model in the player's hands (a shield, its banner pattern
+     * and its blocking pose included), as pieces the game puts in Steve's hands; lit where Mario is.
+     */
+    private void heldPieces(int cell, List<EntityWire.Piece> out) {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null) return;
+        for (int hand = HeldItem.MAIN; hand <= HeldItem.OFF; hand++) {
+            ItemStack stack = hand == HeldItem.MAIN ? player.getMainHandItem() : player.getOffhandItem();
+            if (stack.isEmpty() || !HeldClient.drawnAsModel(stack)) continue;
+            int from = out.size();
+            try {
+                var state = new net.minecraft.client.renderer.item.ItemStackRenderState();
+                Minecraft.getInstance().getItemModelResolver().updateForLiving(state, stack,
+                        hand == HeldItem.MAIN ? net.minecraft.world.item.ItemDisplayContext.THIRD_PERSON_RIGHT_HAND
+                                : net.minecraft.world.item.ItemDisplayContext.THIRD_PERSON_LEFT_HAND, player);
+                galaxy = new Matrix4d(); // the hand frame as it is: the game puts it in his hand
+                capture.begin(new Matrix4d(), out);
+                state.submit(new PoseStack(), capture, EntityCapture.FULL_BRIGHT, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, 0);
+            } catch (RuntimeException ex) {
+                GalaxyCraft.LOG.warn("Not drawing {} in Steve's hand: {}", stack, ex.toString());
+            } finally {
+                galaxy = null;
+            }
+            int flags = HELD | (hand == HeldItem.OFF ? LEFT : 0);
+            for (int i = from; i < out.size(); i++) {
+                EntityWire.Piece p = out.get(i);
+                out.set(i, new EntityWire.Piece(p.model() | flags, p.skin(), p.overlay(), p.tint(), p.mtx()));
+                cellOf.put(i, cell);
+            }
         }
     }
 

@@ -290,9 +290,47 @@ final class EntityCapture implements SubmitNodeCollector {
     public void submitNameTag(PoseStack poseStack, Vec3 at, int offset, Component name, boolean seeThrough, int light,
             CameraRenderState camera) {}
 
+    // ---- text (a sign's) ----
+
+    /** Minecraft's full-bright light coordinates: glowing text, which no darkness dims. */
+    static final int FULL_BRIGHT = 0xF000F0;
+
+    /**
+     * As TextFeatureRenderer: glowing text's outline (eight copies around it) first, then the
+     * text; each glyph as Minecraft renders it, grouped into one model per font page.
+     */
     @Override
     public void submitText(PoseStack poseStack, float x, float y, FormattedCharSequence text, boolean shadow, Font.DisplayMode mode,
-            int light, int color, int background, int outline) {}
+            int light, int color, int background, int outline) {
+        Font font = net.minecraft.client.Minecraft.getInstance().font;
+        java.util.Map<com.mojang.renderpearl.api.textures.GpuTexture, Recorder> pages = new java.util.LinkedHashMap<>();
+        Font.GlyphVisitor glyphs = new Font.GlyphVisitor() {
+            @Override
+            public void acceptGlyph(net.minecraft.client.gui.font.TextRenderable.Styled glyph) {
+                acceptRenderable(glyph);
+            }
+
+            @Override
+            public void acceptEffect(net.minecraft.client.gui.font.TextRenderable effect) {
+                acceptRenderable(effect);
+            }
+
+            @Override
+            public void acceptRenderable(net.minecraft.client.gui.font.TextRenderable r) {
+                // In the pose's units, as a model's in blocks: Recorder makes them pixels, place() blocks again.
+                r.render(new Matrix4f(), pages.computeIfAbsent(r.textureView().texture(), t -> new Recorder()), light, false);
+            }
+        };
+        if (outline != 0) font.prepare8xTextOutline(text, x, y, outline).visit(glyphs);
+        font.prepareText(text, x, y, color, shadow, false, background).visit(glyphs);
+        double[] m = owner.toGal(place(new Matrix4f(poseStack.last().pose())));
+        for (var page : pages.entrySet()) {
+            int skin = owner.fontSkin(page.getKey()), model = skin < 0 ? -1 : owner.customModel(page.getValue().done());
+            if (model < 0) continue;
+            if (light == FULL_BRIGHT) owner.glowing.add(out.size());
+            out.add(new EntityWire.Piece(model, skin, 0, -1, m));
+        }
+    }
 
     @Override
     public void submitTextBackground(PoseStack poseStack, float x0, float y0, float x1, float y1, int color, Font.DisplayMode mode,
