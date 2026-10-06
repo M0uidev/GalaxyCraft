@@ -16,6 +16,7 @@ import dev.moui.galaxycraft.proto.Seqlock;
 import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.view.CameraDistance;
 import dev.moui.galaxycraft.view.CameraMath;
+import dev.moui.galaxycraft.view.IntroCamera;
 import dev.moui.galaxycraft.view.View;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
@@ -655,8 +656,42 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             camOffsetGal = CameraMath.offsetGal(frame, cameraMc, feetMc, partialTicks);
             camLookGal = frame.dirToGal(forwardMc, partialTicks);
             camUpGal = frame.dirToGal(upMc, partialTicks);
+            intro();
         }
         sendPose(Minecraft.getInstance());
+    }
+
+    /** Entering a world: the camera's zoom from space down to the player's view (IntroCamera), ms. */
+    private static final long INTRO_MS = 3000;
+    /** When the zoom started (nanoTime; 0: none), and whether the GUI was hidden before it. */
+    private static long introStart;
+    private static boolean guiWasHidden;
+
+    /** The zoom from space starts now (EnteringScreen, once Mario stands on the planet). */
+    static void startIntro() {
+        Minecraft mc = Minecraft.getInstance();
+        if (introStart == 0) guiWasHidden = mc.gui.hud.isHidden();
+        if (!mc.gui.hud.isHidden()) mc.gui.hud.toggle(); // no hand or hotbar in the shot
+        introStart = System.nanoTime();
+    }
+
+    /** During the zoom: the camera this frame on its way in, instead of the player's own. */
+    private static void intro() {
+        if (introStart == 0) return;
+        double t = (System.nanoTime() - introStart) / (INTRO_MS * 1e6);
+        if (t >= 1 || frame == null) {
+            introStart = 0;
+            var hud = Minecraft.getInstance().gui.hud;
+            if (hud.isHidden() != guiWasHidden) hud.toggle();
+            return;
+        }
+        PlanetSession on = PlanetClient.focus();
+        double radius = on.active() ? on.planet().surface() : 48;
+        double far = (radius * 1.5 + 48) / GravityFrame.SCALE; // the planet whole in view, galaxy units
+        IntroCamera.Pose p = IntroCamera.at(t, frame.upGal(), camOffsetGal, camLookGal, camUpGal, far);
+        camOffsetGal = p.offset();
+        camLookGal = p.look();
+        camUpGal = p.up();
     }
 
     private static void sendPose(Minecraft client) {

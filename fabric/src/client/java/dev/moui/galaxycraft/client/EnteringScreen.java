@@ -8,13 +8,13 @@ import net.minecraft.network.chat.Component;
 /**
  * Entering a world: an opaque screen over the game until Mario stands on the world's planet
  * (SMG2 may still be booting behind it, its warning and file select showing), then a short fade
- * into the game. The world keeps running behind it (not a pause screen), so the landing happens.
+ * into the camera's zoom from space down to the player's view. The world keeps running behind it (not a pause screen), so the landing happens.
  */
 final class EnteringScreen extends Screen {
     /** Ticks the game is shown settled (landed, linked) before the fade starts. */
     private static final int SETTLE_TICKS = 10;
-    /** The fade, ms. */
-    private static final long FADE_MS = 700;
+    /** The fade, ms: quick, the camera's zoom from space (GalaxyCraftClient.startIntro) is the way in. */
+    private static final long FADE_MS = 300;
     /** Longest it covers the game, ms: whatever happens, the player is not left behind it. */
     private static final long MAX_MS = 60_000;
     private final long opened = System.currentTimeMillis();
@@ -46,8 +46,10 @@ final class EnteringScreen extends Screen {
     public void tick() {
         boolean ready = !PlanetClient.waitingToLand() && GalaxyCraftClient.linkedToGalaxy();
         settled = ready ? settled + 1 : 0;
-        if (fadeFrom == 0 && (settled >= SETTLE_TICKS || System.currentTimeMillis() - opened > MAX_MS))
+        if (fadeFrom == 0 && (settled >= SETTLE_TICKS || System.currentTimeMillis() - opened > MAX_MS)) {
             fadeFrom = System.currentTimeMillis();
+            if (ready) GalaxyCraftClient.startIntro();
+        }
     }
 
     @Override
