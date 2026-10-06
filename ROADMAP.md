@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (blocks: walls, heads, similar blocks and the off hand added to the Inbox)
+Last updated: 2026-10-06 (walls and off hand done; drawn blocks next, then working blocks)
 
 ---
 
@@ -29,6 +29,8 @@ Last updated: 2026-10-06 (blocks: walls, heads, similar blocks and the off hand 
 
 | Feature | Status | Notes |
 |---|---|---|
+| Blocks drawn by renderers | next | First of the blocks work (order chosen: walls → drawn → working). Chests, ender chests, shulker boxes, beds, signs and their text, banners, heads, decorated pots, bells, books on lecterns and enchanting tables, items on shelves and campfires: Minecraft draws them with block entity renderers (their block model has no faces), so the planet draws nothing. Also the primed TNT drawn whole, the shulker mob, and the off hand's item in Steve's hand with the shield raised. Efficiency: the still shape baked once into the chunk mesh, only moving parts (a chest lid, a bell) through the entity path while they move. |
+| Blocks that work | next | After the drawn blocks. Beds (spawn point, skipping the night, every bed including the straw bed), signs (typing text), ender chests (shared inventory), shelves, rails with minecarts; and the like: respawn anchors, lecterns, jukeboxes, chiseled bookshelves, item frames, armor stands, flower pots, the other minecarts (chest, hopper, furnace, TNT) and powered/detector/activator rails. Lead: the shadow uses the real player, who is in another dimension (beds refuse, the sign editor opens on the wrong level). |
 | Infinite universe | next | Stage 3 of the galaxy: No Man's Sky-like endless space, planets generated per sector as you explore (the catalog grows), a floating origin (SMG2's floats), faster travel than elytra. Builds on the galaxy options' catalog and streaming. |
 | Flat space stations | next | Player-built **flat** platforms floating in space, to play flat Minecraft (farms, builds) without the sphere's distortion. Hook ready: `CosmicWind` takes any `GravityBody`, not only spheres. |
 
@@ -113,30 +115,13 @@ Last updated: 2026-10-06 (blocks: walls, heads, similar blocks and the off hand 
 | 2026-10-05 | Lag fix: `gxplay.sh` runs Dolphin dual core and stops leftover hidden Minecrafts | beddf73 |
 | 2026-10-06 | Smoother level of detail: blocks first when nearing a planet, far view finer near the blocks (Distant Horizons-style), parallel meshing, nearest chunks first, block distance 96 and far view detail settings; no hangs flying fast (collision zone overflow) or standing still (Wii Remote auto-sleep, stale collision); quiet F1-F8 and invalid-access dialogs | adfd848 |
 | 2026-10-06 | Game feel: hold to break at Minecraft's speeds, cracks, block sounds and particles, the block outline in its real shape (and drawn again) | 7fd037b |
+| 2026-10-06 | Torches, heads, signs, banners, coral fans, levers and buttons on walls (all four sides); heads on the floor turned to the player; the off hand places and uses when the main hand does nothing | ea7a354 |
 
 ---
 
 ## Inbox
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
-
-- 2026-10-06: The off hand (user): placing blocks and using things with the left hand, and what
-  comes with it. Today every right click, placement, bucket and held-item drawing uses only the
-  main hand.
-- 2026-10-06: Blocks, continued (user): torches and other directional blocks fixed to walls (X and
-  Z sides), mob heads placed freely on the floor and walls with their rotations, and the blocks
-  with mechanics like the ones below that don't work yet either. Must stay efficient without
-  changing how it looks. Lead found: placement calls the block's `getStateForPlacement` directly,
-  which skips `StandingAndWallBlockItem` (the item that picks wall torches, wall heads, wall
-  signs, wall banners, coral fans).
-- 2026-10-06: Blocks that don't show or don't work yet (user), and the others like them. Visible:
-  TNT drawn whole, chests (invisible), shulker boxes, and shulkers (the mob); End crystals already
-  work. Working: rails with minecarts together, signs, shelves, every bed (the straw bed too),
-  ender chests with their shared inventory. Lead found: chests, ender chests, beds, signs and
-  shulker boxes are drawn by Minecraft's block entity renderers (their block model has no
-  faces), so the planet draws nothing; they could go through `EntityCapture` like mobs do. Needs
-  Minecraft 26.3's sources, which the cloud session can't download.
-
 
 - 2026-10-05: Launcher follow-ups (review): old planets in ~/.local/share/galaxycraft/planets are not moved into a world; closing the Dolphin window can lose the last ≤10 s of planet edits (no save on exit).
 - 2026-10-05: FPS above 60 (user, while playing). SMG2's logic is locked to 60 frames a second,
