@@ -420,9 +420,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             } else if (Flight.active() && !player.onGround()) {
                 // Elytra: up turns to the gravity that pulls, at a flight's pace; in the void
                 // (no gravity) it stays as it was.
-                // The look stays where it was in the galaxy: flying into a planet's pull turns up, not
-                // where the player faces.
-                if (!space) keepLook(player, frame.update(Flight.upToward(frame, gravity).negate(), pos));
+                if (!space) frame.update(Flight.upToward(frame, gravity).negate(), pos);
             } else if (world.get().follow() && world.get().hasGravity() && !ownPhysics()) {
                 // Nobody walks by Minecraft's physics here, so the frame may lag the gravity a
                 // little: the camera's up turns smoothly instead of snapping at planet edges.
@@ -513,19 +511,6 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             if (holding) hold(player, false);
             player.setNoGravity(true);
         }
-    }
-
-    /** After a re-aim of the frame: the look turned with it, so it points where it did in the galaxy. */
-    private static void keepLook(LocalPlayer player, GravityFrame.Update u) {
-        if (!u.rotated()) return;
-        double[] t = LookMath.turned(player.getYRot(), player.getXRot(), u.deltaMc());
-        float yaw = (float) t[0], pitch = (float) t[1];
-        // Last tick's look stays as it was (LookMath.keptOld): drawing turns the frame between ticks.
-        float dy = yaw - player.getYRot();
-        player.setYRot(yaw);
-        player.setXRot(pitch);
-        player.yHeadRot += dy;
-        player.yBodyRot += dy;
     }
 
     /**

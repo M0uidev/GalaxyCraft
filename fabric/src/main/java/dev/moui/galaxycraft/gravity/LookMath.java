@@ -21,24 +21,4 @@ public final class LookMath {
     public static double pitch(Vector3d d) {
         return Math.toDegrees(Math.asin(Math.max(-1, Math.min(1, -d.y / d.length()))));
     }
-
-    /**
-     * A look (yaw, pitch) turned by q: {yaw, pitch} of the turned direction, the yaw the nearest to
-     * the old one (it goes on past ±180 instead of jumping by 360).
-     */
-    public static double[] turned(double yawDeg, double pitchDeg, org.joml.Quaterniondc q) {
-        Vector3d d = q.transform(direction(yawDeg, pitchDeg), new Vector3d());
-        double yaw = yaw(d), diff = yaw - yawDeg;
-        diff -= 360 * Math.floor((diff + 180) / 360);
-        return new double[] {yawDeg + diff, pitch(d)};
-    }
-
-    /**
-     * Last tick's look (drawing between ticks starts from it) after a look is kept through a
-     * frame's turn by q: as it was. Drawing turns the frame from last tick's to this one's, so
-     * last tick's look is read in last tick's frame; turned too, it would jump back by q.
-     */
-    public static double[] keptOld(double yawDeg, double pitchDeg, org.joml.Quaterniondc q) {
-        return new double[] {yawDeg, pitchDeg};
-    }
 }

@@ -97,10 +97,12 @@ final class Flight {
         return started;
     }
 
-    /** Up for a flight in a field: toward the gravity, at a flight's pace. */
+    /** A flight's turn of up toward the pull: gentle in, gentle out. */
+    private static final dev.moui.galaxycraft.gravity.UpTurn turn = new dev.moui.galaxycraft.gravity.UpTurn();
+
+    /** Up for a flight in a field: toward the gravity, eased (UpTurn). */
     static Vector3d upToward(GravityFrame frame, Vector3d gravity) {
-        return GravityFrame.limitTurn(frame.upGal(), new Vector3d(gravity).normalize().negate(),
-                GravityFrame.FLIGHT_TURN_PER_TICK);
+        return turn.step(frame.upGal(), new Vector3d(gravity).normalize().negate());
     }
 
     /**
@@ -116,6 +118,7 @@ final class Flight {
             player.setNoGravity(false);
         }
         inVoid = voidNow;
+        if (voidNow || player.onGround()) turn.reset(); // the next turn into a pull starts gently
         if (voidNow) fromSpace = true;
         else if (player.onGround() || player.isFallFlying()) fromSpace = false;
         if (fromSpace) player.resetFallDistance();
@@ -136,6 +139,7 @@ final class Flight {
         fromSpace = false;
         landed = 0;
         lastMario = null;
+        turn.reset();
     }
 
     /** Every planet's gravity, blocks. */
