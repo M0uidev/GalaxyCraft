@@ -512,15 +512,12 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         if (!u.rotated()) return;
         double[] t = LookMath.turned(player.getYRot(), player.getXRot(), u.deltaMc());
         float yaw = (float) t[0], pitch = (float) t[1];
-        float dy = yaw - player.getYRot(), dx = pitch - player.getXRot();
+        // Last tick's look stays as it was (LookMath.keptOld): drawing turns the frame between ticks.
+        float dy = yaw - player.getYRot();
         player.setYRot(yaw);
         player.setXRot(pitch);
-        player.yRotO += dy;
-        player.xRotO += dx;
         player.yHeadRot += dy;
-        player.yHeadRotO += dy;
         player.yBodyRot += dy;
-        player.yBodyRotO += dy;
     }
 
     /**
