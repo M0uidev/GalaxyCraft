@@ -125,6 +125,7 @@ Last updated: 2026-10-06 (infinite universe now: research, design and its core)
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-06: Make SMG2 use 64-bit numbers instead of 32 so far-away positions stay precise (user, about the infinite universe). Looked into: SMG2's engine, CPU SIMD and GPU are 32-bit throughout, so not the engine itself; our own code goes 64-bit (free on the Wii's CPU) and the floating origin covers the rest. Spec §2b.
 - 2026-10-06: Follow-ups of "blocks show what they hold" (Claude): the enchanting table's book
   turning to the player and the bell swinging (still drawn at rest); a crowd of 100 signs and 50
   banners costs ~2.7 ms a frame, could be made cheaper (pieces that do not move sent once).

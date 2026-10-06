@@ -52,6 +52,37 @@ really is infinite (longs, not doubles, for where things are in the universe).
 | **Star Citizen / Unreal Engine 5** | 64-bit positions throughout ("large world coordinates"). | Doubles and longs in the mod; SMG2 cannot change its floats, so it gets the floating origin. |
 | **Minecraft** | Renders relative to the camera; its Far Lands were noise fed huge coordinates. | Universe-scale decisions use integer hashes only, never float noise of absolute positions. |
 
+## 2b. Why not make SMG2 use 64 bits?
+
+The idea (2026-10-06): if 32-bit floats are the problem, move SMG2 to 64-bit doubles. Checked
+against Syati's SMG2 headers:
+
+- **The game is built on 32 bits all the way down.** `TVec3f` appears ~2000 times across 226
+  headers: Mario (dozens of cached `TVec3f`/`Mtx` fields in `MarioActor`), every actor's
+  `mTranslation`, gravity, the camera, collision (`CollisionParts` keeps four `TMtx34f`). Its
+  vector and matrix math (`PSMTX*`, `PSVEC*`) runs on the Gekko's *paired singles*: two 32-bit
+  floats per register, the CPU's only SIMD. The GPU (GX's transform unit) takes 32-bit matrices.
+  The level files store 32-bit floats too. Changing that means rewriting most of the game's code.
+- **It would be slower**, not faster: doubles lose the paired-single SIMD the whole engine uses.
+- **But the Gekko's normal FPU does doubles natively**, at the same speed as floats. So the code
+  we write ourselves can use 64 bits for free.
+
+So it is a hybrid, and the design below already uses it:
+
+| Who owns the code | Precision | How far it holds |
+|---|---|---|
+| The mod (Java) | `double` + `long` cells (`UPos`) | endless |
+| Our module's own math (planet and view matrices, drops, teleports) | `double` where a big number meets a small one: e.g. the planet's matrix computed camera-relative (`center - eye` in double, then to float) | endless, and steady between origin moves |
+| SMG2's engine (Mario, collision, gravity, camera, GX) | 32-bit float, unchanged | kept small by the floating origin (§4.3): never past 13,107 blocks, 1/8 unit or better |
+
+What Syati's headers also settle for §4.4:
+
+- `CollisionParts::resetAllMtx(const TPos3f&)` sets a part's base matrix *and* its previous one,
+  so a moved part is a teleported floor, not a fast-moving one dragging Mario (`setMtx` alone would
+  be the latter). Step 2 uses it: no need to drop the chunks.
+- `MR::setPlayerPos`, `MR::setPlayerPosAndWait` and `MR::setPlayerBaseMtx` move Mario;
+  `MR::resetCameraMan` resets SMG2's own camera. The spike only checks Mario's speed survives.
+
 ## 3. Decisions
 
 | Question | Choice |
@@ -127,17 +158,18 @@ GXC_MSG_ORIGIN = 116, /* M -> S: u32 epoch, i32 shift[3] (cells of 65536 units),
 - **Module** (`VoxelPlanet.cpp`), in one frame, `d = -shift * 65536`:
   1. every `Planet.center += d`; its gravity's `mLocalPos` (+ `updateIdentityMtx`);
      `mTranslation`. Meshes, far views, outlines and cracks are relative to the center: untouched.
-  2. every chunk's collision part: its base matrix's translation `+= d`. **Spike**: which
-     `CollisionParts` call moves a part (`setMtx` / reset of its previous matrix so it is not
-     taken as a fast-moving floor that drags Mario). Fallback: the policy's `clear` also releases
-     the nearest planet's chunks in the void (today it keeps them always), so there are no parts
-     to move.
+  2. every chunk's collision part: `resetAllMtx` with its base matrix's translation `+= d` (it
+     resets the previous matrix too, so the part is not taken as a floor moving 400 blocks in a
+     frame; §2b). Fallback if that misbehaves: the policy's `clear` also releases the nearest
+     planet's chunks in the void (today it keeps them always), so there are no parts to move.
   3. Mario: `MR::setPlayerPos(pos + d)` (as `Teleport` does) keeping his velocity; seated (elytra,
      the usual case out there) he follows the next `SEAT`. **Spike**: velocity and SMG2's
      "previous position" fields (a fall-too-far check must not see a 400-block jump).
   4. Camera: in GalaxyCraft's first and third person the view is built from Mario's feet and the
-     mod's look/offset: nothing to do. SMG2's own camera (F5): shift its position and target, or
-     reset it (a snap in empty space). **Spike.**
+     mod's look/offset: nothing to do. SMG2's own camera (F5): `MR::resetCameraMan` (a snap, in
+     empty space where nothing shows it).
+  7. The module's own matrices (planets, far views, outline, crack): computed camera-relative in
+     double (`center - eye`, then float), so they stay steady at any distance from the origin.
   5. `pending teleport` and `gLanding.to` += d; drawn entities need nothing (re-sent each frame
      in the new epoch); held items are Mario-relative.
   6. Echo the new epoch in the mailbox from this frame on.
