@@ -2,6 +2,7 @@
 # End to end for the voxel planet: a fresh boot of the dev Dolphin with the current module walks
 # to the prologue (savestates hold the module's code), then Minecraft's VoxelPlanetTest spawns a
 # planet, lands Mario on it, digs under him and builds next to him. Exits non-zero on failure.
+#   GXC_GUI=1 tools/gxvoxel.sh ...   any of these in a Dolphin window, to watch it
 #   tools/gxvoxel.sh          (captures: ~/.local/share/galaxycraft-dev/ScreenShots/SB4E01/voxel-*.png)
 #   tools/gxvoxel.sh held     HeldItemTest instead: Steve holds the hotbar's items (held-*.png)
 #   tools/gxvoxel.sh entities EntityTest instead: mobs, TNT and drops drawn by the game (entities-*.png)
@@ -23,6 +24,8 @@
 #   tools/gxvoxel.sh galaxy   GalaxyProbe: Create World's tab, a galaxy of 64 planets, 8 complete and the
 #                             rest far, an edit on the farthest kept (galaxy-*.png)
 set -u
+# GXC_GUI=1 runs Dolphin in a window, to watch the test as it plays.
+GUI="${GXC_GUI:+--gui}"
 if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ]; then
   # LauncherProbe (or GalaxyProbe, a world of many planets): the dev Dolphin boots by itself (no
   # savestate), Minecraft starts at its title.
@@ -31,7 +34,7 @@ if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ]; then
   LOG="$HOME/.local/share/galaxycraft-dev/$GTAG-minecraft.log"
   syati/build.sh > /dev/null 2>&1 || { echo "gxvoxel: FAILED: syati/build.sh" >&2; exit 1; }
   $G stop > /dev/null
-  GALAXYCRAFT_BOOT=space $G start --speed 1 || { echo "gxvoxel: FAILED: dolphin did not start" >&2; exit 1; }
+  GALAXYCRAFT_BOOT=space $G start $GUI --speed 1 || { echo "gxvoxel: FAILED: dolphin did not start" >&2; exit 1; }
   echo "gxvoxel: running $NAME (log: $LOG)"
   (cd fabric && ./gradlew runClientGameTest -P$GPROP ${GXC_ARGS:-} --console=plain) > "$LOG" 2>&1
   grep "\[GalaxyCraft $GTAG\]" "$LOG"
@@ -74,13 +77,13 @@ if [ -n "${GXC_SAV:-}" ]; then
 elif [ -z "${GXC_REUSE:-}" ] || [ ! -f "$SAV" ]; then
   syati/build.sh > /dev/null 2>&1 || fail "syati/build.sh"
   $G stop > /dev/null
-  $G start --speed 0 || fail "dolphin did not start"
+  $G start $GUI --speed 0 || fail "dolphin did not start"
   sleep 8
   python3 tools/gxroute.py new-game || fail "route to the prologue"
   $G ctl "save $SAV" --wait 30 | grep -q "ok save" || fail "save $SAV"
 fi
 $G stop > /dev/null
-$G start --speed 1 --gdb || fail "dolphin did not start"
+$G start $GUI --speed 1 --gdb || fail "dolphin did not start"
 for _ in $(seq 60); do
   $G ctl mbx 2> /dev/null | grep -q '^at=' && break
   sleep 1

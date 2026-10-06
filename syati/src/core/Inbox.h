@@ -63,10 +63,13 @@ struct InboxCrack
   f32 corners[8][3];  // relative to the planet's center
 };
 
+const u32 HELD_POSE_NONE = 0, HELD_POSE_BLOCK = 1;
+
 struct InboxHeld
 {
   u32 kind;  // GXC_HELD_*
   u32 hand;  // 0 the right (main) hand, 1 the left (off) hand
+  u32 pose;  // GXC_HELD_POSE_*: 1 that arm raised to block (a shield)
   const u8* sprite;  // 16x64 GX RGB5A3 (2048 bytes): bands top, sides, bottom (HeldMesh)
 };
 
@@ -78,7 +81,7 @@ struct InboxAtlas
 };
 
 // Entities (GXC_MSG_SKIN, MODEL, ENTITIES and GXC_ENT_* in protocol/galaxycraft_protocol.h).
-const u32 ENT_MAX_SKINS = 256, ENT_MAX_MODELS = 2048, ENT_MAX = 768, ENT_BYTES = 60;
+const u32 ENT_MAX_SKINS = 256, ENT_MAX_MODELS = 2048, ENT_MAX = 1536, ENT_BYTES = 60;
 const u32 ENT_SKIN_MAX = 256, ENT_DL_MAX = 65536;
 
 struct InboxSkin

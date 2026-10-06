@@ -551,6 +551,24 @@ public final class VoxelPlanet {
         return out;
     }
 
+    /** Cells whose block the game draws live (its own renderer), left out of the chunk mesh. */
+    private final java.util.Set<Integer> hidden = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Whether cell's block is left out of the mesh (drawn live instead). Any thread. */
+    public boolean hidden(int cell) {
+        return hidden.contains(cell);
+    }
+
+    /** Leaves cell's block out of the mesh (or puts it back); its chunk is meshed again if that changes. */
+    public void hide(int cell, boolean on) {
+        if (on ? hidden.add(cell) : hidden.remove(cell)) dirty.set(chunkOf(cell));
+    }
+
+    /** The cells left out of the mesh now. */
+    public java.util.Set<Integer> hiddenCells() {
+        return java.util.Set.copyOf(hidden);
+    }
+
     /** Everything is resent (the game lost it: new scene or reconnect). */
     public void markAllDirty() {
         dirty.set(0, chunkCount());

@@ -43,12 +43,22 @@ final class HeldClient {
 
     /** Client tick, linked to the game: sends what each hand holds if the game does not have it yet. */
     static void tick(LocalPlayer player, BridgeClient bridge, int sceneId) {
-        send(link, player.getMainHandItem(), HeldItem.MAIN, bridge, sceneId);
-        send(offLink, player.getOffhandItem(), HeldItem.OFF, bridge, sceneId);
+        send(link, player, player.getMainHandItem(), HeldItem.MAIN, bridge, sceneId);
+        send(offLink, player, player.getOffhandItem(), HeldItem.OFF, bridge, sceneId);
     }
 
-    private static void send(HeldItem link, ItemStack stack, int hand, BridgeClient bridge, int sceneId) {
-        byte[] held = HeldItem.inHand(stack.isEmpty() ? HeldItem.none() : payloads.computeIfAbsent(stack.getItem(), i -> payload(stack)), hand);
+    /** Drawn by Minecraft's own model in Steve's hand (EntityClient.heldPieces), not as a sprite: a shield. */
+    static boolean drawnAsModel(ItemStack stack) {
+        return stack.has(net.minecraft.core.component.DataComponents.BLOCKS_ATTACKS);
+    }
+
+    private static void send(HeldItem link, LocalPlayer player, ItemStack stack, int hand, BridgeClient bridge, int sceneId) {
+        byte[] look = stack.isEmpty() || drawnAsModel(stack) ? HeldItem.none()
+                : payloads.computeIfAbsent(stack.getItem(), i -> payload(stack));
+        boolean blocking = player.isBlocking()
+                && player.getUsedItemHand() == (hand == HeldItem.MAIN ? net.minecraft.world.InteractionHand.MAIN_HAND
+                        : net.minecraft.world.InteractionHand.OFF_HAND);
+        byte[] held = HeldItem.inHand(look, hand, blocking ? HeldItem.POSE_BLOCK : HeldItem.POSE_NONE);
         if (link.due(held, sceneId, bridge.hostPid()) && bridge.send(Layout.MSG_HELD, held))
             link.sent(held, sceneId, bridge.hostPid());
     }

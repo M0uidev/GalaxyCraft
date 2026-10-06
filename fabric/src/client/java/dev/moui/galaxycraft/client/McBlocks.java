@@ -338,6 +338,11 @@ public final class McBlocks implements Blocks {
         return Block.getId(state);
     }
 
+    /** Whether a state's whole look is what its block entity renderer draws (a chest), not a model of its own (a shelf). */
+    public boolean drawnByRenderer(int id) {
+        return baked.containsKey(id);
+    }
+
     @Override public BlockInfo info(int id) {
         if (id < 0 || id >= count) id = AIR;
         BlockInfo b = infos[id];

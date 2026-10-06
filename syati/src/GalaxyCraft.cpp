@@ -20,6 +20,7 @@ extern "C" void init__10MarioActorFRC12JMapInfoIter(void* self, const void* iter
 extern "C" void movement__10MarioActorFv(void* self);
 extern "C" void movement__14CameraDirectorFv(void* self);
 extern "C" void draw__10MarioActorCFv(const void* self);
+extern "C" void calcViewAndEntry__10MarioActorFv(void* self);
 extern "C" void draw__17StarPointerLayoutCFv(const void* self);
 extern "C" void draw__15StarPointerBlurCFv(const void* self);
 extern "C" void movement__13ClippingJudgeFv(void* self);
@@ -66,6 +67,7 @@ struct Debug
   u32 music;              // BootMusicFrames: bit 0 the galaxy's music plays, above: frames it played
   u32 landing_frames;     // VoxelPlanetLandingFrames: frames the last landing was held for its ground
   uint32_t teleports[3];  // VoxelPlanetTeleports: received, applied, kept for their planet
+  u32 arm_pose;           // bit 0: MarioCalcView hooked; above: arms raised to block last frame
 };
 
 struct Published
@@ -360,9 +362,16 @@ void PublishParts(const f32* query)
 
 namespace
 {
+void MarioCalcView(void* self);
+
 void MarioInit(void* self, const void* iter)
 {
   init__10MarioActorFRC12JMapInfoIter(self, iter);
+  // MarioActor's vtable slot for calcViewAndEntry, taken only if it holds that (else no arm pose).
+  u32* calcView = reinterpret_cast<u32*>(0x806C7448 + 0x20);
+  if (*calcView == reinterpret_cast<u32>(&calcViewAndEntry__10MarioActorFv))
+    *calcView = reinterpret_cast<u32>(&MarioCalcView);
+  gOut.dbg.arm_pose = *calcView == reinterpret_cast<u32>(&MarioCalcView) ? 1 : 0;
   gOut.mbx.scene_id++;  // a new Mario means a new stage: the host republishes everything
   // Until his first movement, no gravity nor position of the last stage's Mario (the file
   // select's flies around with gravity): the mod would take them for this stage's.
@@ -631,6 +640,14 @@ void MarioMovement(void* self)
   gOut.mbx.game_flags = (gFollowing ? GXC_MBX_GAME_FOLLOWING : 0u) | (gDemo ? GXC_MBX_GAME_DEMO : 0u);
   VoxelPlanetFrame(gOut.mbx.scene_id, &gOut.mbx.inbox_addr, &gOut.mbx.inbox_size);
   gOut.mbx.game_seq++;  // last: the host reads a consistent frame when this moves
+}
+
+// After all of Mario's animation, before his joints become his model's view matrices: Steve's arm
+// raised to block as Minecraft's (HeldItemPoseArms).
+void MarioCalcView(void* self)
+{
+  gOut.dbg.arm_pose = (gOut.dbg.arm_pose & 1) | HeldItemPoseArms(static_cast<const LiveActor*>(self)) << 1;
+  calcViewAndEntry__10MarioActorFv(self);
 }
 
 void MarioDraw(const void* self)

@@ -118,13 +118,14 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   }
   else if (type == InboxRecord::HELD)
   {
-    // kind, hand, two reserved words, the sprite (GxcHeld); kinds up to TOOL, hands 0 and 1.
+    // kind, hand, pose, a reserved word, the sprite (GxcHeld); kinds up to TOOL, hands 0 and 1.
     if (len != 16 + 2048)
       return false;
     out->held.kind = ReadBE32(p);
     out->held.hand = ReadBE32(p + 4);
+    out->held.pose = ReadBE32(p + 8);
     out->held.sprite = p + 16;
-    if (out->held.kind > 4 || out->held.hand > 1)
+    if (out->held.kind > 4 || out->held.hand > 1 || out->held.pose > 1)
       return false;
   }
   else if (type == InboxRecord::ATLAS)

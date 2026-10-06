@@ -8,6 +8,7 @@
 		"CreateWorldScreenMixin",
 		"EntityMixin",
 		"EntityRenderDispatcherMixin",
+		"FontTextureMixin",
 		"GameRendererMixin",
 		"LevelRendererMixin",
 		"LocalPlayerMixin",

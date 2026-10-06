@@ -26,6 +26,7 @@ struct Hand
   const Model* draw;  // null: nothing in hand
   u32 size;
   u32 kind;
+  u32 pose;  // GXC_HELD_POSE_*
 };
 Hand gHands[2];
 const LiveActor* gMario = 0;
@@ -126,6 +127,7 @@ void HeldItemSet(const gxc::InboxHeld& held)
 {
   Hand& hand = gHands[held.hand & 1];
   hand.draw = 0;
+  hand.pose = held.pose;
   if (held.kind == gxc::HELD_NONE)
     return;
   Model& m = hand.models[hand.next];
@@ -156,4 +158,52 @@ void HeldItemFrame(const LiveActor* mario, bool shown)
 uint32_t HeldItemKind()
 {
   return (gHands[0].draw ? gHands[0].kind : 0) | (gHands[1].draw ? gHands[1].kind << 8 : 0);
+}
+
+bool HeldItemHandMtx(uint32_t hand, float out[12])
+{
+  if (!gShown || !gMario || hand > 1)
+    return false;
+  const MtxPtr joint = MR::getJointMtx(gMario, hand == 0 ? GXC_HELD_JOINT : GXC_HELD_JOINT_L);
+  if (!joint)
+    return false;
+  f32 j[12];
+  for (int r = 0; r < 3; r++)
+    for (int c = 0; c < 4; c++)
+      j[4 * r + c] = joint[r][c];
+  gxc::Mul34(j, gHandMtx[hand], out);
+  return true;
+}
+
+uint32_t HeldItemPoseArms(const LiveActor* mario)
+{
+  uint32_t raised = 0;
+  if (!gShown || !mario || mario != gMario)
+    return raised;
+  const MtxPtr body = MR::getJointMtx(mario, GXC_BLOCK_ARM_BODY);
+  if (!body)
+    return raised;
+  f32 b[12], m[12];
+  for (int r = 0; r < 3; r++)
+    for (int c = 0; c < 4; c++)
+      b[4 * r + c] = body[r][c];
+  static const char* const ARMS[2][2] = {{"ArmR1", "ArmR2"}, {"ArmL1", "ArmL2"}};
+  for (int h = 0; h < 2; h++)
+  {
+    if (gHands[h].pose != gxc::HELD_POSE_BLOCK)
+      continue;
+    raised++;
+    // Minecraft's arm is one straight piece turned at the shoulder: both joints from the body.
+    for (int k = 0; k < 2; k++)
+    {
+      const MtxPtr joint = MR::getJointMtx(mario, ARMS[h][k]);
+      if (!joint)
+        continue;
+      gxc::Mul34(b, gBlockArm[h][k], m);
+      for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 4; c++)
+          joint[r][c] = m[4 * r + c];
+    }
+  }
+  return raised;
 }

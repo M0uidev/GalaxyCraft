@@ -108,6 +108,7 @@ public final class PlanetMesher {
                 fluidQuads(p, c, b, out, dark);
                 continue;
             }
+            if (p.hidden(c)) continue; // drawn live by its own renderer (a sign with text, an open chest)
             for (ModelQuad mq : b.quads()) {
                 int nb = -1;
                 if (mq.cull() >= 0) {
