@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (official name is now Super Minecraft Galaxy)
+Last updated: 2026-10-06 (blocks that work done; blocks show what they hold next; official name Super Minecraft Galaxy)
 
 ---
 
@@ -29,7 +29,7 @@ Last updated: 2026-10-06 (official name is now Super Minecraft Galaxy)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Blocks that work | next | The drawn blocks are done. Beds (spawn point, skipping the night, every bed including the straw bed), signs (typing text), ender chests (shared inventory), shelves, rails with minecarts; and the like: respawn anchors, lecterns, jukeboxes, chiseled bookshelves, item frames, armor stands, flower pots, the other minecarts (chest, hopper, furnace, TNT) and powered/detector/activator rails (EntityTest: "the minecart rolls along its rails" fails today). Also what the drawn blocks left out: sign text, banner patterns, a player head's own skin, items on shelves and campfires, chest lids opening, the shield's raised pose. Lead: the shadow uses the real player, who is in another dimension (beds refuse, the sign editor opens on the wrong level). |
+| Blocks show what they hold | next | What the working blocks keep, drawn on the planet: a sign's text (it is saved, not shown yet), banner patterns, a player head's own skin, items on shelves and campfires, chest lids opening, the shield's raised pose. Each needs the block's own data in the planet's mesh (and Minecraft's font as tiles for text). |
 | Infinite universe | next | Stage 3 of the galaxy: No Man's Sky-like endless space, planets generated per sector as you explore (the catalog grows), a floating origin (SMG2's floats), faster travel than elytra. Builds on the galaxy options' catalog and streaming. |
 | Flat space stations | next | Player-built **flat** platforms floating in space, to play flat Minecraft (farms, builds) without the sphere's distortion. Hook ready: `CosmicWind` takes any `GravityBody`, not only spheres. |
 
@@ -86,7 +86,6 @@ Last updated: 2026-10-06 (official name is now Super Minecraft Galaxy)
 | `gxroute.py sky` route broken | planned | Can't regenerate `sky.sav`, so `MarioPerspectivesTest` / `gxe2e.sh` fail. |
 | Far view at ~40 blocks still draws chunks | planned | Costs speed (~123%). |
 | Rare LodProbe send stall | planned | Not reproduced. |
-| Teleport lands inside a planet | planned | Reproduced 2026-10-06 in `LauncherProbe` (reopening a world, 1 of 2 runs): "lands at 48.0 (ground 48.0, surface 48.0)", then Mario is found at the planet's center (47.5 blocks under the surface). Same runs sometimes fail "the planet comes back as it was left": the planet may come back incomplete. |
 | Non-cube blocks never checked visually in SMG2 | planned | Slabs, stairs, flowers on a planet: needs a screenshot pass. |
 
 ---
@@ -117,6 +116,7 @@ Last updated: 2026-10-06 (official name is now Super Minecraft Galaxy)
 | 2026-10-06 | Torches, heads, signs, banners, coral fans, levers and buttons on walls (all four sides); heads on the floor turned to the player; the off hand places and uses when the main hand does nothing | ea7a354 |
 | 2026-10-06 | Entering a world is silent (no SMG2 boot, music or landing sounds) until the zoom from space | edd62e6 |
 | 2026-10-06 | Chests (also trapped, ender and copper), beds, signs and hanging signs, banners, mob heads, shulker boxes, decorated pots, bells, lecterns, conduits drawn on planets as Minecraft draws them, at no cost per frame; the off hand's item in Steve's left hand | 793e34d |
+| 2026-10-06 | Blocks that work on planets: beds and the straw bed (respawn point, sleeping the night through), signs (typing their text), charged respawn anchors (respawn point, no explosion), the lit TNT drawn, ender chests, shelves, rails with Mario riding the minecart; landing after a teleport waits for the ground (no more falling to a planet's core on entering a world) | 40c23e9 |
 | 2026-10-06 | The game is called **Super Minecraft Galaxy** everywhere players see it (menus, chat, Dolphin, game list, README); code keeps the galaxycraft ids so worlds carry over. Discord server renamed to match | 0e844e7 |
 
 ---
@@ -127,8 +127,7 @@ New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it cam
 
 - 2026-10-06: Seen in test screenshots (Claude): a green dome with white, pink and blue pillars upside
   down in the sky over the planet (HeldItemTest, EntityTest). Probably another planet's far view
-  seen from below; to check. Lit TNT "drawn whole" (user): not reproduced in EntityTest; what is
-  missing on screen?
+  seen from below; to check.
 - 2026-10-05: Launcher follow-ups (review): old planets in ~/.local/share/galaxycraft/planets are not moved into a world; closing the Dolphin window can lose the last ≤10 s of planet edits (no save on exit).
 - 2026-10-05: FPS above 60 (user, while playing). SMG2's logic is locked to 60 frames a second,
   so Dolphin cannot draw more by itself. Frame generation (lsfg-vk) needs Lossless Scaling
