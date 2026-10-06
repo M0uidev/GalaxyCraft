@@ -124,6 +124,16 @@ public final class PlanetClient {
     /** Since when (nanoTime, 0: not) Mario has had no gravity in GalaxyCraftSpace after landing; past RELAND_NANOS he lands again. */
     private static long unlandedSince;
     private static final long RELAND_NANOS = 5_000_000_000L;
+    /**
+     * Planets are made (generated, read) one at a time on this thread, at low priority: the game,
+     * Dolphin and Minecraft's server keep their cores while a galaxy streams in.
+     */
+    static final ExecutorService maker = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "GalaxyCraft planet maker");
+        t.setDaemon(true);
+        t.setPriority(Thread.MIN_PRIORITY);
+        return t;
+    });
     private static final ExecutorService saver = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "GalaxyCraft planet saver");
         t.setDaemon(true);
@@ -199,7 +209,7 @@ public final class PlanetClient {
             VoxelPlanet planet = cells.planet(b);
             planet.sphere(0, new Vector3d(), new double[1]); // every chunk's bounding sphere, worked out here too
             return planet;
-        });
+        }, maker);
     }
 
     private static int skySent = -1, skyAge;

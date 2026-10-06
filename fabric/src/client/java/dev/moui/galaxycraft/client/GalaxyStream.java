@@ -29,7 +29,7 @@ import org.joml.Vector3d;
 /**
  * A world's galaxy streamed from its catalog (GalaxySave.Galaxy): the PlanetLayout.NEAR_PLANETS
  * planets nearest Mario are complete (PlanetClient's sessions: loaded from their file, or made from
- * their recipe), the next two are made ahead, and every other one is a {@link FarPlanet}, drawn
+ * their recipe, or kept from a moment ago), the next one is made ahead, and every other one is a {@link FarPlanet}, drawn
  * with fewer patches the smaller it looks. A planet made from its recipe and never edited is not
  * saved: it comes out the same again.
  */
@@ -52,6 +52,13 @@ final class GalaxyStream {
     /** Complete planets whose far view is still up until their own is all sent. */
     private final Map<Integer, PlanetSession> promoting = new HashMap<>();
     private final Set<Integer> failed = new HashSet<>();
+    /** Planets that were complete a moment ago, kept as they are: coming back to one is instant. */
+    static final int RECENT = 4;
+    private final Map<Integer, VoxelPlanet> recent = new java.util.LinkedHashMap<>(8, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<Integer, VoxelPlanet> e) {
+            return size() > RECENT;
+        }
+    };
     /** Far views by index << 4 | patches; cells: built from the planet itself (not its recipe). */
     private final Map<Integer, PlanetLod.Part[]> meshes = new HashMap<>();
     private final Set<Integer> fromCells = new HashSet<>();
@@ -120,7 +127,7 @@ final class GalaxyStream {
         List<Integer> ranked = PlanetLayout.ranked(spheres, from, had, UNITS);
         int n = Math.min(PlanetLayout.NEAR_PLANETS, ranked.size());
         wanted = ranked.subList(0, n).stream().map(k -> entries.get(k).index()).toList();
-        ahead = ranked.subList(n, Math.min(n + 2, ranked.size())).stream().map(k -> entries.get(k).index()).toList();
+        ahead = ranked.subList(n, Math.min(n + 1, ranked.size())).stream().map(k -> entries.get(k).index()).toList();
         for (GalaxyCatalog.Entry e : entries) {
             PlanetSession s = PlanetClient.sessionOf(e.index());
             boolean active = s != null && s.active();
@@ -142,7 +149,9 @@ final class GalaxyStream {
         McBlocks blocks = PlanetClient.blocks();
         if (blocks == null) return;
         CompletableFuture<Object> f;
-        if (java.nio.file.Files.isRegularFile(store.file(key))) {
+        VoxelPlanet kept = recent.remove(index);
+        if (kept != null) f = CompletableFuture.completedFuture(kept);
+        else if (java.nio.file.Files.isRegularFile(store.file(key))) {
             f = CompletableFuture.supplyAsync(() -> {
                 try {
                     return store.read(key, blocks, name -> Minecraft.getInstance().submit(() -> blocks.parse(name)).join())
@@ -150,7 +159,7 @@ final class GalaxyStream {
                 } catch (IOException ex) {
                     throw new java.io.UncheckedIOException(ex);
                 }
-            });
+            }, PlanetClient.maker);
         } else {
             PlanetBlueprint bp = recipe(e);
             if (bp == null) {
@@ -221,6 +230,7 @@ final class GalaxyStream {
         meshes.put(e.index() << 4 | patches, PlanetLod.coarse(LodSource.of(p, stride), patches, UNITS));
         fromCells.add(e.index());
         PlanetClient.saveOne(s);
+        recent.put(e.index(), p);
         PlanetClient.release(e.index());
         promoting.remove(e.index());
         GalaxyCraft.LOG.info("Planet {} of the galaxy is far now", e.index());
@@ -310,6 +320,7 @@ final class GalaxyStream {
         for (CompletableFuture<Object> f : making.values()) f.cancel(false);
         making.clear();
         promoting.clear();
+        recent.clear();
     }
 
     /** A planet added or changed by hand (editor, commands): its entry, written to galaxy.json. */
@@ -320,12 +331,14 @@ final class GalaxyStream {
         meshes.keySet().removeIf(k -> k >> 4 == e.index());
         fromCells.remove(e.index());
         failed.remove(e.index());
+        recent.remove(e.index());
         dropFar(e.index());
         write();
     }
 
     void removeEntry(int index) {
         entries.removeIf(x -> x.index() == index);
+        recent.remove(index);
         dropFar(index);
         making.remove(index);
         write();

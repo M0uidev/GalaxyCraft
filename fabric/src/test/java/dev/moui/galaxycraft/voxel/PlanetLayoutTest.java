@@ -96,7 +96,9 @@ class PlanetLayoutTest {
         s.add(new PlanetLayout.Sphere(new Vector3d(7000 * 80 - 10 * 80, 0, 0), 100 * 80)); // 10 blocks nearer than 7
         java.util.Set<Integer> had = java.util.Set.of(0, 1, 2, 3, 4, 5, 6, 7);
         assertTrue(PlanetLayout.ranked(s, new Vector3d(), had, 80).subList(0, 8).contains(7));
-        s.set(8, new PlanetLayout.Sphere(new Vector3d(7000 * 80 - 70 * 80, 0, 0), 100 * 80)); // 70 nearer
+        s.set(8, new PlanetLayout.Sphere(new Vector3d(7000 * 80 - 100 * 80, 0, 0), 100 * 80)); // 100 nearer: still not
+        assertTrue(PlanetLayout.ranked(s, new Vector3d(), had, 80).subList(0, 8).contains(7), "flying past, no swap for 100 blocks");
+        s.set(8, new PlanetLayout.Sphere(new Vector3d(7000 * 80 - 170 * 80, 0, 0), 100 * 80)); // 170 nearer
         List<Integer> r = PlanetLayout.ranked(s, new Vector3d(), had, 80).subList(0, 8);
         assertTrue(r.contains(8));
         assertFalse(r.contains(7));

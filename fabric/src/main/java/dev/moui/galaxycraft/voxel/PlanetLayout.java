@@ -16,7 +16,7 @@ public final class PlanetLayout {
     /** Most planets a stage holds outside a catalog (/galaxycraft planet add in a level). */
     public static final int MAX_PLANETS = NEAR_PLANETS;
     /** A complete planet gives its place to another only once that one is this much nearer, blocks. */
-    public static final double KEEP_NEAR = 64;
+    public static final double KEEP_NEAR = 160;
     /** Between two planets' gravity, blocks. */
     public static final double GAP = 24;
     /**
