@@ -1,6 +1,6 @@
 # Game feel: breaking and placing blocks
 
-2026-10-06. Status: implemented on branch `game-feel`, not yet played in the game.
+2026-10-06. Status: implemented, built and played in the game (`tools/gxvoxel.sh mining`).
 
 ## Goal
 
@@ -72,8 +72,6 @@ out, depth tested and not written.
 
 ## Not done / open
 
-- Nothing has been played in the game yet: the mod's client code was written without building it
-  (Minecraft's servers are out of reach of the cloud session), so it needs a build and a playtest.
 - Bare-hand breaking (punching wood) stays impossible while empty-hand clicks are Mario's.
 - Minecraft's crack shows on the block's real model; here on its outline box (for slabs and other
   non-cubes it is the box around them).

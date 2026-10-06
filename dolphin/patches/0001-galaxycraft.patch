@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..40d8968
+index 0000000..21be918
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,591 @@
+@@ -0,0 +1,594 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -241,6 +241,9 @@ index 0000000..40d8968
 +    state.dev_keys.reset();
 +  else
 +    state.dev_keys.emplace(keys, buttons);
++  // The mouse buttons reach Minecraft too (a probe holding the attack button on a block).
++  if (state.input)
++    state.input->Buttons(names.empty() ? s_xinput_buttons : buttons);
 +}
 +
 +// Field hook, after Tick: Mario mode's Wii Remote follows keyboard and mouse while following;

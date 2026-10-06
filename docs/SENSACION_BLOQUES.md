@@ -25,46 +25,29 @@ Rama `game-feel` (2026-10-06). Diseño: [specs/2026-10-06-galaxycraft-game-feel-
   dibuja líneas a través de una cara. Sale, como antes, cuando un clic haría algo con el bloque:
   con algo en la mano, o con la mano vacía sobre puertas, palancas, cofres, etc.
 
-## Qué falta: probarlo en el PC
+## Probado en el juego (2026-10-06)
 
-En la sesión en la nube no se pudo compilar el mod: los servidores de Minecraft y de Fabric están
-bloqueados ahí. Sí pasaron los tests que no necesitan Minecraft:
+`tools/gxvoxel.sh mining` (MiningProbe) lo juega en el Dolphin de desarrollo: mantiene el clic
+izquierdo con un pico de madera mirando al suelo y cava un pozo.
 
-- `syati/test.sh`: el mensaje nuevo, la malla de las grietas y el borde con aristas (497
-  comprobaciones).
-- `dolphin/galaxycraft/test.sh`: Dolphin pasa el mensaje al juego (99 tests).
-- Las pruebas unitarias del mod: `MiningTest` (los tiempos de Minecraft), `OutlineEdgesTest`
-  (las aristas de escaleras, vallas, losas) y `PlanetSessionTest`.
+- Rompe un bloque tras otro sin soltar: pasto 17 ticks, tierra 22 (15 de Minecraft + 5 de pausa +
+  2 hasta que la sombra lo quita), piedra 30 (23 + 5 + 2). Los tiempos de Minecraft.
+- Las grietas llegan a la etapa 8 y se borran al soltar. Saltan trocitos.
+- Suenan el golpe y la rotura de cada bloque (pasto, tierra con el sonido de grava, piedra).
+- El borde de unas escaleras sigue su forma (18 aristas) y se ve en el juego.
 
-Para la sesión de Claude Code en el PC:
+Lo que hubo que arreglar al traerlo de la nube:
 
-1. `cd fabric && ./gradlew build` y `./test.sh`. Puede fallar algo de la API de Minecraft 26.3 en
-   el código del cliente, que se escribió sin compilarlo:
-   - `PlanetClient`: `mine`, `destroyProgress`, `blockSound` y `placed` usan
-     `BlockState.getDestroySpeed(BlockGetter, BlockPos)`, `Player.getDestroySpeed`,
-     `Player.hasCorrectToolForDrops`, `Entity.onGround()`, `BlockState.getSoundType()`,
-     `SoundType.getHitSound()/getBreakSound()/getPlaceSound()`, `ClientLevel.playLocalSound` y
-     `LivingEntity.swing`.
-   - `McBlocks`: `crackUv` y las texturas `block/destroy_stage_N`.
-   - `ParticleClient`: `crack`, `burst` y `puff`.
-2. Compilar el módulo (`syati/build.sh`) y Dolphin (`dolphin/build.sh`): el mensaje 115 es nuevo
-   y el del borde cambió de forma, en los tres. Un mod, un Dolphin o un módulo viejo con los
-   otros nuevos no dibuja el borde.
-3. Jugar (`tools/gxplay.sh`) y revisar:
-   - Piedra con pico de madera: unos 1,15 s. Con pico de diamante y Eficiencia V, casi al
-     instante. Tierra con pala: rápido. Con la mano equivocada, más lento.
-   - Mantener el botón cavando un túnel: un bloque tras otro sin soltar.
-   - Las grietas se ven sobre el bloque (oscurecen y no lo tapan), desde todos los lados, y se
-     borran al soltar.
-   - Los sonidos del golpe, la rotura y al colocar (piedra, madera, tierra, vidrio).
-   - Los trocitos al golpear salen de la cara que miras.
-   - En creativo, mantener el botón rompe uno cada ~¼ s.
-   - Que no suene dos veces ni rompa dos bloques al cortar pasto rápido.
-   - El borde sobre escaleras, vallas, antorchas, losas y puertas: sigue su forma.
-4. Revisar `destroyProgress`. Deshace la penalización de Minecraft por romper en el aire
-   multiplicando por 5 cuando el jugador no está en el suelo. Si en 26.3 esa penalización ya no
-   depende de `onGround()` (por ejemplo, si ahora es un atributo), romper saldría 5 veces más
-   rápido. Se nota con el pico de madera en piedra: debe tardar unos 1,15 s.
+- `LivingEntity.swing` pide en 26.3 la animación del objeto: `swing(mano, objeto.getAttackAnimation(), false)`,
+  como lo llama Minecraft.
+- Las grietas aclaraban todo el bloque: los huecos de `destroy_stage_N` son blancos con alfa 1/255 y
+  RGB5A3 lo redondea a 1/7, que pasaba la prueba de alfa del juego. Ahora esos texeles quedan en 0
+  al cargar las grietas.
+- El borde no se dibujaba nunca (tampoco en `master`): `DrawOutline` no fijaba el número de etapas
+  TEV y heredaba las dos de la luz de los chunks. Solo se veía mientras había grietas, porque
+  `DrawCrack` deja una.
+- `ctl keys lmb` del Dolphin de desarrollo ahora también llega a Minecraft (los botones del ratón),
+  para que una prueba pueda mantener el clic.
 
 ## Preguntas abiertas
 

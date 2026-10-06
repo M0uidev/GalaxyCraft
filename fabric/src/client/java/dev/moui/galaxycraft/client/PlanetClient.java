@@ -1060,7 +1060,7 @@ public final class PlanetClient {
         if (state == null) return;
         net.minecraft.world.level.block.SoundType sound = state.getSoundType();
         if (step.working()) {
-            player.swing(InteractionHand.MAIN_HAND);
+            player.swing(InteractionHand.MAIN_HAND, player.getMainHandItem().getAttackAnimation(), false);
             entities.particles().crack(s.planet(), cell, aim.face(), state);
         }
         if (step.hitSound()) blockSound(s, cell, sound.getHitSound(), (sound.getVolume() + 1) / 8, sound.getPitch() * 0.5f);

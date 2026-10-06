@@ -125,6 +125,12 @@ public final class McBlocks implements Blocks {
         this.tileOf = sprites;
         this.tiles = new ArrayList<>(sprites.size());
         for (Identifier name : sprites.keySet()) tiles.add(image(name));
+        // The cracks' gaps are white at alpha 1/255, which Minecraft's 0.1 cutoff drops; RGB5A3 would
+        // round it up to 1/7, past the game's, and the crack would whiten the block where it is not.
+        for (Identifier stage : DESTROY_STAGES) {
+            int[] argb = tiles.get(sprites.get(stage));
+            for (int i = 0; i < argb.length; i++) if ((argb[i] >>> 24) < 26) argb[i] = 0;
+        }
         List<Atlas.Anim> anims = animations(sprites.keySet());
         this.atlas = Atlas.of(tiles, anims);
         for (Material m : Material.values()) materialIds[m.ordinal()] = parse(m.state);

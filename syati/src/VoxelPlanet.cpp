@@ -1122,6 +1122,7 @@ public:
     const GXColor color = {0, 0, 0, 110};
     GXSetChanMatColor(GX_COLOR0A0, color);
     GXSetNumTexGens(0);
+    GXSetNumTevStages(1);  // the chunks leave their light's second stage on
     GXSetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD_NULL, GX_TEXMAP_NULL, GX_COLOR0A0);
     GXSetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
     GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
