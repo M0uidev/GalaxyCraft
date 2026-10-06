@@ -284,6 +284,8 @@ u8* Alloc32(u32 size)
 // asked for (getZone), which a stage with no collision of its own (GalaxyCraftSpace) never does:
 // then we ask. False if there is still none: no collision, as CollisionParts::init would read
 // through it.
+const u32 ZONE_PARTS_FOR_PLANETS = 512 - 32;
+
 bool MainZoneReady()
 {
   const u32 director = reinterpret_cast<u32>(getCollisionDirector__2MRFv());
@@ -297,7 +299,11 @@ bool MainZoneReady()
     return false;
   if (*reinterpret_cast<const u32*>(keeper + 0x20) == 0)
     getZone__26CollisionCategorizedKeeperFi(reinterpret_cast<void*>(keeper), 0);
-  return *reinterpret_cast<const u32*>(keeper + 0x20) != 0;
+  const u32 zone = *reinterpret_cast<const u32*>(keeper + 0x20);
+  // A zone holds 512 parts, its count right after them (+0x804): a 513th overwrites the count, and
+  // every removal after searches all of memory for its part (the game hangs). The game's own
+  // objects add parts too, so ours stop short of it.
+  return zone != 0 && *reinterpret_cast<const u32*>(zone + 0x804) < ZONE_PARTS_FOR_PLANETS;
 }
 
 void Identity(TPos3f* m, const f32 t[3])

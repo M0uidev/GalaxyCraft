@@ -29,7 +29,7 @@ uint8_t* VoxelPlanetAlloc32(uint32_t size);
 // collision parts made, last chunk slot and version seen, chunks dropped for lack of memory, free
 // bytes of the scene's MEM2 and MEM1 heaps (at the last batch), collision parts alive, chunks
 // drawn last frame (the rest were behind the camera or the horizon), chunks left without
-// collision because the stage's main collision zone was missing, the block atlas being put
+// collision because the stage's main collision zone was missing or full, the block atlas being put
 // together (its id, bytes of it in, 1 once complete: planets are drawn only then). Chunks and
 // parts count every planet's.
 struct VoxelStats

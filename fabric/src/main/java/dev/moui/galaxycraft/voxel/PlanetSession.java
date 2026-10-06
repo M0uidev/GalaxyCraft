@@ -384,11 +384,32 @@ public final class PlanetSession {
             if (!renderPinned) render = settingRender;
             farStep = settingFarStep;
             Vector3d from = landing != null ? landing : mario, to = landing != null ? landing : ahead;
-            for (int c : residency(from, to))
-                if (near.get(c)) queueUrgent(c);
-                else queue(c); // only loses its collision: no hurry
+            // Urgent both ways, those losing their collision first: the game's collision zone holds
+            // 512 parts, and one more breaks it (SMG2 then hangs searching all of memory).
+            for (int c : residency(from, to)) queueUrgent(c);
             tiles(from, to, true);
+            nearestFirst(from, to);
         }
+    }
+
+    /**
+     * The chunks still to send in the order Mario will reach them (their tile's distance from his
+     * way), each tile's covering right after its chunks: flying fast, what he is about to reach
+     * comes before what was queued earlier and is behind him now.
+     */
+    private void nearestFirst(Vector3d a, Vector3d b) {
+        if (pending.size() < 2) return;
+        java.util.Map<Integer, Double> tileKey = new java.util.HashMap<>();
+        List<double[]> order = new ArrayList<>(pending.size());
+        int i = 0;
+        for (int c : pending) {
+            int t = c <= HIDE_MARK ? HIDE_MARK - c : PlanetLod.tileOfChunk(planet, c);
+            double d = tileKey.computeIfAbsent(t, k -> tileDistance(k, a, b));
+            order.add(new double[] {d + (c <= HIDE_MARK ? 0.5 : 0), i++, c}); // the covering after its tile's chunks
+        }
+        order.sort((x, y) -> x[0] != y[0] ? Double.compare(x[0], y[0]) : Double.compare(x[1], y[1]));
+        pending.clear();
+        for (double[] o : order) pending.add((int) o[2]);
     }
 
     /** Next message to send, or null; {@link #sent()} once the ring took it. No budget: tests. */
@@ -458,7 +479,8 @@ public final class PlanetSession {
         for (int c : pending) {
             if (jobs.size() >= PREFETCH) break;
             if (c < 0 || !pendingSet.get(c) || planet.isDirty(c) || premeshed.containsKey(c)) continue;
-            boolean kcl = near.get(c) || mario != null && near.cardinality() < MAX_PARTS && distance(c, mario, ahead) < NEAR;
+            boolean kcl = (near.get(c) || mario != null && near.cardinality() < MAX_PARTS && distance(c, mario, ahead) < NEAR)
+                    && (withKcl.get(c) || withKcl.cardinality() < MAX_PARTS);
             if (!kcl && !shown.get(PlanetLod.tileOfChunk(planet, c))) continue; // dropped, not meshed
             if (!onGuest.get(c) && !planet.mayShow(c)) continue;
             jobs.add(new int[] {c, kcl ? 1 : 0, !kcl && !underground ? 1 : 0});
@@ -485,8 +507,13 @@ public final class PlanetSession {
         // whether it is near is decided now, not at the next residency pass.
         if (!near.get(c) && mario != null && near.cardinality() < MAX_PARTS && distance(c, mario, ahead) < NEAR)
             near.set(c);
-        boolean kcl = near.get(c);
-        if (!kcl && !shown.get(PlanetLod.tileOfChunk(planet, c))) {
+        // Never more than MAX_PARTS in the game, whatever is still to go (a full zone breaks SMG2).
+        boolean kcl = near.get(c) && (withKcl.get(c) || withKcl.cardinality() < MAX_PARTS);
+        int tile = PlanetLod.tileOfChunk(planet, c);
+        // Losing its collision before its tile's far view is back: it only loses that now (still
+        // drawn); the tile going out drops it after the far view.
+        boolean keepDrawn = !kcl && withKcl.get(c) && onGuest.get(c) && !farOnGuest.get(tile);
+        if (!kcl && !shown.get(tile) && !keepDrawn) {
             // Past the render distance: its tile's far view stands in for it, the game drops it.
             if (onGuest.get(c)) {
                 ByteBuffer b = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN);
@@ -1115,11 +1142,11 @@ public final class PlanetSession {
         dropped.andNot(next);
         near = next;
         List<Integer> send = new ArrayList<>();
+        dropped.stream().filter(ch -> withKcl.get(ch)).forEach(send::add);
         for (double[] o : close) {
             int ch = (int) o[1];
             if (near.get(ch) && (!onGuest.get(ch) || !withKcl.get(ch))) send.add(ch);
         }
-        dropped.stream().filter(ch -> withKcl.get(ch)).forEach(send::add);
         return send;
     }
 
