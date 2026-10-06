@@ -4,6 +4,7 @@ import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.settings.Setting;
 import dev.moui.galaxycraft.settings.Settings;
+import dev.moui.galaxycraft.voxel.PlanetSession;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
@@ -46,6 +47,13 @@ public final class GalaxyOptions {
     public static final Setting.Range CAMERA_DISTANCE_SPACE = SETTINGS.add(new Setting.Range("cameraDistanceSpace",
             "Camera Distance in Space", "Third person, out in space (past every planet's gravity); the camera eases between the three",
             2, 16, 1, 10, " blocks"));
+    public static final Setting.Range BLOCK_DISTANCE = SETTINGS.add(new Setting.Range("blockDistance", "Planet Block Distance",
+            "How far around Mario a planet is its real blocks; past that, its far view. Farther costs more of the game's memory and time",
+            32, 160, 16, (int) PlanetSession.DEFAULT_RENDER, " blocks"));
+    public static final Setting.Range FAR_VIEW_DETAIL = SETTINGS.add(new Setting.Range("farViewDetail", "Far View Detail",
+            "How far the far view stays fine past the blocks: next to them it is almost block by block, and each step farther "
+                    + "its patches are twice as wide. Higher: finer farther out, more memory",
+            1, 6, 1, 2, ""));
     public static final Setting.Toggle PARTICLES = SETTINGS.add(new Setting.Toggle("particles", "Game Particles",
             "Minecraft's particles (explosions, broken blocks, hits) drawn in the game", true));
 
@@ -66,7 +74,17 @@ public final class GalaxyOptions {
 
     /** Loads the settings and puts what they say in place; once, at startup. */
     static void init() {
+        BLOCK_DISTANCE.onChange(v -> applyLevelOfDetail());
+        FAR_VIEW_DETAIL.onChange(v -> applyLevelOfDetail());
+        applyLevelOfDetail();
         SKIN.onChange(name -> SkinClient.wear(name, GalaxyCraftClient::say));
         if (!SKIN.get().isEmpty()) SkinClient.wear(SKIN.get(), msg -> GalaxyCraft.LOG.info("Skin: {}", msg));
+    }
+
+    /** Far View Detail d: levels of the far view 16 d blocks apart. */
+    private static void applyLevelOfDetail() {
+        // -Dgalaxycraft.renderDistance (probes) wins over the setting.
+        double render = System.getProperty("galaxycraft.renderDistance") != null ? PlanetSession.RENDER : BLOCK_DISTANCE.get();
+        PlanetSession.setLevelOfDetail(render, 16.0 * FAR_VIEW_DETAIL.get());
     }
 }

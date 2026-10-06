@@ -608,7 +608,13 @@ class PlanetSessionTest {
         s.update(3, 100, top);
         List<PlanetSession.Msg> msgs = drain(s);
         assertTrue(msgs.stream().anyMatch(m -> m.type() == Layout.MSG_CHUNK && !far(m)), "its chunks");
-        assertTrue(msgs.stream().noneMatch(m -> far(m) && le(m).getInt(8) > 0), "its far view, which the game has, not again");
+        // Its far view, which the game has, not again ahead of them: only tiles a level finer, after.
+        int lastChunk = -1, firstFar = Integer.MAX_VALUE;
+        for (int i = 0; i < msgs.size(); i++) {
+            if (msgs.get(i).type() == Layout.MSG_CHUNK && !far(msgs.get(i))) lastChunk = i;
+            if (far(msgs.get(i)) && le(msgs.get(i)).getInt(8) > 0) firstFar = Math.min(firstFar, i);
+        }
+        assertTrue(firstFar > lastChunk, "chunks first: " + lastChunk + ", " + firstFar);
         // Each tile of chunks covered once (after them), the others left as they are.
         VoxelPlanet p = s.planet();
         for (int t = 0; t < PlanetLod.tileCount(p); t++) {
@@ -623,9 +629,44 @@ class PlanetSessionTest {
         for (int t = 0; t < PlanetLod.tileCount(p); t++) {
             int tt = t;
             long sent = back.stream().filter(m -> far(m) && tile(le(m)) == tt).count();
-            assertEquals(s.tileShown(t) || wasShown(msgs, t) ? 1 : 0, sent, "tile " + t);
+            // Covered ones uncovered; finer ones coarse again (no chunks to hand off to); once each.
+            assertEquals(PlanetLod.tilePatchColumns(p.grid.n), s.farColumns(t), "tile " + t + " coarse");
+            if (wasShown(msgs, t)) assertEquals(1, sent, "tile " + t);
+            else assertTrue(sent <= 1, "tile " + t);
             assertTrue(back.stream().noneMatch(m -> covered(m) && tile(le(m)) == tt), "drawn near again: not covered");
         }
+    }
+
+    @Test void theFarViewIsFinerNearTheChunksAndCoarserFartherOut() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(128, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = onTop(s, 128);
+        s.update(3, 100, top);
+        Sent got = sent(drain(s));
+        VoxelPlanet p = s.planet();
+        int coarse = PlanetLod.tilePatchColumns(p.grid.n);
+        int finest = Integer.MAX_VALUE, coarsest = 0;
+        for (int t : got.far().keySet()) {
+            finest = Math.min(finest, s.farColumns(t));
+            coarsest = Math.max(coarsest, s.farColumns(t));
+        }
+        assertEquals(PlanetSession.FINEST_COLUMNS, finest, "next to the chunks, nearly block by block");
+        assertEquals(coarse, coarsest, "far away, as before");
+        // Walking to the other side: the tiles there get finer, the ones left behind coarser.
+        Vector3d other = new Vector3d(s.center()).add(0, 129 * 80, 0);
+        int under = PlanetLod.tileOfChunk(p, p.chunkOf(s.cellAt(new Vector3d(s.center()).add(0, 127.5 * 80, 0))));
+        int wasThere = s.farColumns(under);
+        for (int i = 0; i < PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, other);
+        drain(s);
+        assertTrue(s.tileShown(under) && wasThere == coarse);
+        int behind = PlanetLod.tileOfChunk(p, p.chunkOf(s.cellAt(new Vector3d(s.center()).add(0, -127.5 * 80, 0))));
+        assertFalse(s.tileShown(behind));
+        assertEquals(coarse, s.farColumns(behind), "left behind: coarse again");
+        long bytes = got.chunks().values().stream().mapToLong(Integer::longValue).sum()
+                + got.far().values().stream().mapToLong(Integer::longValue).sum()
+                + got.covered().values().stream().mapToLong(Integer::longValue).sum();
+        System.out.printf("graded far view, radius 128: %.1f MB%n", bytes / 1e6);
+        assertTrue(bytes < 10_000_000, bytes + " bytes");
     }
 
     static boolean wasShown(List<PlanetSession.Msg> msgs, int t) {

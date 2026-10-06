@@ -82,6 +82,13 @@ public final class PlanetSession {
      */
     public static final double RENDER = renderDistance(System.getProperty("galaxycraft.renderDistance"));
     public static final double DEFAULT_RENDER = 64, RENDER_KEEP = 16;
+    /**
+     * Levels of the far view, as Minecraft's LOD mods have them: the tiles next to the chunks in
+     * patches of FINEST_COLUMNS columns, so the blocks coming in are close to what was drawn, and
+     * twice as wide every farStep blocks farther, up to PlanetLod's coarse patches.
+     */
+    public static final int FINEST_COLUMNS = 2;
+    public static final double DEFAULT_FAR_STEP = 32;
     /** In pending: -2 - tile, its far view goes once the chunks queued before it are out. */
     private static final int HIDE_MARK = -2;
     static final int PLANET_GONE = 1;
@@ -121,7 +128,15 @@ public final class PlanetSession {
     private final BitSet farPendingSet = new BitSet();
     private int[] farVersion = new int[0];
     private final BitSet farDirty = new BitSet(); // tiles edited since their far view was sent
+    /** The player's settings, which every session follows (setRenderDistance pins one's own: tests). */
+    private static volatile double settingRender = RENDER, settingFarStep = DEFAULT_FAR_STEP;
     private double render = RENDER;
+    private boolean renderPinned;
+    private double farStep = DEFAULT_FAR_STEP;
+    private int[] farWant = new int[0]; // per tile, the patch columns its far view should have
+    private int[] farCols = new int[0]; // and those the game has
+    private int builtCols;
+    private final java.util.LinkedHashSet<Integer> farLater = new java.util.LinkedHashSet<>(); // a level finer or coarser, once the chunks are out
     private BitSet shown = new BitSet();      // tiles the game gets as chunks (the rest: their far view)
     private BitSet farOnGuest = new BitSet(); // tiles whose far view the game may draw near (not covered)
     private BitSet farHeld = new BitSet();    // tiles whose far view the game has, covered or not
@@ -348,6 +363,8 @@ public final class PlanetSession {
         }
         if (detail && ++sinceResidency >= RESIDENCY_UPDATES && mario != null) {
             sinceResidency = 0;
+            if (!renderPinned) render = settingRender;
+            farStep = settingFarStep;
             Vector3d from = landing != null ? landing : mario, to = landing != null ? landing : ahead;
             for (int c : residency(from, to))
                 if (near.get(c)) queueUrgent(c);
@@ -385,7 +402,9 @@ public final class PlanetSession {
             int t = farPending.peek();
             // A tile of chunks gets it too, covered: the game draws it only from afar.
             builtFarShows = !shown.get(t);
-            built = farMsg(t, PlanetLod.tile(planet, t, unitsPerBlock), !builtFarShows);
+            // A tile of chunks is drawn only from afar: coarse. Else as fine as its level.
+            builtCols = builtFarShows && t < farWant.length && farWant[t] > 0 ? farWant[t] : PlanetLod.tilePatchColumns(planet.grid.n);
+            built = farMsg(t, PlanetLod.tile(planet, t, builtCols, unitsPerBlock), !builtFarShows);
             builtFar = true;
         }
         while (built == null && !pending.isEmpty() && bulk.getAsBoolean()) {
@@ -402,6 +421,11 @@ public final class PlanetSession {
             if (!pendingSet.get(c)) continue; // went in the urgent lane since
             pendingSet.clear(c);
             build(c);
+        }
+        if (built == null && pending.isEmpty() && farPending.isEmpty() && !farLater.isEmpty() && bulk.getAsBoolean()) {
+            for (int t : farLater) queueFar(t);
+            farLater.clear();
+            return peek(bulk);
         }
         return built;
     }
@@ -461,6 +485,7 @@ public final class PlanetSession {
             farPendingSet.clear(t);
             farOnGuest.set(t, builtFarShows); // what it carried, whatever the tile is by now
             farHeld.set(t);
+            if (t < farCols.length) farCols[t] = builtCols;
             if (builtFarShows && shown.get(t)) pending.add(HIDE_MARK - t); // chunks there since: hidden after them
             return;
         }
@@ -483,7 +508,7 @@ public final class PlanetSession {
 
     /** Messages and chunks still to send (chunks may turn out to have nothing to send). */
     public int queued() {
-        return gone.size() + control.size() + farPending.size() + urgent.size() + pending.size() + (built != null && !builtFar ? 1 : 0);
+        return gone.size() + control.size() + farPending.size() + farLater.size() + urgent.size() + pending.size() + (built != null && !builtFar ? 1 : 0);
     }
 
     /** Whether Mario is under cover, and far chunks are sent with their dark cave faces. */
@@ -727,6 +752,8 @@ public final class PlanetSession {
         center = c;
         id = takeId();
         farVersion = new int[PlanetLod.tileCount(p)];
+        farWant = new int[farVersion.length];
+        farCols = new int[farVersion.length];
         guestHasIt = false;
         tileSpheres = null;
         scene = host = Integer.MIN_VALUE; // the next update sends it all
@@ -790,6 +817,7 @@ public final class PlanetSession {
         control.clear();
         farPending.clear();
         farPendingSet.clear();
+        farLater.clear();
         farDirty.clear();
         builtFar = false;
         builtFarMark = false;
@@ -830,8 +858,10 @@ public final class PlanetSession {
             farHeld = (BitSet) keptHeld.clone();
             for (int t = 0; t < tileCount; t++)
                 if (keptStale.get(t) || !farHeld.get(t) || !shown.get(t) && !farOnGuest.get(t)) queueFar(t);
+                else if (!shown.get(t) && farCols[t] != farWant[t]) farLater.add(t);
         } else {
             farHeld = new BitSet();
+            farCols = new int[tileCount];
             for (int t = 0; t < tileCount; t++) queueFar(t);
         }
         guestHasIt = false;
@@ -879,7 +909,11 @@ public final class PlanetSession {
         BitSet out = (BitSet) shown.clone();
         out.andNot(next);
         shown = next;
+        List<double[]> relevel = levels(a, b);
         if (!changes) return;
+        // Far views a level finer or coarser, nearest first, after the chunks coming in.
+        relevel.sort((x, y) -> Double.compare(x[0], y[0]));
+        for (double[] o : relevel) farLater.add((int) o[1]);
         in.sort((x, y) -> Double.compare(x[0], y[0]));
         for (double[] o : in) {
             int t = (int) o[1];
@@ -890,6 +924,43 @@ public final class PlanetSession {
             queueFar(t);
             for (int c : PlanetLod.chunksOfTile(planet, t)) if (onGuest.get(c)) queue(c);
         });
+    }
+
+    /**
+     * The patch columns each tile's far view should have (farWant), from the way a to b; the tiles
+     * the game has at another level, with their distance. A level only gets coarser RENDER_KEEP
+     * blocks past where it would, so walking along a boundary does not resend it back and forth.
+     */
+    private List<double[]> levels(Vector3d a, Vector3d b) {
+        int count = PlanetLod.tileCount(planet), coarse = PlanetLod.tilePatchColumns(planet.grid.n);
+        List<double[]> out = new ArrayList<>();
+        boolean graded = detail && a != null && render != Double.POSITIVE_INFINITY;
+        for (int t = 0; t < count; t++) {
+            double d = graded ? tileDistance(t, a, b) : Double.POSITIVE_INFINITY;
+            int want = columnsAt(d - render, coarse);
+            if (farCols[t] != 0 && want > farCols[t] && columnsAt(d - render - RENDER_KEEP, coarse) <= farCols[t]) want = farCols[t];
+            farWant[t] = want;
+            if (!shown.get(t) && farHeld.get(t) && farCols[t] != want && !farPendingSet.get(t)) out.add(new double[] {d, t});
+        }
+        return out;
+    }
+
+    /** Patch columns for a far view this many blocks past the render distance. */
+    private int columnsAt(double past, int coarse) {
+        if (past == Double.POSITIVE_INFINITY) return coarse;
+        int s = FINEST_COLUMNS;
+        for (double edge = farStep; past >= edge && s < coarse; edge += farStep) s *= 2;
+        return Math.min(s, coarse);
+    }
+
+    /** Blocks between levels of the far view (the next level out has patches twice as wide). */
+    public void setFarStep(double blocks) {
+        farStep = Math.max(8, blocks);
+    }
+
+    /** Patch columns of the far view the game has for a tile (0: none yet; tests). */
+    public int farColumns(int t) {
+        return farCols[t];
     }
 
     /** A tile's far view to send (or hide, if it is chunks by then). */
@@ -923,6 +994,16 @@ public final class PlanetSession {
     /** Render distance in blocks; infinite: every chunk (tests, and -Dgalaxycraft.renderDistance=0). Takes effect at the next residency pass. */
     public void setRenderDistance(double blocks) {
         render = blocks;
+        renderPinned = true;
+    }
+
+    /**
+     * The player's level of detail, for every planet from its next residency pass: blocks around
+     * Mario that are chunks, and blocks between levels of the far view past them.
+     */
+    public static void setLevelOfDetail(double renderBlocks, double farStepBlocks) {
+        settingRender = renderBlocks;
+        settingFarStep = Math.max(8, farStepBlocks);
     }
 
     private double tileDistance(int t, Vector3d a, Vector3d b) {
