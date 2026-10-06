@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (LOD handoff and graded far view on fix/lod-handoff)
+Last updated: 2026-10-06 (smoother level of detail merged; game feel and blocks idea in the Inbox)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-06 (LOD handoff and graded far view on fix/lod-handoff)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Smoother level of detail | now | Branch `fix/lod-handoff`, awaiting playtest: blocks no longer wait behind the far view when nearing a planet; far view finer next to the blocks and coarser farther out (Distant Horizons-style); Planet Block Distance and Far View Detail settings; Dolphin's F1-F8 savestate message and invalid-access dialogs silenced. |
+| (nothing in progress) | | Pick the next one from **Next**. |
 
 ## Next
 
@@ -110,12 +110,19 @@ Last updated: 2026-10-06 (LOD handoff and graded far view on fix/lod-handoff)
 | 2026-10-05 | Create World's planet options: GalaxyCraft tab, up to 64 seeded planets (8 complete, the rest drawn from afar at less and less detail, even past SMG2's draw distance), entering a world with a zoom from space, smooth space and planet flight | f1ef3ea |
 | 2026-10-05 | Elytra: glide and fly between planets in every movement mode; cosmic wind | 7bc2385 |
 | 2026-10-05 | Lag fix: `gxplay.sh` runs Dolphin dual core and stops leftover hidden Minecrafts | beddf73 |
+| 2026-10-06 | Smoother level of detail: blocks first when nearing a planet, far view finer near the blocks (Distant Horizons-style), parallel meshing, nearest chunks first, block distance 96 and far view detail settings; no hangs flying fast (collision zone overflow) or standing still (Wii Remote auto-sleep, stale collision); quiet F1-F8 and invalid-access dialogs | adfd848 |
 
 ---
 
 ## Inbox
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
+
+- 2026-10-06: Game feel and blocks (user). The overall feel should sit exactly between Minecraft
+  and Mario Galaxy in fluidity. Chain breaking while holding the button, at the tool's real speed
+  (e.g. a shovel with Efficiency). Precise sounds, material particles on hit and place, and the
+  progressive crack texture. Today one click breaks a block at once (`PlanetClient.breakBlock`,
+  on press, not held), with no break progress or cracks.
 
 - 2026-10-05: Launcher follow-ups (review): old planets in ~/.local/share/galaxycraft/planets are not moved into a world; closing the Dolphin window can lose the last ≤10 s of planet edits (no save on exit).
 - 2026-10-05: FPS above 60 (user, while playing). SMG2's logic is locked to 60 frames a second,
