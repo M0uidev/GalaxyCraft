@@ -83,6 +83,13 @@ loom {
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 				if (project.hasProperty("skinName")) vmArg "-Dgalaxycraft.skinName=${project.property("skinName")}"
 			}
+			if (project.hasProperty("galaxycraftMining")) { // tools/gxvoxel.sh mining: MiningProbe in the dev Dolphin
+				vmArg "-Dgalaxycraft.mining=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftElytra")) { // tools/gxvoxel.sh elytra: ElytraProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.elytra=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"

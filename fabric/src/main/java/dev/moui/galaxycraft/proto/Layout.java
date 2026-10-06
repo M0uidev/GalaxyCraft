@@ -51,6 +51,10 @@ public final class Layout {
     public static final int MSG_SKIN = 108, MSG_MODEL = 109, MSG_ENTITIES = 110, MSG_HURT = 111, MSG_SEAT = 112, MSG_SKY = 113;
     /** The skin of Mario's model (Steve), M -> S for the host: a 64x64 GXC_MSG_SKIN payload. */
     public static final int MSG_MARIO_SKIN = 114;
+    /** The block being broken, M -> S: GxcCrack, Minecraft's cracks at stage 0..CRACK_STAGES - 1. */
+    public static final int MSG_CRACK = 115, CRACK_STAGES = 10;
+    /** Edges a GxcOutline carries at most. */
+    public static final int OUTLINE_MAX_EDGES = 96;
     public static final int HURT_HIT = 0, HURT_FIRE = 1, HURT_EXPLOSION = 2;
     public static final int ENT_MAX_SKINS = 256, ENT_MAX_MODELS = 2048, ENT_MAX = 768, ENT_BYTES = 60;
     public static final int ENT_SKIN_MAX = 256, ENT_DL_MAX = 65536, ENT_VTXFMT = 3;

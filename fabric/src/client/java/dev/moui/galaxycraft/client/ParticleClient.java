@@ -3,6 +3,7 @@ package dev.moui.galaxycraft.client;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import dev.moui.galaxycraft.shadow.ShadowWorld;
+import dev.moui.galaxycraft.voxel.CellSpace;
 import dev.moui.galaxycraft.voxel.PlanetDrops;
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
 import java.io.InputStreamReader;
@@ -25,7 +26,8 @@ import org.joml.Vector3d;
  * Particles Minecraft made in the shadow (ShadowWorld.pollParticle: a mob's last poof, an
  * explosion, a broken block's pieces, hits), moved on the planet like Minecraft moves them and
  * drawn by the game facing the camera (EntityClient). Each is its particle type's sprites from
- * its particles/*.json, shown by age; a block's pieces are bits of its side.
+ * its particles/*.json, shown by age; a block's pieces are bits of its side. The client adds its
+ * own too, for blocks the player breaks and places (crack, burst, puff).
  */
 final class ParticleClient {
     static final int MAX = 400;
@@ -122,6 +124,59 @@ final class ParticleClient {
             }
         }
         live.add(new Live(pos, vel, frames, null, 0, size, 0, drag, life));
+    }
+
+    /**
+     * Minecraft's crack particle (ParticleEngine.crack), every tick a block is being broken: a small
+     * piece of it off a random spot of the side hit (face, a cell side), drifting off it.
+     */
+    void crack(VoxelPlanet p, int cell, int face, BlockState block) {
+        if (live.size() >= MAX) return;
+        double[] o = p.info(cell).outline();
+        int[] step = CellSpace.STEP[face];
+        double[] at = new double[3], v = new double[3];
+        for (int a = 0; a < 3; a++) {
+            // On the side, 0.1 in from its edges and 0.1 out of it, as Minecraft puts it.
+            at[a] = step[a] == 0 ? o[a] + 0.1 + random.nextDouble() * Math.max(0, o[a + 3] - o[a] - 0.2)
+                    : step[a] > 0 ? o[a + 3] + 0.1 : o[a] - 0.1;
+            v[a] = gauss(0.02) + step[a] * 0.02;
+        }
+        v[1] += 0.02;
+        piece(p, cell, at, v, block, 0.6);
+    }
+
+    /** A block's pieces flying apart as Minecraft's break effect throws them (level event 2001). */
+    void burst(VoxelPlanet p, int cell, BlockState block) {
+        for (int i = 0; i < 12 && live.size() < MAX; i++) {
+            double fx = random.nextDouble(), fy = random.nextDouble(), fz = random.nextDouble();
+            piece(p, cell, new double[] {fx, fy, fz}, new double[] {(fx - 0.5) * 0.15, fy * 0.15 + 0.05, (fz - 0.5) * 0.15},
+                    block, 1);
+        }
+    }
+
+    /** A block just placed: a few small pieces of it puff off its sides (GalaxyCraft's, Minecraft makes none). */
+    void puff(VoxelPlanet p, int cell, BlockState block) {
+        double[] o = p.info(cell).outline();
+        for (int i = 0; i < 8 && live.size() < MAX; i++) {
+            int face = random.nextInt(6);
+            if (CellSpace.STEP[face][1] < 0) face = random.nextInt(6); // fewer from underneath
+            int[] step = CellSpace.STEP[face];
+            double[] at = new double[3], v = new double[3];
+            for (int a = 0; a < 3; a++) {
+                at[a] = step[a] == 0 ? o[a] + random.nextDouble() * (o[a + 3] - o[a]) : step[a] > 0 ? o[a + 3] + 0.05 : o[a] - 0.05;
+                v[a] = gauss(0.015) + step[a] * 0.04;
+            }
+            piece(p, cell, at, v, block, 0.7);
+        }
+    }
+
+    /** A piece of block at model point at of cell, moving by v (model space, blocks a tick), scale times its size. */
+    private void piece(VoxelPlanet p, int cell, double[] at, double[] v, BlockState block, double scale) {
+        Vector3d pos = CellSpace.point(p.grid, cell, at[0], at[1], at[2]);
+        Vector3d vel = CellSpace.point(p.grid, cell, at[0] + v[0], at[1] + v[1], at[2] + v[2]).sub(pos);
+        double life = 4 / (random.nextDouble() * 0.9 + 0.1);
+        live.add(new Live(pos, vel, null, block, random.nextInt(16), (0.1 + random.nextDouble() * 0.1) * scale, 0.04, 0.98,
+                (int) Math.min(life, 30)));
     }
 
     private double gauss(double s) {

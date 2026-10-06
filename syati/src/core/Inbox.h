@@ -37,9 +37,29 @@ struct InboxChunk
   const u8* kcl;  // kcl_size bytes (0: drawn only)
 };
 
+// Minecraft's block outline (GxcOutline): count edges, each two ends of three big-endian f32
+// (relative to the planet's center), as GX takes a list of lines' vertices.
+const u32 OUTLINE_MAX_EDGES = 96, OUTLINE_EDGE_BYTES = 24;
 struct InboxOutline
 {
-  u32 visible;
+  u32 visible;      // the planet's id; 0: none
+  u32 count;        // edges, up to OUTLINE_MAX_EDGES
+  const u8* edges;  // count * OUTLINE_EDGE_BYTES
+};
+
+// The outline's edges as a display list of lines (vertex format fmt: f32 positions) into out,
+// padded with GX_NOP to OUTLINE_DL_BYTES.
+const u32 OUTLINE_DL_BYTES = (3 + OUTLINE_MAX_EDGES * OUTLINE_EDGE_BYTES + 31) & ~31u;
+void OutlineList(const InboxOutline& o, u32 fmt, u8 out[OUTLINE_DL_BYTES]);
+
+// Minecraft's cracks over the block being broken (GXC_MSG_CRACK): stage 0..CRACK_STAGES - 1, the
+// stage's atlas tile at uv (u0, v0, u1, v1), on the box of the corners (in InboxOutline's order).
+const u32 CRACK_STAGES = 10;
+struct InboxCrack
+{
+  u32 visible;  // the planet's id; 0: none
+  u32 stage;
+  f32 uv[4];
   f32 corners[8][3];  // relative to the planet's center
 };
 
@@ -123,11 +143,13 @@ struct InboxRecord
     HURT = 111,
     SEAT = 112,
     SKY = 113,
+    CRACK = 115,
   };
   u32 type;
   InboxPlanet planet;
   InboxChunk chunk;
   InboxOutline outline;
+  InboxCrack crack;
   InboxHeld held;
   InboxAtlas atlas;
   InboxSkin skin;

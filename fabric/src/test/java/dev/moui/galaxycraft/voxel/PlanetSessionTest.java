@@ -499,10 +499,15 @@ class PlanetSessionTest {
         assertEquals(Layout.MSG_OUTLINE, msgs.get(0).type(), "before the chunks");
         ByteBuffer o = le(msgs.get(0));
         assertEquals(s.id(), o.getInt(0), "visible: on this planet");
+        assertEquals(12, o.getInt(4), "a cube's edges");
+        assertEquals(8 + 12 * 24, o.capacity(), "only those");
         Vector3d mid = s.planet().grid.center(cell).mul(80);
-        for (int m = 0; m < 8; m++) {
-            Vector3d c = new Vector3d(o.getFloat(4 + 12 * m), o.getFloat(8 + 12 * m), o.getFloat(12 + 12 * m));
-            assertTrue(c.distance(mid) > 40 && c.distance(mid) < 80, "corner " + m + " " + c.distance(mid));
+        for (int e = 0; e < 12; e++) {
+            Vector3d a = new Vector3d(o.getFloat(8 + 24 * e), o.getFloat(12 + 24 * e), o.getFloat(16 + 24 * e));
+            Vector3d b = new Vector3d(o.getFloat(20 + 24 * e), o.getFloat(24 + 24 * e), o.getFloat(28 + 24 * e));
+            assertTrue(a.distance(mid) > 40 && a.distance(mid) < 80, "edge " + e + " " + a.distance(mid));
+            assertTrue(b.distance(mid) > 40 && b.distance(mid) < 80, "edge " + e + " " + b.distance(mid));
+            assertTrue(a.distance(b) > 60 && a.distance(b) < 100, "a cell's side long: " + a.distance(b));
         }
         s.setOutline(cell);
         assertTrue(drain(s).isEmpty(), "same cell: nothing");
@@ -511,6 +516,42 @@ class PlanetSessionTest {
         assertEquals(1, off.size());
         assertEquals(0, le(off.get(0)).getInt(0));
         assertEquals(-1, s.target(eye, new Vector3d(0, 1, 0), false), "sky: nothing in reach");
+    }
+
+    @Test void cracksGoOutWhenTheirStageOrBlockChanges() {
+        PlanetSession s = spawned(16);
+        drain(s);
+        Vector3d eye = new Vector3d(s.center()).add(0, 17.6 * 80, 0); // over the grass, looking down
+        int cell = s.target(eye, new Vector3d(0, -1, 0), false);
+        float[] uv = {0.25f, 0.5f, 0.3125f, 0.5625f};
+        s.setCrack(cell, 3, uv);
+        List<PlanetSession.Msg> msgs = drain(s);
+        assertEquals(1, msgs.size());
+        assertEquals(Layout.MSG_CRACK, msgs.get(0).type());
+        ByteBuffer c = le(msgs.get(0));
+        assertEquals(120, c.capacity());
+        assertEquals(s.id(), c.getInt(0), "visible: on this planet");
+        assertEquals(3, c.getInt(4));
+        assertEquals(0.25f, c.getFloat(8));
+        assertEquals(0.5625f, c.getFloat(20));
+        Vector3d mid = s.planet().grid.center(cell).mul(80);
+        for (int m = 0; m < 8; m++) {
+            Vector3d p = new Vector3d(c.getFloat(24 + 12 * m), c.getFloat(28 + 12 * m), c.getFloat(32 + 12 * m));
+            assertTrue(p.distance(mid) > 40 && p.distance(mid) < 80, "corner " + m + " " + p.distance(mid));
+        }
+        s.setCrack(cell, 3, uv);
+        assertTrue(drain(s).isEmpty(), "same stage: nothing");
+        s.setCrack(cell, 4, uv);
+        assertEquals(4, le(drain(s).get(0)).getInt(4));
+        s.planet().set(cell, Material.STONE);
+        s.setCrack(cell, 4, uv);
+        assertEquals(1, drain(s).stream().filter(m -> m.type() == Layout.MSG_CRACK).count(), "another block there");
+        s.setCrack(-1, 4, uv);
+        List<PlanetSession.Msg> off = drain(s);
+        assertEquals(1, off.size());
+        assertEquals(0, le(off.get(0)).getInt(0), "none");
+        s.setCrack(cell, -1, uv);
+        assertTrue(drain(s).isEmpty(), "still none");
     }
 
     @Test void bedrockStaysAndNothingOutOfReach() {
