@@ -37,6 +37,8 @@ public final class PlanetSession {
     public static final double DEFAULT_MARIO_RADIUS = 0.3;
     /** The outline stands this fraction of a cell out of it. */
     static final double OUTLINE_GROW = 0.02;
+    /** The cracks stand this fraction of a cell out of it: over the block's faces, under the outline. */
+    static final double CRACK_GROW = 0.005;
     /**
      * Collision reaches this far around Mario and around where he will be in LOOKAHEAD updates at
      * his speed, blocks, for at most MAX_PARTS chunks; a chunk that has it keeps it KEEP blocks
@@ -169,6 +171,9 @@ public final class PlanetSession {
     private boolean unsaved;
     private int outline = -1; // the cell outlined in the game, -1 none
     private int outlineId = -1; // the block that was in it then: a door opening changes its outline
+    private int crack = -1, crackStage = -1; // the cell cracked in the game and how far, -1 none
+    private int crackId = -1;
+    private int placed = -1;
     private Vector3d mario;
     /** Where Mario is headed: his position LOOKAHEAD updates on at his last step's speed. */
     private Vector3d ahead;
@@ -700,7 +705,13 @@ public final class PlanetSession {
         }
         planet.settle(changed);
         unsaved = true;
+        placed = cell;
         return true;
+    }
+
+    /** The cell the last block placeBlock placed went into (-1 none yet): its sound and pieces. */
+    public int lastPlaced() {
+        return placed;
     }
 
     /** What the eye points at: the cell, the side of it facing the eye and the point, in its model space. */
@@ -796,16 +807,47 @@ public final class PlanetSession {
      */
     byte[] outlinePayload(int cell) {
         ByteBuffer b = ByteBuffer.allocate(100).order(ByteOrder.LITTLE_ENDIAN).putInt(cell >= 0 ? id : 0);
-        if (cell < 0) return b.array();
+        if (cell >= 0) putCorners(b, cell, OUTLINE_GROW);
+        return b.array();
+    }
+
+    /** The corners of cell's outline box (its shape's bounds in the cell) from the planet's center, grown by grow. */
+    private void putCorners(ByteBuffer b, int cell, double grow) {
         double[] o = planet.info(cell).outline();
         Vector3d mid = CellSpace.point(planet.grid, cell, (o[0] + o[3]) / 2, (o[1] + o[4]) / 2, (o[2] + o[5]) / 2);
         for (int m = 0; m < 8; m++) {
             // Corner (di, dj, dk) is model (x, y, z) = (dj, dk, di) picks of the bounds.
             int di = m & 1, dj = m >> 1 & 1, dk = m >> 2;
             Vector3d c = CellSpace.point(planet.grid, cell, dj == 0 ? o[0] : o[3], dk == 0 ? o[1] : o[4], di == 0 ? o[2] : o[5]);
-            c.sub(mid).mul(1 + OUTLINE_GROW).add(mid).mul(unitsPerBlock);
+            c.sub(mid).mul(1 + grow).add(mid).mul(unitsPerBlock);
             b.putFloat((float) c.x).putFloat((float) c.y).putFloat((float) c.z);
         }
+    }
+
+    /**
+     * Minecraft's cracks over this cell in the game, stage 0..Layout.CRACK_STAGES - 1 (-1, or a
+     * cell of -1: none); uv is that stage's tile in the atlas (u0, v0, u1, v1). Sent if the cell,
+     * its block or the stage changed.
+     */
+    public void setCrack(int cell, int stage, float[] uv) {
+        if (planet == null) return;
+        if (cell < 0 || stage < 0 || uv == null) cell = stage = -1;
+        stage = Math.min(stage, Layout.CRACK_STAGES - 1);
+        int block = cell < 0 ? -1 : planet.get(cell);
+        if (cell == crack && stage == crackStage && block == crackId) return;
+        crack = cell;
+        crackStage = stage;
+        crackId = block;
+        control.removeIf(m -> m.type() == Layout.MSG_CRACK);
+        control.add(new Msg(Layout.MSG_CRACK, crackPayload(cell, stage, uv)));
+    }
+
+    /** GxcCrack: the planet's id (0: none), the stage, its tile, the corners of the cell's outline box. */
+    byte[] crackPayload(int cell, int stage, float[] uv) {
+        ByteBuffer b = ByteBuffer.allocate(120).order(ByteOrder.LITTLE_ENDIAN).putInt(cell >= 0 ? id : 0)
+                .putInt(Math.max(0, stage));
+        for (int k = 0; k < 4; k++) b.putFloat(cell >= 0 ? uv[k] : 0);
+        if (cell >= 0) putCorners(b, cell, CRACK_GROW);
         return b.array();
     }
 
@@ -908,6 +950,7 @@ public final class PlanetSession {
         shown = new BitSet();
         farOnGuest = new BitSet();
         outline = outlineId = -1;
+        crack = crackStage = crackId = -1;
         pending.clear();
         pendingSet.clear();
         premeshed.clear();

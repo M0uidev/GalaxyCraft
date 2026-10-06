@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (smoother level of detail merged; game feel and blocks idea in the Inbox)
+Last updated: 2026-10-06 (smoother level of detail merged; game feel and blocks in Now, on branch `game-feel`)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-06 (smoother level of detail merged; game feel and blocks 
 
 | Feature | Status | Notes |
 |---|---|---|
-| (nothing in progress) | | Pick the next one from **Next**. |
+| Game feel: breaking and placing blocks | now | Branch `game-feel`: hold to break at Minecraft's speeds (tool, Efficiency, Haste), cracks drawn by the game, block sounds, material particles on hit and place. Written in the cloud without building the mod: needs a build and a playtest on the PC ([docs/SENSACION_BLOQUES.md](docs/SENSACION_BLOQUES.md), [spec](docs/superpowers/specs/2026-10-06-galaxycraft-game-feel-design.md)). |
 
 ## Next
 
@@ -67,6 +67,7 @@ Last updated: 2026-10-06 (smoother level of detail merged; game feel and blocks 
 
 | Feature | Status | Notes |
 |---|---|---|
+| Breaking with an empty hand | idea | Punching wood: with an empty hand the clicks are Mario's (spin) today. Came up with the game feel work. |
 | Full survival loop on planets | planned | Old stage 7 "more mechanics". Mining, drops, crafting, mobs, light already work; what's missing still needs listing (hunger? sleep/beds? progression?). |
 
 ## Platforms and multiplayer
@@ -118,11 +119,6 @@ Last updated: 2026-10-06 (smoother level of detail merged; game feel and blocks 
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
-- 2026-10-06: Game feel and blocks (user). The overall feel should sit exactly between Minecraft
-  and Mario Galaxy in fluidity. Chain breaking while holding the button, at the tool's real speed
-  (e.g. a shovel with Efficiency). Precise sounds, material particles on hit and place, and the
-  progressive crack texture. Today one click breaks a block at once (`PlanetClient.breakBlock`,
-  on press, not held), with no break progress or cracks.
 
 - 2026-10-05: Launcher follow-ups (review): old planets in ~/.local/share/galaxycraft/planets are not moved into a world; closing the Dolphin window can lose the last ≤10 s of planet edits (no save on exit).
 - 2026-10-05: FPS above 60 (user, while playing). SMG2's logic is locked to 60 frames a second,

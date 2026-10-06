@@ -513,6 +513,42 @@ class PlanetSessionTest {
         assertEquals(-1, s.target(eye, new Vector3d(0, 1, 0), false), "sky: nothing in reach");
     }
 
+    @Test void cracksGoOutWhenTheirStageOrBlockChanges() {
+        PlanetSession s = spawned(16);
+        drain(s);
+        Vector3d eye = new Vector3d(s.center()).add(0, 17.6 * 80, 0); // over the grass, looking down
+        int cell = s.target(eye, new Vector3d(0, -1, 0), false);
+        float[] uv = {0.25f, 0.5f, 0.3125f, 0.5625f};
+        s.setCrack(cell, 3, uv);
+        List<PlanetSession.Msg> msgs = drain(s);
+        assertEquals(1, msgs.size());
+        assertEquals(Layout.MSG_CRACK, msgs.get(0).type());
+        ByteBuffer c = le(msgs.get(0));
+        assertEquals(120, c.capacity());
+        assertEquals(s.id(), c.getInt(0), "visible: on this planet");
+        assertEquals(3, c.getInt(4));
+        assertEquals(0.25f, c.getFloat(8));
+        assertEquals(0.5625f, c.getFloat(20));
+        Vector3d mid = s.planet().grid.center(cell).mul(80);
+        for (int m = 0; m < 8; m++) {
+            Vector3d p = new Vector3d(c.getFloat(24 + 12 * m), c.getFloat(28 + 12 * m), c.getFloat(32 + 12 * m));
+            assertTrue(p.distance(mid) > 40 && p.distance(mid) < 80, "corner " + m + " " + p.distance(mid));
+        }
+        s.setCrack(cell, 3, uv);
+        assertTrue(drain(s).isEmpty(), "same stage: nothing");
+        s.setCrack(cell, 4, uv);
+        assertEquals(4, le(drain(s).get(0)).getInt(4));
+        s.planet().set(cell, Material.STONE);
+        s.setCrack(cell, 4, uv);
+        assertEquals(1, drain(s).stream().filter(m -> m.type() == Layout.MSG_CRACK).count(), "another block there");
+        s.setCrack(-1, 4, uv);
+        List<PlanetSession.Msg> off = drain(s);
+        assertEquals(1, off.size());
+        assertEquals(0, le(off.get(0)).getInt(0), "none");
+        s.setCrack(cell, -1, uv);
+        assertTrue(drain(s).isEmpty(), "still none");
+    }
+
     @Test void bedrockStaysAndNothingOutOfReach() {
         PlanetSession s = spawned(16);
         assertFalse(s.breakBlock(new Vector3d(s.center()).add(0, 30 * 80, 0), new Vector3d(0, -1, 0)));

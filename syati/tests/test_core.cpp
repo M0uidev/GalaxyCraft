@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "CodePatch.h"
+#include "CrackMesh.h"
 #include "Graves.h"
 #include "AtlasAnim.h"
 #include "HeldMesh.h"
@@ -489,6 +490,84 @@ static void TestInboxOutline()
   CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
 }
 
+static void TestInboxCrack()
+{
+  std::vector<u8> b;
+  Put32(b, 115u << 16), Put32(b, 120), Put32(b, 4), Put32(b, 9);
+  PutF(b, 0.25f), PutF(b, 0.5f), PutF(b, 0.3125f), PutF(b, 0.5625f);
+  for (int k = 0; k < 24; k++)
+    PutF(b, static_cast<float>(k));
+  Put32(b, 115u << 16), Put32(b, 120), Put32(b, 4), Put32(b, 10);  // no stage 10
+  b.resize(b.size() + 112);
+  InboxRecord r;
+  u32 off = 0;
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::CRACK);
+  CHECK(r.crack.visible == 4 && r.crack.stage == 9);
+  CHECK(r.crack.uv[0] == 0.25f && r.crack.uv[3] == 0.5625f);
+  CHECK(r.crack.corners[0][0] == 0.f && r.crack.corners[7][2] == 23.f);
+  CHECK(!NextInboxRecord(b.data(), b.size(), &off, 512, &r));
+  std::vector<u8> s;
+  Put32(s, 115u << 16), Put32(s, 100), Put32(s, 4);  // an outline's size: malformed
+  s.resize(s.size() + 96);
+  off = 0;
+  CHECK(!NextInboxRecord(s.data(), s.size(), &off, 512, &r));
+}
+
+static float GetBEF(const u8* p)
+{
+  const u32 u = (u32(p[0]) << 24) | (u32(p[1]) << 16) | (u32(p[2]) << 8) | u32(p[3]);
+  float f;
+  memcpy(&f, &u, 4);
+  return f;
+}
+
+static void TestCrackMesh()
+{
+  // A unit box: corner m at (dj, dk, di) = (m >> 1 & 1, m >> 2, m & 1).
+  f32 corners[8][3];
+  for (int m = 0; m < 8; m++)
+    corners[m][0] = static_cast<f32>(m >> 1 & 1), corners[m][1] = static_cast<f32>(m >> 2),
+    corners[m][2] = static_cast<f32>(m & 1);
+  const f32 uv[4] = {0.25f, 0.5f, 0.3125f, 0.5625f};
+  std::vector<u8> dl(CRACK_DL_BYTES, 0xEE);
+  CrackMesh(corners, uv, 6, dl.data());
+  CHECK(CRACK_DL_BYTES % 32 == 0 && CRACK_DL_BYTES >= 3 + 24 * 20);
+  CHECK(dl[0] == (0x80 | 6) && dl[1] == 0 && dl[2] == 24);
+  CHECK(dl[3 + 24 * 20] == 0 && dl[CRACK_DL_BYTES - 1] == 0);  // GX_NOP after the quads
+  // Each side: its four corners share the coordinate of its axis, and they span the other two.
+  int sides[3][2] = {{0, 0}, {0, 0}, {0, 0}};
+  for (int q = 0; q < 6; q++)
+  {
+    float v[4][5];
+    for (int i = 0; i < 4; i++)
+      for (int k = 0; k < 5; k++)
+        v[i][k] = GetBEF(dl.data() + 3 + (q * 4 + i) * 20 + 4 * k);
+    int axis = -1;
+    for (int k = 0; k < 3; k++)
+      if (v[0][k] == v[1][k] && v[1][k] == v[2][k] && v[2][k] == v[3][k])
+        axis = k;
+    CHECK(axis >= 0);
+    if (axis < 0)
+      continue;
+    sides[axis][v[0][axis] > 0.5f]++;
+    // The whole tile: two corners at u0 and two at u1, and the same for v.
+    int u0 = 0, v0 = 0;
+    for (int i = 0; i < 4; i++)
+    {
+      CHECK(v[i][3] == uv[0] || v[i][3] == uv[2]);
+      CHECK(v[i][4] == uv[1] || v[i][4] == uv[3]);
+      u0 += v[i][3] == uv[0], v0 += v[i][4] == uv[1];
+    }
+    CHECK(u0 == 2 && v0 == 2);
+    // Upright on the four sides: the top of the tile (v0) is up (y = 1).
+    if (axis != 1)
+      for (int i = 0; i < 4; i++)
+        CHECK((v[i][4] == uv[1]) == (v[i][1] == 1.f));
+  }
+  for (int k = 0; k < 3; k++)
+    CHECK(sides[k][0] == 1 && sides[k][1] == 1);
+}
+
 static void TestInboxHeld()
 {
   std::vector<u8> b;
@@ -706,6 +785,8 @@ int main()
   TestPlanetDropAndViewTranslate();
   TestCodePatch();
   TestInboxOutline();
+  TestInboxCrack();
+  TestCrackMesh();
   TestInboxHeld();
   TestInboxEntities();
   TestInboxAtlas();

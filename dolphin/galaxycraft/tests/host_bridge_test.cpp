@@ -683,6 +683,22 @@ TEST(inbox_gets_the_outline_big_endian)
   CHECK(f.mem.GetU32(r + 8) == 1 && f.mem.GetF32(r + 8 + 4 + 23 * 4) == 5.5f);
 }
 
+TEST(inbox_gets_the_crack_big_endian)
+{
+  Fixture f;
+  InboxInMailbox(f, 1024);
+  GxcCrack c{3, 9, {0.25f, 0.5f, 0.3125f, 0.5625f}, {}};
+  c.corners[7][2] = -2.5f;
+  Ring(*f.shm, GXC_OFF_RING_M2S).Push(GXC_MSG_CRACK, &c, sizeof(c));
+  f.Tick();
+  const u32 r = INBOX + sizeof(GxcInboxHeader);
+  CHECK(sizeof(GxcCrack) == 120);
+  CHECK(f.mem.GetU32(r) == (u32(GXC_MSG_CRACK) << 16) && f.mem.GetU32(r + 4) == 120);
+  CHECK(f.mem.GetU32(r + 8) == 3 && f.mem.GetU32(r + 12) == 9);
+  CHECK(f.mem.GetF32(r + 16) == 0.25f && f.mem.GetF32(r + 28) == 0.5625f);
+  CHECK(f.mem.GetF32(r + 8 + 24 + 23 * 4) == -2.5f);
+}
+
 TEST(inbox_gets_the_held_item_with_its_sprite_untouched)
 {
   Fixture f;

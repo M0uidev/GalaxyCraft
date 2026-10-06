@@ -213,6 +213,7 @@ enum {
   GXC_MSG_MARIO_SKIN = 114, /* M -> S, for the host itself: the skin of Mario's model (Steve), all big-endian:
                                u32 id (unused), u32 width, u32 height (64 and 64), GX RGB5A3 texels. The host
                                writes them over the "steve" texture of Mario.bdl wherever it is in guest RAM */
+  GXC_MSG_CRACK = 115,     /* GxcCrack: the block being broken, cracked as far as it has been */
   GXC_MSG_PAD = 0xFFFF,
 };
 
@@ -283,6 +284,18 @@ typedef struct {
   uint32_t visible; /* the planet's id: corners from its center; 0: none */
   float corners[8][3];
 } GxcOutline;
+
+/* Minecraft's cracks over the block the player is breaking: the atlas tile of destroy_stage_<stage>
+ * on the six sides of the box the corners make (in GxcOutline's order), multiplied into what is
+ * drawn under it as Minecraft does (twice texture times screen: mid gray changes nothing). Sent
+ * when the stage or the block changes. */
+#define GXC_CRACK_STAGES 10
+typedef struct {
+  uint32_t visible; /* the planet's id: corners from its center; 0: none */
+  uint32_t stage;   /* 0 .. GXC_CRACK_STAGES - 1 */
+  float uv[4];      /* the stage's tile in the block atlas: u0, v0, u1, v1 (0 to 1) */
+  float corners[8][3];
+} GxcCrack;
 
 /* What the player holds in the main hand, drawn by the game in Steve's right hand as Minecraft
  * draws it in third person. Sent when it changes and again in every new scene. */

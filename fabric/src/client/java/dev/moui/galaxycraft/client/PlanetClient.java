@@ -13,6 +13,7 @@ import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.voxel.AtlasLink;
 import dev.moui.galaxycraft.voxel.CellSpace;
 import dev.moui.galaxycraft.voxel.Material;
+import dev.moui.galaxycraft.voxel.Mining;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.BlueprintStore;
 import dev.moui.galaxycraft.voxel.GalaxyCatalog;
@@ -158,6 +159,16 @@ public final class PlanetClient {
     private static final EntityClient entities = new EntityClient(() -> focus, drops);
     private static McBlocks blocks;
     private static AtlasLink atlasLink;
+    /** Breaking blocks while the button is held down, as Minecraft does (Minecraft's own speeds). */
+    private static final Mining mining = new Mining();
+    /**
+     * The last cell broken and its block then: Minecraft breaks it on its own thread, so for a few
+     * ticks the planet may still show it, and it must not break (and sound) twice.
+     */
+    private static int brokeCell = -1, brokeId = -1, sinceBroke;
+    private static final int BROKE_TICKS = 20;
+    /** This tick's frame (sounds are played where their block is, in Minecraft's coordinates). */
+    private static GravityFrame frameNow;
 
     private PlanetClient() {}
 
@@ -536,7 +547,12 @@ public final class PlanetClient {
         boolean screen = Minecraft.getInstance().gui.screen() != null; // the clicks are the screen's
         PlanetSession was = focus;
         focus = nearest(world.queryPos());
-        if (focus != was) was.setOutline(-1);
+        if (focus != was) {
+            was.setOutline(-1);
+            was.setCrack(-1, -1, null);
+            mining.stop();
+        }
+        frameNow = frame;
         for (PlanetSession s : planets())
             if (s.active() && world.queryPos() != null)
                 s.setDetail(PlanetLayout.detail(s.detail(), s == focus, s.center().distance(world.queryPos()), s.gravityUnits(),
@@ -593,13 +609,20 @@ public final class PlanetClient {
             }
             ShadowWorld.steer(new ShadowWorld.Steer(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),
                     key(in, SC_LSHIFT) || key(in, SC_RSHIFT)));
-            if (item) {
-                // Minecraft gets the same clicks and swings the arm by itself.
-                if (pressed(buttons, MOUSE_LEFT) && !hit) breakBlock(player, eye, look, aim);
-                if (pressed(buttons, MOUSE_RIGHT) && !hit) use(player, eye, look, world.queryPos(), aim);
+            // Held down on a block (not on a mob): Minecraft's breaking, a tick at a time.
+            if (item && target == null) mine(player, session, eye, look, aim, pressed(buttons, MOUSE_LEFT), (buttons & MOUSE_LEFT) != 0);
+            else {
+                mining.stop();
+                session.setCrack(-1, -1, null);
             }
+            // Minecraft gets the same clicks and swings the arm by itself.
+            if (item && pressed(buttons, MOUSE_RIGHT) && !hit) use(player, eye, look, world.queryPos(), aim);
         }
-        else ShadowWorld.mario(null);
+        else {
+            ShadowWorld.mario(null);
+            mining.stop();
+            focus.setCrack(-1, -1, null);
+        }
         shadow.tick(stage == null ? "" : PlanetStore.key(stage, indexOf(focus)), world.queryPos());
         drops.tick(Minecraft.getInstance(), frame, frame == null ? null : world.queryPos());
         entities.tick();
@@ -1007,12 +1030,82 @@ public final class PlanetClient {
         } else {
             ItemStack held = stack.copy();
             Runnable place = () -> {
-                if (focus.placeBlock(eye, look, blocks.placer(held), feet) && !creative) useUp(player, held);
+                if (!focus.placeBlock(eye, look, blocks.placer(held), feet)) return;
+                placed(focus);
+                if (!creative) useUp(player, held);
             };
             if (aim == null || !shadow.available()) place.run();
             else ShadowWorld.use(focus.planet(), aim.cell(), aim.face(),
                     new net.minecraft.world.phys.Vec3(aim.hit().x, aim.hit().y, aim.hit().z), player.getUUID(), place);
         }
+    }
+
+    /**
+     * The attack button on the block aimed at (aim, null for none) this tick: Mining's breaking at
+     * the speed Minecraft gives the block and what is in hand, with Minecraft's feel: the hit
+     * sound every 4 ticks, a piece of the block flying off the side hit every tick, its cracks
+     * growing (drawn by the game), its break sound and pieces when it goes.
+     */
+    private static void mine(LocalPlayer player, PlanetSession s, Vector3d eye, Vector3d look, PlanetSession.Aim aim,
+            boolean pressed, boolean held) {
+        if (++sinceBroke > BROKE_TICKS) brokeCell = -1;
+        int cell = aim == null ? -1 : aim.cell();
+        int id = cell < 0 ? -1 : s.planet().get(cell);
+        if (cell >= 0 && cell == brokeCell && id == brokeId) cell = -1; // broken, on its way out
+        net.minecraft.world.level.block.state.BlockState state = cell < 0 ? null : blocks.state(id);
+        double perTick = state == null || !s.planet().info(cell).breakable() ? 0 : destroyProgress(player, state);
+        Mining.Step step = mining.tick(pressed, held, cell, id, player.getMainHandItem().getItem(), perTick,
+                player.getAbilities().instabuild);
+        s.setCrack(step.crack(), step.stage(), step.stage() >= 0 ? blocks.crackUv(step.stage()) : null);
+        if (state == null) return;
+        net.minecraft.world.level.block.SoundType sound = state.getSoundType();
+        if (step.working()) {
+            player.swing(InteractionHand.MAIN_HAND);
+            entities.particles().crack(s.planet(), cell, aim.face(), state);
+        }
+        if (step.hitSound()) blockSound(s, cell, sound.getHitSound(), (sound.getVolume() + 1) / 8, sound.getPitch() * 0.5f);
+        if (step.broke() >= 0) {
+            blockSound(s, cell, sound.getBreakSound(), (sound.getVolume() + 1) / 2, sound.getPitch() * 0.8f);
+            // With Minecraft running the planet its pieces come from the shadow (level event 2001).
+            if (!shadow.available()) entities.particles().burst(s.planet(), cell, state);
+            brokeCell = cell;
+            brokeId = id;
+            sinceBroke = 0;
+            breakBlock(player, eye, look, aim);
+        }
+    }
+
+    /**
+     * How much of the block a tick of the button breaks: Minecraft's BlockState.getDestroyProgress
+     * (the tool's speed, Efficiency, Haste and Mining Fatigue against its hardness; a third as fast
+     * without the right tool), save that Mario's jumps and flights do not slow it: Minecraft breaks
+     * five times slower off the ground, and here Mario is in the air half the time.
+     */
+    private static double destroyProgress(LocalPlayer player, net.minecraft.world.level.block.state.BlockState state) {
+        float hardness = state.getDestroySpeed(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, net.minecraft.core.BlockPos.ZERO);
+        if (hardness < 0) return 0;
+        float speed = player.getDestroySpeed(state);
+        if (!player.onGround()) speed *= 5;
+        return speed / hardness / (player.hasCorrectToolForDrops(state) ? 30 : 100);
+    }
+
+    /** A block's sound where its cell is (Minecraft's coordinates of the player's frame), as Minecraft plays them. */
+    private static void blockSound(PlanetSession s, int cell, net.minecraft.sounds.SoundEvent sound, float volume, float pitch) {
+        net.minecraft.client.multiplayer.ClientLevel level = Minecraft.getInstance().level;
+        if (level == null || frameNow == null) return;
+        Vector3d at = frameNow.toMc(s.galOf(s.planet().grid.center(cell)));
+        level.playLocalSound(at.x, at.y, at.z, sound, net.minecraft.sounds.SoundSource.BLOCKS, volume, pitch, false);
+    }
+
+    /** A block placed (by the planet, not by Minecraft): its place sound, and a few of its pieces puff off it. */
+    private static void placed(PlanetSession s) {
+        int cell = s.lastPlaced();
+        if (cell < 0 || !s.active()) return;
+        net.minecraft.world.level.block.state.BlockState state = blocks.state(s.planet().get(cell));
+        if (state.isAir()) return;
+        net.minecraft.world.level.block.SoundType sound = state.getSoundType();
+        blockSound(s, cell, sound.getPlaceSound(), (sound.getVolume() + 1) / 2, sound.getPitch() * 0.8f);
+        entities.particles().puff(s.planet(), cell, state);
     }
 
     /**

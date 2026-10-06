@@ -9,6 +9,7 @@
 #include "Game/Map/CollisionParts.h"
 #include "EntityDraw.h"
 #include "AtlasAnim.h"
+#include "CrackMesh.h"
 #include "Graves.h"
 #include "HeldItem.h"
 #include "Inbox.h"
@@ -331,9 +332,11 @@ class VoxelPlanetActor : public LiveActor
 {
 public:
   VoxelPlanetActor()
-      : LiveActor("GxcVoxelPlanet"), mOutlineOn(false), mOutlinePlanet(0), mOutlineNext(0), mOutlineDraw(0)
+      : LiveActor("GxcVoxelPlanet"), mOutlineOn(false), mOutlinePlanet(0), mOutlineNext(0), mOutlineDraw(0),
+        mCrackOn(false), mCrackPlanet(0), mCrackNext(0), mCrackDraw(0)
   {
     mOutlineDl[0] = mOutlineDl[1] = 0;
+    mCrackDl[0] = mCrackDl[1] = 0;
   }
 
   virtual void init(const JMapInfoIter&)
@@ -381,6 +384,10 @@ public:
     else if (r.type == gxc::InboxRecord::OUTLINE)
     {
       SetOutline(r.outline);
+    }
+    else if (r.type == gxc::InboxRecord::CRACK)
+    {
+      SetCrack(r.crack);
     }
     else if (r.type == gxc::InboxRecord::HELD)
     {
@@ -507,6 +514,8 @@ public:
     }
     if (mOutlinePlanet == p.id)
       mOutlineOn = false;
+    if (mCrackPlanet == p.id)
+      mCrackOn = false;
     p.id = 0;
   }
 
@@ -561,6 +570,26 @@ public:
     mOutlineNext ^= 1;
     mOutlinePlanet = o.visible;
     mOutlineOn = true;
+  }
+
+  // The cracks' six sides as a display list (CrackMesh, vertex format 6). Two, used in turn, as
+  // the outline's.
+  void SetCrack(const gxc::InboxCrack& c)
+  {
+    mCrackOn = false;
+    if (!c.visible)
+      return;
+    u8*& dl = mCrackDl[mCrackNext];
+    if (!dl)
+      dl = Alloc32(gxc::CRACK_DL_BYTES);
+    if (!dl)
+      return;
+    gxc::CrackMesh(c.corners, c.uv, GX_VTXFMT6, dl);
+    DCFlushRange(dl, gxc::CRACK_DL_BYTES);
+    mCrackDraw = dl;
+    mCrackNext ^= 1;
+    mCrackPlanet = c.visible;
+    mCrackOn = true;
   }
 
   void ReplaceFar(Planet& p, const gxc::InboxChunk& c)
@@ -821,6 +850,10 @@ public:
     for (u32 i = 0; i < MAX_PLANETS; i++)
       if (gPlanets[i].id)
         DrawPlanet(gPlanets[i], view, proj, &drawn, &far, PASS_CLEAR);
+    // The block being broken: its cracks over everything drawn (the atlas is still loaded).
+    const Planet* cracked = mCrackOn ? Find(mCrackPlanet) : 0;
+    if (cracked)
+      DrawCrack(view, cracked->center);
     GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_NOOP);
     GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
     GXSetCullMode(GX_CULL_FRONT);
@@ -1113,12 +1146,44 @@ public:
     GXCallDisplayList(mOutlineDraw, OUTLINE_DL_BYTES);
   }
 
+  // Minecraft's crumbling: the crack tile multiplied into what is under it, twice (2 x texture x
+  // screen: its mid gray changes nothing, its dark lines darken), where the tile is not a hole.
+  void DrawCrack(const f32 view[12], const f32 center[3]) const
+  {
+    GXClearVtxDesc();
+    GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GXSetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+    GXSetVtxAttrFmt(GX_VTXFMT6, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
+    GXSetVtxAttrFmt(GX_VTXFMT6, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
+    GXSetNumChans(1);
+    GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_REG, 0, GX_DF_NONE, GX_AF_NONE);
+    GXSetNumTexGens(1);
+    GXSetTexCoordGen2(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY, GX_FALSE, GX_PTIDENTITY);
+    GXSetNumTevStages(1);
+    Stage(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR_NULL, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC,
+          GX_TEVPREV);
+    GXSetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+    GXSetBlendMode(GX_BM_BLEND, GX_BL_DSTCLR, GX_BL_SRCCLR, GX_LO_NOOP);
+    GXSetAlphaCompare(GX_GREATER, 25, GX_AOP_AND, GX_ALWAYS, 0);  // Minecraft drops alpha under 0.1
+    GXSetZMode(GX_TRUE, GX_LEQUAL, GX_FALSE);
+    GXSetCullMode(GX_CULL_NONE);
+    f32 pos[12];
+    gxc::ViewTranslate(view, center, pos);
+    GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(pos), GX_PNMTX0);
+    GXCallDisplayList(mCrackDraw, gxc::CRACK_DL_BYTES);
+  }
+
   static const u32 OUTLINE_DL_BYTES = 320;  // 3 + 24 * 12, padded to 32
   bool mOutlineOn;
   u32 mOutlinePlanet;
   u32 mOutlineNext;
   u8* mOutlineDl[2];
   u8* mOutlineDraw;
+  bool mCrackOn;
+  u32 mCrackPlanet;
+  u32 mCrackNext;
+  u8* mCrackDl[2];
+  u8* mCrackDraw;
 };
 }  // namespace
 

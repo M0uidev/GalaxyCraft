@@ -43,6 +43,17 @@ struct InboxOutline
   f32 corners[8][3];  // relative to the planet's center
 };
 
+// Minecraft's cracks over the block being broken (GXC_MSG_CRACK): stage 0..CRACK_STAGES - 1, the
+// stage's atlas tile at uv (u0, v0, u1, v1), on the box of the corners (in InboxOutline's order).
+const u32 CRACK_STAGES = 10;
+struct InboxCrack
+{
+  u32 visible;  // the planet's id; 0: none
+  u32 stage;
+  f32 uv[4];
+  f32 corners[8][3];  // relative to the planet's center
+};
+
 struct InboxHeld
 {
   u32 kind;  // GXC_HELD_*
@@ -123,11 +134,13 @@ struct InboxRecord
     HURT = 111,
     SEAT = 112,
     SKY = 113,
+    CRACK = 115,
   };
   u32 type;
   InboxPlanet planet;
   InboxChunk chunk;
   InboxOutline outline;
+  InboxCrack crack;
   InboxHeld held;
   InboxAtlas atlas;
   InboxSkin skin;

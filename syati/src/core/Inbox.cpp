@@ -101,6 +101,19 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
     for (int k = 0; k < 24; k++)
       out->outline.corners[k / 3][k % 3] = ReadF32(p + 4 + 4 * k);
   }
+  else if (type == InboxRecord::CRACK)
+  {
+    if (len != 120)
+      return false;
+    out->crack.visible = ReadBE32(p);
+    out->crack.stage = ReadBE32(p + 4);
+    for (int k = 0; k < 4; k++)
+      out->crack.uv[k] = ReadF32(p + 8 + 4 * k);
+    for (int k = 0; k < 24; k++)
+      out->crack.corners[k / 3][k % 3] = ReadF32(p + 24 + 4 * k);
+    if (out->crack.stage >= CRACK_STAGES)
+      return false;
+  }
   else if (type == InboxRecord::HELD)
   {
     // kind, three reserved words, the sprite (GxcHeld); kinds up to TOOL.

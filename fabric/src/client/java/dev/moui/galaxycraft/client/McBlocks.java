@@ -2,6 +2,7 @@ package dev.moui.galaxycraft.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import dev.moui.galaxycraft.GalaxyCraft;
+import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.voxel.Atlas;
 import dev.moui.galaxycraft.voxel.BlockInfo;
 import dev.moui.galaxycraft.voxel.Blocks;
@@ -73,6 +74,12 @@ public final class McBlocks implements Blocks {
     private static final Identifier LAVA_STILL = Identifier.withDefaultNamespace("block/lava_still");
     private static final Identifier WATER_FLOW = Identifier.withDefaultNamespace("block/water_flow");
     private static final Identifier LAVA_FLOW = Identifier.withDefaultNamespace("block/lava_flow");
+    /** Minecraft's cracks on a block being broken, stage 0 to 9 (textures/block/destroy_stage_N.png). */
+    private static final Identifier[] DESTROY_STAGES = new Identifier[Layout.CRACK_STAGES];
+
+    static {
+        for (int i = 0; i < DESTROY_STAGES.length; i++) DESTROY_STAGES[i] = Identifier.withDefaultNamespace("block/destroy_stage_" + i);
+    }
     private static final Direction[] DIRECTIONS = Direction.values();
     /** Where in the client level a neighborhood goes: this far under the top, above the player. */
     private static final int SCRATCH_BELOW_TOP = 4;
@@ -114,6 +121,7 @@ public final class McBlocks implements Blocks {
                     for (BakedQuad q : part.getQuads(d < 0 ? null : DIRECTIONS[d]))
                         sprites.putIfAbsent(q.materialInfo().sprite().contents().name(), sprites.size());
         }
+        for (Identifier stage : DESTROY_STAGES) sprites.putIfAbsent(stage, sprites.size()); // the game draws them over a block
         this.tileOf = sprites;
         this.tiles = new ArrayList<>(sprites.size());
         for (Identifier name : sprites.keySet()) tiles.add(image(name));
@@ -122,6 +130,14 @@ public final class McBlocks implements Blocks {
         for (Material m : Material.values()) materialIds[m.ordinal()] = parse(m.state);
         GalaxyCraft.LOG.info("Planet blocks: {} states, {} sprites in a {}x{} atlas", count, tiles.size(), atlas.width(),
                 atlas.height());
+    }
+
+    /** Where crack stage 0..9's tile is in the atlas: u0, v0, u1, v1 (0 to 1), as GxcCrack takes it. */
+    float[] crackUv(int stage) {
+        int t = tileOf.get(DESTROY_STAGES[Math.clamp(stage, 0, DESTROY_STAGES.length - 1)]);
+        float cols = atlas.columns, rows = atlas.rows;
+        int c = t % atlas.columns, r = t / atlas.columns;
+        return new float[] {c / cols, r / rows, (c + 1) / cols, (r + 1) / rows};
     }
 
     /** Built once Minecraft's models are loaded (the first time a planet needs it). */

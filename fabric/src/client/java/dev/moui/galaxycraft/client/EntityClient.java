@@ -88,6 +88,11 @@ final class EntityClient {
         camera.pos = net.minecraft.world.phys.Vec3.ZERO;
     }
 
+    /** The particles on the planet (to add the client's own: a block being broken, or placed). */
+    ParticleClient particles() {
+        return particles;
+    }
+
     int particleCount() {
         return particles.all().size();
     }
