@@ -518,6 +518,7 @@ public final class PlanetClient {
                 && bridge.send(Layout.MSG_ATLAS, piece); ) atlasLink.sent();
         if (!bridge.stage().equals(stage)) enterStage(bridge.stage());
         boolean space = galaxy != null && Layout.SPACE_STAGE.equals(stage);
+        marioUniverse = world.queryPos();
         // The floating origin first: what this tick sends is from wherever it is now.
         UniverseClient.tick(bridge, world, landPending || generating != null);
         for (ShadowWorld.Bed b; (b = ShadowWorld.pollBed()) != null; ) slept(b, player);
@@ -685,6 +686,13 @@ public final class PlanetClient {
             sinceSave = 0;
             saveNow();
         }
+    }
+
+    private static Vector3d marioUniverse;
+
+    /** Where the game said Mario is at the last tick, universe units (null: not known). */
+    public static Vector3d marioUniverse() {
+        return marioUniverse == null ? null : new Vector3d(marioUniverse);
     }
 
     /** The floating origin moved: planet records still queued are made again from it. */

@@ -21,6 +21,8 @@
 #                             itself and Mario waits there (tools/gxboot.py; --fresh-nand: no save file)
 #   tools/gxvoxel.sh launch   LauncherProbe: title screen, Create World, the home planet, leave and come
 #                             back (launch-*.png in fabric/build/run/clientGameTest/screenshots)
+#   tools/gxvoxel.sh universe UniverseProbe: the floating origin a million blocks out and following Mario
+#                             through the void (universe-*.png)
 #   tools/gxvoxel.sh galaxy   GalaxyProbe: Create World's tab, a galaxy of 64 planets, 8 complete and the
 #                             rest far, an edit on the farthest kept (galaxy-*.png)
 set -u
@@ -28,11 +30,13 @@ set -u
 GUI="${GXC_GUI:+--gui}"
 # Under gdb (crash backtraces in the log) the windowed Dolphin quits at once: not with GXC_GUI.
 GDB="--gdb"; [ -z "$GUI" ] || GDB=""
-if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ]; then
+if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ] || [ "${1:-}" = universe ]; then
   # LauncherProbe (or GalaxyProbe, a world of many planets): the dev Dolphin boots by itself (no
   # savestate), Minecraft starts at its title.
   G="python3 tools/gxdev.py"
-  if [ "$1" = galaxy ]; then NAME=GalaxyProbe GPROP=galaxycraftGalaxy GTAG=galaxy; else NAME=LauncherProbe GPROP=galaxycraftLauncher GTAG=launch; fi
+  if [ "$1" = galaxy ]; then NAME=GalaxyProbe GPROP=galaxycraftGalaxy GTAG=galaxy
+  elif [ "$1" = universe ]; then NAME=UniverseProbe GPROP=galaxycraftUniverse GTAG=universe
+  else NAME=LauncherProbe GPROP=galaxycraftLauncher GTAG=launch; fi
   LOG="$HOME/.local/share/galaxycraft-dev/$GTAG-minecraft.log"
   syati/build.sh > /dev/null 2>&1 || { echo "gxvoxel: FAILED: syati/build.sh" >&2; exit 1; }
   $G stop > /dev/null

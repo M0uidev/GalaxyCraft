@@ -24,9 +24,10 @@ import org.joml.Vector3d;
  * made again from it. A new scene or host is told the epoch first.
  *
  * -Dgalaxycraft.floatingOrigin=false keeps the origin at the universe's (0, 0, 0) (as before);
- * /galaxycraft origin x y z pins it there (blocks) to see what far-away floats do.
+ * /galaxycraft origin x y z pins it there (blocks) to see what far-away floats do. Only in
+ * GalaxyCraftSpace, whose stage has nothing of its own to move.
  */
-final class UniverseClient {
+public final class UniverseClient {
     private static final double UNITS = 1 / GravityFrame.SCALE;
     private static final boolean ON = !"false".equals(System.getProperty("galaxycraft.floatingOrigin"));
 
@@ -36,6 +37,8 @@ final class UniverseClient {
     private static Vector3d pinned;
     private static Universe universe;
     private static int moves;
+    /** The epoch the game said its last reading is in (it echoes a move once it made it). */
+    private static int gameEpoch;
 
     private UniverseClient() {}
 
@@ -44,22 +47,31 @@ final class UniverseClient {
         universe = u;
     }
 
-    static Universe universe() {
+    public static Universe universe() {
         return universe;
     }
 
     /** Moves made since the client started (tests). */
-    static int moves() {
+    public static int moves() {
         return moves;
     }
 
+    /** The epoch of the game's last reading (tests: the game made the last move once it is GameOrigin's). */
+    public static int gameEpoch() {
+        return gameEpoch;
+    }
+
     /** Pins the origin at that many blocks from the universe's (0, 0, 0); null lets it follow again. */
-    static void pin(Vector3d blocks) {
+    public static void pin(Vector3d blocks) {
         pinned = blocks == null ? null : new Vector3d(blocks).mul(UNITS);
     }
 
     /** Before the planets' messages of the tick. landing: a teleport or landing is under way. */
     static void tick(BridgeClient bridge, Seqlock.WorldState world, boolean landing) {
+        // Only GalaxyCraftSpace is empty but for what the module draws: in another stage the
+        // stage's own ground would stay where it is.
+        if (!Layout.SPACE_STAGE.equals(bridge.stage())) return;
+        gameEpoch = world.originEpoch();
         if (world.sceneId() != scene || bridge.hostPid() != host) {
             scene = world.sceneId();
             host = bridge.hostPid();
