@@ -15,18 +15,25 @@ target_include_directories(galaxycraft_host PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/../../protocol)
 
 if(MSVC)
-  set(GALAXYCRAFT_WARNINGS /W4 /WX /permissive- /utf-8)
+  # What Dolphin builds it with (its CMakeLists.txt and Source/CMakeLists.txt): standing alone it
+  # warns where it would inside Dolphin.
+  set(GALAXYCRAFT_WARNINGS /W4 /WX /permissive- /utf-8 /wd4201 /wd4127 /wd4100 /wd4200 /wd4244
+    /wd4121 /wd4324 /wd4714 /wd4351 /wd4245 /w15262 /w44263 /w44265 /w44946)
+  set(GALAXYCRAFT_DEFINITIONS NOMINMAX UNICODE _UNICODE WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS
+    _CRT_SECURE_NO_DEPRECATE)
 else()
   set(GALAXYCRAFT_WARNINGS -Wall -Wextra -Werror)
 endif()
 
 if(PROJECT_IS_TOP_LEVEL)
   target_compile_options(galaxycraft_host PRIVATE ${GALAXYCRAFT_WARNINGS})
+  target_compile_definitions(galaxycraft_host PRIVATE ${GALAXYCRAFT_DEFINITIONS})
   add_executable(galaxycraft_host_tests tests/main.cpp tests/host_bridge_test.cpp
     tests/overlay_input_test.cpp tests/devcontrol_test.cpp tests/mario_input_test.cpp
     tests/mario_skin_test.cpp)
   target_link_libraries(galaxycraft_host_tests PRIVATE galaxycraft_host)
   target_compile_options(galaxycraft_host_tests PRIVATE ${GALAXYCRAFT_WARNINGS})
+  target_compile_definitions(galaxycraft_host_tests PRIVATE ${GALAXYCRAFT_DEFINITIONS})
 endif()
 
 if(PROJECT_IS_TOP_LEVEL)

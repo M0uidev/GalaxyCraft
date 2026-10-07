@@ -476,9 +476,9 @@ void HostBridge::PublishParts(GuestMemory& mem, const Mailbox& mbx, bool republi
     std::array<u8, 4 + 32> scene{};
     std::memcpy(scene.data(), &mbx.scene_id, 4);
     std::memcpy(scene.data() + 4, mbx.stage_name.data(), 32);
-    if (m_s2m.Free() < Ring::Cost(scene.size()))
+    if (m_s2m.Free() < Ring::Cost(static_cast<u32>(scene.size())))
       return;
-    m_s2m.Push(GXC_MSG_SCENE_CHANGE, scene.data(), scene.size());
+    m_s2m.Push(GXC_MSG_SCENE_CHANGE, scene.data(), static_cast<u32>(scene.size()));
     m_scene = mbx.scene_id;
     m_parts.clear();
   }
@@ -539,7 +539,7 @@ bool HostBridge::SendPart(GuestMemory& mem, u32 id, const PartState& p, bool wit
   // Only send if everything fits, so the mod never sees half a part.
   u64 need = Ring::Cost(sizeof(GxcPartUpsert));
   for (u32 off = 0; off < kcl.size(); off += GXC_KCL_CHUNK_MAX)
-    need += Ring::Cost(sizeof(GxcKclChunk) + std::min<u32>(GXC_KCL_CHUNK_MAX, kcl.size() - off)) + 8;
+    need += Ring::Cost(sizeof(GxcKclChunk) + std::min<u32>(GXC_KCL_CHUNK_MAX, static_cast<u32>(kcl.size() - off))) + 8;
   if (need > m_s2m.Free())
     return false;
 
@@ -549,7 +549,7 @@ bool HostBridge::SendPart(GuestMemory& mem, u32 id, const PartState& p, bool wit
   std::vector<u8> chunk;
   for (u32 off = 0; off < kcl.size(); off += GXC_KCL_CHUNK_MAX)
   {
-    const u32 n = std::min<u32>(GXC_KCL_CHUNK_MAX, kcl.size() - off);
+    const u32 n = std::min<u32>(GXC_KCL_CHUNK_MAX, static_cast<u32>(kcl.size() - off));
     const GxcKclChunk h{id, off, p.kcl_size};
     chunk.resize(sizeof(h) + n);
     std::memcpy(chunk.data(), &h, sizeof(h));

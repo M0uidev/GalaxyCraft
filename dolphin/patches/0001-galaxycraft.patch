@@ -49,7 +49,7 @@ index fc614fd24c..7a29ab02f7 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000000..cf421a142e
+index 0000000000..134a569159
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
 @@ -0,0 +1,688 @@
@@ -509,7 +509,7 @@ index 0000000000..cf421a142e
 +    File::CreateFullPath(s_log_path);
 +    File::IOFile(s_log_path, "wb");
 +  }
-+  const std::string shm_path = gxc::ShmFile(GXC_SHM_NAME + 1);
++  const std::string shm_path = gxc::ShmFile(std::string(GXC_SHM_NAME).substr(1));  // no leading /
 +  auto state = std::make_unique<State>();
 +  state->shm = gxc::Shm::Create(shm_path);
 +  if (!state->shm)

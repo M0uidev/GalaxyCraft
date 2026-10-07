@@ -246,7 +246,26 @@ async function play(instId) {
   return { ok: started, error: started ? null : runner.info.error || 'The game did not start; see the log.' };
 }
 
+// The log also goes to <data>/logs/launcher.log (Launcher, Dolphin and Minecraft lines), new each
+// time the launcher opens; the one before is launcher.old.log. The file to bring back when
+// something fails.
+const logsDir = () => path.join(paths().dataDir, 'logs');
+let logFile = null;
+
+function openLogFile() {
+  try {
+    const file = path.join(logsDir(), 'launcher.log');
+    fs.mkdirSync(logsDir(), { recursive: true });
+    if (fs.existsSync(file)) fs.renameSync(file, path.join(logsDir(), 'launcher.old.log'));
+    logFile = fs.createWriteStream(file, { flags: 'a' });
+    logFile.on('error', () => { logFile = null; });
+  } catch {
+    logFile = null; // the log in the window still works
+  }
+}
+
 runner.on('log', (entry) => {
+  if (logFile) logFile.write(`${new Date(entry.time).toISOString()} [${entry.source}]${entry.stream === 'stderr' ? ' !' : ''} ${entry.line}\n`);
   logBuffer.push(entry);
   if (logBuffer.length > LOG_KEEP) logBuffer.splice(0, logBuffer.length - LOG_KEEP);
   send('game:log', entry);
@@ -314,6 +333,7 @@ handle('launcher:get', () => ({
   packaged: app.isPackaged,
   offline: OFFLINE,
   dataDir: paths().dataDir,
+  logsDir: logsDir(),
   mode: mode(),
   game: runner.info.state ? runner.info : { state: 'idle' },
   update: updater.status(),
@@ -409,6 +429,8 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     nativeTheme.themeSource = 'dark';
     loadState();
+    openLogFile();
+    runner.log('Launcher', `Super Minecraft Galaxy Launcher ${app.getVersion()} on ${process.platform}-${process.arch}; logs in ${logsDir()}`);
     createWindow();
     accounts = new Accounts({ file: path.join(app.getPath('userData'), 'accounts.json'), clientId: config().msaClientId,
       fetchFn: (url, opts) => net.fetch(url, opts), parent: win });
