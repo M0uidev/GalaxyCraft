@@ -91,3 +91,17 @@ test('what can go wrong is said plainly', async () => {
   s = services({ 'minecraft/profile': () => json(404, {}) });
   await assert.rejects(auth.fromMicrosoft(ms, s.fetchFn), (e) => e.code === 'profile');
 });
+
+test('loggingFetch logs each step and what a refusal said, never the tokens', async () => {
+  const lines = [];
+  const refused = { ok: false, status: 403, clone: () => ({ text: async () => '{"errorMessage":"Invalid app registration"}' }) };
+  const { fetchFn } = services({ login_with_xbox: async () => refused });
+  const err = await auth.fromMicrosoft({ msAccessToken: 'ms-secret' }, auth.loggingFetch(fetchFn, (l) => lines.push(l))).catch((e) => e);
+  assert.equal(err.code, 'app');
+  assert.deepEqual(lines, [
+    'Sign-in: POST user.auth.xboxlive.com/user/authenticate -> 200',
+    'Sign-in: POST xsts.auth.xboxlive.com/xsts/authorize -> 200',
+    'Sign-in: POST api.minecraftservices.com/authentication/login_with_xbox -> 403 {"errorMessage":"Invalid app registration"}',
+  ]);
+  assert.equal(lines.some((l) => l.includes('ms-secret')), false);
+});

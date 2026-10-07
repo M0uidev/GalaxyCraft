@@ -246,7 +246,24 @@ async function play(instId) {
   return { ok: started, error: started ? null : runner.info.error || 'The game did not start; see the log.' };
 }
 
+// The launcher's log on disk, <data>/logs/launcher.log (the previous run's is launcher.old.log),
+// for a player to send when something goes wrong.
+let logFile = null;
+function openLogFile() {
+  try {
+    const dir = path.join(paths().dataDir, 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'launcher.log');
+    if (fs.existsSync(file)) fs.renameSync(file, path.join(dir, 'launcher.old.log'));
+    logFile = file;
+  } catch { logFile = null; }
+}
+
 runner.on('log', (entry) => {
+  if (logFile) {
+    const line = `${new Date(entry.time).toISOString()} [${entry.source}${entry.stream === 'stderr' ? ' err' : ''}] ${entry.line}\n`;
+    try { fs.appendFileSync(logFile, line); } catch { /* disk full or gone: the in-app log still has it */ }
+  }
   logBuffer.push(entry);
   if (logBuffer.length > LOG_KEEP) logBuffer.splice(0, logBuffer.length - LOG_KEEP);
   send('game:log', entry);
@@ -408,10 +425,12 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     nativeTheme.themeSource = 'dark';
+    openLogFile();
+    runner.log('Launcher', `Super Minecraft Galaxy Launcher ${app.getVersion()} on ${process.platform} ${process.arch}`);
     loadState();
     createWindow();
     accounts = new Accounts({ file: path.join(app.getPath('userData'), 'accounts.json'), clientId: config().msaClientId,
-      fetchFn: (url, opts) => net.fetch(url, opts), parent: win });
+      fetchFn: (url, opts) => net.fetch(url, opts), parent: win, log: (l) => runner.log('Launcher', l) });
     let ensureMinecraftFn;
     if (process.env.GXL_TEST_MINECRAFT && !app.isPackaged) {
       // Smoke test from source: a stand-in Java instead of Minecraft's download.

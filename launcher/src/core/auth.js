@@ -159,10 +159,29 @@ async function fresh(account, clientId, fetchFn, now = Date.now()) {
   return { ...account, ...next, signedInAt: account.signedInAt };
 }
 
+/**
+ * fetchFn that also logs each sign-in request: where it went, its status and, when refused, what
+ * the service said (error bodies carry no tokens; capped anyway). For the launcher's log.
+ */
+function loggingFetch(fetchFn, log) {
+  return async (url, opts = {}) => {
+    const u = new URL(url);
+    const where = `${opts.method || 'GET'} ${u.host}${u.pathname}`;
+    let res;
+    try { res = await fetchFn(url, opts); } catch (e) { log(`Sign-in: ${where} failed: ${e.message}`); throw e; }
+    let said = '';
+    if (!res.ok && res.clone) {
+      try { said = (await res.clone().text()).replace(/\s+/g, ' ').slice(0, 400); } catch { /* no body */ }
+    }
+    log(`Sign-in: ${where} -> ${res.status}${said ? ` ${said}` : ''}`);
+    return res;
+  };
+}
+
 /** What may be shown and kept in the clear (no tokens). */
 const publicAccount = (a) => ({ uuid: a.uuid, name: a.name, skinUrl: a.skinUrl || '' });
 
 module.exports = {
   REDIRECT, AuthError, pkce, authorizeUrl, codeFromRedirect, exchangeCode, refreshMicrosoft, xbox, minecraft,
-  fromMicrosoft, fresh, publicAccount,
+  fromMicrosoft, fresh, publicAccount, loggingFetch,
 };

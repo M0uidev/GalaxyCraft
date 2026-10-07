@@ -178,6 +178,9 @@ async function main() {
     assert.match(log, /fake dolphin space -u /);
     assert.match(log, /-PgalaxycraftGameDir=.*creative-builds/);
     assert.match(log, /Dolphin ended/);
+    const logFile = fs.readFileSync(path.join(dataDir, 'logs', 'launcher.log'), 'utf8');
+    assert.match(logFile, /\[Launcher\] Super Minecraft Galaxy Launcher /);
+    assert.match(logFile, /\[Dolphin\] .*fake dolphin space -u /);
     assert.ok(fs.existsSync(path.join(dataDir, 'dolphin', 'Config', 'Dolphin.ini')), 'Dolphin\'s folder seeded');
     await shot('11-after');
   }

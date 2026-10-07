@@ -8,10 +8,11 @@ const path = require('node:path');
 const auth = require('../core/auth');
 
 class Accounts {
-  constructor({ file, clientId, fetchFn, parent }) {
+  constructor({ file, clientId, fetchFn, parent, log = () => {} }) {
     this.file = file;
     this.clientId = clientId;
-    this.fetchFn = fetchFn;
+    this.log = log;
+    this.fetchFn = auth.loggingFetch(fetchFn, log);
     this.parent = parent;
     this.data = { selected: null, accounts: [] };
     try { this.data = { ...this.data, ...JSON.parse(fs.readFileSync(file, 'utf8')) }; } catch { /* none yet */ }
@@ -76,7 +77,11 @@ class Accounts {
     const entry = this.data.accounts.find((x) => x.uuid === this.data.selected);
     if (!entry) throw new auth.AuthError('Sign in with your Microsoft account first.', 'signin');
     let account = { ...entry, ...this.open(entry.secret) };
-    const renewed = await auth.fresh(account, this.clientId, this.fetchFn);
+    let renewed;
+    try { renewed = await auth.fresh(account, this.clientId, this.fetchFn); } catch (e) {
+      this.log(`Sign-in refresh failed [${e.code || 'error'}]: ${e.message}`);
+      throw e;
+    }
     if (renewed !== account) { this.remember(renewed); account = renewed; }
     return { name: account.name, uuid: account.uuid, accessToken: account.mcAccessToken, xuid: account.xuid || '0', clientId: this.clientId };
   }
@@ -86,6 +91,7 @@ class Accounts {
     if (!this.clientId) {
       return Promise.reject(new auth.AuthError('Microsoft sign-in is not set up in this build of the launcher yet.', 'config'));
     }
+    this.log(`Sign-in: started (app ${this.clientId})`);
     const p = auth.pkce();
     const win = new BrowserWindow({
       parent: this.parent || undefined, modal: !!this.parent, width: 520, height: 700, title: 'Sign in with Microsoft',
@@ -98,6 +104,7 @@ class Accounts {
       const finish = (err, value) => {
         if (done) return;
         done = true;
+        this.log(err ? `Sign-in failed [${err.code || 'error'}]: ${err.message}` : `Sign-in: signed in as ${value.name}`);
         if (!win.isDestroyed()) win.close();
         if (err) reject(err); else resolve(value);
       };
