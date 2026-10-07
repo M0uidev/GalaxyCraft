@@ -105,7 +105,7 @@ public final class MarioPerspectivesTest implements FabricClientGameTest {
     private static String gxdev(String... args) {
         Path root = Path.of(System.getProperty("galaxycraft.repoRoot", "."));
         String[] cmd = new String[args.length + 2];
-        cmd[0] = "python3";
+        cmd[0] = Python.exe();
         cmd[1] = root.resolve("tools/gxdev.py").toString();
         System.arraycopy(args, 0, cmd, 2, args.length);
         try {

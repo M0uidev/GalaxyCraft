@@ -147,7 +147,7 @@ public final class WalkOnStubPlanetTest implements FabricClientGameTest {
         while (dir != null && !Files.exists(dir.resolve("tools/fake_galaxy.py"))) dir = dir.getParent();
         if (dir == null) throw new AssertionError("tools/fake_galaxy.py not found above " + Path.of("").toAbsolutePath());
         try {
-            return new ProcessBuilder("python3", dir.resolve("tools/fake_galaxy.py").toString())
+            return new ProcessBuilder(Python.exe(), dir.resolve("tools/fake_galaxy.py").toString())
                     .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.INHERIT).start();
         } catch (IOException e) {
             throw new AssertionError("could not start fake_galaxy.py", e);

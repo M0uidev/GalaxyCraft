@@ -154,6 +154,8 @@ typedef struct { /* S -> M */
  * overlay covers that whole window, so it maps onto Minecraft's window as is.
  */
 #define GXC_POINTER_INSIDE 1u
+#define GXC_POINTER_BACKGROUND 2u /* another window is in front of the host's (Alt+Tab): Minecraft
+                                     counts as unfocused and pauses */
 typedef struct {
   uint32_t seq;
   uint32_t flags; /* GXC_POINTER_* */

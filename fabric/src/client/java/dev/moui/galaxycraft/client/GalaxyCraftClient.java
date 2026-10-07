@@ -30,6 +30,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.client.CameraType;
+import net.minecraft.client.CloudStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import net.minecraft.client.player.LocalPlayer;
@@ -150,10 +151,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> DolphinStarter.stop());
         ClientTickEvents.END_CLIENT_TICK.register(DolphinStarter::keepScreen);
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
+            client.options.cloudStatus().set(CloudStatus.OFF); // see OptionsMixin
             // From Mojang's launcher: Dolphin is started here, and the window hidden only once it runs.
             boolean dolphinUp = !DolphinStarter.wanted() || DolphinStarter.start(client);
             if (dolphinUp && Boolean.getBoolean("galaxycraft.hidden")) { // Dolphin shows the overlay instead
-                client.options.pauseOnLostFocus = false;
+                client.options.pauseOnLostFocus = false; // hidden, never focused: hostFocused pauses
                 SDLVideo.SDL_HideWindow(client.getWindow().handle());
             }
         });
@@ -242,8 +244,24 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
         SkinClient.frame(bridge);
         bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
-        bridge.pointer().ifPresent(p -> input.applyPointer(Minecraft.getInstance(), p));
+        bridge.pointer().ifPresentOrElse(p -> {
+            hostFocused(mc, !p.background());
+            input.applyPointer(mc, p);
+        }, () -> hostFocused(mc, true));
         bridge.text().ifPresentOrElse(t -> input.applyText(Minecraft.getInstance(), t), input::resetText);
+    }
+
+    private static volatile boolean hostFocused = true;
+
+    /** Dolphin's window is the one in front (Minecraft's own is hidden behind it). */
+    public static boolean hostFocused() {
+        return hostFocused;
+    }
+
+    /** Leaving Dolphin's window (Alt+Tab) opens the pause menu, as leaving Minecraft's would. */
+    private static void hostFocused(Minecraft mc, boolean focused) {
+        if (hostFocused && !focused && mc.level != null && mc.gui.screen() == null) mc.pauseGame(false);
+        hostFocused = focused;
     }
 
     /** Render thread, after the GUI: publish the frame for Dolphin to composite. */

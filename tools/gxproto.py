@@ -5,7 +5,20 @@ import struct
 import time
 from collections import namedtuple
 
-SHM_PATH = "/dev/shm/galaxycraft_v1"
+
+def shm_dir(env=os.environ, windows=os.name == "nt"):
+    """The folder of the shared memory file and Dolphin's dev control files: $GXC_SHM_DIR, else
+    /dev/shm on Linux and the temp folder on Windows (GetTempPathW's: TMP, TEMP, then the user's
+    folder), as Dolphin and the mod pick it."""
+    if env.get("GXC_SHM_DIR"):
+        return env["GXC_SHM_DIR"]
+    if windows:
+        return env.get("TMP") or env.get("TEMP") or env.get("USERPROFILE") or "."
+    return "/dev/shm"
+
+
+SHM_DIR = shm_dir()
+SHM_PATH = os.path.join(SHM_DIR, "galaxycraft_v1")
 MAGIC = 0x52435847  # "GXCR"
 VERSION = 11
 
@@ -64,8 +77,10 @@ GameCamera = namedtuple("GameCamera", "flags frame_id cam_pos cam_dir cam_up fov
 
 
 def now_ms():
-    """CLOCK_MONOTONIC milliseconds, the clock both sides use for heartbeats."""
-    return time.monotonic_ns() // 1_000_000
+    """The milliseconds both sides use for heartbeats: CLOCK_MONOTONIC on Linux,
+    QueryPerformanceCounter on Windows (Java's System.nanoTime and C++'s steady_clock there; Python's
+    perf_counter is QueryPerformanceCounter, its monotonic is not before 3.13)."""
+    return (time.perf_counter_ns() if os.name == "nt" else time.monotonic_ns()) // 1_000_000
 
 
 class Shm:

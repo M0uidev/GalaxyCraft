@@ -47,6 +47,7 @@ import org.joml.Vector3d;
  * while something is in either hand and no screen is open (Dolphin then keeps them from Mario), P
  * to land on the planet, and the messages that carry it to the game, the block atlas first. Up to
  * PlanetLayout.MAX_PLANETS planets per stage (galaxy), each saved in ~/.local/share/galaxycraft/planets
+ * (%APPDATA%\galaxycraft\planets on Windows)
  * (see planetDir, PlanetStore.key) and loaded again when the stage is; /galaxycraft planet add puts
  * another one up (PlanetLayout.place), spawn replaces the one in focus. The planet nearest Mario
  * is the one in focus: the clicks, the outline, P and Minecraft's running of the blocks are its;
@@ -1165,16 +1166,15 @@ public final class PlanetClient {
 
     /**
      * Where planets are saved: -Dgalaxycraft.planetDir, else $XDG_DATA_HOME/galaxycraft/planets
-     * (~/.local/share/...). Not the game directory: the client game tests that tools/gxplay.sh
-     * runs Minecraft through start from a clean one every time.
+     * (~/.local/share/...), %APPDATA%\galaxycraft\planets on Windows (PlanetStore.dataDir). Not
+     * the game directory: the client game tests that tools/gxplay.sh runs Minecraft through start
+     * from a clean one every time.
      */
     static java.nio.file.Path planetDir() {
         String prop = System.getProperty("galaxycraft.planetDir");
         if (prop != null && !prop.isEmpty()) return java.nio.file.Path.of(prop);
-        String xdg = System.getenv("XDG_DATA_HOME");
-        java.nio.file.Path data = xdg != null && !xdg.isEmpty() ? java.nio.file.Path.of(xdg)
-                : java.nio.file.Path.of(System.getProperty("user.home"), ".local", "share");
-        return data.resolve("galaxycraft").resolve("planets");
+        return PlanetStore.dataDir(System.getProperty("os.name", ""), System::getenv, System.getProperty("user.home"))
+                .resolve("planets");
     }
 
     private static int autoRadius(String prop) {

@@ -8,8 +8,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..', '..');
-const SOURCES = ['syati/src', 'syati/riivolution', 'syati/symbols_extra.txt', 'syati/build.sh', 'protocol',
-  'tools/steve', 'tools/space_galaxy.py', 'tools/rarc.py', 'tools/bcsv.py', 'tools/dolphin-play'];
+const SOURCES = ['syati/src', 'syati/riivolution', 'syati/symbols_extra.txt', 'syati/build.py', 'protocol',
+  'tools/steve', 'tools/space_galaxy.py', 'tools/rarc.py', 'tools/bcsv.py', 'tools/hostexe.py', 'tools/dolphin-play'];
 const SKIP = /(^|\/)(__pycache__|build|\.pytest_cache)(\/|$)|\.pyc$/;
 
 function files(rel) {

@@ -13,7 +13,8 @@
 		"LevelRendererMixin",
 		"LocalPlayerMixin",
 		"MinecraftMixin",
-		"ModelPartAccessor"
+		"ModelPartAccessor",
+		"OptionsMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

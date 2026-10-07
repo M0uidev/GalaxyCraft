@@ -1,17 +1,70 @@
 #include "Shm.h"
 
 #include <atomic>
+#include <cstdlib>
 #include <cstring>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#endif
 
 #include "galaxycraft_protocol.h"
 
 namespace gxc
 {
-std::unique_ptr<Shm> Shm::Create(const std::string& path)
+namespace
 {
+#ifdef _WIN32
+std::wstring Widen(const std::string& s)
+{
+  const int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+  std::wstring w(n, L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), w.data(), n);
+  return w;
+}
+
+std::string Narrow(const std::wstring& w)
+{
+  const int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), nullptr, 0,
+                                    nullptr, nullptr);
+  std::string s(n, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), s.data(), n, nullptr,
+                      nullptr);
+  return s;
+}
+#endif
+
+// The platform's mapping of a file opened for read and write, sized to GXC_TOTAL_SIZE.
+u8* MapFile(const std::string& path)
+{
+#ifdef _WIN32
+  // Shared both ways with Minecraft (Java opens it for read and write too). TEMPORARY keeps it in
+  // the cache instead of written to disk. The mapping grows the file to its size; a file mapped
+  // by Minecraft cannot be resized (SetEndOfFile), so it is never truncated.
+  const HANDLE file = CreateFileW(Widen(path).c_str(), GENERIC_READ | GENERIC_WRITE,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                  OPEN_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+  if (file == INVALID_HANDLE_VALUE)
+    return nullptr;
+  const u64 size = GXC_TOTAL_SIZE;
+  const HANDLE mapping = CreateFileMappingW(file, nullptr, PAGE_READWRITE, static_cast<DWORD>(size >> 32),
+                                            static_cast<DWORD>(size), nullptr);
+  CloseHandle(file);
+  if (!mapping)
+    return nullptr;
+  void* p = MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, GXC_TOTAL_SIZE);
+  CloseHandle(mapping);  // the view keeps the mapping alive
+  return static_cast<u8*>(p);
+#else
   const int fd = open(path.c_str(), O_RDWR | O_CREAT, 0600);
   if (fd < 0)
     return nullptr;
@@ -22,9 +75,53 @@ std::unique_ptr<Shm> Shm::Create(const std::string& path)
   }
   void* p = mmap(nullptr, GXC_TOTAL_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   close(fd);
-  if (p == MAP_FAILED)
+  return p == MAP_FAILED ? nullptr : static_cast<u8*>(p);
+#endif
+}
+}  // namespace
+
+std::string ShmDir()
+{
+  std::string dir;
+#ifdef _WIN32
+  if (const wchar_t* env = _wgetenv(L"GXC_SHM_DIR"); env && *env)
+  {
+    dir = Narrow(env);
+  }
+  else
+  {
+    wchar_t tmp[MAX_PATH + 1];
+    const DWORD n = GetTempPathW(MAX_PATH + 1, tmp);
+    dir = n ? Narrow(std::wstring(tmp, n)) : std::string(".");
+  }
+  while (dir.size() > 1 && (dir.back() == '\\' || dir.back() == '/'))
+    dir.pop_back();
+#else
+  if (const char* env = std::getenv("GXC_SHM_DIR"); env && *env)
+    dir = env;
+  else
+    dir = "/dev/shm";
+  while (dir.size() > 1 && dir.back() == '/')
+    dir.pop_back();
+#endif
+  return dir;
+}
+
+std::string ShmFile(const std::string& name)
+{
+#ifdef _WIN32
+  return ShmDir() + "\\" + name;
+#else
+  return ShmDir() + "/" + name;
+#endif
+}
+
+std::unique_ptr<Shm> Shm::Create(const std::string& path)
+{
+  u8* p = MapFile(path);
+  if (!p)
     return nullptr;
-  auto shm = std::unique_ptr<Shm>(new Shm(static_cast<u8*>(p), GXC_TOTAL_SIZE));
+  auto shm = std::unique_ptr<Shm>(new Shm(p, GXC_TOTAL_SIZE));
   std::memset(shm->m_data, 0, GXC_OFF_RING_S2M);  // header and slots: drop stale state
   std::memset(shm->m_data + GXC_OFF_RING_S2M, 0, sizeof(GxcRingHeader));
   std::memset(shm->m_data + GXC_OFF_RING_M2S, 0, sizeof(GxcRingHeader));
@@ -36,10 +133,14 @@ std::unique_ptr<Shm> Shm::Create(const std::string& path)
 
 Shm::~Shm()
 {
+#ifdef _WIN32
+  UnmapViewOfFile(m_data);
+#else
   munmap(m_data, m_size);
+#endif
 }
 
-// x86-64 and aarch64 Linux are little-endian, matching the protocol, so plain copies suffice.
+// x86-64 and aarch64 (Linux and Windows) are little-endian, matching the protocol, so plain copies suffice.
 u32 Shm::GetU32(size_t off) const
 {
   u32 v;

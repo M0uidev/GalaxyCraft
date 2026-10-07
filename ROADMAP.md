@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-07 (play from the Minecraft Launcher, MVP, in a cloud session)
+Last updated: 2026-10-07 (Windows support and play from the Minecraft Launcher merged; first release next)
 
 ---
 
@@ -23,8 +23,7 @@ Last updated: 2026-10-07 (play from the Minecraft Launcher, MVP, in a cloud sess
 
 | Feature | Status | Notes |
 |---|---|---|
-| Windows support | now | A cloud session ports it on `feat/windows` (2026-10-07), following [docs/WINDOWS.md](docs/WINDOWS.md); CI builds Dolphin for Windows; the user playtests on their Windows dual boot. |
-| Play from the Minecraft Launcher | now | MVP: sign in with Mojang's Minecraft Launcher instead of ours (while Mojang reviews our sign-in app). INSTALL adds a "Super Minecraft Galaxy" installation there; the mod starts Dolphin. A cloud session builds it (2026-10-07). [Spec](docs/superpowers/specs/2026-10-07-play-from-minecraft-launcher-design.md) |
+| First release (Linux and Windows) | now | v0.1.1 from `master`: the user retests Windows with CI's `windows-test-build` (playtest fixes + playing from the Minecraft Launcher), then `npm run release -- patch`, then a new player's INSTALL from the release. |
 
 ## Next
 
@@ -74,7 +73,7 @@ Last updated: 2026-10-07 (play from the Minecraft Launcher, MVP, in a cloud sess
 
 | Feature | Status | Notes |
 |---|---|---|
-| Windows support | now | In **Now**. Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory on Windows still to do. |
+| Windows support | now | In **Now**. Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory ported on `feat/windows`, untested by hand. |
 | Multiplayer | idea | Out of the first design's scope. |
 | Minecraft on one PC, Dolphin on another | idea | Would need a network transport instead of shared memory. |
 

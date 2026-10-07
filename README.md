@@ -102,7 +102,8 @@ Minecraft's menu opens in Dolphin's window while SMG2 boots behind it by itself,
 title and file select. Each Minecraft world is a galaxy: entering one puts you in
 **GalaxyCraftSpace** (an empty galaxy under SMG2's starry sky) on that world's planets, where you
 left off. A new world gets its home planet and a starter kit. Worlds, planets and settings are
-kept in `~/.local/share/galaxycraft/`. See [docs/LANZADOR.md](docs/LANZADOR.md).
+kept in `~/.local/share/galaxycraft/` (`%APPDATA%\galaxycraft\` on Windows). See
+[docs/LANZADOR.md](docs/LANZADOR.md); Windows: [docs/WINDOWS.md](docs/WINDOWS.md).
 
 | Input | Action |
 |---|---|
@@ -138,7 +139,7 @@ tools/gxfit.sh                                    # end to end: Mario's fit and 
 ```
 
 The end-to-end scripts drive a separate, headless Dolphin through `tools/gxdev.py`. That Dolphin
-shares `/dev/shm/galaxycraft_v1` with `gxplay.sh`, so don't run them while playing.
+shares `/dev/shm/galaxycraft_v1` (`$GXC_SHM_DIR` moves it) with `gxplay.sh`, so don't run them while playing.
 
 ## Layout
 

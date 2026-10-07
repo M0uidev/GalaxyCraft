@@ -829,6 +829,7 @@ async function main() {
   $('#log-btn').onclick = () => ($('#console').classList.contains('hidden') ? openLog() : $('#console').classList.add('hidden'));
   $('#log-close').onclick = () => $('#console').classList.add('hidden');
   $('#log-clear').onclick = () => { ui.log = []; renderLog(); };
+  $('#log-folder').onclick = () => api.openPath(ui.info.logsDir);
   $('#log-copy').onclick = () => { navigator.clipboard.writeText(ui.log.map((e) => `[${e.source}] ${e.line}`).join('\n')); toast('Log copied'); };
   $('#log-filter').onchange = renderLog;
   $('#folder-btn').onclick = async () => api.openPath(await api.gameDirOf(S().selected));

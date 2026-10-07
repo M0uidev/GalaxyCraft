@@ -9,7 +9,17 @@
 #include <cstdlib>
 #include <cstring>
 #include <thread>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 #include "galaxycraft_protocol.h"
 
@@ -29,9 +39,7 @@ constexpr int SKIN_RETRY_TICKS = 60;
 
 u32 BE32(const u8* p)
 {
-  u32 v;
-  std::memcpy(&v, p, 4);
-  return __builtin_bswap32(v);
+  return u32{p[0]} << 24 | u32{p[1]} << 16 | u32{p[2]} << 8 | u32{p[3]};
 }
 float BEF(const u8* p)
 {
@@ -39,8 +47,10 @@ float BEF(const u8* p)
 }
 void PutBE32(u8* p, u32 v)
 {
-  v = __builtin_bswap32(v);
-  std::memcpy(p, &v, 4);
+  p[0] = static_cast<u8>(v >> 24);
+  p[1] = static_cast<u8>(v >> 16);
+  p[2] = static_cast<u8>(v >> 8);
+  p[3] = static_cast<u8>(v);
 }
 void PutBEF(u8* p, float f)
 {
@@ -110,7 +120,11 @@ HostBridge::HostBridge(Shm& shm, std::function<u64()> clock_ms, std::function<vo
     m_sleep = {};
   m_shm.SetU32(offsetof(GxcHeader, magic), GXC_MAGIC);
   m_shm.SetU32(offsetof(GxcHeader, version), GXC_VERSION);
+#ifdef _WIN32
+  m_shm.SetU32(offsetof(GxcHeader, host_pid), static_cast<u32>(GetCurrentProcessId()));
+#else
   m_shm.SetU32(offsetof(GxcHeader, host_pid), static_cast<u32>(getpid()));
+#endif
   if (auto p = ReadPlayer(m_shm))
     m_seen_player_frame = p->frame_id;  // stale pose from a previous session is not fresh
 }
@@ -462,9 +476,9 @@ void HostBridge::PublishParts(GuestMemory& mem, const Mailbox& mbx, bool republi
     std::array<u8, 4 + 32> scene{};
     std::memcpy(scene.data(), &mbx.scene_id, 4);
     std::memcpy(scene.data() + 4, mbx.stage_name.data(), 32);
-    if (m_s2m.Free() < Ring::Cost(scene.size()))
+    if (m_s2m.Free() < Ring::Cost(static_cast<u32>(scene.size())))
       return;
-    m_s2m.Push(GXC_MSG_SCENE_CHANGE, scene.data(), scene.size());
+    m_s2m.Push(GXC_MSG_SCENE_CHANGE, scene.data(), static_cast<u32>(scene.size()));
     m_scene = mbx.scene_id;
     m_parts.clear();
   }
@@ -525,7 +539,7 @@ bool HostBridge::SendPart(GuestMemory& mem, u32 id, const PartState& p, bool wit
   // Only send if everything fits, so the mod never sees half a part.
   u64 need = Ring::Cost(sizeof(GxcPartUpsert));
   for (u32 off = 0; off < kcl.size(); off += GXC_KCL_CHUNK_MAX)
-    need += Ring::Cost(sizeof(GxcKclChunk) + std::min<u32>(GXC_KCL_CHUNK_MAX, kcl.size() - off)) + 8;
+    need += Ring::Cost(sizeof(GxcKclChunk) + std::min<u32>(GXC_KCL_CHUNK_MAX, static_cast<u32>(kcl.size() - off))) + 8;
   if (need > m_s2m.Free())
     return false;
 
@@ -535,7 +549,7 @@ bool HostBridge::SendPart(GuestMemory& mem, u32 id, const PartState& p, bool wit
   std::vector<u8> chunk;
   for (u32 off = 0; off < kcl.size(); off += GXC_KCL_CHUNK_MAX)
   {
-    const u32 n = std::min<u32>(GXC_KCL_CHUNK_MAX, kcl.size() - off);
+    const u32 n = std::min<u32>(GXC_KCL_CHUNK_MAX, static_cast<u32>(kcl.size() - off));
     const GxcKclChunk h{id, off, p.kcl_size};
     chunk.resize(sizeof(h) + n);
     std::memcpy(chunk.data(), &h, sizeof(h));

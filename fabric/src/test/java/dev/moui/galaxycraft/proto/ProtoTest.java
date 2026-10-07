@@ -19,6 +19,14 @@ class ProtoTest {
 
     @TempDir Path dir;
 
+    @Test void shmDirPerSystem() {
+        assertEquals("/dev/shm", Layout.shmDir(null, "Linux", "/tmp"));
+        assertEquals("C:\\Users\\me\\AppData\\Local\\Temp\\", Layout.shmDir("", "Windows 11", "C:\\Users\\me\\AppData\\Local\\Temp\\"));
+        assertEquals("/run/gxc", Layout.shmDir("/run/gxc", "Windows 11", "C:\\Temp"));
+        if (System.getenv("GXC_SHM_DIR") == null && !System.getProperty("os.name").startsWith("Windows"))
+            assertEquals("/dev/shm/galaxycraft_v1", Layout.SHM_PATH);
+    }
+
     @Test void layoutMatchesHeader() {
         assertEquals(64, Layout.OFF_WORLD);
         assertEquals(128, Layout.OFF_PLAYER);

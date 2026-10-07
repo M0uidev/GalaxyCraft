@@ -46,7 +46,7 @@ public final class Seqlock {
     public record InputState(int buttons, double mouseX, double mouseY, double wheel, byte[] keys) {}
 
     /** The host's pointer over its window, 0..1 (GxcPointerState), while a Minecraft screen is open. */
-    public record PointerState(boolean inside, float x, float y) {}
+    public record PointerState(boolean inside, boolean background, float x, float y) {}
 
     /** look/up are the camera's; camOffset is the camera minus pos (galaxy units); view is Layout.VIEW_*. */
     /**
@@ -152,8 +152,9 @@ public final class Seqlock {
             int s1 = getAcquire(s, o);
             if (s1 == 0) return Optional.empty();
             if ((s1 & 1) != 0) continue;
-            var p = new PointerState((s.get(INT, o + 4) & Layout.POINTER_INSIDE) != 0, s.get(FLOAT, o + 8),
-                    s.get(FLOAT, o + 12));
+            int flags = s.get(INT, o + 4);
+            var p = new PointerState((flags & Layout.POINTER_INSIDE) != 0, (flags & Layout.POINTER_BACKGROUND) != 0,
+                    s.get(FLOAT, o + 8), s.get(FLOAT, o + 12));
             VarHandle.acquireFence();
             if (getAcquire(s, o) == s1) return Optional.of(p);
         }

@@ -9,7 +9,14 @@
 
 namespace gxc
 {
-// The shared memory file (/dev/shm/galaxycraft_v1), owned and initialized by the host.
+// The folder of the shared memory file and of the dev control files: $GXC_SHM_DIR if set, else
+// /dev/shm on Linux and the temp folder on Windows (GetTempPathW, the same one Java's
+// java.io.tmpdir is). No trailing separator.
+std::string ShmDir();
+// ShmDir() + "/" + name ("\\" on Windows).
+std::string ShmFile(const std::string& name);
+
+// The shared memory file (ShmDir()/galaxycraft_v1), owned and initialized by the host.
 // Field accessors are little-endian, as the protocol header specifies.
 class Shm
 {

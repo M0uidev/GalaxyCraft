@@ -18,7 +18,13 @@ const args = process.argv.slice(2);
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 const game = opt('--game') || process.env.GXC_GAME;
 const OUT = path.join(ROOT, 'release', 'module');
-const TOOL = path.join(ROOT, 'dolphin', 'build', 'Binaries', 'dolphin-tool');
+const WIN = process.platform === 'win32';
+// The patched DolphinTool (tools/hostexe.py looks in the same places) and Python.
+const TOOL = WIN
+  ? ['dolphin/build/Binaries/DolphinTool.exe', 'dolphin/build-win/Binaries/DolphinTool.exe', 'dist/dolphin-win32-x64/DolphinTool.exe']
+    .map((p) => path.join(ROOT, p)).find((p) => fs.existsSync(p)) || path.join(ROOT, 'dolphin', 'build', 'Binaries', 'DolphinTool.exe')
+  : path.join(ROOT, 'dolphin', 'build', 'Binaries', 'dolphin-tool');
+const PYTHON = process.env.PYTHON || (WIN ? 'python' : 'python3');
 const die = (m) => { console.error(`pack-game: ${m}`); process.exit(1); };
 
 /** A 64x64 skin with nothing of Mojang's in it: plain gray-blue, PNG. */
@@ -64,7 +70,7 @@ function main() {
   if (!id.ok) die(id.reason);
   if (!fs.existsSync(TOOL)) die(`no ${TOOL}: run dolphin/build.sh first`);
   const env = { ...process.env, GXC_GAME: game };
-  if (!args.includes('--skip-build')) execFileSync(path.join(ROOT, 'syati', 'build.sh'), { stdio: 'inherit', env });
+  if (!args.includes('--skip-build')) execFileSync(PYTHON, [path.join(ROOT, 'syati', 'build.py')], { stdio: 'inherit', env });
   const build = path.join(ROOT, 'syati', 'build');
   for (const f of ['CustomCode/CustomCode_SB4E.bin', 'galaxycraft.xml']) if (!fs.existsSync(path.join(build, f))) die(`no syati/build/${f}`);
 
@@ -74,8 +80,8 @@ function main() {
     const skin = path.join(work, 'blank-skin.png');
     fs.writeFileSync(skin, blankSkin());
     const made = path.join(work, 'made');
-    execFileSync('python3', [path.join(ROOT, 'tools', 'steve', 'build.py'), '--skin', skin, '--out', made], { stdio: 'inherit', env });
-    execFileSync('python3', [path.join(ROOT, 'tools', 'space_galaxy.py'), '--out', made], { stdio: 'inherit', env });
+    execFileSync(PYTHON, [path.join(ROOT, 'tools', 'steve', 'build.py'), '--skin', skin, '--out', made], { stdio: 'inherit', env });
+    execFileSync(PYTHON, [path.join(ROOT, 'tools', 'space_galaxy.py'), '--out', made], { stdio: 'inherit', env });
 
     fs.rmSync(OUT, { recursive: true, force: true });
     fs.mkdirSync(path.join(OUT, 'CustomCode'), { recursive: true });

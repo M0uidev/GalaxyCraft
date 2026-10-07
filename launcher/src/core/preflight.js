@@ -35,7 +35,7 @@ function preflight({ settings, inst, platform = process.platform, env = process.
     add({
       id: 'module', ok: fs.exists(patch), label: 'Game module (SMG2)',
       detail: fs.exists(patch) ? patch : 'Not built',
-      fix: win ? 'Build the module (syati/build.sh; see docs/WINDOWS.md).' : 'Run syati/build.sh in the game folder.',
+      fix: win ? 'Run python syati/build.py in the game folder (see docs/WINDOWS.md).' : 'Run syati/build.sh in the game folder.',
     });
 
     const jar = p.join(root, 'fabric', 'gradle', 'wrapper', 'gradle-wrapper.jar');

@@ -12,12 +12,14 @@ import struct
 import sys
 import time
 
+import gxproto
+
 OFF_WORLD = 64
 
 
 def main(secs):
-    with open("/dev/shm/galaxycraft_v1", "rb") as f:
-        m = mmap.mmap(f.fileno(), 4096, prot=mmap.PROT_READ)
+    with open(gxproto.SHM_PATH, "rb") as f:
+        m = mmap.mmap(f.fileno(), 4096, access=mmap.ACCESS_READ)
     frames = []
     last = None
     end = time.monotonic() + secs

@@ -1,0 +1,13 @@
+Super Minecraft Galaxy: build de prueba para Windows (hecho por CI, sin release)
+
+1. Instala el lanzador: SuperMinecraftGalaxy-Launcher-<version>-win-x64.exe (artefacto
+   "launcher-Windows" de la misma rama). SmartScreen avisa porque no está firmado:
+   "Más información" > "Ejecutar de todas formas".
+2. Cierra el lanzador si quedó abierto y haz doble clic en PLAY-TEST.cmd (en esta carpeta): abre el
+   lanzador instalado diciéndole que el juego es este (game.json y los archivos de al lado).
+3. En el lanzador: inicia sesión, elige tu Super Mario Galaxy 2 (USA), INSTALL (versión 0.0.1) y PLAY.
+
+Logs para traer de vuelta (ver docs/WINDOWS.md, "Probar en Windows"):
+  %APPDATA%\galaxycraft\logs\launcher.log                 el lanzador, Dolphin y Minecraft juntos
+  %APPDATA%\galaxycraft\dolphin\Logs\galaxycraft.log      el puente de Dolphin
+  %APPDATA%\galaxycraft\minecraft\logs\latest.log         Minecraft

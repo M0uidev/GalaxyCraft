@@ -15,6 +15,14 @@ def tmp_path():
 
 
 class LayoutTest(unittest.TestCase):
+    def test_shm_dir_per_system(self):
+        self.assertEqual(gxproto.shm_dir({}, windows=False), "/dev/shm")
+        self.assertEqual(gxproto.shm_dir({"TEMP": r"C:\T", "TMP": r"C:\U"}, windows=True), r"C:\U")
+        self.assertEqual(gxproto.shm_dir({"TEMP": r"C:\T"}, windows=True), r"C:\T")
+        self.assertEqual(gxproto.shm_dir({"GXC_SHM_DIR": "/run/gxc", "TMP": "x"}, windows=True), "/run/gxc")
+        if "GXC_SHM_DIR" not in os.environ and os.name != "nt":
+            self.assertEqual(gxproto.SHM_PATH, "/dev/shm/galaxycraft_v1")
+
     def test_offsets_match_header(self):
         self.assertEqual(gxproto.OFF_WORLD, 64)
         self.assertEqual(gxproto.OFF_PLAYER, 128)

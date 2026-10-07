@@ -1,6 +1,7 @@
+#include <bit>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <unistd.h>
 
 #include "Input.h"
 #include "Overlay.h"
@@ -14,7 +15,7 @@ namespace
 {
 struct ShmFixture
 {
-  std::string path = "/tmp/gxc_overlay_test_" + std::to_string(getpid());
+  std::string path = gxc_test::TempFile("gxc_overlay_test_");
   std::unique_ptr<Shm> shm = Shm::Create(path);
   ~ShmFixture() { std::filesystem::remove(path); }
 
@@ -120,6 +121,9 @@ TEST(input_writer_publishes_the_pointer_when_it_changes)
   in.Pointer(1.5f, 0.75f, false);
   std::memcpy(&p, f.shm->Data() + GXC_OFF_POINTER, sizeof(p));
   CHECK(p.flags == 0 && p.seq == 4);
+  in.Pointer(1.5f, 0.75f, false, true);  // Dolphin's window went to the background
+  std::memcpy(&p, f.shm->Data() + GXC_OFF_POINTER, sizeof(p));
+  CHECK(p.flags == GXC_POINTER_BACKGROUND && p.seq == 6);
 }
 
 TEST(input_writer_ignores_out_of_range_keys)
@@ -182,7 +186,7 @@ TEST(x11_keymap_becomes_sdl_bitmap_without_escape)
   CHECK(!bit(41));  // Escape belongs to Dolphin
   int set = 0;
   for (u8 b : keys)
-    set += __builtin_popcount(b);
+    set += std::popcount(b);
   CHECK(set == 2);
 }
 
@@ -193,6 +197,55 @@ TEST(x11_buttons_map_to_sdl_buttons)
   CHECK(X11ButtonsToSdl(2) == 4);       // middle
   CHECK(X11ButtonsToSdl(4) == 8);       // right
   CHECK(X11ButtonsToSdl(0x1F) == 0x0E); // wheel "buttons" 4/5 are not buttons
+}
+
+TEST(dinput_keys_map_like_evdev)
+{
+  // Set 1 scancodes below 0x59: the same codes as evdev.
+  for (int code = 0; code <= 0x58; code++)
+    CHECK(DikToScancode(code) == EvdevToScancode(code));
+  CHECK(DikToScancode(0x01) == 41);   // Escape
+  CHECK(DikToScancode(0x1E) == 4);    // A
+  CHECK(DikToScancode(0x1D) == 224);  // left Ctrl
+  CHECK(DikToScancode(0x9D) == 228);  // right Ctrl (extended)
+  CHECK(DikToScancode(0xB8) == 230);  // right Alt
+  CHECK(DikToScancode(0xC8) == 82);   // Up
+  CHECK(DikToScancode(0xCB) == 80);   // Left
+  CHECK(DikToScancode(0xCD) == 79);   // Right
+  CHECK(DikToScancode(0xD0) == 81);   // Down
+  CHECK(DikToScancode(0xD2) == 73);   // Insert
+  CHECK(DikToScancode(0xD3) == 76);   // Delete
+  CHECK(DikToScancode(0x64) == -1);   // F13: not evdev's right Alt
+  CHECK(DikToScancode(0x61) == -1);   // not evdev's right Ctrl
+
+  u8 dik[256] = {};
+  dik[0x11] = 0x80;  // W
+  dik[0x2A] = 0x80;  // left Shift
+  dik[0x01] = 0x80;  // Escape: Dolphin's
+  dik[0x1F] = 0x7F;  // S, bit 7 clear: up
+  u8 keys[64];
+  DikKeysToScancodes(dik, keys);
+  auto bit = [&](int sc) { return (keys[sc / 8] >> (sc % 8)) & 1; };
+  CHECK(bit(26) && bit(225));
+  CHECK(!bit(41) && !bit(22));
+  int set = 0;
+  for (u8 b : keys)
+    set += std::popcount(b);
+  CHECK(set == 2);
+}
+
+TEST(dinput_buttons_map_to_sdl_buttons)
+{
+  u8 b[8] = {};
+  CHECK(DInputButtonsToSdl(b) == 0);
+  b[0] = 0x80;
+  CHECK(DInputButtonsToSdl(b) == 2);  // left
+  b[0] = 0, b[1] = 0x80;
+  CHECK(DInputButtonsToSdl(b) == 8);  // right
+  b[1] = 0, b[2] = 0x80;
+  CHECK(DInputButtonsToSdl(b) == 4);  // middle
+  b[0] = b[1] = b[3] = b[4] = 0x80;
+  CHECK(DInputButtonsToSdl(b) == 0x3E);
 }
 
 TEST(input_writer_set_keys_publishes_only_changes)
@@ -237,4 +290,19 @@ TEST(keysyms_to_characters)
   CHECK(KeysymToCodepoint(0xFF0D) == 0);               // Return
   CHECK(KeysymToCodepoint(0xFFE1) == 0);               // Shift_L
   CHECK(KeysymToCodepoint(0xFE51) == 0);               // dead_acute
+}
+
+TEST(shm_dir_is_gxc_shm_dir_or_the_system_default)
+{
+#ifdef _WIN32
+  _putenv_s("GXC_SHM_DIR", "C:\\gxc\\");
+  CHECK(ShmFile("galaxycraft_v1") == "C:\\gxc\\galaxycraft_v1");
+  _putenv_s("GXC_SHM_DIR", "");
+  CHECK(!ShmDir().empty() && ShmDir().back() != '\\');
+#else
+  setenv("GXC_SHM_DIR", "/run/gxc/", 1);
+  CHECK(ShmFile("galaxycraft_v1") == "/run/gxc/galaxycraft_v1");
+  unsetenv("GXC_SHM_DIR");
+  CHECK(ShmFile("galaxycraft_v1") == "/dev/shm/galaxycraft_v1");
+#endif
 }

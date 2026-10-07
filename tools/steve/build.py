@@ -6,7 +6,7 @@
   gen/held.h      where the module draws what Steve holds, relative to his forearm (from Mario's skeleton)
 Inputs come from this machine, never the repo: the game image ($GXC_GAME or the SMG2 .rvz in
 ~/Documents/Games/Dolphin Games), the skin (--skin, or Steve's from the Minecraft client jar), and
-SuperBMD 2.5.0 under wine (downloaded into the toolchain if missing). Skips work if nothing changed.
+SuperBMD 2.5.0 (under wine on Linux; downloaded into the toolchain if missing). Skips work if nothing changed.
   tools/steve/build.py [--skin PNG] [--out DIR]
 """
 import argparse
@@ -26,6 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
+import hostexe  # noqa: E402
 import rarc  # noqa: E402
 import steve_model  # noqa: E402
 
@@ -35,7 +36,7 @@ SUPERBMD_URL = "https://github.com/RenolY2/SuperBMD/releases/download/v2.5.0/Sup
 SUPERBMD_SHA256 = "6f5e7ff25b9da61eda0ba3f4c9b5cb53b3702cdc5ca515c9e41c839f9398acd6"
 MC_JAR = os.path.expanduser("~/.gradle/caches/fabric-loom/26.3/minecraft-client.jar")
 MC_SKIN = "assets/minecraft/textures/entity/player/wide/steve.png"
-DOLPHIN_TOOL = os.path.join(ROOT, "dolphin/build/Binaries/dolphin-tool")
+DOLPHIN_TOOL = hostexe.dolphin_tool()
 # Archive -> (model inside it, what replaces it). Gloves, face, hair and cap are drawn on Mario's
 # joints from their own archives, so Steve needs them gone.
 MODELS = {"Mario": ("Mario.bdl", steve_model.steve),
@@ -66,16 +67,14 @@ def superbmd():
 
 
 def run_superbmd(exe, workdir, *args):
-    win = lambda p: "Z:" + os.path.join(workdir, p).replace("/", "\\") if not p.startswith("-") else p
-    env = dict(os.environ, WINEDEBUG="-all")
-    out = subprocess.run(["wine", exe, *map(win, args)], cwd=workdir, env=env, capture_output=True, text=True)
+    win = lambda p: hostexe.windows_path(os.path.join(workdir, p)) if not p.startswith("-") else p
+    out = hostexe.run_with_wine(exe, list(map(win, args)), cwd=workdir, capture_output=True, text=True)
     if out.returncode != 0 or "Exception" in out.stdout + out.stderr:
         die("SuperBMD failed:\n" + (out.stdout + out.stderr)[-2000:])
 
 
 def game_image():
-    game = os.environ.get("GXC_GAME") or next(iter(sorted(glob.glob(
-        os.path.expanduser("~/Documents/Games/Dolphin Games/*.rvz")))), None)
+    game = hostexe.default_game()
     if not game or not os.path.isfile(game):
         die("no game image; set GXC_GAME")
     return game

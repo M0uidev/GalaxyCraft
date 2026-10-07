@@ -49,15 +49,15 @@ public:
 
   void PutU32(u32 addr, u32 v)
   {
-    v = __builtin_bswap32(v);
-    std::memcpy(Ptr(addr, 4), &v, 4);
+    u8* p = Ptr(addr, 4);
+    p[0] = static_cast<u8>(v >> 24), p[1] = static_cast<u8>(v >> 16);
+    p[2] = static_cast<u8>(v >> 8), p[3] = static_cast<u8>(v);
   }
   void PutF32(u32 addr, float f) { PutU32(addr, std::bit_cast<u32>(f)); }
   u32 GetU32(u32 addr)
   {
-    u32 v;
-    std::memcpy(&v, Ptr(addr, 4), 4);
-    return __builtin_bswap32(v);
+    const u8* p = Ptr(addr, 4);
+    return u32{p[0]} << 24 | u32{p[1]} << 16 | u32{p[2]} << 8 | u32{p[3]};
   }
   float GetF32(u32 addr) { return std::bit_cast<float>(GetU32(addr)); }
   void PutBytes(u32 addr, const void* src, u32 n) { std::memcpy(Ptr(addr, n), src, n); }

@@ -19,6 +19,18 @@ void X11KeymapToScancodes(const char keymap[32], u8 keys[64]);
 // XInput2 button bits (bit n = X button n+1: left, middle, right, wheel...) -> protocol mask.
 u32 X11ButtonsToSdl(u32 x_buttons);
 
+// SDL scancode for a DirectInput key code (DIK_*, the PC's set 1 scancodes; 0x80 and up are the
+// extended keys), or -1 if none. The same keys as EvdevToScancode.
+int DikToScancode(int dik);
+
+// DirectInput keyboard state (bit 7 of each DIK_* byte: down) -> protocol key bitmap of SDL
+// scancodes. Escape is left out, as in X11KeymapToScancodes.
+void DikKeysToScancodes(const u8 dik[256], u8 keys[64]);
+
+// DirectInput mouse buttons (DIMOUSESTATE2::rgbButtons: left, right, middle, back, forward; bit 7
+// down) -> protocol mask.
+u32 DInputButtonsToSdl(const u8 buttons[8]);
+
 // The character an X11 keysym types (the layout already applied), or 0 if it types none
 // (modifiers, arrows, Return, dead keys...).
 u32 KeysymToCodepoint(u32 keysym);
@@ -38,9 +50,9 @@ public:
   void SetKeys(const u8 keys[64]);
   // A character typed (GxcTextState), for Minecraft's text fields.
   void Text(u32 codepoint);
-  // Where the pointer is over the render window (GxcPointerState: 0..1, inside or not);
-  // publishes only if it changed.
-  void Pointer(float x, float y, bool inside);
+  // Where the pointer is over the render window (GxcPointerState: 0..1, inside or not), and
+  // whether that window is in the background; publishes only if something changed.
+  void Pointer(float x, float y, bool inside, bool background = false);
 
 private:
   void Publish();
@@ -52,5 +64,6 @@ private:
   u32 m_text_count = 0;
   float m_pointer_x = -1, m_pointer_y = -1;
   bool m_pointer_inside = false;
+  bool m_pointer_background = false;
 };
 }  // namespace gxc

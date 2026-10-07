@@ -347,7 +347,7 @@ public final class MovementProbe implements FabricClientGameTest {
     /** Runs tools/gxdev.py (the dev Dolphin's control channel) and returns its output. */
     private static String gxdev(String... args) {
         String[] cmd = new String[args.length + 2];
-        cmd[0] = "python3";
+        cmd[0] = Python.exe();
         cmd[1] = Path.of(System.getProperty("galaxycraft.repoRoot"), "tools/gxdev.py").toString();
         System.arraycopy(args, 0, cmd, 2, args.length);
         try {
