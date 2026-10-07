@@ -2,7 +2,7 @@
 
 2026-10-07. Status: built on `feat/launcher` from the user's brief ("a launcher similar to the
 original Minecraft launcher, customizable, Linux first, then Windows; one update releases both").
-To be tested on Linux by the user's local Claude Code before merging; Windows is covered by CI
+Tested on Linux (unit tests, smoke test, a real PLAY into a world) and merged 2026-10-07 (7cc48a6); Windows is covered by CI
 until someone runs it on a Windows PC.
 
 ## Goal
