@@ -94,8 +94,11 @@ class Installer extends EventEmitter {
     }
   }
 
-  /** Installs (or updates to) a version. rom: the player's checked Super Mario Galaxy 2. */
-  async install(manifest, rom) {
+  /**
+   * Installs (or updates to) a version. rom: the player's checked Super Mario Galaxy 2.
+   * minecraft: false when the Minecraft Launcher brings Minecraft (nothing of it downloaded here).
+   */
+  async install(manifest, rom, { minecraft = true } = {}) {
     if (this.busy) throw new Error('Already installing');
     this.busy = true;
     try {
@@ -125,7 +128,7 @@ class Installer extends EventEmitter {
       await this.makeDiscFiles(lay, sys, rom);
 
       // 3. Minecraft, Fabric and Java.
-      await this.minecraft(manifest);
+      if (minecraft) await this.minecraft(manifest);
 
       writeJson(lay.descriptor, gamepack.descriptor(rom, lay.module));
       const before = this.installed();

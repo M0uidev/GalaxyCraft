@@ -18,6 +18,8 @@ const gamepack = require('../core/gamepack');
 const minecraft = require('../core/minecraft');
 const disc = require('../core/disc');
 const { playerState } = require('../core/playstate');
+const official = require('../core/official');
+const officialLauncher = require('./official');
 const { GameRunner } = require('./runner');
 const { Installer } = require('./installer');
 const mcprofile = require('./mcprofile');
@@ -34,6 +36,7 @@ const LOG_KEEP = 5000;
 let win = null;
 let state = null;
 let quitWhenGameEnds = false;
+let closeOfficialWhenGameEnds = false; // Minecraft came from the Minecraft Launcher: it closes with the game
 const runner = new GameRunner();
 const logBuffer = [];
 let accounts = null;
@@ -53,6 +56,11 @@ function mode() {
   if (s.playFrom === 'folder' || s.playFrom === 'release') return s.playFrom;
   if (process.env.GXL_GAME_MANIFEST) return 'release'; // a game.json to install (CI's Windows test build)
   return !app.isPackaged || s.gameRoot || process.env.GXC_ROOT ? 'folder' : 'release';
+}
+
+/** Who starts Minecraft for the released game: 'launcher' (this one, signed in here) or 'official' (the Minecraft Launcher). */
+function minecraftFrom() {
+  return official.minecraftSource(state.settings.minecraftFrom, accounts.current());
 }
 
 function romInfo() {
@@ -162,13 +170,17 @@ function settingsFile(inst) {
 function status(instId) {
   const m = mode();
   const rom = romInfo();
+  const mcDir = findMinecraftDir({ platform: process.platform, home: paths().home }, fs.existsSync);
   const base = { mode: m, rom, account: accounts.current(), signInReady: accounts.available,
-    installing, minecraftLauncher: !!findMinecraftDir({ platform: process.platform, home: paths().home }, fs.existsSync),
+    installing, minecraftLauncher: !!mcDir,
     latestVersion: latest && !(latest instanceof Error) ? latest.version : null };
   if (m === 'folder') return { ...base, folder: check(instId) };
   const installed = installer.installed();
-  return { ...base, installedVersion: installed ? installed.version : null,
-    player: playerState({ account: base.account, signInReady: accounts.available, rom, installed, latest, system: gamepack.systemKey() }) };
+  const mcFrom = minecraftFrom();
+  return { ...base, installedVersion: installed ? installed.version : null, minecraftFrom: mcFrom,
+    officialLauncher: { ok: !!mcDir, dir: mcDir },
+    player: playerState({ account: base.account, signInReady: accounts.available, rom, installed, latest, system: gamepack.systemKey(),
+      official: mcFrom === 'official' }) };
 }
 
 async function checkLatest() {
@@ -187,7 +199,10 @@ async function installLatest() {
   installing = { version: target.version };
   send('install:state', installing);
   try {
-    await installer.install(target, rom.path);
+    const viaOfficial = minecraftFrom() === 'official';
+    // With the Minecraft Launcher, Minecraft and Java are its own: only Fabric's version is fetched here.
+    await installer.install(target, rom.path, { minecraft: !viaOfficial });
+    if (viaOfficial) await officialLauncher.fabricProfile({ manifest: target, paths: paths(), fetchFn: (url, opts) => net.fetch(url, opts) });
     registerInMinecraftLauncher(instOf(state.selected));
     return { ok: true };
   } catch (e) {
@@ -210,10 +225,30 @@ function registerInMinecraftLauncher(inst) {
   }
 }
 
+/**
+ * PLAY with Minecraft from the Minecraft Launcher: the disc files checked, our installation there
+ * brought up to date and made the last used one, then the Minecraft Launcher opened (play()); the
+ * player presses its Play and the mod starts Dolphin.
+ */
+async function playReleaseOfficial(inst) {
+  const rom = romInfo();
+  const i = await installer.prepare(rom.path);
+  await officialLauncher.fabricProfile({ manifest: i.manifest, paths: paths(), fetchFn: (url, opts) => net.fetch(url, opts) });
+  const r = mcprofile.register({ installer, inst, paths: paths(), iconFile: path.join(APP_DIR, 'build', 'icon.png'),
+    log: (l) => runner.log('Launcher', l) });
+  if (!r.ok) {
+    throw new Error(r.reason === 'no .minecraft'
+      ? 'The Minecraft Launcher is not set up on this computer: install it from minecraft.net, open it once and sign in, then press PLAY again.'
+      : `Could not add the game to the Minecraft Launcher (${r.reason}).`);
+  }
+  return gamepack.minecraftLauncherPlan();
+}
+
 /** PLAY for players: the installed release, the player's disc and Minecraft account. */
 async function playRelease(inst) {
   const st = status(inst.id).player;
   if (st.action !== 'play' && st.action !== 'update') return { ok: false, error: st.detail };
+  if (minecraftFrom() === 'official') return playReleaseOfficial(inst);
   const sessionInfo = await accounts.session();
   const rom = romInfo();
   const i = await installer.prepare(rom.path);
@@ -256,6 +291,13 @@ async function play(instId) {
   setState({ ...state, selected: inst.id,
     installations: state.installations.map((x) => (x.id === inst.id ? { ...x, lastPlayed: new Date().toISOString() } : x)) });
   const started = await runner.start(plan, { installation: inst.id });
+  closeOfficialWhenGameEnds = !!(started && plan.watch && state.settings.closeMinecraftLauncher);
+  if (started && plan.watch) {
+    const opened = officialLauncher.open();
+    runner.log('Launcher', opened
+      ? 'Opened the Minecraft Launcher: press Play there on the "Super Minecraft Galaxy" installation'
+      : 'Open the Minecraft Launcher and press Play on the "Super Minecraft Galaxy" installation');
+  }
   if (started && win) {
     if (state.settings.onPlay === 'hide' || state.settings.onPlay === 'close') win.hide();
     if (state.settings.onPlay === 'close') quitWhenGameEnds = true;
@@ -288,9 +330,22 @@ runner.on('log', (entry) => {
   send('game:log', entry);
 });
 
+/** The game ended with Minecraft from the Minecraft Launcher: it is closed too (this launcher stays). */
+async function closeOfficialLauncher() {
+  if (!closeOfficialWhenGameEnds) return;
+  closeOfficialWhenGameEnds = false;
+  try {
+    const n = await officialLauncher.close();
+    if (n) runner.log('Launcher', 'Closed the Minecraft Launcher');
+  } catch (e) {
+    runner.log('Launcher', `Could not close the Minecraft Launcher: ${e.message}`, 'stderr');
+  }
+}
+
 runner.on('state', (info) => {
   send('game:state', info);
   if (info.state !== 'stopped') return;
+  closeOfficialLauncher();
   if (quitWhenGameEnds) { app.quit(); return; }
   if (win && !win.isVisible()) { win.show(); win.focus(); }
 });
@@ -382,6 +437,7 @@ handle('rom:choose', async () => {
   return { path: r.filePaths[0], check };
 });
 handle('game:play', (id) => play(id));
+handle('official:open', () => officialLauncher.open());
 handle('game:stop', () => runner.stop());
 handle('game:log', () => logBuffer);
 

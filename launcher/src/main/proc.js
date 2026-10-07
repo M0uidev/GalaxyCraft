@@ -84,8 +84,7 @@ async function stopMatching(match) {
     const { stdout } = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]);
     return parseInt(stdout.trim(), 10) || 0;
   }
-  const found = async () => (await run('pgrep', ['-f', match])).stdout.split('\n').filter(Boolean)
-    .filter((pid) => Number(pid) !== process.pid).length;
+  const found = () => countMatching(match);
   const n = await found();
   if (!n) return 0;
   await run('pkill', ['-f', match]);
@@ -94,6 +93,53 @@ async function stopMatching(match) {
     await sleep(100);
   }
   await run('pkill', ['-KILL', '-f', match]);
+  return n;
+}
+
+/** How many processes have `match` in their command line (a Minecraft started by the Minecraft Launcher). */
+async function countMatching(match) {
+  if (WIN) {
+    const like = match.replace(/'/g, "''").replace(/([[\]*?`])/g, '`$1');
+    const script = '@(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and '
+      + `$_.CommandLine -like '*${like}*' }).Count`;
+    const { stdout } = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]);
+    return parseInt(stdout.trim(), 10) || 0;
+  }
+  return (await run('pgrep', ['-f', match])).stdout.split('\n').filter(Boolean)
+    .filter((pid) => Number(pid) !== process.pid).length;
+}
+
+/**
+ * Stops whole programs this launcher did not start: on Windows those whose program path is like
+ * one of `patterns` (PowerShell -like), asked first and forced after graceMs; elsewhere by command
+ * line (pkill -f). Resolves to how many were found.
+ */
+async function stopPrograms(patterns, graceMs = 4000) {
+  if (!patterns.length) return 0;
+  if (WIN) {
+    const cond = patterns.map((p) => `$_.ExecutablePath -like '${p.replace(/'/g, "''")}'`).join(' -or ');
+    const list = `@(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and (${cond}) })`;
+    const ps = async (script) => parseInt((await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script])).stdout.trim(), 10) || 0;
+    // The topmost ones (their parent is not one of them): stopping each tree takes the rest.
+    const go = (force) => ps(`$all = ${list}; $ids = $all.ProcessId; `
+      + `foreach ($p in @($all | Where-Object { $ids -notcontains $_.ParentProcessId })) { `
+      + `& taskkill /pid $p.ProcessId /T ${force ? '/F ' : ''}2>&1 | Out-Null }; Write-Output $all.Count`);
+    const n = await go(false);
+    if (!n) return 0;
+    for (let waited = 0; waited < graceMs; waited += 500) {
+      if (!(await ps(`${list}.Count`))) return n;
+      await sleep(500);
+    }
+    await go(true);
+    return n;
+  }
+  let n = 0;
+  for (const p of patterns) {
+    const found = await countMatching(p);
+    if (!found) continue;
+    n += found;
+    await run('pkill', ['-f', p]);
+  }
   return n;
 }
 
@@ -106,4 +152,4 @@ function waitExit(child, ms) {
   });
 }
 
-module.exports = { start, stopTree, stopMatching, waitExit, alive };
+module.exports = { start, stopTree, stopMatching, countMatching, stopPrograms, waitExit, alive };

@@ -296,7 +296,80 @@ async function playerMode(tmp, errors) {
   assert.equal(desc['base-file'], rom);
   await page.waitForFunction(() => document.querySelector('#play').textContent === 'PLAY', null, { timeout: 30000 });
   await app.close();
+
+  await officialMode({ dir, rom, errors, step });
   server.close();
+}
+
+// ---- the same player, with Minecraft from the official Minecraft Launcher ------------------
+
+async function officialMode({ dir, rom, errors, step }) {
+  const { spawn } = require('node:child_process');
+  step('Minecraft Launcher: PLAY opens it, its Play starts the game');
+  // The player's Minecraft Launcher: its folder (with an installation of their own) and a stand-in for it.
+  const home = path.join(dir, 'home');
+  const mcDir = WIN ? path.join(home, 'AppData', 'Roaming', '.minecraft') : path.join(home, '.minecraft');
+  fs.mkdirSync(mcDir, { recursive: true });
+  fs.writeFileSync(path.join(mcDir, 'launcher_profiles.json'), JSON.stringify({ profiles: { mine: { name: 'Vanilla', type: 'custom' } }, version: 3 }));
+  // Fabric's version as Fabric's servers give it (kept, so nothing is fetched).
+  const fabricId = 'fabric-loader-0.19.5-26.3';
+  const kept = path.join(dir, 'data', 'minecraft-files', 'versions', fabricId, `${fabricId}.json`);
+  fs.mkdirSync(path.dirname(kept), { recursive: true });
+  fs.writeFileSync(kept, JSON.stringify({ id: fabricId, inheritsFrom: '26.3' }));
+  const opened = path.join(dir, 'official-opened');
+  let fakeLauncher;
+  if (WIN) {
+    fakeLauncher = path.join(dir, 'MinecraftLauncher.exe'); // the stand-in (as Dolphin: up for 3 s)
+    fs.copyFileSync(path.join(dir, 'Fake.exe'), fakeLauncher);
+  } else {
+    fakeLauncher = path.join(dir, 'minecraft-launcher');
+    fs.writeFileSync(fakeLauncher, `#!/bin/sh\necho opened > '${opened}'\n`, { mode: 0o755 });
+  }
+
+  const userData = path.join(dir, 'userData-official');
+  fs.mkdirSync(userData, { recursive: true });
+  fs.writeFileSync(path.join(userData, 'launcher.json'), JSON.stringify({ settings: { playFrom: 'release', minecraftFrom: 'official', rom } }));
+  const env = { ...process.env, GXL_USER_DATA: userData, GXL_OFFLINE: '1', GXC_DATA_DIR: path.join(dir, 'data'),
+    GXL_MINECRAFT_LAUNCHER: fakeLauncher, HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData', 'Roaming') };
+  delete env.ELECTRON_RUN_AS_NODE;
+  delete env.GXL_TEST_ACCOUNT;
+  delete env.GXL_GAME_MANIFEST; // offline: the installed game is played
+  const app = await electron.launch({ executablePath: require('electron'), args: [APP, ...(WIN ? [] : ['--no-sandbox'])], env });
+  const page = await app.firstWindow();
+  page.on('pageerror', (e) => errors.push(`official pageerror: ${e.message}`));
+  await page.setViewportSize({ width: 1280, height: 780 });
+  await page.waitForSelector('body[data-ready="1"]');
+
+  // Installed already (by the player above), and no account here: PLAY, not SIGN IN.
+  await page.waitForFunction(() => document.querySelector('#play').textContent === 'PLAY', null, { timeout: 15000 });
+  assert.equal(await page.textContent('#account-name'), 'Minecraft Launcher');
+  assert.match(await page.textContent('#play-status'), /Minecraft Launcher/);
+  await page.click('#play');
+  await page.waitForFunction(() => /press Play in the Minecraft Launcher/.test(document.querySelector('#play-status').textContent), null, { timeout: 15000 });
+  await page.screenshot({ path: path.join(SHOTS, '23-official-waiting.png') });
+  const profiles = JSON.parse(fs.readFileSync(path.join(mcDir, 'launcher_profiles.json'), 'utf8'));
+  assert.equal(profiles.profiles.mine.name, 'Vanilla');
+  const ours = profiles.profiles['super-minecraft-galaxy'];
+  assert.equal(ours.lastVersionId, fabricId);
+  assert.equal(ours.gameDir, path.join(dir, 'data', 'minecraft'));
+  assert.match(ours.javaArgs, /-Dgalaxycraft\.hidden=true -Dgalaxycraft\.startDolphin=true/);
+  assert.ok(fs.existsSync(path.join(dir, 'data', 'play.json')), 'play.json for the mod');
+  assert.ok(fs.existsSync(path.join(mcDir, 'versions', fabricId, `${fabricId}.json`)), 'Fabric in the Minecraft Launcher');
+  assert.ok(fs.existsSync(path.join(dir, 'data', 'minecraft', 'mods', 'galaxycraft-0.2.0.jar')), 'mod in the game folder');
+
+  // The player presses Play there: a Minecraft with our installation's arguments shows up, and later closes.
+  const minecraft = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '--', '-Dgalaxycraft.hidden=true'], { stdio: 'ignore' });
+  await page.waitForFunction(() => /Playing/.test(document.querySelector('#play-status').textContent), null, { timeout: 15000 });
+  minecraft.kill();
+  await page.waitForFunction(() => document.querySelector('#play').textContent === 'PLAY', null, { timeout: 30000 });
+  await page.click('#log-btn');
+  const log = await page.textContent('#log');
+  assert.match(log, /Opened the Minecraft Launcher/);
+  assert.match(log, /Minecraft is running/);
+  assert.match(log, /Minecraft ended/);
+  assert.doesNotMatch(log, /fake dolphin|fake minecraft/); // nothing started by this launcher
+  if (!WIN) assert.ok(fs.existsSync(opened), 'the Minecraft Launcher was opened');
+  await app.close();
 }
 
 main().catch((e) => {

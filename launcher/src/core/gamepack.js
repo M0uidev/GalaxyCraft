@@ -159,6 +159,15 @@ function playerPlan({ paths, inst, lay, dolphinExe, mcCommand, env = process.env
   return { gameDir, dolphinDir, seed, processes: [dolphin, minecraft], stopMatch: HIDDEN_MATCH };
 }
 
+/**
+ * PLAY with Minecraft from the Minecraft Launcher: nothing started here. The player presses Play
+ * there, the mod starts Dolphin (play.json) and closes it with Minecraft; the plan only watches
+ * for that Minecraft, and STOP or the game's end stops it (Dolphin goes with it).
+ */
+function minecraftLauncherPlan() {
+  return { seed: null, processes: [], stopMatch: HIDDEN_MATCH, watch: { name: 'Minecraft', match: HIDDEN_MATCH } };
+}
+
 /** The JVM arguments for Minecraft in the game: the installation's memory, hidden window. */
 function minecraftJvmArgs(manifest, inst) {
   const own = splitArgs(inst.javaArgs || '');
@@ -174,5 +183,5 @@ function modChanges(manifest, previouslyManaged = []) {
 
 module.exports = {
   FORMAT, LATEST_URL, MANAGED, SYSTEMS, systemKey, parseManifest, localManifest, supported, compareVersions, layout,
-  descriptor, devDescriptor, playerPlan, minecraftJvmArgs, modChanges,
+  descriptor, devDescriptor, playerPlan, minecraftLauncherPlan, minecraftJvmArgs, modChanges,
 };
