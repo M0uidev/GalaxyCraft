@@ -264,7 +264,7 @@ public final class PlanetSession {
 
     public PlanetStore.Saved save() {
         unsaved = false;
-        CubeSphere g = planet.grid;
+        CubeSphere g = planet.sphere();
         return new PlanetStore.Saved(g.n, g.core, g.layers, planet.depth, new Vector3d(center), planet.cells().clone(),
                 planet.biomes());
     }
@@ -303,7 +303,7 @@ public final class PlanetSession {
      */
     /** Radius of the top of the highest block in the column through p (blocks); the surface if it is all air. */
     double ground(Vector3d p) {
-        CubeSphere g = planet.grid;
+        CubeSphere g = planet.sphere();
         int c0 = g.cellAt(new Vector3d(p).normalize(g.core + 0.5));
         if (c0 >= 0)
             for (int k = g.layers - 1; k >= 0; k--)
@@ -701,7 +701,7 @@ public final class PlanetSession {
     public boolean placeBlock(Vector3d eyeGal, Vector3d lookGal, Placer placer, Vector3d marioFeetGal) {
         PlanetRaycast.Hit h = cast(eyeGal, lookGal);
         if (h == null || placer == null) return false;
-        CubeSphere g = planet.grid;
+        CellGrid g = planet.grid;
         int face = h.face();
         int cell = planet.info(h.hit()).replaceable() ? h.hit() : g.neighbor(h.hit(), face);
         if (cell < 0 || !planet.info(cell).replaceable()) return false;

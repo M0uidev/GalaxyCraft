@@ -22,7 +22,7 @@ class SurfaceSamplerTest {
             TerrainNoise noise = GenFixtures.waves(b.seed());
             VoxelPlanet p = PlanetGenerator.build(b, noise, GenFixtures.TABLE, null, GenFixtures.B, GenFixtures::id);
             SurfaceSampler s = new SurfaceSampler(b, noise, GenFixtures.TABLE);
-            CubeSphere g = p.grid;
+            CubeSphere g = p.sphere();
             Random r = new Random(1);
             for (int t = 0; t < 60; t++) {
                 int f = r.nextInt(6), i = r.nextInt(g.n), j = r.nextInt(g.n);

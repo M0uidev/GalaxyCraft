@@ -78,7 +78,7 @@ class WalkFeelTest {
      */
     private void digDown(int radius, double at, int dir, int layer, boolean fit) {
         p = VoxelPlanet.ofRadius(radius);
-        g = p.grid;
+        g = p.sphere();
         field.clear();
         int face = 0, n = g.n, top = layer > 0 ? layer : p.depth;
         int i = Math.max(11, Math.min(n - 12, (int) Math.round(n * at))), j = i;
@@ -139,7 +139,7 @@ class WalkFeelTest {
     /** cave > 0: in a cave dug out deep down, its floor that layer (blocks narrow by the core). */
     private void walk(int radius, int seed, double at, int cave) {
         p = VoxelPlanet.ofRadius(radius);
-        g = p.grid;
+        g = p.sphere();
         field.clear();
         int face = 0, n = g.n, top = cave > 0 ? cave : p.depth; // k = top: the first air layer
         int mid = Math.max(11, Math.min(n - 12, (int) Math.round(n * at)));

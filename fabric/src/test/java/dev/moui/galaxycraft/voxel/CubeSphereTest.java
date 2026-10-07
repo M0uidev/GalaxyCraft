@@ -8,6 +8,19 @@ import org.junit.jupiter.api.Test;
 class CubeSphereTest {
     final CubeSphere g = new CubeSphere(24, 7, 17);
 
+    @Test void gridApiMatchesTheOldFormulas() {
+        CellGrid cg = g;
+        assertEquals(6, cg.faces());
+        assertEquals(6 * 24 * 24, cg.columns());
+        int c = g.index(3, 5, 7, 4);
+        assertEquals(0, g.dir(3, 5, 7).mul(g.radius(4)).distance(cg.vertex(3, 5, 7, 4)), 1e-9);
+        assertEquals(0, g.dir(3, 5, 7).distance(cg.columnUp(3, 5, 7)), 1e-9);
+        assertEquals(0, g.corner(c, 1, 0, 1).distance(cg.vertex(3, 6, 7, 5)), 1e-9);
+        assertTrue(cg.inCore(new Vector3d(0, 6.5, 0)));
+        assertFalse(cg.inCore(new Vector3d(0, 7.5, 0)));
+        assertEquals(g.radius(9), cg.radiusAt(9));
+    }
+
     @Test void centerOfEveryCellMapsBack() {
         for (int c = 0; c < g.cellCount(); c++) assertEquals(c, g.cellAt(g.center(c)), "cell " + c);
     }

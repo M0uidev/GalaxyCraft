@@ -19,7 +19,7 @@ class PlanetBlueprintTest {
         PlanetBlueprint bp = new PlanetBlueprint("t", 32, 10, List.of(
                 new PlanetBlueprint.Layer(name(Material.COBBLESTONE), 2), new PlanetBlueprint.Layer(name(Material.STONE), 1)));
         VoxelPlanet p = bp.build(B);
-        CubeSphere g = p.grid;
+        CubeSphere g = p.sphere();
         int d = p.depth;
         assertEquals(bp.crustDepth(), d);
         assertEquals(d + 10, g.layers);

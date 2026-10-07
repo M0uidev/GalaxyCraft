@@ -74,14 +74,14 @@ public final class TpProbe implements FabricClientGameTest {
         double h = local.length() - p.surface();
         // The top of the column under him.
         int top = -1;
-        int c0 = p.grid.cellAt(new Vector3d(local).normalize(p.grid.core + 0.5));
+        int c0 = p.grid.cellAt(new Vector3d(local).normalize(p.sphere().core + 0.5));
         if (c0 >= 0)
             for (int k = p.grid.layers - 1; k >= 0; k--)
                 if (p.get(c0 + k) != Blocks.AIR) {
                     top = k + 1;
                     break;
                 }
-        double ground = top < 0 ? p.surface() : p.grid.radius(top);
+        double ground = top < 0 ? p.surface() : p.sphere().radius(top);
         int at = p.grid.cellAt(new Vector3d(local).normalize(local.length() + 0.1));
         boolean solid = at >= 0 && p.get(at) != Blocks.AIR;
         double over = local.length() - ground;

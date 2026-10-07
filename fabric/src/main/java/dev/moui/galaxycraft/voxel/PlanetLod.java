@@ -26,8 +26,8 @@ public final class PlanetLod {
 
     /** The six faces' parts. */
     public static Part[] parts(VoxelPlanet p, double unitsPerBlock) {
-        Part[] out = new Part[6];
-        for (int f = 0; f < 6; f++) out[f] = face(p, f, unitsPerBlock);
+        Part[] out = new Part[p.grid.faces()];
+        for (int f = 0; f < out.length; f++) out[f] = face(p, f, unitsPerBlock);
         return out;
     }
 
@@ -59,7 +59,7 @@ public final class PlanetLod {
 
     public static int tileCount(VoxelPlanet p) {
         int t = tilesPerEdge(p);
-        return 6 * t * t;
+        return p.grid.faces() * t * t;
     }
 
     /** The tile a chunk lies in. */
@@ -107,14 +107,14 @@ public final class PlanetLod {
      */
     public static Part[] coarse(LodSource src, int patches, double unitsPerBlock) {
         int n = src.grid().n, s = Math.max(1, (n + patches - 1) / patches);
-        Part[] out = new Part[6];
-        for (int f = 0; f < 6; f++) out[f] = region(src, f, 0, n, 0, n, s, unitsPerBlock);
+        Part[] out = new Part[src.grid().faces()];
+        for (int f = 0; f < out.length; f++) out[f] = region(src, f, 0, n, 0, n, s, unitsPerBlock);
         return out;
     }
 
     /** Columns [i0, i1) × [j0, j1) of a face, in patches of s × s: walls between them, skirts around. */
     private static Part region(LodSource p, int face, int i0r, int i1r, int j0r, int j1r, int s, double unitsPerBlock) {
-        CubeSphere g = p.grid();
+        CellGrid g = p.grid();
         int ma = (i1r - i0r + s - 1) / s, mb = (j1r - j0r + s - 1) / s;
         LodSource.Patch[][] patch = new LodSource.Patch[ma][mb];
         for (int a = 0; a < ma; a++)
@@ -126,15 +126,15 @@ public final class PlanetLod {
             for (int b = 0; b < mb; b++) {
                 LodSource.Patch t = patch[a][b];
                 int i0 = i0r + a * s, i1 = Math.min(i1r, i0 + s), j0 = j0r + b * s, j1 = Math.min(j1r, j0 + s);
-                double r = g.radius(t.height());
-                Vector3d mid = g.dir(face, i0, j0).add(g.dir(face, i1, j1)).normalize();
-                quads.add(top(p, t, new Vector3d[] {g.dir(face, i0, j0).mul(r), g.dir(face, i1, j0).mul(r),
-                        g.dir(face, i1, j1).mul(r), g.dir(face, i0, j1).mul(r)}, mid));
+                int h = t.height();
+                Vector3d mid = g.vertex(face, i0, j0, h).add(g.vertex(face, i1, j1, h)).mul(0.5);
+                quads.add(top(p, t, new Vector3d[] {g.vertex(face, i0, j0, h), g.vertex(face, i1, j0, h),
+                        g.vertex(face, i1, j1, h), g.vertex(face, i0, j1, h)}, g.columnUp(face, (i0 + i1) / 2, (j0 + j1) / 2)));
                 // Walls toward lower neighbors (+i and +j here, -i and -j by those), skirts at the region's edges.
-                wall(p, quads, t, a + 1 < ma ? patch[a + 1][b] : null, g.dir(face, i1, j0), g.dir(face, i1, j1), mid, skirt);
-                wall(p, quads, t, a > 0 ? patch[a - 1][b] : null, g.dir(face, i0, j0), g.dir(face, i0, j1), mid, skirt);
-                wall(p, quads, t, b + 1 < mb ? patch[a][b + 1] : null, g.dir(face, i0, j1), g.dir(face, i1, j1), mid, skirt);
-                wall(p, quads, t, b > 0 ? patch[a][b - 1] : null, g.dir(face, i0, j0), g.dir(face, i1, j0), mid, skirt);
+                wall(p, quads, t, a + 1 < ma ? patch[a + 1][b] : null, face, i1, j0, i1, j1, mid, skirt);
+                wall(p, quads, t, a > 0 ? patch[a - 1][b] : null, face, i0, j0, i0, j1, mid, skirt);
+                wall(p, quads, t, b + 1 < mb ? patch[a][b + 1] : null, face, i0, j1, i1, j1, mid, skirt);
+                wall(p, quads, t, b > 0 ? patch[a][b - 1] : null, face, i0, j0, i1, j0, mid, skirt);
             }
         return new Part(displayList(p, quads, unitsPerBlock), sphere(quads, unitsPerBlock));
     }
@@ -151,18 +151,18 @@ public final class PlanetLod {
     }
 
     /**
-     * The wall on the edge e0-e1 of patch t down to its neighbor nb if that is lower, or down skirt
-     * layers if there is none (the face's edge); facing away from t's middle.
+     * The wall on the edge from column vertex (ia, ja) to (ib, jb) of patch t down to its neighbor
+     * nb if that is lower, or down skirt layers if there is none (the face's edge); facing away
+     * from mid, the middle of t's top.
      */
-    private static void wall(LodSource p, List<PlanetMesher.Quad> out, LodSource.Patch t, LodSource.Patch nb, Vector3d e0, Vector3d e1,
-            Vector3d mid, int skirt) {
+    private static void wall(LodSource p, List<PlanetMesher.Quad> out, LodSource.Patch t, LodSource.Patch nb, int face, int ia, int ja,
+            int ib, int jb, Vector3d mid, int skirt) {
         int low = nb == null ? Math.max(0, t.height() - skirt) : nb.height();
         if (low >= t.height()) return;
-        CubeSphere g = p.grid();
-        double r0 = g.radius(low), r1 = g.radius(t.height());
-        Vector3d[] q = {new Vector3d(e0).mul(r0), new Vector3d(e1).mul(r0), new Vector3d(e1).mul(r1), new Vector3d(e0).mul(r1)};
-        Vector3d edge = new Vector3d(e0).add(e1).normalize();
-        Vector3d away = edge.sub(mid);
+        CellGrid g = p.grid();
+        int high = t.height();
+        Vector3d[] q = {g.vertex(face, ia, ja, low), g.vertex(face, ib, jb, low), g.vertex(face, ib, jb, high), g.vertex(face, ia, ja, high)};
+        Vector3d away = new Vector3d(q[2]).add(q[3]).mul(0.5).sub(mid);
         Vector3d n = new Vector3d(q[1]).sub(q[0]).cross(new Vector3d(q[2]).sub(q[0]));
         if (n.dot(away) < 0) {
             Vector3d tmp = q[0];

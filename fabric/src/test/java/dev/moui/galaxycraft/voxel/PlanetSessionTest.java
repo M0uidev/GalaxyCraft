@@ -432,7 +432,7 @@ class PlanetSessionTest {
         s.update(3, 100, MARIO);
         VoxelPlanet p = s.planet();
         Vector3d mario = new Vector3d(MARIO).sub(s.center()).div(80);
-        int c0 = p.grid.cellAt(new Vector3d(mario).normalize(p.grid.core + 0.5));
+        int c0 = p.grid.cellAt(new Vector3d(mario).normalize(p.sphere().core + 0.5));
         for (int k = p.depth; k < p.depth + 5; k++) p.set(c0 + k, Material.STONE); // a tower where he lands
         s.teleport();
         PlanetSession.Msg tp = drain(s).stream().filter(m -> m.type() == Layout.MSG_PLANET_TP).findFirst().orElseThrow();

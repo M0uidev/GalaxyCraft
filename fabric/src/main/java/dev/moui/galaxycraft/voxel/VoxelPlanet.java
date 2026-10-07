@@ -12,7 +12,7 @@ public final class VoxelPlanet {
     public static final int CHUNK = 8;
     public static final int MIN_RADIUS = 10, MAX_RADIUS = 256;
 
-    public final CubeSphere grid;
+    public final CellGrid grid;
     public final Blocks blocks;
     /** Blocks of solid ground under the grass top: the crust, with bedrock at its bottom. */
     public final int depth;
@@ -35,11 +35,11 @@ public final class VoxelPlanet {
     /** Columns each way a biome color is averaged over (Minecraft's biome blend, 5 x 5 by default). */
     public static final int BIOME_BLEND = Integer.getInteger("galaxycraft.biomeBlend", 2);
 
-    public VoxelPlanet(CubeSphere grid, int depth) {
+    public VoxelPlanet(CellGrid grid, int depth) {
         this(grid, depth, new char[grid.cellCount()], CubeBlocks.INSTANCE);
     }
 
-    private VoxelPlanet(CubeSphere grid, int depth, char[] cells, Blocks blocks) {
+    private VoxelPlanet(CellGrid grid, int depth, char[] cells, Blocks blocks) {
         if (cells.length != grid.cellCount()) throw new IllegalArgumentException("cells do not fit the grid");
         this.grid = grid;
         this.blocks = blocks;
@@ -185,11 +185,16 @@ public final class VoxelPlanet {
     }
 
     /** A planet as saved by {@link #cells()}, its ids those of blocks. */
-    public static VoxelPlanet of(CubeSphere grid, int depth, char[] cells, Blocks blocks) {
+    public static VoxelPlanet of(CellGrid grid, int depth, char[] cells, Blocks blocks) {
         return new VoxelPlanet(grid, depth, cells, blocks);
     }
 
     /** Sky and block light of every cell (Minecraft's levels, 0 to 15). */
+    /** The grid as a sphere: a planet's (generation, saving); a station's grid is none. */
+    public CubeSphere sphere() {
+        return (CubeSphere) grid;
+    }
+
     public PlanetLight light() {
         return light;
     }
@@ -215,7 +220,7 @@ public final class VoxelPlanet {
 
     public void setBiomes(PlanetBiomes b) {
         if (b == null) b = PlanetBiomes.uniform(PlanetBiomes.PLAINS);
-        if (!b.uniform() && b.columns().length != 6 * grid.n * grid.n) throw new IllegalArgumentException("biomes do not fit the grid");
+        if (!b.uniform() && b.columns().length != grid.columns()) throw new IllegalArgumentException("biomes do not fit the grid");
         biomes = b;
         java.util.Arrays.fill(blended, null);
     }
@@ -234,7 +239,7 @@ public final class VoxelPlanet {
         if (kind == PlanetBiomes.FIXED || kind >= PlanetBiomes.KINDS) return tint & 0xFFFFFF;
         int col = cell / grid.layers;
         int[] cache = blended[kind];
-        if (cache == null) blended[kind] = cache = new int[6 * grid.n * grid.n];
+        if (cache == null) blended[kind] = cache = new int[grid.columns()];
         int c = cache[col];
         if (c == 0) cache[col] = c = 0x1000000 | blend(col, kind, tint & 0xFFFFFF);
         return c & 0xFFFFFF;
@@ -277,12 +282,12 @@ public final class VoxelPlanet {
 
     /** Radius of the grass surface, blocks. */
     public double surface() {
-        return grid.radius(depth);
+        return grid.radiusAt(depth);
     }
 
     /** Radius of the ball nothing can dig into (inside the bedrock), blocks. */
     public double occluder() {
-        return grid.core;
+        return grid instanceof CubeSphere s ? s.core : 0;
     }
 
     /** The block id of a cell (air past the layers). */
@@ -421,7 +426,7 @@ public final class VoxelPlanet {
     }
 
     public int chunkCount() {
-        return 6 * chunksPerEdge * chunksPerEdge * chunkLayers;
+        return grid.faces() * chunksPerEdge * chunksPerEdge * chunkLayers;
     }
 
     /** Chunks along a face's edge. */
@@ -506,18 +511,17 @@ public final class VoxelPlanet {
         int[] cs = cellsOf(chunk);
         int first = cs[0], last = cs[cs.length - 1], f = grid.face(first);
         int i0 = grid.i(first), i1 = grid.i(last) + 1, j0 = grid.j(first), j1 = grid.j(last) + 1;
-        double r0 = grid.radius(grid.k(first)), r1 = grid.radius(grid.k(last) + 1);
+        int k0 = grid.k(first), k1 = grid.k(last) + 1;
         // The corners of the chunk and the middle of its outer face (where the shell bulges).
         Vector3d[] pts = new Vector3d[10];
         int n = 0;
         for (int m = 0; m < 4; m++) {
-            Vector3d d = grid.dir(f, (m & 1) == 0 ? i0 : i1, (m & 2) == 0 ? j0 : j1);
-            pts[n++] = new Vector3d(d).mul(r0);
-            pts[n++] = new Vector3d(d).mul(r1);
+            int i = (m & 1) == 0 ? i0 : i1, j = (m & 2) == 0 ? j0 : j1;
+            pts[n++] = grid.vertex(f, i, j, k0);
+            pts[n++] = grid.vertex(f, i, j, k1);
         }
-        Vector3d mid = grid.dir(f, (i0 + i1) / 2, (j0 + j1) / 2);
-        pts[n++] = new Vector3d(mid).mul(r0);
-        pts[n++] = new Vector3d(mid).mul(r1);
+        pts[n++] = grid.vertex(f, (i0 + i1) / 2, (j0 + j1) / 2, k0);
+        pts[n++] = grid.vertex(f, (i0 + i1) / 2, (j0 + j1) / 2, k1);
         Vector3d c = new Vector3d();
         for (Vector3d p : pts) c.add(p);
         c.mul(1.0 / pts.length);

@@ -15,7 +15,7 @@ public final class PlanetLight {
     private static final int SKY = 0, BLOCK = 1;
 
     private final VoxelPlanet p;
-    private final CubeSphere g;
+    private final CellGrid g;
     /** Per cell: sky light in the high nibble, block light in the low one. */
     private final byte[] light;
     /** Per block id, once looked up (0: not yet): 1 << 8 | opacity << 4 | emission, one write (threads share it). */

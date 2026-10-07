@@ -81,7 +81,7 @@ class PlanetGeneratorTest {
 
     @Test void noSeamsOnTheCubesEdges() {
         VoxelPlanet p = build(bp(48, 16, 3, "minecraft:jagged_peaks", 0));
-        CubeSphere g = p.grid;
+        CubeSphere g = p.sphere();
         int worstAcross = 0, worstInside = 0;
         for (int c = 0; c < g.cellCount(); c += g.layers)
             for (int side = CubeSphere.I_MINUS; side <= CubeSphere.J_PLUS; side++) {
@@ -96,7 +96,7 @@ class PlanetGeneratorTest {
     @Test void groundStaysBetweenBedrockAndTheSky() {
         for (String biome : List.of("minecraft:jagged_peaks", "minecraft:desert")) {
             VoxelPlanet p = build(bp(64, 8, 5, biome, 0));
-            CubeSphere g = p.grid;
+            CubeSphere g = p.sphere();
             for (int c = 0; c < g.cellCount(); c += g.layers) {
                 assertEquals(Material.BEDROCK, p.material(c));
                 assertNotEquals(Blocks.AIR, p.get(c + 1), "a block above the bedrock");
@@ -113,7 +113,7 @@ class PlanetGeneratorTest {
 
     @Test void aDesertPlanetIsSandWithBareCliffs() {
         VoxelPlanet p = build(bp(40, 12, 1, "minecraft:desert", 0));
-        CubeSphere g = p.grid;
+        CubeSphere g = p.sphere();
         int sand = 0, other = 0;
         for (int c = 0; c < g.cellCount(); c += g.layers) {
             Material m = p.material(c + top(p, c));
@@ -134,7 +134,7 @@ class PlanetGeneratorTest {
 
     @Test void severalBiomesMix() {
         VoxelPlanet p = build(bp(48, 12, 2, "minecraft:plains", 64));
-        CubeSphere g = p.grid;
+        CubeSphere g = p.sphere();
         Set<Material> tops = new HashSet<>();
         for (int c = 0; c < g.cellCount(); c += g.layers) tops.add(p.material(c + top(p, c)));
         assertTrue(tops.contains(Material.COBBLESTONE) && tops.contains(Material.GRASS), tops.toString());
@@ -153,7 +153,7 @@ class PlanetGeneratorTest {
 
     @Test void shallowSeasUpToTheBaseSurface() {
         VoxelPlanet p = build(bp(64, 12, 4, "minecraft:plains", 48).withWater(true));
-        CubeSphere g = p.grid;
+        CubeSphere g = p.sphere();
         int wet = 0, frozen = 0;
         for (int c = 0; c < g.cellCount(); c += g.layers) {
             int w = water(p, c);
@@ -171,7 +171,7 @@ class PlanetGeneratorTest {
 
     @Test void anOceanPlanetIsMostlyWaterWithIslands() {
         VoxelPlanet p = build(bp(48, 12, 6, "minecraft:ocean", 0).withWater(true));
-        CubeSphere g = p.grid;
+        CubeSphere g = p.sphere();
         int wet = 0, dry = 0;
         for (int c = 0; c < g.cellCount(); c += g.layers) if (water(p, c) > 0) wet++; else dry++;
         assertTrue(wet > dry && dry > 0, wet + " wet, " + dry + " dry");

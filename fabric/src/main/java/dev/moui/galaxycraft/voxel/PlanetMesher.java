@@ -235,7 +235,7 @@ public final class PlanetMesher {
      * face between the same fluid, none against an opaque cube. Water is translucent.
      */
     private static void fluidQuads(VoxelPlanet p, int c, BlockInfo b, List<Quad> out, Dark dark) {
-        CubeSphere g = p.grid;
+        CellGrid g = p.grid;
         int f = b.fluid();
         boolean translucent = f == Blocks.WATER;
         int tint = p.tint(c, b.tint());
@@ -254,7 +254,7 @@ public final class PlanetMesher {
                     h[di][dj] = averageHeight(p, f, self, cornerSource(p, f, nj), cornerSource(p, f, ni), diag);
                 }
         }
-        double r0 = g.radius(g.k(c));
+        int k0 = g.k(c);
         Vector3d center = g.center(c);
         // Lit as Minecraft lights fluids: the brighter of the cell and the one above it.
         int above = g.neighbor(c, CubeSphere.TOP);
@@ -273,7 +273,7 @@ public final class PlanetMesher {
             double angle = Math.atan2(flow[0], flow[1]) - Math.PI / 2, sn = Math.sin(angle) * 0.25, cs = Math.cos(angle) * 0.25;
             for (int v = 0; v < 4; v++) {
                 int di = k[v][0], dj = k[v][1];
-                q[v] = point(g, c, di, dj, r0 + h[di][dj]);
+                q[v] = point(g, c, di, dj, k0 + h[di][dj]);
                 if (!moving) uv[v] = new double[] {dj, di};
                 else if (di == 0 && dj == 0) uv[v] = new double[] {0.5 - cs - sn, 0.5 - cs + sn};
                 else if (di == 1 && dj == 0) uv[v] = new double[] {0.5 - cs + sn, 0.5 + cs + sn};
@@ -284,7 +284,7 @@ public final class PlanetMesher {
         }
         int down = g.neighbor(c, CubeSphere.BOTTOM);
         if (down >= 0 && p.fluid(down) != f && !p.occludes(down) && !(dark != null && dark.in(down))) {
-            Vector3d[] q = {point(g, c, 0, 0, r0), point(g, c, 1, 0, r0), point(g, c, 1, 1, r0), point(g, c, 0, 1, r0)};
+            Vector3d[] q = {point(g, c, 0, 0, k0), point(g, c, 1, 0, k0), point(g, c, 1, 1, k0), point(g, c, 0, 1, k0)};
             addFluid(out, q, new double[][] {{0, 0}, {0, 1}, {1, 1}, {1, 0}}, center, still, CubeSphere.BOTTOM, tint, translucent, levels);
         }
         for (int s : LATERAL) {
@@ -298,16 +298,16 @@ public final class PlanetMesher {
                 default -> new int[] {0, 1, 1, 1};
             };
             double h0 = h[a[0]][a[1]], h1 = h[a[2]][a[3]];
-            Vector3d[] q = {point(g, c, a[0], a[1], r0), point(g, c, a[2], a[3], r0), point(g, c, a[2], a[3], r0 + h1),
-                    point(g, c, a[0], a[1], r0 + h0)};
+            Vector3d[] q = {point(g, c, a[0], a[1], k0), point(g, c, a[2], a[3], k0), point(g, c, a[2], a[3], k0 + h1),
+                    point(g, c, a[0], a[1], k0 + h0)};
             double[][] uv = {{0, 0.5}, {0.5, 0.5}, {0.5, (1 - h1) * 0.5}, {0, (1 - h0) * 0.5}};
             addFluid(out, q, uv, center, flowing, s, tint, translucent, levels);
         }
     }
 
-    /** Corner (di, dj) of cell's column at radius r. */
-    private static Vector3d point(CubeSphere g, int cell, int di, int dj, double r) {
-        return g.dir(g.face(cell), g.i(cell) + di, g.j(cell) + dj).mul(r);
+    /** Corner (di, dj) of cell's column at height h (layers). */
+    private static Vector3d point(CellGrid g, int cell, int di, int dj, double h) {
+        return g.vertex(g.face(cell), g.i(cell) + di, g.j(cell) + dj, h);
     }
 
     /** A fluid face, turned to face away from the cell's center, lit by the sun alone (no ambient occlusion on fluids). */
@@ -487,7 +487,7 @@ public final class PlanetMesher {
      * sides opaque is the darkest.
      */
     static double[] ambientOcclusion(VoxelPlanet p, int cell, int side, int front) {
-        CubeSphere g = p.grid;
+        CellGrid g = p.grid;
         double[] out = {1, 1, 1, 1, 1, 1, 1, 1};
         // The two axes along the face: (minus side, plus side) each, and which corner index they vary.
         int[] axisA, axisB;
@@ -531,7 +531,7 @@ public final class PlanetMesher {
      * them; one that is opaque counts as the front cell (it has no light of its own).
      */
     static double[] lightCorners(VoxelPlanet p, int side, int front) {
-        CubeSphere g = p.grid;
+        CellGrid g = p.grid;
         PlanetLight l = p.light();
         double[] out = new double[16];
         int[] axisA, axisB;

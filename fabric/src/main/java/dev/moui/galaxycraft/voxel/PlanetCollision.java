@@ -29,7 +29,7 @@ public final class PlanetCollision {
      */
     public static void boxes(VoxelPlanet p, Function<Vector3d, Vector3d> galOf, Function<Vector3d, Vector3d> localOf,
             GravityFrame frame, double[] query, List<double[]> out) {
-        CubeSphere g = p.grid;
+        CellGrid g = p.grid;
         Vector3d mid = new Vector3d((query[0] + query[3]) / 2, (query[1] + query[4]) / 2, (query[2] + query[5]) / 2);
         int ref = g.cellAt(localOf.apply(frame.toGal(mid)));
         if (ref < 0) return;
@@ -51,7 +51,7 @@ public final class PlanetCollision {
     }
 
     /** c's box: across from cell across (c's column at the player's layer), up from c itself. */
-    private static void add(CubeSphere g, int c, int across, double[] box, Function<Vector3d, Vector3d> galOf, GravityFrame frame,
+    private static void add(CellGrid g, int c, int across, double[] box, Function<Vector3d, Vector3d> galOf, GravityFrame frame,
             double[] q, List<double[]> out) {
         double[] b = {Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE};
         double mx = (box[0] + box[3]) / 2, my = (box[1] + box[4]) / 2, mz = (box[2] + box[5]) / 2;

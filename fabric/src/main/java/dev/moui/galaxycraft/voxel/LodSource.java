@@ -16,7 +16,7 @@ public interface LodSource {
     /** A patch's ground: its top (layers from the grid's bottom), its block, and a cell of it (tints). */
     record Patch(int height, int block, int cell) {}
 
-    CubeSphere grid();
+    CellGrid grid();
 
     Blocks blocks();
 
@@ -33,7 +33,7 @@ public interface LodSource {
     /** As {@link #of(VoxelPlanet)}, looking at every stride-th column each way only (faster on big planets). */
     static LodSource of(VoxelPlanet p, int stride) {
         return new LodSource() {
-            @Override public CubeSphere grid() {
+            @Override public CellGrid grid() {
                 return p.grid;
             }
 
@@ -42,7 +42,7 @@ public interface LodSource {
             }
 
             @Override public Patch patch(int face, int i0, int i1, int j0, int j1) {
-                CubeSphere g = p.grid;
+                CellGrid g = p.grid;
                 Map<Integer, Integer> count = new HashMap<>();
                 long sum = 0;
                 int cols = 0, best = Blocks.AIR, bestCount = 0;
@@ -85,7 +85,7 @@ public interface LodSource {
         CubeSphere g = s.grid();
         Map<Integer, String> biomeAt = new HashMap<>();
         return new LodSource() {
-            @Override public CubeSphere grid() {
+            @Override public CellGrid grid() {
                 return g;
             }
 
@@ -120,7 +120,7 @@ public interface LodSource {
         int depth = VoxelPlanet.groundDepth(radius);
         CubeSphere g = new CubeSphere(VoxelPlanet.gridSize(radius), radius - depth, depth + VoxelPlanet.defaultAir(radius));
         return new LodSource() {
-            @Override public CubeSphere grid() {
+            @Override public CellGrid grid() {
                 return g;
             }
 
