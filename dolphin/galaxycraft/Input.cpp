@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstring>
+#include <utility>
 
 #include "galaxycraft_protocol.h"
 
@@ -78,6 +79,46 @@ int EvdevToScancode(int evdev)
     if (code == evdev)
       return scancode;
   return -1;
+}
+
+int DikToScancode(int dik)
+{
+  // Up to F12 the DIK codes are the evdev codes (both are set 1 scancodes); past them they differ.
+  if (dik >= 0 && dik <= 0x58)
+    return EvdevToScancode(dik);
+  // Extended keys (E0 prefix + 0x80), as their evdev codes.
+  static constexpr std::pair<int, int> EXTENDED[] = {
+      {0x9D, 97},  {0xB8, 100}, {0xC7, 102}, {0xC8, 103}, {0xC9, 104}, {0xCB, 105},
+      {0xCD, 106}, {0xCF, 107}, {0xD0, 108}, {0xD1, 109}, {0xD2, 110}, {0xD3, 111}};
+  for (const auto& [code, evdev] : EXTENDED)
+    if (code == dik)
+      return EvdevToScancode(evdev);
+  return -1;
+}
+
+void DikKeysToScancodes(const u8 dik[256], u8 keys[64])
+{
+  std::fill(keys, keys + 64, u8{0});
+  for (int code = 0; code < 256; code++)
+  {
+    if (!(dik[code] & 0x80))
+      continue;
+    const int scancode = DikToScancode(code);
+    if (scancode < 0 || scancode == 41)  // 41: Escape stays Dolphin's
+      continue;
+    keys[scancode / 8] |= static_cast<u8>(1 << (scancode % 8));
+  }
+}
+
+u32 DInputButtonsToSdl(const u8 buttons[8])
+{
+  // SDL: 1 left, 2 middle, 3 right, 4 back, 5 forward.
+  static constexpr int SDL_BUTTON[5] = {1, 3, 2, 4, 5};
+  u32 mask = 0;
+  for (int i = 0; i < 5; i++)
+    if (buttons[i] & 0x80)
+      mask |= 1u << SDL_BUTTON[i];
+  return mask;
 }
 
 void X11KeymapToScancodes(const char keymap[32], u8 keys[64])

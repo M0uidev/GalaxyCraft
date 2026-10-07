@@ -9,7 +9,17 @@
 #include <cstdlib>
 #include <cstring>
 #include <thread>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 #include "galaxycraft_protocol.h"
 
@@ -29,9 +39,7 @@ constexpr int SKIN_RETRY_TICKS = 60;
 
 u32 BE32(const u8* p)
 {
-  u32 v;
-  std::memcpy(&v, p, 4);
-  return __builtin_bswap32(v);
+  return u32{p[0]} << 24 | u32{p[1]} << 16 | u32{p[2]} << 8 | u32{p[3]};
 }
 float BEF(const u8* p)
 {
@@ -39,8 +47,10 @@ float BEF(const u8* p)
 }
 void PutBE32(u8* p, u32 v)
 {
-  v = __builtin_bswap32(v);
-  std::memcpy(p, &v, 4);
+  p[0] = static_cast<u8>(v >> 24);
+  p[1] = static_cast<u8>(v >> 16);
+  p[2] = static_cast<u8>(v >> 8);
+  p[3] = static_cast<u8>(v);
 }
 void PutBEF(u8* p, float f)
 {
@@ -110,7 +120,11 @@ HostBridge::HostBridge(Shm& shm, std::function<u64()> clock_ms, std::function<vo
     m_sleep = {};
   m_shm.SetU32(offsetof(GxcHeader, magic), GXC_MAGIC);
   m_shm.SetU32(offsetof(GxcHeader, version), GXC_VERSION);
+#ifdef _WIN32
+  m_shm.SetU32(offsetof(GxcHeader, host_pid), static_cast<u32>(GetCurrentProcessId()));
+#else
   m_shm.SetU32(offsetof(GxcHeader, host_pid), static_cast<u32>(getpid()));
+#endif
   if (auto p = ReadPlayer(m_shm))
     m_seen_player_frame = p->frame_id;  // stale pose from a previous session is not fresh
 }

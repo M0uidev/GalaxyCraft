@@ -22,6 +22,8 @@ import sys
 import time
 from pathlib import Path
 
+import gxproto
+
 ROOT = Path(__file__).resolve().parent.parent
 USER_DIR = Path.home() / ".local/share/galaxycraft-dev"
 SEED = ROOT / "tools/dolphin-dev"
@@ -30,8 +32,8 @@ PID_FILE = USER_DIR / "dolphin.pid"
 LOG_FILE = USER_DIR / "dolphin.log"
 DESCRIPTOR = ROOT / "syati/build/galaxycraft.json"
 BINARIES = ROOT / "dolphin/build/Binaries"
-CTL = Path("/dev/shm/galaxycraft_ctl")
-CTL_OUT = Path("/dev/shm/galaxycraft_ctl.out")
+CTL = Path(gxproto.SHM_DIR) / "galaxycraft_ctl"
+CTL_OUT = Path(gxproto.SHM_DIR) / "galaxycraft_ctl.out"
 
 
 def die(msg):

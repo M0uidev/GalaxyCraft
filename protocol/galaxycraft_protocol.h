@@ -1,7 +1,8 @@
 /*
  * GalaxyCraft shared-memory protocol, version 11.
  *
- * Source of truth for the layout of /dev/shm/galaxycraft_v1. Mirrors:
+ * Source of truth for the layout of galaxycraft_v1, the shared memory file in /dev/shm (Linux),
+ * %TEMP% (Windows) or $GXC_SHM_DIR. Mirrors:
  *   tools/gxproto.py
  *   fabric/src/main/java/dev/moui/galaxycraft/proto/Layout.java
  * protocol/test_layout.c pins every offset.

@@ -1,5 +1,5 @@
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index 56c8dba..c99982b 100644
+index 56c8dba3de..c99982b01b 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
 @@ -57,6 +57,8 @@ add_library(core
@@ -26,7 +26,7 @@ index 56c8dba..c99982b 100644
    common
    discio
 diff --git a/Source/Core/Core/Core.cpp b/Source/Core/Core/Core.cpp
-index fc614fd..7a29ab0 100644
+index fc614fd24c..7a29ab02f7 100644
 --- a/Source/Core/Core/Core.cpp
 +++ b/Source/Core/Core/Core.cpp
 @@ -2,6 +2,7 @@
@@ -49,10 +49,10 @@ index fc614fd..7a29ab0 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000..bdde4e6
+index 0000000000..cf421a142e
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,597 @@
+@@ -0,0 +1,688 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -61,9 +61,6 @@ index 0000000..bdde4e6
 +#include <array>
 +#include <atomic>
 +#include <chrono>
-+#include <filesystem>
-+#include <fstream>
-+#include <sstream>
 +#include <cstdio>
 +#include <cstdlib>
 +#include <cstring>
@@ -73,8 +70,12 @@ index 0000000..bdde4e6
 +#include <string_view>
 +#include <utility>
 +
++#include <fmt/chrono.h>
++
 +#include "AudioCommon/AudioCommon.h"
 +#include "AudioCommon/SoundStream.h"
++#include "Common/FileUtil.h"
++#include "Common/IOFile.h"
 +#include "Common/HookableEvent.h"
 +#include "Core/Config/MainSettings.h"
 +#include "Common/Logging/Log.h"
@@ -102,6 +103,22 @@ index 0000000..bdde4e6
 +
 +namespace GalaxyCraft
 +{
++namespace
++{
++std::mutex s_log_mutex;
++std::string s_log_path;  // under s_log_mutex; empty: not started
++}  // namespace
++
++void Log(const std::string& line)
++{
++  std::fprintf(stderr, "GalaxyCraft: %s\n", line.c_str());
++  std::lock_guard lock(s_log_mutex);
++  if (s_log_path.empty())
++    return;
++  const auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
++  File::IOFile(s_log_path, "ab").WriteString(fmt::format("{:%Y-%m-%d %H:%M:%S} UTC {}\n", now, line));
++}
++
 +namespace
 +{
 +// Emulated RAM through raw pointers with our own bounds checks: the game hands us addresses
@@ -226,12 +243,14 @@ index 0000000..bdde4e6
 +  bool override_on = false;
 +  bool link_shown = true;  // the bridge's Minecraft mode as last announced
 +  bool muted = false;      // the game's sound off while Minecraft's menus show (InMenu)
-+  u8 keys[64] = {};  // keyboard and mouse as of the last XInput2 update (Escape included)
++  u8 keys[64] = {};  // keyboard and mouse as of the last input update (Escape included)
 +  u32 buttons = 0;
 +  std::optional<std::pair<std::array<u8, 64>, u32>> dev_keys;  // ctl keys, while set
++  u32 logged_mod_pid = 0;  // NoteHeartbeat: the Minecraft last logged
 +};
 +
-+// ctl keys: hold these (names as DevKeysToInput) until the next keys; none = back to XInput2.
++// ctl keys: hold these (names as DevKeysToInput) until the next keys; none = back to the
++// keyboard and mouse.
 +void SetDevKeys(State& state, const std::string& names)
 +{
 +  std::array<u8, 64> keys{};
@@ -293,27 +312,38 @@ index 0000000..bdde4e6
 +  });
 +}
 +
-+// Development control channel (tools/gxdev.py): commands in, results appended out.
-+constexpr const char* CTL_PATH = "/dev/shm/galaxycraft_ctl";
-+constexpr const char* CTL_OUT_PATH = "/dev/shm/galaxycraft_ctl.out";
++// Development control channel (tools/gxdev.py): commands in, results appended out, next to the
++// shared memory file (/dev/shm on Linux, %TEMP% on Windows, or $GXC_SHM_DIR).
++const std::string& CtlPath()
++{
++  static const std::string path = gxc::ShmFile("galaxycraft_ctl");
++  return path;
++}
++
++const std::string& CtlOutPath()
++{
++  static const std::string path = gxc::ShmFile("galaxycraft_ctl.out");
++  return path;
++}
 +
 +void AppendCtlOut(const std::string& text)
 +{
-+  std::ofstream(CTL_OUT_PATH, std::ios::app) << text;
++  File::IOFile(CtlOutPath(), "ab").WriteString(text);
 +}
++
++s64 HeartbeatAgeMs(const gxc::Shm& shm);
 +
 +// CPU thread. Memory commands run right away; screenshots and savestates go to the host thread,
 +// which is where Dolphin expects them to be started.
 +void RunControlFile(gxc::GuestMemory& mem, gxc::HostBridge& bridge, bool mod_alive, State& state)
 +{
-+  std::error_code ec;
-+  if (!std::filesystem::exists(CTL_PATH, ec))
++  if (!File::Exists(CtlPath()))
 +    return;
-+  std::stringstream text;
-+  text << std::ifstream(CTL_PATH).rdbuf();
-+  std::filesystem::remove(CTL_PATH, ec);
++  std::string text;
++  File::ReadFileToString(CtlPath(), text);
++  File::Delete(CtlPath(), File::IfAbsentBehavior::NoConsoleWarning);
 +
-+  for (const gxc::DevCommand& cmd : gxc::ParseDevCommands(text.str()))
++  for (const gxc::DevCommand& cmd : gxc::ParseDevCommands(text))
 +  {
 +    switch (cmd.kind)
 +    {
@@ -363,14 +393,15 @@ index 0000000..bdde4e6
 +      AppendCtlOut(fmt::format("render_focus={} full_focus={} ui_blocks_input={} link={} mod_alive={} "
 +                               "following={} in_game={} focus_gained={} focus_lost={} link_toggles={} "
 +                               "xinput_updates={} fps={:.1f} vps={:.1f} speed={:.0f} max_speed={:.0f} mario_skin_writes={} plus_held={} "
-+                               "muted={} republished={}/{}/{}\n",
++                               "muted={} republished={}/{}/{} mod_heartbeat_age_ms={}\n",
 +                               Host_RendererHasFocus(), Host_RendererHasFullFocus(),
 +                               Host_UIBlocksControllerState(), bridge.MinecraftMode(),
 +                               mod_alive, bridge.Following(), bridge.InGame(), s_focus_gained.load(),
 +                               s_focus_lost.load(), s_link_toggles.load(),
 +                               s_xinput_updates.load(), perf.GetFPS(), perf.GetVPS(), perf.GetSpeed() * 100,
 +                               perf.GetMaxSpeed() * 100, bridge.MarioSkinWrites(), bridge.PlusHeld(), state.muted,
-+                               bridge.Republished()[0], bridge.Republished()[1], bridge.Republished()[2]));
++                               bridge.Republished()[0], bridge.Republished()[1], bridge.Republished()[2],
++                               HeartbeatAgeMs(*state.shm)));
 +    }
 +      break;
 +    case gxc::DevCommand::Keys:
@@ -414,6 +445,30 @@ index 0000000..bdde4e6
 +  return hb != 0 && NowMs() - hb < GXC_HEARTBEAT_TIMEOUT_MS;
 +}
 +
++// How old Minecraft's heartbeat is by this process's clock (0: none yet; negative: from the
++// future). Both clocks are the system's monotonic one (Linux CLOCK_MONOTONIC, Windows
++// QueryPerformanceCounter), so a live mod reads a few milliseconds: anything far off means the
++// clocks disagree and the mod would look gone.
++s64 HeartbeatAgeMs(const gxc::Shm& shm)
++{
++  const u64 hb = shm.GetU64(offsetof(GxcHeader, mod_heartbeat_ms));
++  return hb == 0 ? 0 : static_cast<s64>(NowMs() - hb);
++}
++
++// Field hook: logs the first heartbeat of each Minecraft connection, with its age (see above).
++void NoteHeartbeat(State& state)
++{
++  const u32 pid = state.shm->GetU32(offsetof(GxcHeader, mod_pid));
++  if (pid == state.logged_mod_pid || state.shm->GetU64(offsetof(GxcHeader, mod_heartbeat_ms)) == 0)
++    return;
++  state.logged_mod_pid = pid;
++  const s64 age = HeartbeatAgeMs(*state.shm);
++  Log(fmt::format("Minecraft (pid {}) connected; its heartbeat is {} ms old{}", pid, age,
++                  age < 0 || age > GXC_HEARTBEAT_TIMEOUT_MS ?
++                      ": the two clocks disagree, Minecraft will look gone" :
++                      " (clocks agree)"));
++}
++
 +// Keyboard and mouse are Minecraft's: the link is on, or its menus cover the game.
 +bool MinecraftHasInput(const State& state)
 +{
@@ -434,6 +489,7 @@ index 0000000..bdde4e6
 +  state.buttons = 0;
 +  s_xinput_buttons = 0;
 +  NOTICE_LOG_FMT(CORE, "GalaxyCraft: link {}", on ? "on" : "off");
++  Log(on ? "link on" : "link off");
 +  OSD::AddMessage(on ? "Super Minecraft Galaxy: Minecraft has the controls" :
 +                       "Super Minecraft Galaxy: Wii Remote has the controls (Minecraft paused)",
 +                  3000);
@@ -446,11 +502,20 @@ index 0000000..bdde4e6
 +  if (!env || std::strcmp(env, "1") != 0)
 +    return;
 +
++  // The log of this run, in Dolphin's Logs folder (with the launcher: galaxycraft/dolphin/Logs).
++  {
++    std::lock_guard lock(s_log_mutex);
++    s_log_path = File::GetUserPath(D_LOGS_IDX) + "galaxycraft.log";
++    File::CreateFullPath(s_log_path);
++    File::IOFile(s_log_path, "wb");
++  }
++  const std::string shm_path = gxc::ShmFile(GXC_SHM_NAME + 1);
 +  auto state = std::make_unique<State>();
-+  state->shm = gxc::Shm::Create("/dev/shm" GXC_SHM_NAME);
++  state->shm = gxc::Shm::Create(shm_path);
 +  if (!state->shm)
 +  {
-+    ERROR_LOG_FMT(CORE, "GalaxyCraft: could not create /dev/shm{}", GXC_SHM_NAME);
++    ERROR_LOG_FMT(CORE, "GalaxyCraft: could not create {}", shm_path);
++    Log("could not create " + shm_path);
 +    return;
 +  }
 +  state->bridge = std::make_unique<gxc::HostBridge>(*state->shm, NowMs);
@@ -473,6 +538,7 @@ index 0000000..bdde4e6
 +      return;
 +    s_state->bridge->Tick(*s_state->memory);
 +    RunControlFile(*s_state->memory, *s_state->bridge, ModAlive(*s_state->shm), *s_state);
++    NoteHeartbeat(*s_state);
 +    AnnounceLink(*s_state);
 +    UpdateMarioInput(*s_state);
 +    UpdateMute(*s_state);
@@ -481,8 +547,8 @@ index 0000000..bdde4e6
 +  std::lock_guard lock(s_mutex);
 +  s_state = std::move(state);
 +  s_running = true;
-+  NOTICE_LOG_FMT(CORE, "GalaxyCraft: bridge running on /dev/shm{}", GXC_SHM_NAME);
-+  std::fprintf(stderr, "GalaxyCraft: bridge running on /dev/shm%s\n", GXC_SHM_NAME);
++  NOTICE_LOG_FMT(CORE, "GalaxyCraft: bridge running on {}", shm_path);
++  Log("bridge running on " + shm_path);
 +}
 +
 +void Stop()
@@ -521,9 +587,8 @@ index 0000000..bdde4e6
 +  {
 +    WARN_LOG_FMT(CORE, "GalaxyCraft: invalid {} {:#010x}, PC = {:#010x}, LR = {:#010x} ({} times)",
 +                 write ? "write to" : "read from", address, pc, lr, count);
-+    std::fprintf(stderr, "GalaxyCraft: invalid %s 0x%08x, PC = 0x%08x, LR = 0x%08x (%llu times)\n",
-+                 write ? "write to" : "read from", address, pc, lr,
-+                 static_cast<unsigned long long>(count));
++    Log(fmt::format("invalid {} {:#010x}, PC = {:#010x}, LR = {:#010x} ({} times)",
++                    write ? "write to" : "read from", address, pc, lr, count));
 +  }
 +  return true;
 +}
@@ -553,8 +618,8 @@ index 0000000..bdde4e6
 +         !state.bridge->ScreenOpen();
 +}
 +
-+bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32], float pointer_x,
-+               float pointer_y)
++bool OnKeyboardMouse(float dx, float dy, float wheel, u32 buttons, const u8 keys[64], bool escape,
++                     float pointer_x, float pointer_y)
 +{
 +  std::lock_guard lock(s_mutex);
 +  const bool active = s_state && MinecraftHasInput(*s_state);
@@ -569,40 +634,66 @@ index 0000000..bdde4e6
 +  const bool screen = s_state->bridge->ScreenOpen() || s_state->bridge->InMenu();
 +  s_state->input->Pointer(pointer_x, pointer_y,
 +                          screen && pointer_x >= 0 && pointer_x <= 1 && pointer_y >= 0 && pointer_y <= 1);
-+  if (dz != 0)
-+    s_state->input->Wheel(-dz / 8.0);  // notches, up positive (as Minecraft's scroll)
-+  u8 keys[64];
-+  gxc::X11KeymapToScancodes(keymap, keys);
-+  constexpr int X_ESCAPE = 9;  // X keycode (evdev 1 + 8)
-+  const bool escape = (keymap[X_ESCAPE / 8] >> (X_ESCAPE % 8)) & 1;
++  if (wheel != 0)
++    s_state->input->Wheel(wheel);  // notches, up positive (as Minecraft's scroll)
 +  // Escape is Minecraft's while one of its screens is open (it closes it) and while Mario is
 +  // playable (it opens Minecraft's pause menu, from which SMG2's own is one button away); in
 +  // SMG2's menus it is Mario's + button.
 +  const bool mc_escape = s_state->bridge->MinecraftTakesEscape();
 +  u8 mc_keys[64];
-+  std::memcpy(mc_keys, keys, sizeof(keys));
++  std::memcpy(mc_keys, keys, sizeof(mc_keys));
 +  if (escape && mc_escape)
 +    mc_keys[gxc::SC_ESCAPE / 8] |= 1u << (gxc::SC_ESCAPE % 8);
 +  s_state->input->SetKeys(mc_keys);
-+  const u32 buttons = gxc::X11ButtonsToSdl(x_buttons);
 +  if (buttons != s_xinput_buttons)
 +  {
 +    s_xinput_buttons = buttons;
 +    s_state->input->Buttons(buttons);
 +  }
 +  // Mario mode reads Escape (the + button) when Minecraft does not.
-+  std::memcpy(s_state->keys, keys, sizeof(keys));
++  std::memcpy(s_state->keys, keys, sizeof(s_state->keys));
 +  if (escape && !mc_escape)
 +    s_state->keys[gxc::SC_ESCAPE / 8] |= 1u << (gxc::SC_ESCAPE % 8);
 +  s_state->buttons = buttons;
 +  return capture;
 +}
 +
++bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32], float pointer_x,
++               float pointer_y)
++{
++  u8 keys[64];
++  gxc::X11KeymapToScancodes(keymap, keys);
++  constexpr int X_ESCAPE = 9;  // X keycode (evdev 1 + 8)
++  const bool escape = (keymap[X_ESCAPE / 8] >> (X_ESCAPE % 8)) & 1;
++  return OnKeyboardMouse(dx, dy, -dz / 8.0f, gxc::X11ButtonsToSdl(x_buttons), keys, escape,
++                         pointer_x, pointer_y);
++}
++
++bool OnDInput(long dx, long dy, long dz, const u8 buttons[8], const u8 dik[256], float pointer_x,
++              float pointer_y)
++{
++  u8 keys[64];
++  gxc::DikKeysToScancodes(dik, keys);
++  constexpr int DIK_ESCAPE = 0x01;
++  const bool escape = (dik[DIK_ESCAPE] & 0x80) != 0;
++  // 120 per notch (WHEEL_DELTA), up positive.
++  return OnKeyboardMouse(static_cast<float>(dx), static_cast<float>(dy), dz / 120.0f,
++                         gxc::DInputButtonsToSdl(buttons), keys, escape, pointer_x, pointer_y);
++}
++
 +void OnText(u32 keysym)
 +{
++  OnCharacter(gxc::KeysymToCodepoint(keysym));
++}
++
++void OnCharacter(u32 codepoint)
++{
++  // Control characters (Backspace, Return, Tab, Escape, Ctrl+letter) are keys, not text.
++  if (codepoint < 0x20 || codepoint == 0x7F)
++    return;
 +  std::lock_guard lock(s_mutex);
 +  if (s_state && MinecraftHasInput(*s_state))
-+    s_state->input->Text(gxc::KeysymToCodepoint(keysym));
++    s_state->input->Text(codepoint);
 +}
 +
 +bool MouseCaptured()
@@ -652,16 +743,17 @@ index 0000000..bdde4e6
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000..aa4925e
+index 0000000000..792487cffb
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,87 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
 +#pragma once
 +
 +#include <functional>
++#include <string>
 +
 +#include "Common/CommonTypes.h"
 +
@@ -681,18 +773,35 @@ index 0000000..aa4925e
 +// True while Minecraft is connected and the link is on, so keyboard and mouse belong to it.
 +bool InputActive();
 +
-+// XInput2 backend, after every input update (any thread): raw mouse motion since the previous
-+// update, X button bits, wheel motion (8 per notch, down positive), the X keymap and where the
-+// pointer is over the render window (0..1). Feeds them to Minecraft and Mario mode's Wii Remote,
-+// and returns true while the pointer is to be captured and recentred (playing, not in SMG2's
-+// menus, where the mouse is the Wii Remote pointer, nor in a Minecraft screen, where it is
-+// Minecraft's pointer).
++// The keyboard and mouse backend (XInput2 on Linux, DirectInput on Windows), after every input
++// update (any thread): raw mouse motion since the previous update, wheel notches since then (up
++// positive), the mouse buttons (bit n = SDL button n), the keys held as SDL scancodes (Escape left
++// out), whether Escape is held, and where the pointer is over the render window (0..1). Feeds them
++// to Minecraft and Mario mode's Wii Remote, and returns true while the pointer is to be captured
++// and recentred (playing, not in SMG2's menus, where the mouse is the Wii Remote pointer, nor in a
++// Minecraft screen, where it is Minecraft's pointer).
++bool OnKeyboardMouse(float dx, float dy, float wheel, u32 buttons, const u8 keys[64], bool escape,
++                     float pointer_x, float pointer_y);
++
++// XInput2 backend, after every input update: OnKeyboardMouse with X11's raw motion, X button bits,
++// wheel motion (8 per notch, down positive) and X keymap (XQueryKeymap).
 +bool OnXInput2(float dx, float dy, float dz, u32 x_buttons, const char keymap[32], float pointer_x,
 +               float pointer_y);
 +
++// DirectInput backend, after every input update: OnKeyboardMouse with DIMOUSESTATE2's relative
++// motion (lX, lY, lZ: 120 per wheel notch, up positive) and buttons, and the DIK_* key states.
++bool OnDInput(long dx, long dy, long dz, const u8 buttons[8], const u8 dik[256], float pointer_x,
++              float pointer_y);
++
 +// XInput2 backend: a key typed this X11 keysym (layout applied); Minecraft gets its character.
 +void OnText(u32 keysym);
-+// Same as OnXInput2's result: the mouse turns Minecraft's view (cursor hidden).
++// A character typed (Unicode code point, layout applied: Qt's key text on Windows); Minecraft
++// gets it. Control characters are ignored.
++void OnCharacter(u32 codepoint);
++
++// Dolphin's GalaxyCraft log: stderr and <User>/Logs/galaxycraft.log (new each run).
++void Log(const std::string& line);
++// Same as OnKeyboardMouse's result: the mouse turns Minecraft's view (cursor hidden).
 +bool MouseCaptured();
 +
 +// Savestates roll the game's RAM back but not Minecraft, so they are off: only the dev control
@@ -726,7 +835,7 @@ index 0000000..aa4925e
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn);
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp b/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp
-index ebf24f7..e580a9b 100644
+index ebf24f735c..e580a9ba44 100644
 --- a/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp
 +++ b/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp
 @@ -80,9 +80,17 @@ Common::Quaternion ComplementaryFilter(const Common::Quaternion& gyroscope,
@@ -750,7 +859,7 @@ index ebf24f7..e580a9b 100644
    {
      if (state->velocity.data[i] * std::copysign(1.f, target_position.data[i]) < 0 ||
 diff --git a/Source/Core/Core/HW/WiimoteEmu/Dynamics.h b/Source/Core/Core/HW/WiimoteEmu/Dynamics.h
-index 8f35c30..9c07dad 100644
+index 8f35c306da..9c07dad72e 100644
 --- a/Source/Core/Core/HW/WiimoteEmu/Dynamics.h
 +++ b/Source/Core/Core/HW/WiimoteEmu/Dynamics.h
 @@ -75,7 +75,9 @@ void ApproachPositionWithJerk(PositionalState* state, const Common::Vec3& target
@@ -765,7 +874,7 @@ index 8f35c30..9c07dad 100644
  void EmulateSwing(MotionState* state, ControllerEmu::Force* swing_group, float time_elapsed);
  void EmulatePoint(MotionState* state, ControllerEmu::Cursor* ir_group,
 diff --git a/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp b/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp
-index 6745602..b365d0a 100644
+index 67456021af..b365d0af0c 100644
 --- a/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp
 +++ b/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp
 @@ -77,7 +77,7 @@ void Nunchuk::BuildDesiredExtensionState(DesiredExtensionState* target_state)
@@ -778,7 +887,7 @@ index 6745602..b365d0a 100644
    const auto transformation =
        GetRotationalMatrix(-m_tilt_state.angle) * GetRotationalMatrix(-m_swing_state.angle);
 diff --git a/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp b/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp
-index bbbea66..bbe14cd 100644
+index bbbea66e37..bbe14cd58a 100644
 --- a/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp
 +++ b/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp
 @@ -837,7 +837,7 @@ void Wiimote::StepDynamics()
@@ -791,7 +900,7 @@ index bbbea66..bbe14cd 100644
                     1.f / ::Wiimote::UPDATE_FREQ);
  }
 diff --git a/Source/Core/Core/HotkeyManager.cpp b/Source/Core/Core/HotkeyManager.cpp
-index 915dc0d..85da7d9 100644
+index 915dc0d6d7..2f0b52d4a2 100644
 --- a/Source/Core/Core/HotkeyManager.cpp
 +++ b/Source/Core/Core/HotkeyManager.cpp
 @@ -86,6 +86,7 @@ constexpr std::array<const char*, NUM_HOTKEYS> s_hotkey_labels{{
@@ -820,7 +929,7 @@ index 915dc0d..85da7d9 100644
 +  set_key_expression(HK_GALAXYCRAFT_LINK, hotkey_string({"Ctrl", "G"}));
  }
 diff --git a/Source/Core/Core/HotkeyManager.h b/Source/Core/Core/HotkeyManager.h
-index 6a1b754..662cd8f 100644
+index 6a1b75458f..662cd8fd4d 100644
 --- a/Source/Core/Core/HotkeyManager.h
 +++ b/Source/Core/Core/HotkeyManager.h
 @@ -74,6 +74,7 @@ enum Hotkey
@@ -832,7 +941,7 @@ index 6a1b754..662cd8f 100644
    HK_NEXT_WIIMOTE_PROFILE_1,
    HK_PREV_WIIMOTE_PROFILE_1,
 diff --git a/Source/Core/Core/PowerPC/MMU.cpp b/Source/Core/Core/PowerPC/MMU.cpp
-index 940e93c..925153c 100644
+index 940e93c7ea..925153c36f 100644
 --- a/Source/Core/Core/PowerPC/MMU.cpp
 +++ b/Source/Core/Core/PowerPC/MMU.cpp
 @@ -25,6 +25,8 @@
@@ -855,7 +964,7 @@ index 940e93c..925153c 100644
      {
        PanicAlertFmtT(
 diff --git a/Source/Core/Core/State.cpp b/Source/Core/Core/State.cpp
-index 2dcd2ca..5756c52 100644
+index 2dcd2cae2b..5756c52036 100644
 --- a/Source/Core/Core/State.cpp
 +++ b/Source/Core/Core/State.cpp
 @@ -39,6 +39,7 @@
@@ -933,7 +1042,7 @@ index 2dcd2ca..5756c52 100644
      return;
  
 diff --git a/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp b/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp
-index b0ebaac..a091c69 100644
+index b0ebaacca1..a091c69dd8 100644
 --- a/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp
 +++ b/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp
 @@ -628,7 +628,7 @@ void SwingIndicator::Draw()
@@ -946,7 +1055,7 @@ index b0ebaac..a091c69 100644
    for (auto& sample : m_position_samples)
      sample.age += elapsed_seconds;
 diff --git a/Source/Core/DolphinQt/Host.cpp b/Source/Core/DolphinQt/Host.cpp
-index e2f1b21..3075bed 100644
+index e2f1b21884..3075bed50a 100644
 --- a/Source/Core/DolphinQt/Host.cpp
 +++ b/Source/Core/DolphinQt/Host.cpp
 @@ -19,6 +19,7 @@
@@ -966,7 +1075,7 @@ index e2f1b21..3075bed 100644
    if (g_gfx && m_render_fullscreen && g_ActiveConfig.ExclusiveFullscreenEnabled())
    {
 diff --git a/Source/Core/DolphinQt/HotkeyScheduler.cpp b/Source/Core/DolphinQt/HotkeyScheduler.cpp
-index 478454e..d7e624e 100644
+index 478454ed5a..d7e624e54a 100644
 --- a/Source/Core/DolphinQt/HotkeyScheduler.cpp
 +++ b/Source/Core/DolphinQt/HotkeyScheduler.cpp
 @@ -35,6 +35,7 @@
@@ -997,7 +1106,7 @@ index 478454e..d7e624e 100644
  
        if (IsHotkey(HK_PREV_WIIMOTE_PROFILE_1))
 diff --git a/Source/Core/DolphinQt/RenderWidget.cpp b/Source/Core/DolphinQt/RenderWidget.cpp
-index 49680b8..b13b2d9 100644
+index 49680b8482..50fd005950 100644
 --- a/Source/Core/DolphinQt/RenderWidget.cpp
 +++ b/Source/Core/DolphinQt/RenderWidget.cpp
 @@ -12,6 +12,8 @@
@@ -1027,7 +1136,7 @@ index 49680b8..b13b2d9 100644
    PassEventToPresenter(event);
  
    switch (event->type())
-@@ -511,6 +517,48 @@ bool RenderWidget::event(QEvent* event)
+@@ -511,6 +517,55 @@ bool RenderWidget::event(QEvent* event)
    return QWidget::event(event);
  }
  
@@ -1061,6 +1170,13 @@ index 49680b8..b13b2d9 100644
 +  switch (event->type())
 +  {
 +  case QEvent::KeyPress:
++#ifdef _WIN32
++    // Windows: what the keys type (layout, dead keys and AltGr applied) comes from Qt; on X11 the
++    // XInput2 backend reads it (GalaxyCraft::OnText), as Qt may never have the focus there.
++    for (const uint c : static_cast<const QKeyEvent*>(event)->text().toUcs4())
++      GalaxyCraft::OnCharacter(c);
++#endif
++    [[fallthrough]];
 +  case QEvent::KeyRelease:
 +    return static_cast<const QKeyEvent*>(event)->key() != Qt::Key_Escape;
 +  case QEvent::MouseMove:
@@ -1077,7 +1193,7 @@ index 49680b8..b13b2d9 100644
  {
    if (!Core::IsRunning(Core::System::GetInstance()))
 diff --git a/Source/Core/DolphinQt/RenderWidget.h b/Source/Core/DolphinQt/RenderWidget.h
-index d828bf3..89bda3b 100644
+index d828bf36d1..89bda3b781 100644
 --- a/Source/Core/DolphinQt/RenderWidget.h
 +++ b/Source/Core/DolphinQt/RenderWidget.h
 @@ -41,6 +41,9 @@ private:
@@ -1090,8 +1206,133 @@ index d828bf3..89bda3b 100644
    void SetPresenterKeyMap();
    void dragEnterEvent(QDragEnterEvent* event) override;
    void dropEvent(QDropEvent* event) override;
+diff --git a/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.cpp b/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.cpp
+index 92ebf355fc..ea43494fbd 100644
+--- a/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.cpp
++++ b/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.cpp
+@@ -8,6 +8,7 @@
+ #include "Common/Logging/Log.h"
+ 
+ #include "Core/Core.h"
++#include "Core/GalaxyCraft.h"
+ #include "Core/Host.h"
+ 
+ #include "InputCommon/ControllerInterface/ControllerInterface.h"
+@@ -104,6 +105,7 @@ void SetKeyboardMouseWindow(HWND hwnd)
+ KeyboardMouse::~KeyboardMouse()
+ {
+   s_keyboard_mouse_exists = false;
++  CaptureForGalaxyCraft(false);
+ 
+   // Independently of the order in which we do these, if we put a breakpoint on Unacquire() (or in
+   // any place in the call stack before this), when refreshing devices from the UI, on the second
+@@ -220,7 +222,7 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+ {
+   UpdateCursorInput();
+ 
+-  DIMOUSESTATE2 tmp_mouse;
++  DIMOUSESTATE2 tmp_mouse{};
+ 
+   // if mouse position hasn't been updated in a short while, skip a dev state
+   DWORD cur_time = GetTickCount();
+@@ -237,6 +239,8 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+   m_last_update = cur_time;
+ 
+   HRESULT mo_hr = m_mo_device->GetDeviceState(sizeof(tmp_mouse), &tmp_mouse);
++  if (FAILED(mo_hr))
++    tmp_mouse = {};  // GalaxyCraft reads it below: no motion, no buttons
+   if (DIERR_INPUTLOST == mo_hr || DIERR_NOTACQUIRED == mo_hr)
+   {
+     INFO_LOG_FMT(CONTROLLERINTERFACE, "Mouse device failed to get state");
+@@ -266,9 +270,66 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+       INFO_LOG_FMT(CONTROLLERINTERFACE, "Keyboard device failed to re-acquire, we'll retry later");
+   }
+ 
++  UpdateGalaxyCraft(tmp_mouse);
++
+   return Core::DeviceRemoval::Keep;
+ }
+ 
++// GalaxyCraft: Minecraft reads keyboard and mouse from here (as from XInput2 on Linux), only while
++// Dolphin's window is the one in front: with background input on, keys and mouse would otherwise
++// reach the game while the player types elsewhere, and the cursor would stay caught.
++void KeyboardMouse::UpdateGalaxyCraft(const DIMOUSESTATE2& mouse)
++{
++  const HWND hwnd = s_hwnd;
++  const bool foreground = hwnd && GetForegroundWindow() == GetAncestor(hwnd, GA_ROOT);
++  float pointer_x = -1, pointer_y = -1;
++  RECT rect{};
++  POINT point{};
++  if (foreground && GetClientRect(hwnd, &rect) && GetCursorPos(&point) &&
++      ScreenToClient(hwnd, &point) && rect.right > 0 && rect.bottom > 0)
++  {
++    pointer_x = static_cast<float>(point.x) / rect.right;
++    pointer_y = static_cast<float>(point.y) / rect.bottom;
++  }
++  static constexpr BYTE NO_KEYS[256] = {};
++  static constexpr BYTE NO_BUTTONS[8] = {};
++  bool capture = false;
++  if (foreground)
++  {
++    capture = GalaxyCraft::OnDInput(mouse.lX, mouse.lY, mouse.lZ, mouse.rgbButtons,
++                                    m_state_in.keyboard, pointer_x, pointer_y);
++  }
++  else
++  {
++    GalaxyCraft::OnDInput(0, 0, 0, NO_BUTTONS, NO_KEYS, -1, -1);  // everything let go
++  }
++  CaptureForGalaxyCraft(capture);
++}
++
++// While captured the cursor is kept inside the render window and recentred on every update, so
++// the mouse keeps moving at the screen's edges; RenderWidget hides it (Qt::BlankCursor).
++void KeyboardMouse::CaptureForGalaxyCraft(bool capture)
++{
++  if (!capture)
++  {
++    if (m_galaxycraft_capture)
++      ClipCursor(nullptr);
++    m_galaxycraft_capture = false;
++    return;
++  }
++  m_galaxycraft_capture = true;
++  RECT rect{};
++  if (!GetClientRect(s_hwnd, &rect))
++    return;
++  POINT top_left{rect.left, rect.top};
++  POINT bottom_right{rect.right, rect.bottom};
++  ClientToScreen(s_hwnd, &top_left);
++  ClientToScreen(s_hwnd, &bottom_right);
++  const RECT clip{top_left.x, top_left.y, bottom_right.x, bottom_right.y};
++  ClipCursor(&clip);
++  SetCursorPos((top_left.x + bottom_right.x) / 2, (top_left.y + bottom_right.y) / 2);
++}
++
+ std::string KeyboardMouse::GetName() const
+ {
+   return "Keyboard Mouse";
+diff --git a/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.h b/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.h
+index 67721e3301..9115fa08ca 100644
+--- a/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.h
++++ b/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.h
+@@ -106,11 +106,15 @@ public:
+ 
+ private:
+   void UpdateCursorInput();
++  void UpdateGalaxyCraft(const DIMOUSESTATE2& mouse);
++  void CaptureForGalaxyCraft(bool capture);
+ 
+   const LPDIRECTINPUTDEVICE8 m_kb_device;
+   const LPDIRECTINPUTDEVICE8 m_mo_device;
+ 
+   DWORD m_last_update;
+   State m_state_in;
++  // GalaxyCraft: Minecraft owns keyboard and mouse; the cursor is kept in the window, centred.
++  bool m_galaxycraft_capture = false;
+ };
+ }  // namespace ciface::DInput
 diff --git a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
-index 309ed70..1065124 100644
+index 309ed701cb..10651247c4 100644
 --- a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
 +++ b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
 @@ -15,6 +15,7 @@
@@ -1196,7 +1437,7 @@ index 309ed70..1065124 100644
  {
    // This is the name string we got from the X server for this master
 diff --git a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
-index 4144805..e283734 100644
+index 414480584f..e283734965 100644
 --- a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
 +++ b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
 @@ -117,6 +117,7 @@ private:
@@ -1219,7 +1460,7 @@ index 4144805..e283734 100644
    const int pointer_deviceid;
    const int keyboard_deviceid;
 diff --git a/Source/Core/VideoCommon/OnScreenUI.cpp b/Source/Core/VideoCommon/OnScreenUI.cpp
-index 209e96c..5d7eae9 100644
+index 209e96c9b2..8c22970f58 100644
 --- a/Source/Core/VideoCommon/OnScreenUI.cpp
 +++ b/Source/Core/VideoCommon/OnScreenUI.cpp
 @@ -3,6 +3,10 @@
@@ -1228,12 +1469,12 @@ index 209e96c..5d7eae9 100644
  
 +#include "Core/GalaxyCraft.h"
 +
-+#include <cstdio>
++#include <fmt/format.h>
 +
  #include "Common/CommonPaths.h"
  #include "Common/EnumMap.h"
  #include "Common/FileUtil.h"
-@@ -413,10 +417,56 @@ void OnScreenUI::DrawChallengesAndLeaderboards()
+@@ -413,10 +417,57 @@ void OnScreenUI::DrawChallengesAndLeaderboards()
  #endif  // USE_RETRO_ACHIEVEMENTS
  }
  
@@ -1264,8 +1505,9 @@ index 209e96c..5d7eae9 100644
 +    if (!s_logged)
 +    {
 +      s_logged = true;
-+      std::fprintf(stderr, "GalaxyCraft: compositing Minecraft overlay %ux%u\n",
-+                   m_galaxycraft_texture->GetWidth(), m_galaxycraft_texture->GetHeight());
++      GalaxyCraft::Log(fmt::format("compositing Minecraft overlay {}x{}",
++                                   m_galaxycraft_texture->GetWidth(),
++                                   m_galaxycraft_texture->GetHeight()));
 +    }
 +    ImGui::GetBackgroundDrawList()->AddImage(*m_galaxycraft_texture, ImVec2(0, 0),
 +                                             ImGui::GetIO().DisplaySize);
@@ -1291,7 +1533,7 @@ index 209e96c..5d7eae9 100644
    perf_metrics.DrawImGuiStats(m_backbuffer_scale);
    DrawDebugText();
 diff --git a/Source/Core/VideoCommon/OnScreenUI.h b/Source/Core/VideoCommon/OnScreenUI.h
-index e9a14e0..7c236c2 100644
+index e9a14e02ba..7c236c234c 100644
 --- a/Source/Core/VideoCommon/OnScreenUI.h
 +++ b/Source/Core/VideoCommon/OnScreenUI.h
 @@ -68,6 +68,10 @@ private:

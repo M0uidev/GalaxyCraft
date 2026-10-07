@@ -2,7 +2,14 @@ package dev.moui.galaxycraft.proto;
 
 /** Mirror of protocol/galaxycraft_protocol.h. Offsets are pinned by protocol/test_layout.c. */
 public final class Layout {
-    public static final String SHM_PATH = "/dev/shm/galaxycraft_v1";
+    /**
+     * The folder of the shared memory file (and of Dolphin's dev control files): $GXC_SHM_DIR if
+     * set, else /dev/shm on Linux and the temp folder on Windows (java.io.tmpdir, which is
+     * GetTempPathW there: the same folder the patched Dolphin picks).
+     */
+    public static final String SHM_DIR = shmDir(System.getenv("GXC_SHM_DIR"),
+            System.getProperty("os.name", ""), System.getProperty("java.io.tmpdir", ""));
+    public static final String SHM_PATH = java.nio.file.Path.of(SHM_DIR, "galaxycraft_v1").toString();
     public static final int MAGIC = 0x52435847; // "GXCR"
     public static final int VERSION = 11;
     public static final int MOD_VERSION = 1;
@@ -25,6 +32,11 @@ public final class Layout {
     public static final long OFF_OVERLAY = 5251072;
     public static final long OVERLAY_FRAME_BYTES = 1920L * 1080L * 4L;
     public static final long TOTAL_SIZE = OFF_OVERLAY + 32 + 3 * OVERLAY_FRAME_BYTES;
+
+    static String shmDir(String env, String osName, String tmpDir) {
+        if (env != null && !env.isEmpty()) return env;
+        return osName.startsWith("Windows") ? tmpDir : "/dev/shm";
+    }
 
     // Header fields.
     public static final long H_MAGIC = 0, H_VERSION = 4, H_HOST_PID = 8, H_MOD_PID = 12;

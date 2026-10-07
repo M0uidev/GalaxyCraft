@@ -1,7 +1,6 @@
 #include <array>
 #include <cstring>
 #include <filesystem>
-#include <unistd.h>
 
 #include "FakeGuestMemory.h"
 #include "HostBridge.h"
@@ -67,7 +66,7 @@ void WriteMailbox(FakeGuestMemory& mem, u32 at, u32 scene, const std::vector<Par
 
 struct Fixture
 {
-  std::string path = "/tmp/gxc_host_test_" + std::to_string(getpid());
+  std::string path = gxc_test::TempFile("gxc_host_test_");
   std::unique_ptr<Shm> shm = Shm::Create(path);
   u64 now = 10'000;
   u64 slept = 0;

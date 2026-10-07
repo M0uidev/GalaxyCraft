@@ -9,7 +9,8 @@
 
 namespace gxc
 {
-// Development commands written by tools/gxdev.py to /dev/shm/galaxycraft_ctl, one per line:
+// Development commands written by tools/gxdev.py to galaxycraft_ctl next to the shared memory file
+// (ShmDir: /dev/shm, %TEMP% on Windows), one per line:
 //   peek ADDR LEN   hex dump of guest memory (ADDR in hex, LEN 1..4096)
 //   poke ADDR HEX   write these bytes (HEX: even number of hex digits, up to 64 bytes)
 //   mbx             one-line summary of the guest mailbox

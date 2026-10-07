@@ -14,11 +14,17 @@ target_include_directories(galaxycraft_host PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/../../protocol)
 
+if(MSVC)
+  set(GALAXYCRAFT_WARNINGS /W4 /WX /permissive- /utf-8)
+else()
+  set(GALAXYCRAFT_WARNINGS -Wall -Wextra -Werror)
+endif()
+
 if(PROJECT_IS_TOP_LEVEL)
-  target_compile_options(galaxycraft_host PRIVATE -Wall -Wextra -Werror)
+  target_compile_options(galaxycraft_host PRIVATE ${GALAXYCRAFT_WARNINGS})
   add_executable(galaxycraft_host_tests tests/main.cpp tests/host_bridge_test.cpp
     tests/overlay_input_test.cpp tests/devcontrol_test.cpp tests/mario_input_test.cpp
     tests/mario_skin_test.cpp)
   target_link_libraries(galaxycraft_host_tests PRIVATE galaxycraft_host)
-  target_compile_options(galaxycraft_host_tests PRIVATE -Wall -Wextra -Werror)
+  target_compile_options(galaxycraft_host_tests PRIVATE ${GALAXYCRAFT_WARNINGS})
 endif()
