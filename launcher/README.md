@@ -104,7 +104,8 @@ keychain (Electron safeStorage) and never written to the log.
 | Patch notes | Generated from `ROADMAP.md`'s **Done** table (and **Now**/**Next** for "Coming next"); also read from `master` live. |
 | Accent color, background (built-in scenes or your own picture), animations, sound | Settings, in the launcher |
 | Installations: name, block icon, worlds folder, Java, Dolphin options, game settings, skin | Installations and Skins tabs |
-| The art (scenes, block icons) | `src/renderer/art.js`, all drawn by code |
+| The art (scenes, block icons) | `src/renderer/art.js`, drawn by code, except the Power Star |
+| The Power Star | `src/renderer/powerstar.png`, rendered from SMG2's model by `scripts/powerstar.py` |
 | Colors, fonts, layout | `src/renderer/styles.css` (`:root` variables) |
 | The app icon | `scripts/make-icon.py` writes `build/icon.png` |
 

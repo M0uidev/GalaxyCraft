@@ -164,26 +164,17 @@ function drawPlanet(g, cx, cy, radius, block, { light = [-0.55, -0.6], seed = 7,
   }
 }
 
-/** A five-pointed star in pixels. */
-function drawStar(g, cx, cy, R, color = '#ffd84a', edge = '#c98a00') {
-  const pts = [];
-  for (let k = 0; k < 10; k++) {
-    const a = -Math.PI / 2 + (k * Math.PI) / 5;
-    const rr = k % 2 ? R * 0.45 : R;
-    pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
-  }
-  g.beginPath();
-  pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-  g.closePath();
-  g.fillStyle = color;
-  g.fill();
-  g.lineWidth = Math.max(2, R / 8);
-  g.strokeStyle = edge;
-  g.lineJoin = 'round';
-  g.stroke();
-  g.fillStyle = '#3a2a00';
-  g.fillRect(cx - R * 0.2, cy - R * 0.12, R * 0.1, R * 0.25);
-  g.fillRect(cx + R * 0.1, cy - R * 0.12, R * 0.1, R * 0.25);
+// SMG2's Power Star, rendered from the game's model (scripts/powerstar.py). loadArt() waits for it.
+const powerStar = new Image();
+powerStar.src = 'powerstar.png';
+export const loadArt = () => powerStar.decode().catch(() => {});
+
+/** The Power Star, R pixels from its center to a tip. */
+function drawStar(g, cx, cy, R) {
+  if (!powerStar.naturalWidth) return;
+  const size = R * 2.2; // the picture leaves a margin around the star
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(powerStar, cx - size / 2, cy - size / 2, size, size);
 }
 
 const iconCache = new Map();
@@ -269,7 +260,7 @@ function paint(g, w, h, name, t, stars, cache) {
   if (name === 'planet') {
     planet(cache, g, w * 0.74, h * 0.92 + Math.sin(t * 0.2) * 4, h * 0.62, unit, { seed: 11 });
     planet(cache, g, w * 0.56, h * 0.16 + Math.sin(t * 0.3 + 1) * 6, h * 0.06, unit * 0.6, { seed: 5 });
-    drawStar(g, w * 0.88, h * 0.14 + Math.sin(t * 1.3) * 5, Math.max(14, h * 0.035));
+    drawStar(g, w * 0.86, h * 0.17 + Math.sin(t * 1.3) * 5, Math.max(16, h * 0.07));
   } else if (name === 'night') {
     g.fillStyle = '#f2efd8';
     g.beginPath(); g.arc(w * 0.8, h * 0.2, h * 0.08, 0, Math.PI * 2); g.fill();

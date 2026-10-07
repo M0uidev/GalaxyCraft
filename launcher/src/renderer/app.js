@@ -1,6 +1,6 @@
 // The launcher's page: Play, Installations, Skins, Patch Notes, News and Settings. It talks to
 // the launcher only through window.launcher (src/main/preload.js).
-import { iconUrl, sceneOn, scenePreview, SCENES } from './art.js';
+import { iconUrl, loadArt, sceneOn, scenePreview, SCENES } from './art.js';
 import { esc, inline, block, cssUrl } from './md.js';
 
 const api = window.launcher;
@@ -819,6 +819,7 @@ function openLog() {
 // ---- start -----------------------------------------------------------------------------------
 
 async function main() {
+  await loadArt();
   ui.info = await api.get();
   ui.game = ui.info.game;
   $('#version').textContent = `v${ui.info.version}${ui.info.packaged ? '' : ' (dev)'}`;
