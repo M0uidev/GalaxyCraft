@@ -124,6 +124,7 @@ Last updated: 2026-10-07 (the launcher's PLAY works with the Minecraft Launcher;
 | 2026-10-07 | Play from the Minecraft Launcher: INSTALL adds a "Super Minecraft Galaxy" installation to Mojang's launcher, and the mod starts Dolphin and closes both together. Tested on Linux by starting Minecraft as the Minecraft Launcher would. [Spec](docs/superpowers/specs/2026-10-07-play-from-minecraft-launcher-design.md) | 6a77d69 |
 | 2026-10-07 | Credits and community links: "by @M0uiDev" on the title screen and in the launcher (it opens the YouTube channel), a "Join the Discord" button on the title screen, Discord and YouTube in the launcher's sidebar and About | a1c1501 |
 | 2026-10-07 | The real Power Star from Super Mario Galaxy 2 in the launcher: its icon, the Home Planet background and the star installation icon; a bolder app icon that reads at small sizes | 95333b8 |
+| 2026-10-07 | The launcher's PLAY without signing in to it: it opens the Minecraft Launcher with Super Minecraft Galaxy selected, shows the game running, and closes the Minecraft Launcher when the game ends (a setting keeps it open); INSTALL no longer downloads Minecraft then | 535e352 |
 
 ---
 
