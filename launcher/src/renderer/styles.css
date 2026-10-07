@@ -78,6 +78,8 @@ main { flex: 1; min-width: 0; position: relative; }
 .nav-icon svg { width: 20px; height: 20px; }
 .sidebar-foot { margin-top: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .version { color: var(--faint); font-size: 11px; padding: 4px 12px 8px; }
+.version .author { color: inherit; }
+.version .author:hover { color: var(--accent); }
 .update-chip { border: 0; border-radius: var(--radius); padding: 8px 12px; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; text-align: left; }
 
 /* ---- pages and tabs ---- */

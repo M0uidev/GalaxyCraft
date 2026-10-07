@@ -16,7 +16,11 @@ const ACCENTS = {
   gold: ['Gold', '#d6a400'],
 };
 const ICONS = ['grass', 'planet', 'star', 'dirt', 'stone', 'diamond', 'tnt', 'ice', 'mushroom', 'crafting'];
+const DISCORD = 'https://discord.gg/NhKmT6cVM7';
+const AUTHOR = 'https://www.youtube.com/@m0uidev';
+
 const SVG = {
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01"/></svg>',
   news: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="15" height="16" rx="1"/><path d="M18 8h3v10a2 2 0 0 1-2 2"/><path d="M7 8h7M7 12h7M7 16h4"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
 };
@@ -726,6 +730,7 @@ async function renderSettings() {
     </section>
     <section class="set-section"><h2>About</h2>
       <div class="kv">
+        <div>Made by</div><div><a href="#" id="st-author">@M0uiDev</a></div>
         <div>Launcher</div><div>${esc(ui.info.version)} · ${esc(platform)}${ui.info.packaged ? '' : ' · from source'}</div>
         <div>Game data</div><div>${esc(ui.info.dataDir)}</div>
         <div>Java</div><div>${esc(c.java ? `${c.java.home} (Java ${c.java.version})` : 'Not found')}</div>
@@ -734,6 +739,8 @@ async function renderSettings() {
       <div class="row" style="margin-top:14px">
         <button class="btn" id="st-open-data">Open the game data folder</button>
         <button class="btn" id="st-open-repo">GalaxyCraft on GitHub</button>
+        <button class="btn" id="st-discord">Join the Discord</button>
+        <button class="btn" id="st-youtube">@M0uiDev on YouTube</button>
       </div>
       <p class="muted small">Not affiliated with Nintendo, Mojang or Microsoft. You need your own Super Mario Galaxy 2 and Minecraft.</p>
     </section>`;
@@ -777,6 +784,9 @@ async function renderSettings() {
   if (inst) inst.onclick = () => api.installUpdate();
   $('#st-open-data').onclick = () => api.openPath(ui.info.dataDir);
   $('#st-open-repo').onclick = () => api.openUrl('https://github.com/M0uidev/GalaxyCraft');
+  $('#st-discord').onclick = () => api.openUrl(DISCORD);
+  $('#st-youtube').onclick = () => api.openUrl(AUTHOR);
+  $('#st-author').onclick = (e) => { e.preventDefault(); api.openUrl(AUTHOR); };
 }
 
 function renderUpdateChip() {
@@ -817,6 +827,8 @@ async function main() {
   applyTheme();
 
   $$('.nav-item[data-page]').forEach((b) => { b.onclick = () => showPage(b.dataset.page); });
+  $('#discord-btn').onclick = () => api.openUrl(DISCORD);
+  $('#author-link').onclick = (e) => { e.preventDefault(); api.openUrl(AUTHOR); };
   $$('.tab-btn').forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
   $('#play').onclick = onPlay;
   $('#account').onclick = toggleAccountMenu;

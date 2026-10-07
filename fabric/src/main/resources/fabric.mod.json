@@ -4,7 +4,13 @@
 	"version": "${version}",
 	"name": "Super Minecraft Galaxy",
 	"description": "Minecraft survival inside Super Mario Galaxy 2 (Dolphin): round, destructible planets.",
-	"authors": ["moui"],
+	"authors": ["M0uiDev"],
+	"contact": {
+		"homepage": "https://discord.gg/NhKmT6cVM7",
+		"sources": "https://github.com/M0uidev/GalaxyCraft",
+		"issues": "https://github.com/M0uidev/GalaxyCraft/issues",
+		"youtube": "https://www.youtube.com/@m0uidev"
+	},
 	"license": "MIT",
 	"environment": "*",
 	"entrypoints": {
