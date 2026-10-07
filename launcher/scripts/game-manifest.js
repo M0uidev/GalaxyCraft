@@ -4,6 +4,8 @@
 // API from Fabric's Maven, and the Minecraft and Fabric versions from fabric/gradle.properties.
 // Run by CI for a release, on the folder of files it attaches.
 //   node scripts/game-manifest.js --version 0.2.0 --dir out --base https://github.com/.../releases/download/v0.2.0
+// With --local instead of --base, the files are named as they sit next to game.json, for a
+// launcher started with GXL_GAME_MANIFEST=<that game.json> (CI's Windows test build).
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -14,6 +16,7 @@ const args = process.argv.slice(2);
 const opt = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : null; };
 const version = opt('--version');
 const dir = opt('--dir');
+const local = args.includes('--local');
 const base = (opt('--base') || '').replace(/\/$/, '');
 const die = (m) => { console.error(`game-manifest: ${m}`); process.exit(1); };
 
@@ -22,11 +25,11 @@ function entry(file) {
   const p = path.join(dir, file);
   if (!fs.existsSync(p)) return null;
   const b = fs.readFileSync(p);
-  return { file, url: `${base}/${encodeURIComponent(file)}`, sha256: sha256(b), size: b.length };
+  return { file, url: local ? file : `${base}/${encodeURIComponent(file)}`, sha256: sha256(b), size: b.length };
 }
 
 async function main() {
-  if (!version || !dir || !base) die('--version, --dir and --base are needed');
+  if (!version || !dir || (!base && !local)) die('--version, --dir and --base (or --local) are needed');
   const props = Object.fromEntries(fs.readFileSync(path.join(__dirname, '..', '..', 'fabric', 'gradle.properties'), 'utf8')
     .split('\n').map((l) => l.split('=')).filter((kv) => kv.length === 2).map(([k, v]) => [k.trim(), v.trim()]));
 
@@ -58,7 +61,7 @@ async function main() {
     mods: [mod, fabricApi],
     dolphin,
   };
-  const check = gamepack.parseManifest(manifest);
+  const check = local ? gamepack.localManifest(manifest, path.join(dir, 'game.json')) : gamepack.parseManifest(manifest);
   if (check instanceof Error) die(check.message);
   fs.writeFileSync(path.join(dir, 'game.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`game.json: ${version}, Minecraft ${manifest.minecraft.version}, Fabric ${manifest.minecraft.fabricLoader}, Dolphin for ${Object.keys(dolphin).join(', ')}`);

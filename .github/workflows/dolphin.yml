@@ -130,6 +130,31 @@ jobs:
             ${{ runner.temp }}/dolphin-stdout.txt
           if-no-files-found: ignore
 
+      # Everything PLAY needs on Windows without a release: the installed launcher, started by
+      # PLAY-TEST.cmd with GXL_GAME_MANIFEST, installs this game.json and the files next to it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: gradle/actions/setup-gradle@v4
+      - name: A test build to play (this Dolphin, the module, the mod)
+        run: |
+          V=0.0.1
+          OUT=dist/windows-test-build
+          mkdir -p "$OUT"
+          (cd fabric && ./gradlew build -x test --no-configuration-cache)
+          for f in fabric/build/libs/*.jar; do case "$f" in *-sources.jar|*-dev.jar) ;; *) cp "$f" "$OUT/galaxycraft-$V.jar" ;; esac; done
+          tar -czf "$OUT/module-$V.tar.gz" -C release/module .
+          cp dist/dolphin-win32-x64.tar.gz "$OUT/dolphin-win32-x64-$V.tar.gz"
+          node launcher/scripts/game-manifest.js --version "$V" --dir "$OUT" --local
+          cp tools/ci/windows-test-build/* "$OUT/"
+          ls -la "$OUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-test-build
+          path: dist/windows-test-build/
+          if-no-files-found: error
+
       # Download, unzip, run Dolphin.exe: the folder is the zip GitHub makes of this artifact.
       - uses: actions/upload-artifact@v4
         with:

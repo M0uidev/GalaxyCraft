@@ -119,6 +119,35 @@ test('install, play prep, update, keep the previous version', { skip: process.pl
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('a game.json on this machine installs from the files next to it', { skip: process.platform === 'win32', timeout: 60000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gxl-local-'));
+  const rom = path.join(dir, 'smg2.iso');
+  fs.writeFileSync(rom, isoHeader());
+  const discArc = crypto.randomBytes(20000);
+  fs.mkdirSync(`${rom}.files/ObjectData`, { recursive: true });
+  fs.writeFileSync(`${rom}.files/ObjectData/Mario.arc`, discArc);
+  const rel = path.join(dir, 'test-build');
+  fs.mkdirSync(rel);
+  const r = await release(rel, '0.0.1', discArc, {});
+  // game.json as CI writes it for the Windows test build: names, no URLs.
+  const local = (f) => ({ ...f, url: f.file });
+  const raw = { format: 1, version: '0.0.1', minecraft: r.manifest.minecraft, module: local(r.manifest.module),
+    mods: r.manifest.mods.map(local), dolphin: { 'linux-x64': local(r.manifest.dolphin['linux-x64']) } };
+  fs.writeFileSync(path.join(rel, 'game.json'), JSON.stringify(raw));
+  const paths = platformPaths({ platform: 'linux', env: { GXC_DATA_DIR: path.join(dir, 'data') }, home: dir });
+  const neverOnline = async (url) => { throw new Error(`no network in this test: ${url}`); };
+  const inst = new Installer({ paths, fetchFn: neverOnline, manifestUrl: path.join(rel, 'game.json'), system: 'linux-x64',
+    ensureMinecraftFn: async () => ({}) });
+  const latest = await inst.latest();
+  assert.equal(latest.version, '0.0.1');
+  assert.match(latest.module.url, /^file:\/\//);
+  const i = await inst.install(latest, rom);
+  assert.deepEqual(fs.readFileSync(path.join(i.lay.module, 'ObjectData', 'Mario.arc')), r.ours);
+  // A release online may not point at this machine's files.
+  assert.match(gamepack.parseManifest({ ...raw, module: { ...raw.module, url: 'file:///etc/passwd' } }).message, /no module/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('game.json is checked before anything is done', () => {
   assert.match(gamepack.parseManifest({ format: 2 }).message, /newer launcher/);
   assert.match(gamepack.parseManifest({ format: 1, version: '1.0.0', minecraft: { version: '26.3', fabricLoader: '1' },

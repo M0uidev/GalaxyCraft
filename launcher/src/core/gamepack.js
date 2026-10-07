@@ -4,6 +4,7 @@
 // versions). The launcher installs a version next to the previous one, makes the disc files from
 // the player's own Super Mario Galaxy 2, and PLAY runs it with the player's Minecraft account.
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { pathFor } = require('./paths');
 const { HIDDEN_MATCH, SMG2_SAVE, MEM2_BYTES, splitArgs } = require('./launchplan');
 const { gameDirOf } = require('./store');
@@ -15,13 +16,30 @@ const MANAGED = '.super-minecraft-galaxy.json';
 const SYSTEMS = { 'linux-x64': 'Linux', 'win32-x64': 'Windows', 'darwin-arm64': 'macOS', 'darwin-x64': 'macOS' };
 const systemKey = (platform = process.platform, arch = process.arch) => `${platform}-${arch}`;
 
-// https, or this machine (tests serve a release locally).
-const isFile = (f) => f && typeof f === 'object' && typeof f.url === 'string' && /^(https:\/\/|http:\/\/127\.0\.0\.1[:/])/.test(f.url)
+// https, or this machine (tests serve a release locally); file: only for a game.json that is a
+// file on this machine itself (localManifest).
+const isFileOf = (f, allowFile = false) => f && typeof f === 'object' && typeof f.url === 'string'
+  && (/^(https:\/\/|http:\/\/127\.0\.0\.1[:/])/.test(f.url) || (allowFile && /^file:\/\//.test(f.url)))
   && typeof f.sha256 === 'string' && /^[0-9a-f]{64}$/.test(f.sha256) && typeof f.file === 'string'
   && /^[\w.+-]+$/.test(f.file);
 
+/**
+ * A game.json read from this machine (GXL_GAME_MANIFEST=path, as CI's Windows test build is): its
+ * files' urls may be names next to it, which become file: URLs. Then parseManifest.
+ */
+function localManifest(raw, manifestPath) {
+  const dir = path.dirname(path.resolve(manifestPath));
+  const local = (f) => (f && typeof f === 'object' && typeof f.url === 'string' && !/^[a-z]+:/i.test(f.url)
+    ? { ...f, url: pathToFileURL(path.join(dir, f.url)).href } : f);
+  const m = raw && typeof raw === 'object' ? raw : {};
+  const dolphin = Object.fromEntries(Object.entries(m.dolphin || {}).map(([k, v]) => [k, local(v)]));
+  return parseManifest({ ...m, module: local(m.module), mods: Array.isArray(m.mods) ? m.mods.map(local) : m.mods, dolphin },
+    { allowFile: true });
+}
+
 /** A game.json made safe to act on, or an Error saying what is wrong. */
-function parseManifest(raw) {
+function parseManifest(raw, { allowFile = false } = {}) {
+  const isFile = (f) => isFileOf(f, allowFile);
   const m = raw && typeof raw === 'object' ? raw : null;
   if (!m || m.format !== FORMAT) return new Error('This game release needs a newer launcher: update the launcher.');
   if (typeof m.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(m.version)) return new Error('game.json: bad version');
@@ -155,6 +173,6 @@ function modChanges(manifest, previouslyManaged = []) {
 }
 
 module.exports = {
-  FORMAT, LATEST_URL, MANAGED, SYSTEMS, systemKey, parseManifest, supported, compareVersions, layout,
+  FORMAT, LATEST_URL, MANAGED, SYSTEMS, systemKey, parseManifest, localManifest, supported, compareVersions, layout,
   descriptor, devDescriptor, playerPlan, minecraftJvmArgs, modChanges,
 };

@@ -10,6 +10,8 @@ const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { Readable } = require('node:stream');
+const { fileURLToPath } = require('node:url');
 const tar = require('tar');
 const gamepack = require('../core/gamepack');
 const disc = require('../core/disc');
@@ -47,13 +49,21 @@ function discStamp(rom) {
 }
 const sameStamp = (a, b) => !!a && !!b && a.rom === b.rom && a.size === b.size && a.mtimeMs === b.mtimeMs;
 
+/** A fetch Response for a file: URL. */
+function fileResponse(url) {
+  const file = fileURLToPath(url);
+  if (!fs.existsSync(file)) return new Response('', { status: 404 });
+  return new Response(Readable.toWeb(fs.createReadStream(file)), { status: 200 });
+}
+
 class Installer extends EventEmitter {
   constructor({ paths, fetchFn = globalThis.fetch, manifestUrl = gamepack.LATEST_URL, system = gamepack.systemKey(),
     ensureMinecraftFn = ensureMinecraft }) {
     super();
     this.ensureMinecraftFn = ensureMinecraftFn;
     this.paths = paths;
-    this.fetchFn = fetchFn;
+    // file: URLs (only a game.json on this machine has them, gamepack.localManifest) are read from disk.
+    this.fetchFn = (url, opts) => (String(url).startsWith('file:') ? fileResponse(url) : fetchFn(url, opts));
     this.manifestUrl = manifestUrl;
     this.system = system;
     this.busy = false;
@@ -75,9 +85,10 @@ class Installer extends EventEmitter {
   /** The newest release's game.json (parsed), or an Error (offline, or a broken release). */
   async latest() {
     try {
-      const raw = /^https?:\/\//.test(this.manifestUrl) ? await fetchJson(this.manifestUrl, this.fetchFn, 2)
-        : JSON.parse(fs.readFileSync(this.manifestUrl, 'utf8'));
-      return gamepack.parseManifest(raw);
+      if (!/^https?:\/\//.test(this.manifestUrl)) {
+        return gamepack.localManifest(JSON.parse(fs.readFileSync(this.manifestUrl, 'utf8')), this.manifestUrl);
+      }
+      return gamepack.parseManifest(await fetchJson(this.manifestUrl, this.fetchFn, 2));
     } catch (e) {
       return new Error(`Could not check for game updates (${e.message})`);
     }
