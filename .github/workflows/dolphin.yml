@@ -134,7 +134,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: gradle/actions/setup-gradle@v4
+      # No gradle/actions/setup-gradle here: its wrapper check scans dolphin/src too, where SDL's
+      # Android example carries a wrapper jar it does not know.
       - name: A test build to play (this Dolphin, the module, the mod)
         run: |
           V=0.0.1
