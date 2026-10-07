@@ -21,6 +21,8 @@ public final class GravityFrame {
     public static final double SCALE = 1.0 / unitsPerBlock(System.getProperty("galaxycraft.unitsPerBlock"));
     private static final double MIN_ANGLE = Math.toRadians(0.05);
     private static final double REBASE_MIN_Y = 36, REBASE_MAX_Y = 164, REBASE_Y = 100;
+    /** Past this far from x, z = 0 (blocks) the player is put back near it. */
+    public static final double REBASE_XZ = 1024;
     private static final Vector3d UP = new Vector3d(0, 1, 0);
     /** Flying into another body's gravity, up turns this much a tick at most: a flip in 1.5 s. */
     public static final double FLIGHT_TURN_PER_TICK = Math.PI / 30;
@@ -35,6 +37,8 @@ public final class GravityFrame {
     /** r as it was before this tick's update: drawing between ticks turns smoothly from it. */
     private final Quaterniond rPrev = new Quaterniond();
     private final Vector3d t = new Vector3d();
+    /** How far slide moved the player this tick (galaxy units): drawing between ticks moves it gradually. */
+    private final Vector3d slid = new Vector3d();
 
     public GravityFrame(Vector3d galStart, Vector3d mcStart, Vector3d gStart) {
         if (gStart.lengthSquared() > 1e-12) {
@@ -59,6 +63,7 @@ public final class GravityFrame {
         r.set(o.r);
         rPrev.set(o.rPrev);
         t.set(o.t);
+        slid.set(o.slid);
     }
 
     public GravityFrame copy() {
@@ -80,6 +85,22 @@ public final class GravityFrame {
      */
     public void startTick() {
         rPrev.set(r);
+        slid.zero();
+    }
+
+    /**
+     * Moves the player by d in the galaxy (galaxy units) while it stays where it is in Minecraft:
+     * the pulse, faster than Minecraft lets a player move (its server would pull it back, and it would
+     * fill the void overworld with chunks).
+     */
+    public void slide(Vector3d galUnits) {
+        t.sub(r.transform(new Vector3d(galUnits).mul(SCALE)));
+        slid.add(galUnits);
+    }
+
+    /** toGal for drawing between ticks (partial 0: the last tick, 1: this one): a slide comes in gradually. */
+    public Vector3d toGal(Vector3d mc, double partial) {
+        return toGal(mc).sub(new Vector3d(slid).mul(1 - partial));
     }
 
     public Vector3d dirToMc(Vector3d d) {
@@ -130,11 +151,19 @@ public final class GravityFrame {
         return new Update(true, delta);
     }
 
-    /** Moves the frame so the player sits at y=100 if they drifted out of [36, 164]. */
+    /**
+     * Moves the frame so the player sits at y=100 if they drifted out of [36, 164], and near x, z = 0
+     * (by whole blocks: the blocks' grid stays lined up) past REBASE_XZ: travel through the galaxy
+     * (a warp, a long flight) never takes the player thousands of blocks across Minecraft's world, whose
+     * chunks would be made and loaded all the way (a long freeze) up to its border.
+     */
     public Optional<Vector3d> rebase(Vector3d playerMc) {
-        if (playerMc.y >= REBASE_MIN_Y && playerMc.y <= REBASE_MAX_Y) return Optional.empty();
+        boolean yOut = playerMc.y < REBASE_MIN_Y || playerMc.y > REBASE_MAX_Y;
+        boolean xzOut = Math.abs(playerMc.x) > REBASE_XZ || Math.abs(playerMc.z) > REBASE_XZ;
+        if (!yOut && !xzOut) return Optional.empty();
         Vector3d gal = toGal(playerMc);
-        Vector3d np = new Vector3d(playerMc.x, REBASE_Y, playerMc.z);
+        Vector3d np = new Vector3d(xzOut ? playerMc.x - Math.rint(playerMc.x) : playerMc.x, yOut ? REBASE_Y : playerMc.y,
+                xzOut ? playerMc.z - Math.rint(playerMc.z) : playerMc.z);
         t.set(np).sub(r.transform(gal.mul(SCALE)));
         return Optional.of(np);
     }

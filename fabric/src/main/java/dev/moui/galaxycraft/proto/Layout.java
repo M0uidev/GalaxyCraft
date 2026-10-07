@@ -4,7 +4,7 @@ package dev.moui.galaxycraft.proto;
 public final class Layout {
     public static final String SHM_PATH = "/dev/shm/galaxycraft_v1";
     public static final int MAGIC = 0x52435847; // "GXCR"
-    public static final int VERSION = 10;
+    public static final int VERSION = 11;
     public static final int MOD_VERSION = 1;
 
     public static final long OFF_HEADER = 0;
@@ -55,6 +55,10 @@ public final class Layout {
     public static final int MSG_MARIO_SKIN = 114;
     /** The block being broken, M -> S: GxcCrack, Minecraft's cracks at stage 0..CRACK_STAGES - 1. */
     public static final int MSG_CRACK = 115, CRACK_STAGES = 10;
+    /** The floating origin moves, M -> S: u32 epoch, i32 shift[3] in cells of ORIGIN_CELL units, big-endian. */
+    public static final int MSG_ORIGIN = 116, ORIGIN_CELL = 65536;
+    /** The other systems as points of light on the sky, M -> S: u32 count, then {f32 dir[3], f32 size, u32 rgba}. */
+    public static final int MSG_STARS = 117, STARS_MAX = 4096, STAR_BYTES = 20;
     /** Edges a GxcOutline carries at most. */
     public static final int OUTLINE_MAX_EDGES = 96;
     public static final int HURT_HIT = 0, HURT_FIRE = 1, HURT_EXPLOSION = 2;

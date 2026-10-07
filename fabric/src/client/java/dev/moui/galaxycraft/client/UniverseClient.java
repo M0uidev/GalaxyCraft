@@ -1,0 +1,185 @@
+package dev.moui.galaxycraft.client;
+
+import dev.moui.galaxycraft.GalaxyCraft;
+import dev.moui.galaxycraft.bridge.BridgeClient;
+import dev.moui.galaxycraft.gravity.GravityFrame;
+import dev.moui.galaxycraft.proto.Layout;
+import dev.moui.galaxycraft.proto.Seqlock;
+import dev.moui.galaxycraft.universe.GameOrigin;
+import dev.moui.galaxycraft.universe.Origin;
+import dev.moui.galaxycraft.universe.OriginPolicy;
+import dev.moui.galaxycraft.universe.StarField;
+import dev.moui.galaxycraft.universe.UPos;
+import dev.moui.galaxycraft.universe.Universe;
+import dev.moui.galaxycraft.voxel.PlanetLayout;
+import dev.moui.galaxycraft.voxel.PlanetSession;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import org.joml.Vector3d;
+
+/**
+ * The floating origin in play: each tick, OriginPolicy says whether the game's origin moves (into a
+ * system's center on the way in, after Mario out in the void), the move goes to the game
+ * (GXC_MSG_ORIGIN) before anything sent from the new origin, and planet records still queued are
+ * made again from it. A new scene or host is told the epoch first.
+ *
+ * -Dgalaxycraft.floatingOrigin=false keeps the origin at the universe's (0, 0, 0) (as before);
+ * /galaxycraft origin x y z pins it there (blocks) to see what far-away floats do. Only in
+ * GalaxyCraftSpace, whose stage has nothing of its own to move.
+ */
+public final class UniverseClient {
+    private static final double UNITS = 1 / GravityFrame.SCALE;
+    private static final boolean ON = !"false".equals(System.getProperty("galaxycraft.floatingOrigin"));
+
+    private static int scene = Integer.MIN_VALUE, host = Integer.MIN_VALUE;
+    private static boolean told;
+    /** /galaxycraft origin: the origin stays here (universe units) until "auto". */
+    private static Vector3d pinned;
+    private static Universe universe;
+    private static int moves;
+    private static final int LANDING_GRACE = 40;
+    private static int sinceLanding = LANDING_GRACE;
+    private static Vector3d lastLandingAt;
+    /** Stars on the sky (GXC_MSG_STARS): sent from here, the sector it was in, the nearest one's distance (units). */
+    private static Vector3d starsFrom;
+    private static Universe.Sector starsSector;
+    private static double starsNearest;
+    private static int starsSent;
+    /** Systems within this many sectors are stars; nearer than STAR_SKIP_BLOCKS their planets show instead. */
+    static final int STAR_SECTORS = 8;
+    static final double STAR_SKIP_BLOCKS = GalaxyStream.LOAD_BLOCKS;
+    /** The epoch the game said its last reading is in (it echoes a move once it made it). */
+    private static int gameEpoch;
+
+    private UniverseClient() {}
+
+    /** The world's universe, from its seed (null: none, out of a world). */
+    static void enter(Universe u) {
+        universe = u;
+    }
+
+    public static Universe universe() {
+        return universe;
+    }
+
+    /** Moves made since the client started (tests). */
+    public static int moves() {
+        return moves;
+    }
+
+    /** The epoch of the game's last reading (tests: the game made the last move once it is GameOrigin's). */
+    public static int gameEpoch() {
+        return gameEpoch;
+    }
+
+    private static boolean starsHidden;
+
+    /** Tests: the stars off (an empty GXC_MSG_STARS) or back on (sent again). */
+    public static void hideStars(boolean hide) {
+        starsHidden = hide;
+        starsFrom = null;
+    }
+
+    /** Stars in the last GXC_MSG_STARS sent (tests). */
+    public static int starsSent() {
+        return starsSent;
+    }
+
+    /** Pins the origin at that many blocks from the universe's (0, 0, 0); null lets it follow again. */
+    public static void pin(Vector3d blocks) {
+        pinned = blocks == null ? null : new Vector3d(blocks).mul(UNITS);
+    }
+
+    /**
+     * Before the planets' messages of the tick. landing: a teleport or landing is under way;
+     * landingAt: where Mario is about to land (universe units), if known: the origin goes to that
+     * system's center first (Mario is held while he lands, nothing to disturb), so he never lands
+     * with the game's numbers far out.
+     */
+    static void tick(BridgeClient bridge, Seqlock.WorldState world, boolean landing, Vector3d landingAt) {
+        // Just landed: the game may still say Mario is where he was for a few frames (the teleport on
+        // its way); the origin is not moved after that old place meanwhile.
+        if (landing) {
+            sinceLanding = 0;
+            if (landingAt != null) lastLandingAt = new Vector3d(landingAt);
+        } else if (sinceLanding < LANDING_GRACE) {
+            sinceLanding++;
+            landing = true;
+            landingAt = lastLandingAt;
+        }
+        // Only GalaxyCraftSpace is empty but for what the module draws: in another stage the
+        // stage's own ground would stay where it is.
+        if (!Layout.SPACE_STAGE.equals(bridge.stage())) return;
+        gameEpoch = world.originEpoch();
+        if (world.sceneId() != scene || bridge.hostPid() != host) {
+            scene = world.sceneId();
+            host = bridge.hostPid();
+            told = false;
+            starsFrom = null;
+        bridge.send(Layout.MSG_STARS, new byte[4]); // none: the menus' game has no universe // a new scene has none
+        }
+        if (!told) told = bridge.send(Layout.MSG_ORIGIN, GameOrigin.message(GameOrigin.now()));
+        if (!told) return;
+        Vector3d mario = world.queryPos();
+        Optional<UPos> goal;
+        if (pinned != null) goal = Optional.of(UPos.of(pinned));
+        else if (!ON || mario == null) goal = Optional.empty();
+        else if (landingAt != null && universe != null) {
+            Optional<Universe.Star> to = universe.systemAt(UPos.of(landingAt), OriginPolicy.SYSTEM_MARGIN);
+            goal = to.map(Universe.Star::center).filter(c -> GameOrigin.origin().peek(c) != null);
+        }
+        else {
+            List<PlanetLayout.Sphere> spheres = new ArrayList<>();
+            for (PlanetSession s : PlanetClient.planets())
+                if (s.active()) spheres.add(new PlanetLayout.Sphere(s.center(), s.gravityUnits()));
+            boolean clear = OriginPolicy.clear(mario, spheres, landing, UNITS);
+            UPos at = UPos.of(mario);
+            Optional<Universe.Star> system = universe == null ? Optional.empty() : universe.systemAt(at, OriginPolicy.SYSTEM_MARGIN);
+            goal = OriginPolicy.target(GameOrigin.origin(), at, system, clear);
+        }
+        goal.ifPresent(g -> move(bridge, g));
+        if (mario != null && universe != null && PlanetClient.ENDLESS) stars(bridge, mario);
+    }
+
+    /**
+     * The other systems on the sky, again when Mario changes sector or has moved a tenth of the way to
+     * the nearest star (their directions shift: parallax).
+     */
+    private static void stars(BridgeClient bridge, Vector3d mario) {
+        UPos at = UPos.of(mario);
+        Universe.Sector sector = Universe.sectorOf(at);
+        if (starsFrom != null && sector.equals(starsSector) && starsFrom.distance(mario) < starsNearest / 10) return;
+        List<Universe.Star> stars = starsHidden ? List.of() : universe.around(at, STAR_SECTORS);
+        byte[] m = StarField.message(stars, at, STAR_SKIP_BLOCKS, UNITS);
+        if (!bridge.send(Layout.MSG_STARS, m)) return;
+        starsFrom = new Vector3d(mario);
+        starsSector = sector;
+        starsSent = java.nio.ByteBuffer.wrap(m).getInt();
+        starsNearest = Double.MAX_VALUE;
+        for (Universe.Star s : stars) {
+            double d = s.center().minus(at).length();
+            if (d >= STAR_SKIP_BLOCKS * UNITS) starsNearest = Math.min(starsNearest, d);
+        }
+    }
+
+    private static void move(BridgeClient bridge, UPos goal) {
+        Origin.Shift s = GameOrigin.moveTo(goal, m -> bridge.send(Layout.MSG_ORIGIN, m));
+        if (s == null) return;
+        moves++;
+        for (PlanetSession p : PlanetClient.planets()) p.originMoved();
+        PlanetClient.originMoved();
+        GalaxyCraft.LOG.info("Floating origin moved by {} {} {} cells (epoch {}), now at {} blocks", s.dx(), s.dy(), s.dz(),
+                s.epoch(), GameOrigin.offset().div(UNITS));
+    }
+
+    /** The world is left: the origin goes back to the universe's (0, 0, 0) for the next one. */
+    static void leave(BridgeClient bridge) {
+        universe = null;
+        pinned = null;
+        starsFrom = null;
+        if (GameOrigin.origin().peek(UPos.ZERO) != null && GameOrigin.moveTo(UPos.ZERO, m -> bridge.send(Layout.MSG_ORIGIN, m)) == null)
+            GameOrigin.reset(); // not linked: the next scene is told anew
+        told = false;
+    }
+}

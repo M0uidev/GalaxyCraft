@@ -15,6 +15,8 @@ void EntityDrawFrame(const gxc::InboxEntities& entities);
 void EntityDrawHurt(const gxc::InboxHurt& hurt);
 // GXC_MSG_SEAT: Mario sits on something (a minecart, a boat) and goes with it.
 void EntityDrawSeat(const gxc::InboxSeat& seat);
+// The floating origin moved: everything in the game by d (galaxy units).
+void EntityDrawShift(const float d[3]);
 // Right after Mario's own movement each frame: on a seat, he is put back on it.
 void EntityDrawAfterMario();
 // Mario is (or just was) seated by the mod: SMG2's fall-too-far kill is off.

@@ -1,5 +1,7 @@
 package dev.moui.galaxycraft.voxel;
 
+import dev.moui.galaxycraft.universe.GameOrigin;
+
 import dev.moui.galaxycraft.proto.Layout;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -1284,6 +1286,17 @@ public final class PlanetSession {
         return new Vector3d(gal).sub(center).div(unitsPerBlock);
     }
 
+    /**
+     * The floating origin moved: a planet record not sent yet is made again where the planet is now
+     * in the game (records after the move are in the new origin).
+     */
+    public void originMoved() {
+        if (id == 0) return;
+        java.util.List<Msg> q = new java.util.ArrayList<>(control);
+        control.clear();
+        for (Msg m : q) control.add(m.type() == Layout.MSG_PLANET ? new Msg(Layout.MSG_PLANET, planetPayload(id, 0)) : m);
+    }
+
     /** A MSG_PLANET with id 0: the game drops every planet (leaving a world, its galaxy goes). */
     public static byte[] dropAll() {
         return ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN).array();
@@ -1292,7 +1305,7 @@ public final class PlanetSession {
     /** GxcPlanet (36 bytes the host swaps), then flags big-endian (passed on as is). */
     private byte[] planetPayload(int planetId, int flags) {
         ByteBuffer b = ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN).putInt(planetId);
-        Vector3d c = center == null ? new Vector3d() : center;
+        Vector3d c = GameOrigin.toGame(center == null ? new Vector3d() : center);
         b.putFloat((float) c.x).putFloat((float) c.y).putFloat((float) c.z);
         double surface = planet == null ? 0 : planet.surface();
         b.putFloat((float) (surface * unitsPerBlock)).putFloat((float) (gravityRadius(surface) * unitsPerBlock));

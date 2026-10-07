@@ -1,5 +1,5 @@
 /*
- * GalaxyCraft shared-memory protocol, version 10.
+ * GalaxyCraft shared-memory protocol, version 11.
  *
  * Source of truth for the layout of /dev/shm/galaxycraft_v1. Mirrors:
  *   tools/gxproto.py
@@ -16,7 +16,7 @@
 
 #define GXC_SHM_NAME "/galaxycraft_v1"
 #define GXC_MAGIC 0x52435847u /* "GXCR" */
-#define GXC_VERSION 10u
+#define GXC_VERSION 11u
 
 /* Regions (byte offsets from the start of the mapping). */
 #define GXC_OFF_HEADER 0
@@ -70,7 +70,8 @@ typedef struct { /* S -> M */
   float gravity[3];   /* galaxy space, unit vector (0 = no gravity) */
   float query_pos[3]; /* galaxy position gravity was evaluated at */
   uint32_t flags; /* GXC_WORLD_* */
-  uint8_t pad[20];
+  uint32_t origin_epoch; /* the floating origin's epoch query_pos is in (GXC_MSG_ORIGIN) */
+  uint8_t pad[16];
 } GxcWorldState;
 
 /*
@@ -131,7 +132,8 @@ typedef struct {
   float fov_y;      /* degrees */
   float mario_pos[3];
   float mario_front[3];
-  uint8_t pad[16];
+  uint32_t origin_epoch; /* the floating origin's epoch cam_pos and mario_pos are in */
+  uint8_t pad[12];
 } GxcGameCamera;
 
 #define GXC_GAMECAM_VALID 1u
@@ -216,6 +218,13 @@ enum {
                                u32 id (unused), u32 width, u32 height (64 and 64), GX RGB5A3 texels. The host
                                writes them over the "steve" texture of Mario.bdl wherever it is in guest RAM */
   GXC_MSG_CRACK = 115,     /* GxcCrack: the block being broken, cracked as far as it has been */
+  GXC_MSG_ORIGIN = 116,    /* the floating origin moves: u32 epoch, i32 shift[3] (cells of GXC_ORIGIN_CELL units),
+                              big-endian. Everything in the game moves by -shift * GXC_ORIGIN_CELL at once (planets,
+                              their gravity and collision, Mario); records after it are in the new epoch, which
+                              the game echoes in GxcMailbox.origin_epoch */
+  GXC_MSG_STARS = 117,     /* the other solar systems, drawn as points of light on the sky around the camera:
+                              u32 count (<= GXC_STARS_MAX), then count x {f32 dir[3] (unit, galaxy space),
+                              f32 size (pixels), u32 rgba}; big-endian. Replaces the last one */
   GXC_MSG_PAD = 0xFFFF,
 };
 
@@ -278,6 +287,12 @@ typedef struct {
 } GxcChunk;
 
 #define GXC_PLANET_MAX_CHUNKS 131072
+
+/* The floating origin moves by whole cells of this many units (2^16): a float moved by them toward
+   0 stays exactly the same point, so nothing jumps. */
+#define GXC_ORIGIN_CELL 65536
+#define GXC_STARS_MAX 4096
+#define GXC_STAR_BYTES 20
 
 /* Minecraft's block outline around what the player points at (and can break, use, place against
  * or scoop): the edges of the block's shape as Minecraft draws them (no line across a face), each
@@ -375,7 +390,7 @@ typedef struct {
  * Dolphin finds it by scanning MEM1/MEM2 for the magic.
  */
 #define GXC_MBX_MAGIC "GXCRMBX1"
-#define GXC_MBX_VERSION 5u
+#define GXC_MBX_VERSION 6u
 #define GXC_MBX_MAX_PARTS 64
 #define GXC_MBX_FOLLOW 2u /* host_flags: Minecraft mode, the camera sits in Mario's eyes */
 #define GXC_MBX_GALAXY_VIEW 4u /* host_flags: keep the game's camera */
@@ -426,6 +441,7 @@ typedef struct {
   uint32_t inbox_addr; /* game: GxcInbox for the voxel planet, 0 none */
   uint32_t inbox_size; /* game: bytes, header included */
   char stage_name[32]; /* game: the stage (galaxy) loaded, NUL-padded */
+  uint32_t origin_epoch; /* game: the floating origin's epoch anchor_pos and cam_pos are in (GXC_MSG_ORIGIN) */
 } GxcMailbox;
 
 /*

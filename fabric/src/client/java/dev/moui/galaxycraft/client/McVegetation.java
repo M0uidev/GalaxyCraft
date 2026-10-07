@@ -53,7 +53,7 @@ final class McVegetation implements Vegetation.Library {
     public List<Vegetation.Patch> patches(String biome) {
         List<Vegetation.Patch> p = grown.get(biome);
         if (p != null) return p;
-        p = server.isSameThread() ? grow(biome) : server.submit(() -> grow(biome)).join();
+        p = server.isSameThread() ? grow(biome) : PlanetClient.answer(server.submit(() -> grow(biome)), "vegetation of " + biome);
         grown.put(biome, p);
         return p;
     }

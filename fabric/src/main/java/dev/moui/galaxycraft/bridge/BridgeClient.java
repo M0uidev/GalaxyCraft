@@ -1,5 +1,8 @@
 package dev.moui.galaxycraft.bridge;
 
+import dev.moui.galaxycraft.universe.GameOrigin;
+import org.joml.Vector3d;
+
 import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Ring;
 import dev.moui.galaxycraft.proto.Seqlock;
@@ -90,7 +93,12 @@ public final class BridgeClient {
             if (m.isEmpty()) break;
             handle(m.get());
         }
-        world = Seqlock.readWorld(s);
+        // Where the game is (its floats, relative to the floating origin) in universe units, as every
+        // position in the mod; a reading from an epoch too old to place is no reading.
+        world = Seqlock.readWorld(s).flatMap(w -> {
+            Vector3d q = GameOrigin.fromGame(w.queryPos(), w.originEpoch());
+            return q == null ? Optional.empty() : Optional.of(w.withQueryPos(q));
+        });
     }
 
     /** Minecraft is in a world or not (its menus): told to the host at each poll. */
@@ -180,7 +188,7 @@ public final class BridgeClient {
     }
 
     public void sendPlayer(Seqlock.PlayerOut p) {
-        if (shm != null) Seqlock.writePlayer(shm.seg(), p);
+        if (shm != null) Seqlock.writePlayer(shm.seg(), p.withPos(GameOrigin.toGame(p.pos())));
     }
 
     private boolean tryOpen() {

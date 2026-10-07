@@ -530,6 +530,21 @@ TEST(boot_space_stays_in_the_world_through_a_stall_of_minecraft)
   CHECK(f.bridge.InMenu());
 }
 
+TEST(boot_space_a_heartbeat_newer_than_the_frame_is_not_a_menu)
+{
+  Fixture f;
+  f.bridge.SetBootSpace(true);
+  f.shm->SetU32(offsetof(GxcHeader, mod_flags), GXC_MOD_IN_WORLD);
+  f.ModReports(1, {10, 20, 30});
+  f.Tick();
+  CHECK(!f.bridge.InMenu());
+  // Minecraft beats while the host waits for it, after the host read its clock for the frame.
+  f.shm->SetU64(offsetof(GxcHeader, mod_heartbeat_ms), f.now + 2);
+  f.Tick();
+  CHECK(!f.bridge.InMenu() && f.bridge.MinecraftMode());
+  CHECK(f.bridge.Republished()[2] == 0);  // no relink
+}
+
 TEST(boot_space_tells_the_mod_when_the_galaxy_is_ready)
 {
   Fixture f;
@@ -729,7 +744,7 @@ TEST(inbox_gets_the_held_item_with_its_sprite_untouched)
 {
   Fixture f;
   InboxInMailbox(f, 4096);
-  GxcHeld h{GXC_HELD_BLOCK, 1, {0, 2}, {}};
+  GxcHeld h{GXC_HELD_BLOCK, 1, 0, 2, {}};
   h.sprite[0] = 0x80, h.sprite[1] = 0x1F;
   Ring(*f.shm, GXC_OFF_RING_M2S).Push(GXC_MSG_HELD, &h, sizeof(h));
   f.Tick();
