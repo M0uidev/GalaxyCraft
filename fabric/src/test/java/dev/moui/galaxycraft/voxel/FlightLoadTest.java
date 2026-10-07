@@ -2,11 +2,12 @@ package dev.moui.galaxycraft.voxel;
 
 import java.util.function.BooleanSupplier;
 import org.joml.Vector3d;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /** Flying over a planet at elytra speeds with PlanetClient's budget (6 ms a tick): the far view stays at the block distance. */
 class FlightLoadTest {
-    @Test void flyingFastTheBlocksKeepUp() {
+    @Tag("timing") @Test void flyingFastTheBlocksKeepUp() {
         for (double render : new double[] {64, 96}) for (double speed : new double[] {3}) {
             PlanetSession s = new PlanetSession(80);
             s.setRenderDistance(render);
@@ -61,7 +62,7 @@ class FlightLoadTest {
         }
     }
 
-    @Test void aSlowMachineStillLoadsWhatIsNearestFirst() {
+    @Tag("timing") @Test void aSlowMachineStillLoadsWhatIsNearestFirst() {
         // A quarter of the budget (a slower computer, a busier tick): what loads first is what
         // Mario is about to reach, so the far view stays as far off as it can.
         PlanetSession s = new PlanetSession(80);

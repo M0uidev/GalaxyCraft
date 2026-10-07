@@ -220,7 +220,11 @@ java {
 }
 
 test {
-	useJUnitPlatform()
+	useJUnitPlatform {
+		// Tests tagged "timing" measure against a wall-clock budget sized for a desktop: CI's
+		// runners are slower and fail them on Linux and Windows alike.
+		if (System.getenv("CI")) excludeTags "timing"
+	}
 	// Tests that drive tools/fake_galaxy.py need the repository root.
 	systemProperty "galaxycraft.repoRoot", rootDir.parentFile.absolutePath
 	// Unit tests are written for 100 galaxy units per block, whatever the mod's default is.

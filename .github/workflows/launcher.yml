@@ -124,9 +124,9 @@ jobs:
           path: out/*.jar
           if-no-files-found: error
 
-  # The mod's unit tests on both systems. FlightLoadTest's two flight tests measure against a
-  # 6 ms-a-tick budget of wall-clock time: on CI's runners (slower than a desktop) they fail on
-  # Linux and Windows alike, so releases do not wait on this job.
+  # The mod's unit tests on both systems. Tests tagged "timing" (FlightLoadTest's two flight
+  # tests: a wall-clock budget sized for a desktop) are left out on CI (fabric/build.gradle).
+  # Releases still do not wait on this job.
   mod-tests:
     name: Mod tests (${{ matrix.name }})
     strategy:
