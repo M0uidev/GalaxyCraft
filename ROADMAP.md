@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-07 (v0.1.1 released)
+Last updated: 2026-10-07 (flat space stations designed)
 
 ---
 
@@ -29,7 +29,7 @@ Last updated: 2026-10-07 (v0.1.1 released)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Flat space stations | next | Player-built **flat** platforms floating in space, to play flat Minecraft (farms, builds) without the sphere's distortion. Hook ready: `CosmicWind` takes any `GravityBody`, not only spheres. |
+| Flat space stations | next | Player-built **flat** platforms floating in space, to play flat Minecraft (farms, builds) without the sphere's distortion. 2026-10-07: designed ([spec](docs/superpowers/specs/2026-10-07-galaxycraft-flat-stations-design.md)): craft a Station Core, place it in space, the station grows as you build (up to 256×256×128), flat "down" gravity, core menu packs it into an item to unfold elsewhere. |
 
 ---
 
