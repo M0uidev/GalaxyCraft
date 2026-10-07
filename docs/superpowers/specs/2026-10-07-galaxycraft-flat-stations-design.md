@@ -1,6 +1,6 @@
 # Flat space stations: player-built platforms floating in space
 
-2026-10-07. Status: design approved in conversation, not built yet.
+2026-10-07. Status: design approved; amended the same day after reading the code (§1 animals travel, §2 size and orientation, §3.4 storage and shadow strip).
 
 The roadmap's **Flat space stations** (Now, `next`): player-built **flat** platforms floating in
 space, to play flat Minecraft (farms, builds) without a sphere's distortion.
@@ -10,7 +10,7 @@ space, to play flat Minecraft (farms, builds) without a sphere's distortion.
 - Craft a **Station Core** and use it in open space: a 9×9×1 slab appears with the core in its
   middle. Build on it like in a flat Minecraft world.
 - The station **grows as you build**: a block placed against any station block joins it, past the
-  current edge too, up to 256×256 footprint and 128 tall. A block placed in open space with nothing
+  current edge too, up to 256×256 footprint, from 48 blocks below the core to 80 above it. A block placed in open space with nothing
   next to it does nothing, as in vanilla.
 - **Gravity** pulls "down" toward the slab inside a box over the station (its bounds plus 24 blocks
   above). Walk off the edge or fall below it and you are in space: elytra and pulse work as always.
@@ -18,10 +18,9 @@ space, to play flat Minecraft (farms, builds) without a sphere's distortion.
 - Everything a planet's blocks do works on a station: crops grow, redstone, chests, furnaces, mob
   spawning by light, water, lighting, drops (the shadow-dimension mirror runs them).
 - **Right click the core** for its menu: **Rename**, **Info** (size, blocks), **Pack up**.
-- **Pack up** takes the whole station out of space, its blocks and the contents of its chests and
-  other block entities, and gives a **Packed Station** item named after it (size in the tooltip).
-  Using that item in open space unfolds the station again, in front of the player. Mobs and drops
-  on it stay behind.
+- **Pack up** takes the whole station out of space, its blocks, the contents of its chests and
+  other block entities, and its animals, and gives a **Packed Station** item named after it (size in
+  the tooltip). Using that item in open space unfolds the station again, in front of the player.
 - From afar a station shows in the far view (LOD) like a planet.
 
 ## 2. Decisions taken
@@ -33,8 +32,8 @@ space, to play flat Minecraft (farms, builds) without a sphere's distortion.
 | Creation | Station Core block + grows as you build; no editor |
 | Moving a station | Core menu → Pack up → Packed Station item → unfold elsewhere in space |
 | Approach | A: a flat cell grid next to the cube sphere, reusing the whole voxel pipeline |
-| Maximum size | 256 × 256 footprint, 128 tall |
-| Orientation | Taken when placed: up = the player's up then, facing snapped to 90° |
+| Maximum size | 256 × 256 footprint; 48 below the core to 80 above (the shadow dimension is 128 tall) |
+| Orientation | Taken when placed: up = the player's up then, its rows along where the player looks |
 | Recipe | 4 iron blocks + 4 glass + 1 ender pearl (mid-game, so farms come early) |
 
 Rejected approaches: a planet with a huge radius whose one face looks flat (six faces of waste,
@@ -91,9 +90,15 @@ rotation, center (universe units) and bounds. `PlanetSession` keeps stations nex
 focus (nearest body) picks between both, so clicks, outline, cracks, shadow, drops and mobs work on
 stations unchanged. Detail chunks load within the same distances as planets.
 
-Saved per system next to planets as `<stage>.s<n>.gxstation`: the planet file's cell format with a
-station header (size, rotation, center, name) and a `BENT` trailer of block-entity NBT (chests,
-furnaces, signs...) read from the shadow world when saving and written back when it mirrors them.
+Saved per world by id as `<planets dir>/stations/<id>.gxstation`: a header (name, packed or placed,
+the stage it is placed in, center in universe units, rotation, the grid's size and offset) and the
+cells in the planet file's palette format. A placed station is active (a session, sent to the game)
+while the player is in its stage and within 2000 blocks of it (out past 2500).
+
+Chests, furnaces and animals need no copy: each station has its own strip of the shadow dimension,
+keyed by its id, and a cell's place there is its **station coordinate** (relative to the core), not
+its grid index, so neither a regrow nor packing and unfolding moves it. Minecraft saves that strip
+with the world; whatever was there when packed is there when unfolded.
 
 ### 3.5 Gravity
 
@@ -129,6 +134,7 @@ stations like planets.
 ### 3.8 Edge cases
 
 - Packing while the player (or Mario) stands on it: they stay where they are, now in space.
+- Stations go in the stage where they are placed (GalaxyCraftSpace in play; the prologue in tests).
 - No free planet id or gravity slot: placing refused, with a message.
 - Two stations' boxes may not overlap: growth into another body's box is refused.
 - Leaving the system with a station placed: it stays and saves with its system like planets.
