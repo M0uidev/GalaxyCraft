@@ -91,4 +91,13 @@ async function stopMatching(match) {
   return n;
 }
 
-module.exports = { start, stopTree, stopMatching, alive };
+/** Resolves once the child has exited (or after ms, whichever comes first). */
+function waitExit(child, ms) {
+  if (!child || child.exitCode !== null || child.signalCode !== null || !child.pid) return Promise.resolve();
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    child.once('exit', () => { clearTimeout(t); resolve(); });
+  });
+}
+
+module.exports = { start, stopTree, stopMatching, waitExit, alive };

@@ -89,6 +89,8 @@ class GameRunner extends EventEmitter {
     this.ended = (async () => {
       this.setState('stopping', { installation });
       await Promise.all(this.children.map((c) => proc.stopTree(c)));
+      // Stopped is only said once each side has really exited (taskkill returns before that).
+      await Promise.all(this.children.map((c) => proc.waitExit(c, 10000)));
       if (this.plan && this.plan.stopMatch) await this.stopMatching(this.plan.stopMatch);
       this.children = [];
       const playedMs = Date.now() - this.startedAt;
