@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-07 (credits and Discord/YouTube links done; first release next)
+Last updated: 2026-10-07 (the real Power Star in the launcher; first release next)
 
 ---
 
@@ -123,6 +123,7 @@ Last updated: 2026-10-07 (credits and Discord/YouTube links done; first release 
 | 2026-10-07 | Windows: the same game and worlds as on Linux (Dolphin built for Windows, its keyboard, mouse and shared memory); first played on Windows | feacda7 |
 | 2026-10-07 | Play from the Minecraft Launcher: INSTALL adds a "Super Minecraft Galaxy" installation to Mojang's launcher, and the mod starts Dolphin and closes both together. Tested on Linux by starting Minecraft as the Minecraft Launcher would. [Spec](docs/superpowers/specs/2026-10-07-play-from-minecraft-launcher-design.md) | 6a77d69 |
 | 2026-10-07 | Credits and community links: "by @M0uiDev" on the title screen and in the launcher (it opens the YouTube channel), a "Join the Discord" button on the title screen, Discord and YouTube in the launcher's sidebar and About | a1c1501 |
+| 2026-10-07 | The real Power Star from Super Mario Galaxy 2 in the launcher: its icon, the Home Planet background and the star installation icon; a bolder app icon that reads at small sizes | 95333b8 |
 
 ---
 
