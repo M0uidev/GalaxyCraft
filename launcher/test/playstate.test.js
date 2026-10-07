@@ -9,6 +9,13 @@ const base = {
   installed: { version: '0.2.0', manifest: manifest('0.2.0') }, latest: manifest('0.2.0'), system: 'linux-x64',
 };
 
+test('without our own sign-in, choosing the game and installing still work', () => {
+  const none = { ...base, account: null, signInReady: false };
+  assert.equal(playerState({ ...none, installed: null }).action, 'install');
+  assert.equal(playerState({ ...none, installed: null, rom: null }).action, 'rom');
+  assert.equal(playerState(none).action, 'signin');
+});
+
 test('the button, step by step', () => {
   assert.equal(playerState({ ...base, installed: null, latest: null }).action, 'checking');
   assert.equal(playerState({ ...base, installed: null, latest: new Error('offline') }).action, 'unavailable');
