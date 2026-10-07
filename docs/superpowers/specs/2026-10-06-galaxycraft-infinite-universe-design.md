@@ -1,8 +1,12 @@
 # Infinite universe: endless systems, a floating origin, faster travel
 
-2026-10-06. Status: research and design, for review. The pure core (§3, §4.1, §4.2) is built and
-unit tested on branch `feat/infinite-universe`. The game side (§4.3 on) needs SMG2, Dolphin and
-the Syati toolchain, so it is left for a session on the PC.
+2026-10-06. Status: built and merged (all of §6, tested end to end by UniverseProbe). User's guide:
+`docs/UNIVERSO.md`. Where the build differs from this design: the mod keeps universe units (doubles)
+everywhere and converts only where it meets the game (`GameOrigin`), instead of converting every kept
+position at each move (§4.5); the origin moves only in GalaxyCraftSpace; a planet is complete only in
+the system Mario is in; travel (warp, landings) keeps Minecraft's player near x, z = 0
+(`GravityFrame.rebase`) and the pulse slides the gravity frame, so Minecraft's player never crosses its
+world. Answers to §8: density as designed, warp free, warp by aiming at a star (K) and a galaxy map (M).
 
 Stage 3 of the galaxy (galaxy options spec, "Out of scope"). The roadmap's **Infinite universe**:
 No Man's Sky-like endless space, planets generated as you explore, a floating origin for SMG2's
