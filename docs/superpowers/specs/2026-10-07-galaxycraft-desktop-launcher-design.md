@@ -107,12 +107,33 @@ player's worlds).
   password).
 - The Windows installer is unsigned: SmartScreen warns until a code-signing certificate is added.
 
+## For everyone: the released game (added 2026-10-07)
+
+Second brief: "new players use their own ROM; their Minecraft session; everything should just
+work for everyone; when new releases of the game come out, people with the launcher can just
+play". So the launcher also installs and updates **the game itself**, without the repository.
+
+| Question | Choice |
+|---|---|
+| Which game a player plays | Settings > Play: *the released game* (default in an installed launcher) or *my game folder* (default from source, or when a folder or `GXC_ROOT` is set) |
+| Their Super Mario Galaxy 2 | Chosen once; its disc header is read (ISO, RVZ, WIA, WBFS, CISO) and only SB4E01 (USA) is accepted, with a reason for anything else. Also used in folder mode (a descriptor is written for the chosen disc) |
+| Files made from the disc | Steve's archives and GalaxyCraftSpace ship as **GXD1 patches** against the player's own (Yaz0-decompressed) disc files: copy ranges plus our bytes, SHA-256 of both ends, so a patch holds none of the disc and a different disc is caught. Steve is packed with a blank skin: the mod sends the player's skin at runtime (`GXC_MSG_MARIO_SKIN`) |
+| Minecraft | Started directly as the official launcher does: Mojang's version file and rules, libraries, assets, log config, **Mojang's own Java runtime**, Fabric's profile merged on top, the mods copied into the installation's `mods` (ours tracked, the player's own left alone) |
+| Their Minecraft session | Microsoft sign-in in a launcher window (OAuth code + PKCE) -> Xbox Live -> XSTS -> Minecraft token, ownership and profile; refreshed before PLAY; kept encrypted by the system keychain (safeStorage); never in the log (the command line is redacted). Needs an Azure app approved by Mojang (client id in `content/config.json`) |
+| Updates | Each GitHub Release carries `game.json`; launchers read `releases/latest/download/game.json`. The button: SIGN IN -> CHOOSE GAME -> INSTALL -> PLAY, UPDATE when newer; COMING SOON on a system the release has no Dolphin for. A version installs beside the current one, becomes current only once complete, and the one before is kept. Offline with a game installed: PLAY works from what is kept |
+| Releases | One `npm run release`: launcher and game together, same version (electron-updater reads the latest release, so one stream). What only the developer's machine can build (the module: CodeWarrior; the patches: the disc) is `release/module`, made by `npm run pack-game` and committed, with a hash of its sources that CI checks. CI builds the rest: the mod jar, a self-contained Linux Dolphin (Qt 6.8.3 and libraries via linuxdeploy, Ubuntu 22.04, GCC 12), `game.json` |
+
+Tested: every core piece by unit tests (disc formats, Yaz0 against `tools/rarc.py`, patches,
+Minecraft's rules and command line on Mojang-shaped data, the sign-in chain against fake
+services, a whole install and update from a release served locally); the real app through
+INSTALL and PLAY of a fake release in the smoke test (Linux and Windows); and in CI, real
+Minecraft 26.3 with Fabric and the mod started from the launcher's own downloads on Linux and
+Windows (Windows runners get Mesa's software OpenGL).
+
 ## Later
 
-- **Release mode**: today PLAY needs a built checkout (the game folder). A release bundle of the
-  built Dolphin, module and mod, downloaded by the launcher, would let players without the repo
-  play. Needs Dolphin built on Windows first (`docs/WINDOWS.md`).
-- **Microsoft account sign-in** and launching Minecraft without Gradle (version manifest,
-  libraries, assets, Fabric's loader): needs an Azure app registration.
-- Building from the launcher (Dolphin, module) with its log, once the build scripts are
-  cross-platform.
+- **The game on Windows**: the Dolphin patch's Windows port (`docs/WINDOWS.md`), then a
+  `dolphin-win32-x64` entry in `game.json`; the launcher already handles it.
+- Mojang's approval of the sign-in app; a code signing certificate for Windows.
+- Other regions of Super Mario Galaxy 2 (the module is built for SB4E).
+- Building Dolphin and the module from the launcher, for developers.

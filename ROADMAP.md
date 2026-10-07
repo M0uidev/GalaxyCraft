@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-07 (desktop launcher for Linux and Windows now, on `feat/launcher`)
+Last updated: 2026-10-07 (desktop launcher now: also installs and updates the game for players)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-07 (desktop launcher for Linux and Windows now, on `feat/l
 
 | Feature | Status | Notes |
 |---|---|---|
-| Desktop launcher | now | A Minecraft Launcher-style app for **Linux and Windows** from one codebase: news, patch notes (from this roadmap), installations with their own worlds and settings, skins, themes and backgrounds, PLAY doing what `gxplay.sh` does. One `npm run release` publishes both systems and installed launchers update themselves. Built on `feat/launcher`, to be tried on Linux before merging. [Spec](docs/superpowers/specs/2026-10-07-galaxycraft-desktop-launcher-design.md), [launcher/README.md](launcher/README.md). |
+| Desktop launcher | now | A Minecraft Launcher-style app for **Linux and Windows** from one codebase: news, patch notes (from this roadmap), installations with their own worlds and settings, skins, themes and backgrounds. **For everyone**: players sign in with their Microsoft account, choose their own Super Mario Galaxy 2, INSTALL and PLAY without the repository; new releases install themselves (UPDATE). One `npm run release` publishes launcher and game for both systems. Developers keep PLAY from their game folder. Built on `feat/launcher`, to be tried on Linux before merging. [Spec](docs/superpowers/specs/2026-10-07-galaxycraft-desktop-launcher-design.md), [launcher/README.md](launcher/README.md). |
 
 ## Next
 
@@ -126,10 +126,12 @@ Last updated: 2026-10-07 (desktop launcher for Linux and Windows now, on `feat/l
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
-- 2026-10-07: Launcher follow-ups (Claude, from the launcher work): play without the repository
-  (the launcher downloads a built game: Dolphin, module and mod), Microsoft account sign-in and
-  Minecraft started without Gradle, building Dolphin and the module from the launcher, a code
-  signing certificate so Windows does not warn about the installer.
+- 2026-10-07: Launcher follow-ups (Claude, from the launcher work): register the sign-in app in
+  Azure and send it to Mojang for approval (launcher/README.md, "Microsoft sign-in"); the first
+  `npm run pack-game` and release; Super Mario Galaxy 2 from other regions; building Dolphin and
+  the module from the launcher; a code signing certificate so Windows does not warn.
+- 2026-10-07: New players use their own Super Mario Galaxy 2 and their Minecraft account, and
+  launchers get new game releases by themselves (user). Taken into the launcher (Now).
 
 - 2026-10-06: Follow-ups of "blocks show what they hold" (Claude): the enchanting table's book
   turning to the player and the bell swinging (still drawn at rest); a crowd of 100 signs and 50
