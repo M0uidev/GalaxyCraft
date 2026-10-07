@@ -648,11 +648,25 @@ public:
       for (int k = 0; k < 3; k++)
         m[k] = p.center[k] + 100.f * tp.dir[k];
     f32 to[3];
-    // Onto the ground under him (a hill, something built), not into it.
-    gxc::PlanetDrop(p.center, tp.ground > 0.f ? tp.ground : p.surface, DROP_ABOVE, m, to);
+    f32 up[3];
+    if (p.flat && tp.aimed)
+    {
+      // A station: dir × ground is the landing point; down onto it along the station's own up
+      // (the line from its center would come in slanted off the core).
+      const TVec3f& u = p.flat->mLocalPlaneUpVec;
+      up[0] = u.x, up[1] = u.y, up[2] = u.z;
+      for (int k = 0; k < 3; k++)
+        to[k] = p.center[k] + tp.dir[k] * tp.ground + up[k] * DROP_ABOVE;
+    }
+    else
+    {
+      // Onto the ground under him (a hill, something built), not into it.
+      gxc::PlanetDrop(p.center, tp.ground > 0.f ? tp.ground : p.surface, DROP_ABOVE, m, to);
+      for (int k = 0; k < 3; k++)
+        up[k] = to[k] - p.center[k];
+    }
     MR::setPlayerPos(TVec3f(to[0], to[1], to[2]));
     BootTeleported();
-    f32 up[3] = {to[0] - p.center[0], to[1] - p.center[1], to[2] - p.center[2]};
     const f32 len = gxc::Sqrt(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
     gLanding.active = len > 0.f;
     gLanding.frames = 0;

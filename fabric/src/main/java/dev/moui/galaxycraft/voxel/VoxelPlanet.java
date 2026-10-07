@@ -13,6 +13,12 @@ public final class VoxelPlanet {
     public static final int MIN_RADIUS = 10, MAX_RADIUS = 256;
 
     public final CellGrid grid;
+
+    /** Up at a point (planet blocks): a station's own up, else away from the planet's center. */
+    public Vector3d up(Vector3d at) {
+        if (grid instanceof FlatGrid f) return f.up();
+        return at.lengthSquared() < 1e-12 ? new Vector3d(0, 1, 0) : new Vector3d(at).normalize();
+    }
     public final Blocks blocks;
     /** Blocks of solid ground under the grass top: the crust, with bedrock at its bottom. */
     public final int depth;

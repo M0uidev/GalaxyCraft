@@ -299,14 +299,13 @@ final class EntityClient {
         double age = d.age + pt, phase = (System.identityHashCode(d) & 0xFFFF) / 65536.0 * Math.PI * 2;
         double bob = Math.sin(age / 10 + phase) * 0.1 + 0.1;
         double size = look.kind() == HeldItem.ITEM || look.kind() == HeldItem.TOOL ? 0.5 : 0.25;
-        Matrix4d m = upright(d.pos);
+        Matrix4d m = upright(d.pos, session().planet().up(d.pos));
         m.translate(0, bob + size / 2 + 0.05, 0).rotateY(age / 20 + phase).scale(size / 16, -size / 16, size / 16);
         out.add(new EntityWire.Piece(model, skin, 0, -1, toGal(m)));
     }
 
-    /** Planet blocks around a planet point, y away from the center (the planet's up there). */
-    private static Matrix4d upright(Vector3d at) {
-        Vector3d up = new Vector3d(at).normalize();
+    /** Planet blocks around a planet point, y the planet's up there. */
+    private static Matrix4d upright(Vector3d at, Vector3d up) {
         Vector3d x = Math.abs(up.y) < 0.9 ? new Vector3d(0, 1, 0).cross(up).normalize() : new Vector3d(1, 0, 0).cross(up).normalize();
         Vector3d z = new Vector3d(x).cross(up);
         return new Matrix4d(x.x, x.y, x.z, 0, up.x, up.y, up.z, 0, z.x, z.y, z.z, 0, at.x, at.y, at.z, 1);

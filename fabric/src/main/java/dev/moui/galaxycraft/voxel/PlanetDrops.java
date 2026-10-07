@@ -59,7 +59,7 @@ public final class PlanetDrops<T> {
     }
 
     private static void step(VoxelPlanet p, Drop<?> d) {
-        Vector3d up = new Vector3d(d.pos).normalize();
+        Vector3d up = p.up(d.pos);
         if (blocked(p, d.pos)) { // a block put where it lay: out on top
             d.pos.fma(0.1, up);
             d.vel.zero();

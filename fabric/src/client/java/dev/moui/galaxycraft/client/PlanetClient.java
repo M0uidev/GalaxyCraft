@@ -1070,6 +1070,18 @@ public final class PlanetClient {
     }
 
     /** A catalog planet's session, if it has one (complete or not). */
+    /** The galaxy's planets not in the game yet (its catalog's far ones): their gravity, in blocks. */
+    static java.util.List<dev.moui.galaxycraft.gravity.GravityBody> farBodies() {
+        java.util.List<dev.moui.galaxycraft.gravity.GravityBody> out = new java.util.ArrayList<>();
+        if (stream == null) return out;
+        for (GalaxyCatalog.Entry e : stream.entries()) {
+            PlanetSession s = sessionOf(e.index());
+            if (s == null || !s.active()) out.add(new dev.moui.galaxycraft.gravity.GravityBody.Sphere(
+                    new Vector3d(e.center()).mul(GravityFrame.SCALE), PlanetSession.gravityRadius(e.radius())));
+        }
+        return out;
+    }
+
     static PlanetSession sessionOf(int index) {
         if (index == 0) return session;
         for (Extra e : extras) if (e.index() == index) return e.s();
@@ -1274,7 +1286,7 @@ public final class PlanetClient {
                     next.run();
                     return;
                 }
-                if (!StationClient.afterPlace(focus, focus.lastPlaced())) return; // past a station's limits: taken back
+                if (!StationClient.afterPlace(focus, focus.lastPlacedCells())) return; // past a station's limits: taken back
                 placed(focus);
                 int cell = focus.lastPlaced();
                 if (cell >= 0 && shadow.available()

@@ -182,6 +182,7 @@ public final class PlanetSession {
     private int crack = -1, crackStage = -1; // the cell cracked in the game and how far, -1 none
     private int crackId = -1;
     private int placed = -1;
+    private int[] placedCells = new int[0];
     private Vector3d mario;
     /** Where Mario is headed: his position LOOKAHEAD updates on at his last step's speed. */
     private Vector3d ahead;
@@ -285,6 +286,13 @@ public final class PlanetSession {
      * the chunks around Mario first. The game drops the old chunks when the record comes.
      */
     public void swap(VoxelPlanet p) {
+        // The last placed block keeps its station coordinate (its sound, a sign's editor come after).
+        if (planet.grid instanceof FlatGrid from && p.grid instanceof FlatGrid to) {
+            if (placed >= 0) placed = to.cellOf(from.stationX(placed), from.stationY(placed), from.stationZ(placed));
+            for (int i = 0; i < placedCells.length; i++)
+                if (placedCells[i] >= 0) placedCells[i] = to.cellOf(from.stationX(placedCells[i]), from.stationY(placedCells[i]),
+                        from.stationZ(placedCells[i]));
+        }
         planet = p;
         farVersion = new int[PlanetLod.tileCount(p)];
         farWant = new int[farVersion.length];
@@ -469,8 +477,7 @@ public final class PlanetSession {
 
     /** Up at a point (planet blocks): away from a planet's center, a station's own up. */
     Vector3d up(Vector3d at) {
-        if (station != null) return station.grid().up();
-        return at.lengthSquared() < 1e-12 ? new Vector3d(0, 1, 0) : new Vector3d(at).normalize();
+        return planet.up(at);
     }
 
     /**
@@ -836,7 +843,13 @@ public final class PlanetSession {
         planet.settle(changed);
         unsaved = true;
         placed = cell;
+        placedCells = changed;
         return true;
+    }
+
+    /** Every cell the last placeBlock set (a door's two halves, a bed's two). */
+    public int[] lastPlacedCells() {
+        return placedCells.clone();
     }
 
     /** The cell the last block placeBlock placed went into (-1 none yet): its sound and pieces. */

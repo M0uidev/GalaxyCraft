@@ -879,4 +879,22 @@ class PlanetSessionTest {
         assertFalse(s.marioAtCore());
         assertFalse(s.underground());
     }
+
+    @Test void theLastPlacedCellFollowsARegrow() {
+        Station st = StationTest.station("cafe0008");
+        PlanetSession s = station(st);
+        assertTrue(s.placeBlock(s.galOf(new Vector3d(3, 3, 0)), new Vector3d(0, -1, 0), Material.STONE, s.galOf(new Vector3d(-3, 1, -3))));
+        FlatGrid before = st.grid();
+        int c = s.lastPlaced();
+        assertEquals(1, before.stationY(c));
+        st.bounds = st.bounds.with(40, 0, 0);
+        st.regrow();
+        s.swap(st.planet);
+        FlatGrid after = st.grid();
+        assertNotEquals(before.n, after.n);
+        int moved = s.lastPlaced();
+        assertEquals(3, after.stationX(moved));
+        assertEquals(1, after.stationY(moved));
+        assertEquals(0, after.stationZ(moved));
+    }
 }

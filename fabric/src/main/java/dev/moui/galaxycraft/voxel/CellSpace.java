@@ -54,11 +54,10 @@ public final class CellSpace {
 
     /**
      * A planet direction in cell's model axes (x, y, z), unit: the axes at the cell's center made
-     * orthonormal around its outward direction.
+     * orthonormal around its outward direction (a station's own up; away from a planet's center).
      */
     public static Vector3d direction(CellGrid g, int cell, Vector3d dir) {
-        Vector3d c = point(g, cell, 0.5, 0.5, 0.5);
-        Vector3d y = new Vector3d(c).normalize();
+        Vector3d y = g instanceof FlatGrid f ? f.up() : point(g, cell, 0.5, 0.5, 0.5).normalize();
         Vector3d x = point(g, cell, 1, 0.5, 0.5).sub(point(g, cell, 0, 0.5, 0.5));
         x.fma(-x.dot(y), y).normalize();
         Vector3d z = new Vector3d(x).cross(y);

@@ -113,7 +113,6 @@ public final class StationClient {
         saveAll();
         for (Active a : active) a.session().unload();
         active.clear();
-        rescan = true;
     }
 
     /** Each client tick, after the planets': stations near Mario in this stage come and go, edits are saved. */
@@ -176,6 +175,19 @@ public final class StationClient {
         write(a.station());
     }
 
+    /**
+     * The headers the scan goes by, as the file is about to be: a station packed a moment ago must
+     * not come back from its old header (or from a list() racing the write), and saving an edit
+     * reads no files.
+     */
+    private static void remember(Station s) {
+        List<StationStore.Header> next = new ArrayList<>(headers);
+        next.removeIf(h -> h.id().equals(s.id));
+        next.add(new StationStore.Header(s.id, s.name, s.stage, s.center, s.rotation, 0, s.bounds.spanX(), s.bounds.spanY(),
+                s.bounds.spanZ()));
+        headers = next;
+    }
+
     /** Written on the planets' saver thread, from a copy of its cells taken here. */
     private static void write(Station s) {
         StationStore store = StationClient.store;
@@ -185,7 +197,7 @@ public final class StationClient {
         copy.center = new Vector3d(s.center);
         char[] cells = s.planet.cells().clone();
         Blocks blocks = blocks();
-        rescan = true;
+        remember(copy);
         PlanetClient.save(() -> {
             try {
                 store.write(copy, cells, blocks);
@@ -219,6 +231,7 @@ public final class StationClient {
         if (stage == null || !Layout.SPACE_STAGE.equals(stage) && !Boolean.getBoolean("galaxycraft.stationsAnywhere")) return "open_space";
         List<GravityBody> bodies = new ArrayList<>();
         for (PlanetSession s : PlanetClient.bodies()) if (s.active()) bodies.add(s.body(GravityFrame.SCALE));
+        bodies.addAll(PlanetClient.farBodies()); // and the galaxy's planets not streamed in yet
         return Station.refusal(new Vector3d(centerUnits).mul(GravityFrame.SCALE), bodies, active.size(), Station.MAX_ACTIVE);
     }
 
@@ -325,21 +338,25 @@ public final class StationClient {
     }
 
     /**
-     * A block was just placed at cell of a station: past its limits it is taken back (false: the
-     * item is not used up); otherwise the station grows, and regrows its grid near the side.
+     * Blocks were just placed at cells of a station (a door's halves): past its limits they are all
+     * taken back (false: the item is not used up); otherwise the station grows, and regrows its
+     * grid near the side.
      */
-    public static boolean afterPlace(PlanetSession session, int cell) {
+    public static boolean afterPlace(PlanetSession session, int... cells) {
         Optional<Station> found = of(session);
-        if (found.isEmpty() || cell < 0) return true;
+        if (found.isEmpty()) return true;
         Station s = found.get();
         FlatGrid g = s.grid();
-        if (!s.allowed(g.stationX(cell), g.stationY(cell), g.stationZ(cell))) {
-            s.planet.set(cell, Blocks.AIR);
+        for (int cell : cells) {
+            if (cell < 0 || s.allowed(g.stationX(cell), g.stationY(cell), g.stationZ(cell))) continue;
+            for (int c : cells) if (c >= 0) s.planet.set(c, Blocks.AIR);
             Player player = Minecraft.getInstance().player;
             if (player != null) tell(player, "message.galaxycraft.station.too_big");
             return false;
         }
-        if (s.changed(cell)) {
+        boolean regrow = false;
+        for (int cell : cells) if (cell >= 0) regrow |= s.changed(cell);
+        if (regrow) {
             s.regrow();
             session.swap(s.planet);
             regrows++;

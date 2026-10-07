@@ -15,6 +15,8 @@ public final class StationScreen extends Screen {
     private final PlanetSession session;
     private final Station station;
     private EditBox name;
+    /** Counted once: the menu is open while nothing is built. */
+    private int blocks;
 
     private StationScreen(PlanetSession session, Station station) {
         super(Component.translatable("screen.galaxycraft.station.title"));
@@ -29,6 +31,7 @@ public final class StationScreen extends Screen {
 
     @Override
     protected void init() {
+        blocks = station.blockCount();
         int w = 200, x = (width - w) / 2, y = height / 2 - 50;
         name = new EditBox(font, x, y + 14, w, 20, Component.translatable("screen.galaxycraft.station.name"));
         name.setMaxLength(32);
@@ -59,7 +62,7 @@ public final class StationScreen extends Screen {
         g.centeredText(font, title.getString(), width / 2, y - 16, WHITE);
         g.text(font, Component.translatable("screen.galaxycraft.station.name").getString(), x, y, GRAY);
         var b = station.bounds;
-        g.text(font, Component.translatable("screen.galaxycraft.station.info", b.spanX(), b.spanZ(), b.spanY(), station.blockCount()).getString(),
+        g.text(font, Component.translatable("screen.galaxycraft.station.info", b.spanX(), b.spanZ(), b.spanY(), blocks).getString(),
                 x, y + 42, GRAY);
     }
 

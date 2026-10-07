@@ -68,6 +68,17 @@ class FlatPlanetTest {
         assertTrue(sphere[3] < 80 * 8, "far view radius " + sphere[3] / 80 + " blocks");
     }
 
+    @Test void cellDirectionsUseTheStationsUp() {
+        VoxelPlanet p = slab();
+        FlatGrid g = (FlatGrid) p.grid;
+        for (int cell : new int[] {g.cellOf(5, 0, 0), g.cellOf(0, 0, 0)}) {
+            Vector3d d = CellSpace.direction(g, cell, g.up());
+            assertEquals(0, d.x, 1e-9);
+            assertEquals(1, d.y, 1e-9);
+            assertEquals(0, d.z, 1e-9);
+        }
+    }
+
     @Test void aSolidChunkAtTheBoxsEdgeShows() {
         FlatGrid g = new FlatGrid(16, 16, -8, -2, -8, new Quaterniond());
         char[] cells = new char[g.cellCount()];
