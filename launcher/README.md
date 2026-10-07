@@ -84,7 +84,7 @@ Players sign in with their Microsoft account, as in the official launcher. Mojan
 approved apps do that, so the launcher needs an app registration of its own:
 
 1. In the [Azure portal](https://portal.azure.com) > *App registrations* > *New registration*:
-   name it (Super Minecraft Galaxy Launcher), *Personal Microsoft accounts only*, platform
+   name it *SMG Launcher* (Mojang refuses app names with "Minecraft" in them; ours is registered so, client id in `content/config.json`), *Personal Microsoft accounts only*, platform
    *Public client/native (mobile & desktop)* with the redirect URI
    `https://login.microsoftonline.com/common/oauth2/nativeclient`. Under *Authentication*, allow
    public client flows.
