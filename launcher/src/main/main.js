@@ -20,6 +20,8 @@ const disc = require('../core/disc');
 const { playerState } = require('../core/playstate');
 const { GameRunner } = require('./runner');
 const { Installer } = require('./installer');
+const mcprofile = require('./mcprofile');
+const { findMinecraftDir } = require('../core/mclauncher');
 const { Accounts } = require('./accounts');
 const updater = require('./updater');
 
@@ -160,7 +162,8 @@ function status(instId) {
   const m = mode();
   const rom = romInfo();
   const base = { mode: m, rom, account: accounts.current(), signInReady: accounts.available,
-    installing, latestVersion: latest && !(latest instanceof Error) ? latest.version : null };
+    installing, minecraftLauncher: !!findMinecraftDir({ platform: process.platform, home: paths().home }, fs.existsSync),
+    latestVersion: latest && !(latest instanceof Error) ? latest.version : null };
   if (m === 'folder') return { ...base, folder: check(instId) };
   const installed = installer.installed();
   return { ...base, installedVersion: installed ? installed.version : null,
@@ -184,6 +187,7 @@ async function installLatest() {
   send('install:state', installing);
   try {
     await installer.install(target, rom.path);
+    registerInMinecraftLauncher(instOf(state.selected));
     return { ok: true };
   } catch (e) {
     runner.log('Launcher', `Install failed: ${e.message}`, 'stderr');
@@ -191,6 +195,17 @@ async function installLatest() {
   } finally {
     installing = null;
     send('install:state', null);
+  }
+}
+
+/** The game as an installation in Mojang's Minecraft Launcher (and play.json); never fails the caller. */
+function registerInMinecraftLauncher(inst) {
+  try {
+    const r = mcprofile.register({ installer, inst, paths: paths(), iconFile: path.join(APP_DIR, 'build', 'icon.png'),
+      log: (l) => runner.log('Launcher', l) });
+    if (!r.ok) runner.log('Launcher', `Minecraft Launcher: not set up (${r.reason})`);
+  } catch (e) {
+    runner.log('Launcher', `Minecraft Launcher: not set up (${e.message})`, 'stderr');
   }
 }
 
@@ -204,6 +219,7 @@ async function playRelease(inst) {
   const ready = await installer.minecraft(i.manifest);
   const gameDir = store.gameDirOf(inst, paths());
   installer.syncMods(i, gameDir);
+  registerInMinecraftLauncher(inst);
   const mcCommand = minecraft.command({
     version: ready.version, java: ready.java, dirs: { ...ready.dirs, game: gameDir }, auth: sessionInfo,
     jvmArgs: gamepack.minecraftJvmArgs(i.manifest, inst), launcher: { name: 'super-minecraft-galaxy', version: app.getVersion() },

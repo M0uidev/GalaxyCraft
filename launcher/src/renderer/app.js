@@ -309,6 +309,11 @@ function renderPlay() {
       btn.textContent = st.label;
       btn.disabled = ['unsupported', 'unavailable', 'checking'].includes(st.action) || (st.action === 'signin' && !ui.status.signInReady);
       status.textContent = st.detail;
+      if (!ui.status.account && ui.status.installedVersion) {
+        status.textContent += ui.status.minecraftLauncher
+          ? ' Not signed in? Play from the Minecraft Launcher: choose "Super Minecraft Galaxy" and press PLAY.'
+          : ' Install the Minecraft Launcher (minecraft.net), sign in, then press INSTALL again.';
+      }
       if (st.action === 'play') status.classList.add('good');
       if (['unsupported', 'unavailable'].includes(st.action)) status.classList.add('bad');
     }

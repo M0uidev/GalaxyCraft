@@ -24,7 +24,8 @@ function playerState({ account, signInReady, rom, installed, latest, system }) {
   if (!sup.ok && !(installed && supported(installed.manifest, system).ok)) {
     return { action: 'unsupported', label: 'COMING SOON', detail: `Super Minecraft Galaxy is not out for ${sup.system} yet: it is coming. Follow the News.` };
   }
-  if (!account) {
+  // Without our own sign-in the player still chooses the game and installs; PLAY is then in the Minecraft Launcher.
+  if (!account && (signInReady || installed)) {
     return { action: 'signin', label: 'SIGN IN', detail: signInReady ? 'Sign in with the Microsoft account that owns Minecraft: Java Edition.'
       : 'Microsoft sign-in is not set up in this launcher yet.' };
   }

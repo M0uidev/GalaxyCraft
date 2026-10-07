@@ -147,8 +147,12 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             PlanetClient.leaveWorld(bridge);
             resetFrame();
         }));
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> DolphinStarter.stop());
+        ClientTickEvents.END_CLIENT_TICK.register(DolphinStarter::keepScreen);
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
-            if (Boolean.getBoolean("galaxycraft.hidden")) { // Dolphin shows the overlay instead
+            // From Mojang's launcher: Dolphin is started here, and the window hidden only once it runs.
+            boolean dolphinUp = !DolphinStarter.wanted() || DolphinStarter.start(client);
+            if (dolphinUp && Boolean.getBoolean("galaxycraft.hidden")) { // Dolphin shows the overlay instead
                 client.options.pauseOnLostFocus = false;
                 SDLVideo.SDL_HideWindow(client.getWindow().handle());
             }
