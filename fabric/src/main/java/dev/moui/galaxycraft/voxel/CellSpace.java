@@ -35,6 +35,8 @@ public final class CellSpace {
 
     /** The model point of cell at planet point p (Newton's method on the trilinear map). */
     public static Vector3d local(CellGrid g, int cell, Vector3d p) {
+        if (g instanceof FlatGrid f) // a unit cube: exact, no Newton
+            return f.toStation(p).sub(f.stationX(cell) - 0.5, f.stationY(cell) - 0.5, f.stationZ(cell) - 0.5);
         Vector3d m = new Vector3d(0.5, 0.5, 0.5);
         double h = 1e-4;
         for (int it = 0; it < 8; it++) {
