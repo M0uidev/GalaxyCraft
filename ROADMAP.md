@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (infinite universe now: research, design and its core)
+Last updated: 2026-10-06 (infinite universe done; nothing in progress)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-06 (infinite universe now: research, design and its core)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Infinite universe | now | Stage 3 of the galaxy: endless solar systems generated per 8192-block sector from the seed (the world's galaxy is the home system), a floating origin so SMG2's floats never shake, pulse and warp travel. Design: [spec](docs/superpowers/specs/2026-10-06-galaxycraft-infinite-universe-design.md). 2026-10-06: research and the pure core (sectors, systems, origin, 20 tests) on `feat/infinite-universe`; next, on the PC: the spike on moving everything in SMG2 at once, then the origin end to end. Open questions in the spec's §8. |
+| (nothing in progress) | | Pick the next one from **Next**. |
 
 ## Next
 
@@ -118,6 +118,7 @@ Last updated: 2026-10-06 (infinite universe now: research, design and its core)
 | 2026-10-06 | Signs as in Minecraft: putting one down opens its editor; clicking Done no longer breaks the sign (a button held as a screen closes is ignored until let go) | 1a73a2b |
 | 2026-10-06 | Blocks show what they hold: signs' text (colors, glowing text), banner patterns, a player head's own skin, items on shelves and campfires, pot sherds, chest and shulker box lids opening, all lit by the planet; the shield as Minecraft's model (with its banner) in Steve's hand, raised to block | 687a92a |
 | 2026-10-06 | The game is called **Super Minecraft Galaxy** everywhere players see it (menus, chat, Dolphin, game list, README); code keeps the galaxycraft ids so worlds carry over. Discord server renamed to match | 0e844e7 |
+| 2026-10-06 | Infinite universe: endless solar systems around the world's galaxy (generated per 8192-block sector from the seed, planets streamed as you approach, edits saved per planet), a floating origin so SMG2's floats never shake (tested a million blocks out), the other systems as stars on the sky, the pulse (sprint while gliding in the void, 400 blocks/s) and free warps (K at a star, M for the galaxy map). Also: a host bug that relinked the game for nothing, and the planet maker waiting forever after leaving a world. Guide: [UNIVERSO.md](docs/UNIVERSO.md) | f0115a5 |
 
 ---
 
@@ -125,6 +126,10 @@ Last updated: 2026-10-06 (infinite universe now: research, design and its core)
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-06: Follow-ups of the infinite universe (Claude): a generated system's planet replaced or
+  added in the editor lasts only the visit (its blocks are saved, its catalog entry is not: the
+  spec's `sectors/<s>.json`); stars are drawn without a depth test, so in third person a few may
+  show over Steve; warp could cost something later (fuel, a Launch Star).
 - 2026-10-06: Make SMG2 use 64-bit numbers instead of 32 so far-away positions stay precise (user, about the infinite universe). Looked into: SMG2's engine, CPU SIMD and GPU are 32-bit throughout, so not the engine itself; our own code goes 64-bit (free on the Wii's CPU) and the floating origin covers the rest. Spec §2b.
 - 2026-10-06: Follow-ups of "blocks show what they hold" (Claude): the enchanting table's book
   turning to the player and the bell swinging (still drawn at rest); a crowd of 100 signs and 50
