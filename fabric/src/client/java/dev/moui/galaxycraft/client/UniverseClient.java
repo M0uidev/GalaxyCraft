@@ -38,6 +38,9 @@ public final class UniverseClient {
     private static Vector3d pinned;
     private static Universe universe;
     private static int moves;
+    private static final int LANDING_GRACE = 40;
+    private static int sinceLanding = LANDING_GRACE;
+    private static Vector3d lastLandingAt;
     /** Stars on the sky (GXC_MSG_STARS): sent from here, the sector it was in, the nearest one's distance (units). */
     private static Vector3d starsFrom;
     private static Universe.Sector starsSector;
@@ -95,6 +98,16 @@ public final class UniverseClient {
      * with the game's numbers far out.
      */
     static void tick(BridgeClient bridge, Seqlock.WorldState world, boolean landing, Vector3d landingAt) {
+        // Just landed: the game may still say Mario is where he was for a few frames (the teleport on
+        // its way); the origin is not moved after that old place meanwhile.
+        if (landing) {
+            sinceLanding = 0;
+            if (landingAt != null) lastLandingAt = new Vector3d(landingAt);
+        } else if (sinceLanding < LANDING_GRACE) {
+            sinceLanding++;
+            landing = true;
+            landingAt = lastLandingAt;
+        }
         // Only GalaxyCraftSpace is empty but for what the module draws: in another stage the
         // stage's own ground would stay where it is.
         if (!Layout.SPACE_STAGE.equals(bridge.stage())) return;

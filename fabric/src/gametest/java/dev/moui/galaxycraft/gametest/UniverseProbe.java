@@ -264,10 +264,33 @@ public final class UniverseProbe implements FabricClientGameTest {
         log(String.format("standing there: Mario moves %.1f units at most", still));
         check(still < 80, "it stays put (not flying off)");
         gxdev("ctl", "shot universe-warp");
+        rejoin(ctx, index);
         int home = ctx.computeOnClient(mc -> PlanetClient.catalog().getFirst().index());
         ctx.runOnClient(mc -> PlanetClient.travelTo(home));
         waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(home), 240);
         ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MARIO));
+    }
+
+    /**
+     * Left right after arriving (the system's other planets still being made) and entered again: Mario
+     * lands where he was, on the other system's planet, and its planets come in (once the maker
+     * waited forever for an answer the world's leaving had dropped).
+     */
+    private void rejoin(ClientGameTestContext ctx, int index) {
+        String world = ctx.computeOnClient(mc -> mc.getSingleplayerServer().getWorldPath(
+                net.minecraft.world.level.storage.LevelResource.ROOT).normalize().getFileName().toString());
+        ctx.waitTicks(40); // the spot written (every second), the neighbors still being made
+        ctx.runOnClient(mc -> mc.disconnectWithSavingScreen());
+        waitReal(ctx, mc -> mc.level == null, 60);
+        ctx.waitTicks(40);
+        ctx.runOnClient(mc -> mc.createWorldOpenFlows().openWorld(world, () -> mc.gui.setScreen(new TitleScreen())));
+        waitReal(ctx, mc -> mc.player != null && mc.level != null, 60);
+        waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(index), 180);
+        ctx.waitTicks(60);
+        int[] t = ctx.computeOnClient(mc -> PlanetClient.tiers());
+        log(String.format("entered again: on the other system's planet, %d planets complete, %d far", t[0], t[1]));
+        check(ctx.computeOnClient(mc -> on(index)) && t[0] >= 2, "entered again, Mario is back on the other system's planet, its neighbors in");
+        ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MINECRAFT));
     }
 
     private static void server(ClientGameTestContext ctx, String command) {

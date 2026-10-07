@@ -249,7 +249,7 @@ final class GalaxyStream {
         else if (java.nio.file.Files.isRegularFile(store.file(key))) {
             f = CompletableFuture.supplyAsync(() -> {
                 try {
-                    return store.read(key, blocks, name -> Minecraft.getInstance().submit(() -> blocks.parse(name)).join())
+                    return store.read(key, blocks, name -> PlanetClient.answer(Minecraft.getInstance().submit(() -> blocks.parse(name)), "block " + name))
                             .orElseThrow(() -> new IllegalStateException("no file"));
                 } catch (IOException ex) {
                     throw new java.io.UncheckedIOException(ex);

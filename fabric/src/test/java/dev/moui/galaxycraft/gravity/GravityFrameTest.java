@@ -181,4 +181,15 @@ class GravityFrameTest {
         f.startTick();
         org.junit.jupiter.api.Assertions.assertTrue(f.toGal(mc, 0).distance(v(1800, 2000, 1400)) < 1e-6, "next tick starts there");
     }
+
+    @Test void farInMinecraftThePlayerIsPutBackNearZeroWhereItIsInTheGalaxy() {
+        GravityFrame f = new GravityFrame(v(0, 0, 0), v(0, 100, 0), v(0, -1, 0));
+        Vector3d far = f.toMc(v(5000.25 * 80, 30 * 80, -7000.5 * 80));
+        Vector3d gal = f.toGal(far);
+        Vector3d np = f.rebase(far).orElseThrow();
+        assertTrue(Math.abs(np.x) <= 0.5 && Math.abs(np.z) <= 0.5, "near zero: " + np);
+        assertEquals(far.x - Math.floor(far.x), np.x - Math.floor(np.x), 1e-9, "the same place in its block");
+        assertTrue(f.toGal(np).distance(gal) < 1e-6, "the same place in the galaxy");
+        assertTrue(f.rebase(np).isEmpty(), "and stays");
+    }
 }

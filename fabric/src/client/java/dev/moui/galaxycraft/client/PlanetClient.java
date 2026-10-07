@@ -202,6 +202,27 @@ public final class PlanetClient {
         generating = generateAsync(bp);
     }
 
+    /** How long a planet being made waits for an answer from the game's or the server's thread, s. */
+    static final int ANSWER_SECONDS = 30;
+
+    /**
+     * The answer to a task handed to Minecraft's thread (or its server's) from the planet maker. Not
+     * waited for forever: leaving a world drops the tasks still queued (and stops the server), and
+     * the maker, one thread, would wait for an answer that never comes, every planet after it queued
+     * behind (entering again, nothing loaded and Mario never landed). The planet being made is
+     * given up instead.
+     */
+    static <T> T answer(java.util.concurrent.CompletableFuture<T> f, String what) {
+        try {
+            return f.get(ANSWER_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.util.concurrent.ExecutionException e) {
+            throw new java.util.concurrent.CompletionException(e.getCause());
+        } catch (java.util.concurrent.TimeoutException | InterruptedException e) {
+            f.cancel(false);
+            throw new java.util.concurrent.CancellationException("no answer for " + what + " (the world was left?)");
+        }
+    }
+
     /** bp's planet made on another thread (null without Minecraft's worldgen: no single player world). */
     static java.util.concurrent.CompletableFuture<VoxelPlanet> generateAsync(PlanetBlueprint bp) {
         McWorldgen gen = worldgen();
@@ -210,7 +231,7 @@ public final class PlanetClient {
         for (String b : PlanetGenerator.blocks()) known.put(b, blocks.parse(b));
         // Trees bring states of their own: those are looked up on this thread too, as they come.
         java.util.function.ToIntFunction<String> ids = name -> known.computeIfAbsent(name,
-                n -> Minecraft.getInstance().submit(() -> blocks.parse(n)).join());
+                n -> answer(Minecraft.getInstance().submit(() -> blocks.parse(n)), "block " + n));
         TerrainNoise noise = gen.noise(bp.seed());
         McBlocks b = blocks;
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
@@ -1078,7 +1099,7 @@ public final class PlanetClient {
 
     /** That planet's entry, the world's galaxy's or a generated system's (end-to-end tests). */
     public static java.util.Optional<GalaxyCatalog.Entry> entry(int index) {
-        return stream == null ? java.util.Optional.empty() : stream.entry(index);
+        return stream == null ? java.util.Optional.empty() : stream.all().stream().filter(e -> e.index() == index).findFirst();
     }
 
     /** The galaxy's catalog (end-to-end tests); empty without one. */

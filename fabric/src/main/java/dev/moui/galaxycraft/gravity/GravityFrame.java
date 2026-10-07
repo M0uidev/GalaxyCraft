@@ -21,6 +21,8 @@ public final class GravityFrame {
     public static final double SCALE = 1.0 / unitsPerBlock(System.getProperty("galaxycraft.unitsPerBlock"));
     private static final double MIN_ANGLE = Math.toRadians(0.05);
     private static final double REBASE_MIN_Y = 36, REBASE_MAX_Y = 164, REBASE_Y = 100;
+    /** Past this far from x, z = 0 (blocks) the player is put back near it. */
+    public static final double REBASE_XZ = 1024;
     private static final Vector3d UP = new Vector3d(0, 1, 0);
     /** Flying into another body's gravity, up turns this much a tick at most: a flip in 1.5 s. */
     public static final double FLIGHT_TURN_PER_TICK = Math.PI / 30;
@@ -149,11 +151,19 @@ public final class GravityFrame {
         return new Update(true, delta);
     }
 
-    /** Moves the frame so the player sits at y=100 if they drifted out of [36, 164]. */
+    /**
+     * Moves the frame so the player sits at y=100 if they drifted out of [36, 164], and near x, z = 0
+     * (by whole blocks: the blocks' grid stays lined up) past REBASE_XZ: travel through the galaxy
+     * (a warp, a long flight) never takes the player thousands of blocks across Minecraft's world, whose
+     * chunks would be made and loaded all the way (a long freeze) up to its border.
+     */
     public Optional<Vector3d> rebase(Vector3d playerMc) {
-        if (playerMc.y >= REBASE_MIN_Y && playerMc.y <= REBASE_MAX_Y) return Optional.empty();
+        boolean yOut = playerMc.y < REBASE_MIN_Y || playerMc.y > REBASE_MAX_Y;
+        boolean xzOut = Math.abs(playerMc.x) > REBASE_XZ || Math.abs(playerMc.z) > REBASE_XZ;
+        if (!yOut && !xzOut) return Optional.empty();
         Vector3d gal = toGal(playerMc);
-        Vector3d np = new Vector3d(playerMc.x, REBASE_Y, playerMc.z);
+        Vector3d np = new Vector3d(xzOut ? playerMc.x - Math.rint(playerMc.x) : playerMc.x, yOut ? REBASE_Y : playerMc.y,
+                xzOut ? playerMc.z - Math.rint(playerMc.z) : playerMc.z);
         t.set(np).sub(r.transform(gal.mul(SCALE)));
         return Optional.of(np);
     }
