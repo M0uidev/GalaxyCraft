@@ -29,14 +29,13 @@ jobs:
             libevdev-dev libudev-dev libsystemd-dev libxi-dev libxrandr-dev libusb-1.0-0-dev libbluetooth-dev \
             libasound2-dev libpulse-dev libgl1-mesa-dev libegl1-mesa-dev libcurl4-openssl-dev libxkbcommon-dev \
             libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
-            libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1 libxcb-shape0 libfuse2 file
+            libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1 libxcb-shape0 libfuse2 file xvfb
           echo "CC=gcc-12" >> "$GITHUB_ENV"
           echo "CXX=g++-12" >> "$GITHUB_ENV"
 
       - uses: jurplel/install-qt-action@v4
         with:
           version: 6.8.3
-          modules: qtwaylandcompositor
           cache: true
 
       - uses: actions/cache@v4
@@ -65,7 +64,8 @@ jobs:
           ldd /tmp/try/usr/bin/dolphin-emu | grep -i qt6 | head -3
           /tmp/try/usr/bin/dolphin-tool --help | head -5 || true
           /tmp/try/usr/bin/dolphin-tool extract --help > /dev/null 2>&1 || /tmp/try/usr/bin/dolphin-tool --help > /dev/null
-          QT_QPA_PLATFORM=offscreen timeout 20 /tmp/try/usr/bin/dolphin-emu --version
+          # X11 (XWayland on Wayland desktops): the GalaxyCraft input hooks XInput2, so only xcb is bundled.
+          xvfb-run -a env QT_QPA_PLATFORM=xcb timeout 20 /tmp/try/usr/bin/dolphin-emu --version
           ls /tmp/try/usr/bin/Sys | head
 
       - uses: actions/upload-artifact@v4

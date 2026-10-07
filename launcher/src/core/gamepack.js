@@ -126,7 +126,8 @@ function playerPlan({ paths, inst, lay, dolphinExe, mcCommand, env = process.env
     name: 'Dolphin',
     cmd: dolphinExe,
     cwd: lay.dolphin,
-    env: { ...env, GALAXYCRAFT: '1', GALAXYCRAFT_BOOT: 'space' },
+    // X11 (XWayland on Wayland desktops): the GalaxyCraft input hooks XInput2.
+    env: { ...env, GALAXYCRAFT: '1', GALAXYCRAFT_BOOT: 'space', ...(paths.platform === 'linux' ? { QT_QPA_PLATFORM: 'xcb' } : {}) },
     args: [
       '-u', dolphinDir, '-e', lay.descriptor,
       '-C', 'Dolphin.Input.BackgroundInput=True', '-C', 'Dolphin.General.HotkeysRequireFocus=False',

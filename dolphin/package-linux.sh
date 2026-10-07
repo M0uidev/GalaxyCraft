@@ -36,7 +36,8 @@ mkdir -p "$APPDIR/usr/bin"
 export PATH="$TOOLS:$PATH" APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1
 export QMAKE="${QT_ROOT_DIR:+$QT_ROOT_DIR/bin/}qmake6"
 [ -x "$QMAKE" ] || QMAKE="${QT_ROOT_DIR:+$QT_ROOT_DIR/bin/}qmake"
-EXTRA_QT_PLUGINS="waylandcompositor;wayland-shell-integration;wayland-decoration-client;wayland-graphics-integration-client" \
+# Qt's xcb platform only: the GalaxyCraft input hooks X11 (XInput2), so Dolphin runs on X11 or
+# XWayland, as tools/gxplay.sh does.
 linuxdeploy --appdir "$APPDIR" \
   --executable build-release/Binaries/dolphin-emu --executable build-release/Binaries/dolphin-tool \
   --desktop-file src/Data/dolphin-emu.desktop --icon-file src/Data/dolphin-emu.png \
