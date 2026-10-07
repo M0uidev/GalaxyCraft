@@ -328,6 +328,12 @@ public final class PlanetClient {
         return all;
     }
 
+    /** Whose strip of the shadow dimension a body runs in: a planet's by its file, a station's by its id (it travels with it). */
+    static String shadowKey(PlanetSession s) {
+        if (s.station() != null) return "station-" + s.station().id;
+        return stage == null ? "" : PlanetStore.key(stage, indexOf(s));
+    }
+
     private static int indexOf(PlanetSession s) {
         for (Extra e : extras) if (e.s() == s) return e.index();
         return 0;
@@ -680,7 +686,7 @@ public final class PlanetClient {
             mining.stop();
             focus.setCrack(-1, -1, null);
         }
-        shadow.tick(stage == null ? "" : PlanetStore.key(stage, indexOf(focus)), world.queryPos());
+        shadow.tick(shadowKey(focus), world.queryPos());
         drops.tick(Minecraft.getInstance(), frame, frame == null ? null : world.queryPos());
         entities.tick();
         // The player hurt by the shadow: Mario reels in the game too.
