@@ -14,7 +14,7 @@ import java.nio.file.StandardOpenOption;
  * wrote it (magic, its pid, a fresh heartbeat by this process's clock), beats as the mod does, and
  * asks Dolphin over the dev control channel how old it sees that heartbeat.
  *   javac -d out fabric/src/main/java/dev/moui/galaxycraft/proto/Layout.java tools/ci/ShmCheck.java
- *   java -cp out ShmCheck [dolphin pid]
+ *   java -cp out ShmCheck [Dolphin.exe: the host's executable, whose pid it must have written]
  */
 public class ShmCheck {
     static final ValueLayout.OfInt I = ValueLayout.JAVA_INT_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
@@ -46,8 +46,13 @@ public class ShmCheck {
             }
             int hostPid = seg.get(I, Layout.H_HOST_PID);
             System.out.println("ShmCheck: host pid " + hostPid + ", protocol " + seg.get(I, Layout.H_VERSION));
-            if (args.length > 0 && hostPid != Integer.parseInt(args[0]))
-                fail("host pid " + hostPid + " is not Dolphin's " + args[0]);
+            if (args.length > 0) {
+                // The pids of the running programs named so (Dolphin.exe): the host's must be one.
+                java.util.List<Long> pids = ProcessHandle.allProcesses()
+                        .filter(h -> h.info().command().map(c -> Path.of(c).getFileName().toString().equalsIgnoreCase(args[0])).orElse(false))
+                        .map(ProcessHandle::pid).toList();
+                if (!pids.contains((long) hostPid)) fail("host pid " + hostPid + " is not " + args[0] + "'s " + pids);
+            }
             long hostAge = now() - seg.get(L, Layout.H_HOST_HEARTBEAT);
             System.out.println("ShmCheck: Dolphin's heartbeat is " + hostAge + " ms old by Java's clock");
             if (hostAge < -1 || hostAge > 2000) fail("the clocks disagree (or Dolphin stalls): " + hostAge + " ms");

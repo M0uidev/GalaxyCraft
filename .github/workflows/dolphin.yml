@@ -109,11 +109,9 @@ jobs:
             -C "Dolphin.DSP.Backend=No Audio Output" -C Dolphin.Interface.ConfirmStop=False \
             -e "$(cygpath -w "$RUNNER_TEMP/loop.dol")" \
             > "$RUNNER_TEMP/dolphin-stdout.txt" 2>&1 &
-          DOLPHIN=$!
-          WINPID=$(cat /proc/$DOLPHIN/winpid 2>/dev/null || true)
           javac -d "$RUNNER_TEMP/shmcheck" fabric/src/main/java/dev/moui/galaxycraft/proto/Layout.java tools/ci/ShmCheck.java
           status=0
-          java -cp "$RUNNER_TEMP/shmcheck" ShmCheck $WINPID || status=$?
+          java -cp "$RUNNER_TEMP/shmcheck" ShmCheck Dolphin.exe || status=$?
           taskkill //F //IM Dolphin.exe || true
           echo "--- Dolphin's output"; cat "$RUNNER_TEMP/dolphin-stdout.txt" || true
           echo "--- galaxycraft.log"; cat "$USER_DIR/Logs/galaxycraft.log" || true
