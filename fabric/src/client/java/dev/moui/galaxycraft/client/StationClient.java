@@ -65,6 +65,24 @@ public final class StationClient {
 
     private StationClient() {}
 
+    private static String testStage;
+    private static Blocks testBlocks;
+
+    /** Game tests without the game (no link, so no stage or blocks of PlanetClient's): theirs. */
+    public static void testSetup(Path planetsDir, String stage, Blocks blocks) {
+        testStage = stage;
+        testBlocks = blocks;
+        enterWorld(planetsDir);
+    }
+
+    private static String stage() {
+        return testStage != null ? testStage : PlanetClient.stage();
+    }
+
+    private static Blocks blocks() {
+        return testBlocks != null ? testBlocks : PlanetClient.blocks();
+    }
+
     /** The active stations' sessions. */
     public static List<PlanetSession> sessions() {
         List<PlanetSession> out = new ArrayList<>(active.size());
@@ -78,13 +96,13 @@ public final class StationClient {
     }
 
     /** The station a session streams, if it is one of ours. */
-    static Optional<Station> of(PlanetSession s) {
+    public static Optional<Station> of(PlanetSession s) {
         for (Active a : active) if (a.session() == s) return Optional.of(a.station());
         return Optional.empty();
     }
 
     /** A world's planets folder: its stations live in its stations/ (null: no world). */
-    static void enterWorld(Path planetsDir) {
+    public static void enterWorld(Path planetsDir) {
         unloadAll();
         store = planetsDir == null ? null : new StationStore(planetsDir.resolve("stations"));
         rescan = true;
@@ -115,7 +133,7 @@ public final class StationClient {
             if (!stage.equals(h.stage()) || active.size() >= Station.MAX_ACTIVE || isActive(h.id())) continue;
             if (blocks(h.center().distance(marioUniverse)) > ACTIVE) continue;
             try {
-                Station s = store.read(h.id(), PlanetClient.blocks());
+                Station s = store.read(h.id(), blocks());
                 activate(s);
                 GalaxyCraft.LOG.info("Station {} ({}) in", s.id, s.name);
             } catch (IOException e) {
@@ -135,7 +153,7 @@ public final class StationClient {
 
     private static PlanetSession activate(Station s) {
         PlanetSession session = new PlanetSession(1 / GravityFrame.SCALE);
-        session.setBlocks(PlanetClient.blocks());
+        session.setBlocks(blocks());
         session.spawnStation(s);
         session.clean(); // as it is on disk
         active.add(new Active(session, s));
@@ -166,7 +184,7 @@ public final class StationClient {
         copy.stage = s.stage;
         copy.center = new Vector3d(s.center);
         char[] cells = s.planet.cells().clone();
-        Blocks blocks = PlanetClient.blocks();
+        Blocks blocks = blocks();
         rescan = true;
         PlanetClient.save(() -> {
             try {
@@ -178,7 +196,7 @@ public final class StationClient {
     }
 
     /** Where a station goes up in front of the player, and how it is turned; null if the player is nowhere. */
-    record Spot(Vector3d center, Quaterniond rotation) {}
+    public record Spot(Vector3d center, Quaterniond rotation) {}
 
     static Spot spot(Player player) {
         GravityFrame frame = GalaxyCraftClient.frame();
@@ -197,7 +215,7 @@ public final class StationClient {
 
     /** Why no station may go up at a spot (a translation key), or null. */
     static String refusal(Vector3d centerUnits) {
-        String stage = PlanetClient.stage();
+        String stage = stage();
         if (stage == null || !Layout.SPACE_STAGE.equals(stage) && !Boolean.getBoolean("galaxycraft.stationsAnywhere")) return "open_space";
         List<GravityBody> bodies = new ArrayList<>();
         for (PlanetSession s : PlanetClient.bodies()) if (s.active()) bodies.add(s.body(GravityFrame.SCALE));
@@ -205,53 +223,61 @@ public final class StationClient {
     }
 
     static boolean placeCore(Player player, InteractionHand hand) {
-        if (store == null || PlanetClient.blocks() == null) return false;
         Spot at = spot(player);
-        if (at == null) return false;
+        return at != null && place(player, hand, at) != null;
+    }
+
+    /** A station up at that spot, if it may go there: its session (null: refused, said on the action bar). */
+    public static PlanetSession place(Player player, InteractionHand hand, Spot at) {
+        if (store == null || blocks() == null) return null;
         String why = refusal(at.center());
         if (why != null) {
+            GalaxyCraft.LOG.info("No station at {}: {}", at.center(), why);
             tell(player, "message.galaxycraft.station." + why);
-            return false;
+            return null;
         }
-        Blocks b = PlanetClient.blocks();
+        Blocks b = blocks();
         Station s = Station.create(Station.newId(random), "Station", at.rotation(), b, (char) b.parse("minecraft:smooth_stone"),
                 (char) b.parse(StationBlocks.CORE_NAME));
-        s.stage = PlanetClient.stage();
+        s.stage = stage();
         s.center = at.center();
-        activate(s);
+        PlanetSession session = activate(s);
         write(s);
         useUp(player, hand, StationBlocks.CORE_ITEM);
         GalaxyCraft.LOG.info("Station {} up at {}", s.id, s.center);
-        return true;
+        return session;
     }
 
     static boolean unfold(Player player, InteractionHand hand, String id) {
-        if (store == null || PlanetClient.blocks() == null) return false;
-        if (isActive(id)) return false;
         Spot at = spot(player);
-        if (at == null) return false;
+        return at != null && unfold(player, hand, id, at) != null;
+    }
+
+    /** A packed station unfolded at that spot: its session (null: refused). */
+    public static PlanetSession unfold(Player player, InteractionHand hand, String id, Spot at) {
+        if (store == null || blocks() == null || isActive(id)) return null;
         String why = refusal(at.center());
         if (why != null) {
             tell(player, "message.galaxycraft.station." + why);
-            return false;
+            return null;
         }
         Station s;
         try {
-            s = store.read(id, PlanetClient.blocks());
+            s = store.read(id, blocks());
         } catch (IOException e) {
             GalaxyCraft.LOG.warn("Could not unfold station {}: {}", id, e.toString());
             tell(player, "message.galaxycraft.station.lost");
-            return false;
+            return null;
         }
-        if (s.stage != null) return false; // placed already: this item is a stale copy
+        if (s.stage != null) return null; // placed already: this item is a stale copy
         Station turned = turned(s, at.rotation());
-        turned.stage = PlanetClient.stage();
+        turned.stage = stage();
         turned.center = at.center();
-        activate(turned);
+        PlanetSession session = activate(turned);
         write(turned);
         useUp(player, hand, StationBlocks.PACKED);
         GalaxyCraft.LOG.info("Station {} unfolded at {}", s.id, turned.center);
-        return true;
+        return session;
     }
 
     /** The same station turned another way: its cells on a grid with that rotation. */
@@ -265,7 +291,7 @@ public final class StationClient {
     }
 
     /** Packs a station into its item: out of space, its file kept, the item in the player's inventory. */
-    static void pack(PlanetSession session) {
+    public static void pack(PlanetSession session) {
         Optional<Active> found = active.stream().filter(a -> a.session() == session).findFirst();
         if (found.isEmpty()) return;
         Station s = found.get().station();
@@ -291,7 +317,7 @@ public final class StationClient {
     }
 
     /** Whether cell is a station's core. */
-    static boolean isCore(PlanetSession session, int cell) {
+    public static boolean isCore(PlanetSession session, int cell) {
         Optional<Station> s = of(session);
         if (s.isEmpty() || cell < 0) return false;
         FlatGrid g = s.get().grid();
@@ -302,7 +328,7 @@ public final class StationClient {
      * A block was just placed at cell of a station: past its limits it is taken back (false: the
      * item is not used up); otherwise the station grows, and regrows its grid near the side.
      */
-    static boolean afterPlace(PlanetSession session, int cell) {
+    public static boolean afterPlace(PlanetSession session, int cell) {
         Optional<Station> found = of(session);
         if (found.isEmpty() || cell < 0) return true;
         Station s = found.get();
