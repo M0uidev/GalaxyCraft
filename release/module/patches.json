@@ -1,0 +1,68 @@
+[
+  {
+    "out": "ObjectData/Mario.arc",
+    "disc": "ObjectData/Mario.arc",
+    "yaz0": true,
+    "patch": "patches/ObjectData/Mario.arc.gxd"
+  },
+  {
+    "out": "ObjectData/MarioCap.arc",
+    "disc": "ObjectData/MarioCap.arc",
+    "yaz0": true,
+    "patch": "patches/ObjectData/MarioCap.arc.gxd"
+  },
+  {
+    "out": "ObjectData/MarioFace.arc",
+    "disc": "ObjectData/MarioFace.arc",
+    "yaz0": true,
+    "patch": "patches/ObjectData/MarioFace.arc.gxd"
+  },
+  {
+    "out": "ObjectData/MarioHair.arc",
+    "disc": "ObjectData/MarioHair.arc",
+    "yaz0": true,
+    "patch": "patches/ObjectData/MarioHair.arc.gxd"
+  },
+  {
+    "out": "ObjectData/MarioHandL.arc",
+    "disc": "ObjectData/MarioHandL.arc",
+    "yaz0": true,
+    "patch": "patches/ObjectData/MarioHandL.arc.gxd"
+  },
+  {
+    "out": "ObjectData/MarioHandR.arc",
+    "disc": "ObjectData/MarioHandR.arc",
+    "yaz0": true,
+    "patch": "patches/ObjectData/MarioHandR.arc.gxd"
+  },
+  {
+    "out": "StageData/GalaxyCraftSpace/GalaxyCraftSpaceDesign.arc",
+    "disc": "StageData/RedBlueExGalaxy/RedBlueExGalaxyDesign.arc",
+    "yaz0": true,
+    "patch": "patches/StageData/GalaxyCraftSpace/GalaxyCraftSpaceDesign.arc.gxd"
+  },
+  {
+    "out": "StageData/GalaxyCraftSpace/GalaxyCraftSpaceLight.arc",
+    "disc": "StageData/RedBlueExGalaxy/RedBlueExGalaxyLight.arc",
+    "yaz0": true,
+    "patch": "patches/StageData/GalaxyCraftSpace/GalaxyCraftSpaceLight.arc.gxd"
+  },
+  {
+    "out": "StageData/GalaxyCraftSpace/GalaxyCraftSpaceMap.arc",
+    "disc": "StageData/RedBlueExGalaxy/RedBlueExGalaxyMap.arc",
+    "yaz0": true,
+    "patch": "patches/StageData/GalaxyCraftSpace/GalaxyCraftSpaceMap.arc.gxd"
+  },
+  {
+    "out": "StageData/GalaxyCraftSpace/GalaxyCraftSpaceScenario.arc",
+    "disc": "StageData/RedBlueExGalaxy/RedBlueExGalaxyScenario.arc",
+    "yaz0": true,
+    "patch": "patches/StageData/GalaxyCraftSpace/GalaxyCraftSpaceScenario.arc.gxd"
+  },
+  {
+    "out": "StageData/GalaxyCraftSpace/GalaxyCraftSpaceUseResource.arc",
+    "disc": "StageData/RedBlueExGalaxy/RedBlueExGalaxyUseResource.arc",
+    "yaz0": true,
+    "patch": "patches/StageData/GalaxyCraftSpace/GalaxyCraftSpaceUseResource.arc.gxd"
+  }
+]
