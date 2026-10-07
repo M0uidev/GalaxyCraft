@@ -71,4 +71,12 @@ class StationTest {
     @Test void newIdsAreEightHexDigits() {
         assertTrue(Station.newId(new java.util.Random(1)).matches("[0-9a-f]{8}"));
     }
+
+    @Test void placementOnlyInOpenSpace() {
+        var planet = new dev.moui.galaxycraft.gravity.GravityBody.Sphere(new Vector3d(), 100);
+        assertNotNull(Station.refusal(new Vector3d(50, 0, 0), java.util.List.of(planet), 0, 8)); // in its gravity
+        assertNotNull(Station.refusal(new Vector3d(110, 0, 0), java.util.List.of(planet), 0, 8)); // within 16 of it
+        assertNull(Station.refusal(new Vector3d(200, 0, 0), java.util.List.of(planet), 0, 8));
+        assertNotNull(Station.refusal(new Vector3d(200, 0, 0), java.util.List.of(), 8, 8)); // every slot taken
+    }
 }

@@ -131,7 +131,7 @@ public final class UniverseClient {
         }
         else {
             List<PlanetLayout.Sphere> spheres = new ArrayList<>();
-            for (PlanetSession s : PlanetClient.planets())
+            for (PlanetSession s : PlanetClient.bodies())
                 if (s.active()) spheres.add(new PlanetLayout.Sphere(s.center(), s.gravityUnits()));
             boolean clear = OriginPolicy.clear(mario, spheres, landing, UNITS);
             UPos at = UPos.of(mario);
@@ -167,7 +167,7 @@ public final class UniverseClient {
         Origin.Shift s = GameOrigin.moveTo(goal, m -> bridge.send(Layout.MSG_ORIGIN, m));
         if (s == null) return;
         moves++;
-        for (PlanetSession p : PlanetClient.planets()) p.originMoved();
+        for (PlanetSession p : PlanetClient.bodies()) p.originMoved();
         PlanetClient.originMoved();
         GalaxyCraft.LOG.info("Floating origin moved by {} {} {} cells (epoch {}), now at {} blocks", s.dx(), s.dy(), s.dz(),
                 s.epoch(), GameOrigin.offset().div(UNITS));

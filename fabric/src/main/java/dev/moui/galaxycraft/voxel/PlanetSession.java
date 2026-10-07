@@ -334,6 +334,11 @@ public final class PlanetSession {
                 planet.biomes());
     }
 
+    /** Something not in its cells changed (a station's name): it is to be saved. */
+    public void markEdited() {
+        unsaved = true;
+    }
+
     /** Nothing to save: a planet made again the same from its recipe until it is edited. */
     public void clean() {
         unsaved = false;

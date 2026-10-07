@@ -39,6 +39,17 @@ public final class Station {
         return new Station(id, name, rotation, VoxelPlanet.flat(g, cells, blocks), b);
     }
 
+    /** No station goes nearer than this to another body's gravity, blocks. */
+    public static final double CLEAR = 16;
+    /** Stations in the game at once (the module's box gravities). */
+    public static final int MAX_ACTIVE = 8;
+
+    /** Why no station may go up at p (blocks), or null if one may: open space only, and a box gravity free. */
+    public static String refusal(Vector3d p, java.util.List<? extends dev.moui.galaxycraft.gravity.GravityBody> bodies, int active, int max) {
+        for (var b : bodies) if (b.outside(p) <= CLEAR) return "open_space";
+        return active >= max ? "too_many" : null;
+    }
+
     /** A random id: 8 hex digits. */
     public static String newId(java.util.Random random) {
         return String.format("%08x", random.nextInt());

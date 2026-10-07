@@ -37,6 +37,11 @@ public final class StationStore {
     }
 
     public void write(Station s, Blocks blocks) throws IOException {
+        write(s, s.planet.cells(), blocks);
+    }
+
+    /** With a copy of its cells taken on the thread that edits them (this may run on another). */
+    public void write(Station s, char[] cells, Blocks blocks) throws IOException {
         Files.createDirectories(dir);
         Path f = file(s.id), tmp = f.resolveSibling(f.getFileName() + ".tmp");
         try (DataOutputStream out = new DataOutputStream(new GZIPOutputStream(Files.newOutputStream(tmp)))) {
@@ -56,8 +61,10 @@ public final class StationStore {
             for (int v : new int[] {b.x0(), b.y0(), b.z0(), b.x1(), b.y1(), b.z1()}) out.writeInt(v);
             FlatGrid g = s.grid();
             for (int v : new int[] {g.n, g.layers, g.ox, g.oy, g.oz}) out.writeInt(v);
-            out.writeInt(s.blockCount());
-            PlanetStore.writeCells(out, s.planet.cells(), blocks);
+            int count = 0;
+            for (char c : cells) if (c != Blocks.AIR) count++;
+            out.writeInt(count);
+            PlanetStore.writeCells(out, cells, blocks);
         }
         Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }

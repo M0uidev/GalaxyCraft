@@ -36,7 +36,8 @@ public final class StationBlocks {
         if (CORE != null) return;
         // Unbreakable as bedrock: a station loses its core only by being packed up.
         CORE = Registry.register(BuiltInRegistries.BLOCK, CORE_KEY, new Block(BlockBehaviour.Properties.of().setId(CORE_KEY)
-                .strength(-1, 3_600_000).noLootTable().sound(SoundType.METAL).lightLevel(s -> 7)));
+                .strength(-1, 3_600_000).noLootTable().sound(SoundType.METAL).lightLevel(s -> 7)
+                .pushReaction(net.minecraft.world.level.material.PushReaction.IMMOVEABLE)));
         CORE_ITEM = Registry.register(BuiltInRegistries.ITEM, CORE_ITEM_KEY, new StationCoreItem(new Item.Properties().setId(CORE_ITEM_KEY).stacksTo(16)));
         PACKED = Registry.register(BuiltInRegistries.ITEM, PACKED_KEY, new PackedStationItem(new Item.Properties().setId(PACKED_KEY).stacksTo(1)));
         CreativeModeTabEvents.modifyOutputEvent(CreativeModeTabs.FUNCTIONAL_BLOCKS).register(output -> output.accept(CORE_ITEM));

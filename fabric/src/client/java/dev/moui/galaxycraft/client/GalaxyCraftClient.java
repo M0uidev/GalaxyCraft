@@ -100,6 +100,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ShadowWorld.signEditor = GalaxyCraftClient::editSign;
+        dev.moui.galaxycraft.station.StationHooks.set(StationClient.HOOKS);
         bridge = new BridgeClient(Path.of(Layout.SHM_PATH), () -> System.nanoTime() / 1_000_000L,
                 new BridgeClient.PartListener() {
                     @Override public void onUpsert(int partId, double[] mtx, byte[] kcl) {
@@ -205,6 +206,16 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                                                     com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(c, "z")));
                                             return 1;
                                         })))))
+                        .then(literal("station")
+                                .then(literal("list").executes(c -> {
+                                    c.getSource().sendFeedback(Component.literal(StationClient.list()));
+                                    return 1;
+                                }))
+                                .then(literal("restore").then(argument("id", com.mojang.brigadier.arguments.StringArgumentType.word()).executes(c -> {
+                                    c.getSource().sendFeedback(Component.literal(StationClient.restore(
+                                            com.mojang.brigadier.arguments.StringArgumentType.getString(c, "id"))));
+                                    return 1;
+                                }))))
                         .then(literal("planet")
                         .then(literal("spawn")
                                 .executes(c -> planetCommand(c.getSource(), () -> PlanetClient.requestSpawn(PlanetClient.DEFAULT_RADIUS)))
