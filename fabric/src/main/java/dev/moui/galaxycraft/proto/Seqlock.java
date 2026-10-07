@@ -16,7 +16,16 @@ public final class Seqlock {
     static final ValueLayout.OfInt INT_U = ValueLayout.JAVA_INT_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
     static final ValueLayout.OfDouble DOUBLE = ValueLayout.JAVA_DOUBLE_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
 
-    public record WorldState(int sceneId, long frameId, Vector3d gravity, Vector3d queryPos, int flags) {
+    /** originEpoch: the floating origin's epoch queryPos is in (GameOrigin turns it into universe units). */
+    public record WorldState(int sceneId, long frameId, Vector3d gravity, Vector3d queryPos, int flags, int originEpoch) {
+        public WorldState(int sceneId, long frameId, Vector3d gravity, Vector3d queryPos, int flags) {
+            this(sceneId, frameId, gravity, queryPos, flags, 0);
+        }
+
+        public WorldState withQueryPos(Vector3d q) {
+            return new WorldState(sceneId, frameId, gravity, q, flags, originEpoch);
+        }
+
         /** The host has not seen a fresh PlayerState yet: queryPos is where the player is. */
         public boolean anchor() {
             return (flags & Layout.WORLD_ANCHOR) != 0;
@@ -52,6 +61,11 @@ public final class Seqlock {
             this(frameId, pos, look, up, fovY, eye, onGround, camOffset, view, sceneId, false, false, false, false, false, false,
                     false);
         }
+
+        public PlayerOut withPos(Vector3d p) {
+            return new PlayerOut(frameId, p, look, up, fovY, eye, onGround, camOffset, view, sceneId, itemActive, screenOpen,
+                    flying, hitboxes, walking, plus, mcFeel);
+        }
     }
 
     /** count of characters ever typed; character i is codepoints[i % TEXT_RING]. */
@@ -59,7 +73,16 @@ public final class Seqlock {
 
     /** SMG2's camera and Mario from one game frame (galaxy space). */
     public record GameCamera(int flags, long frameId, Vector3d camPos, Vector3d camDir, Vector3d camUp, float fovY,
-            Vector3d marioPos, Vector3d marioFront) {
+            Vector3d marioPos, Vector3d marioFront, int originEpoch) {
+        public GameCamera(int flags, long frameId, Vector3d camPos, Vector3d camDir, Vector3d camUp, float fovY,
+                Vector3d marioPos, Vector3d marioFront) {
+            this(flags, frameId, camPos, camDir, camUp, fovY, marioPos, marioFront, 0);
+        }
+
+        public GameCamera withPositions(Vector3d cam, Vector3d mario) {
+            return new GameCamera(flags, frameId, cam, camDir, camUp, fovY, mario, marioFront, originEpoch);
+        }
+
         public boolean valid() {
             return (flags & Layout.GAMECAM_VALID) != 0;
         }
@@ -86,7 +109,7 @@ public final class Seqlock {
             int s1 = getAcquire(s, o);
             if (s1 == 0) return Optional.empty();
             if ((s1 & 1) != 0) continue;
-            var w = new WorldState(s.get(INT, o + 4), s.get(LONG, o + 8), vec(s, o + 16), vec(s, o + 28), s.get(INT, o + 40));
+            var w = new WorldState(s.get(INT, o + 4), s.get(LONG, o + 8), vec(s, o + 16), vec(s, o + 28), s.get(INT, o + 40), s.get(INT, o + 44));
             VarHandle.acquireFence();
             if (getAcquire(s, o) == s1) return Optional.of(w);
         }
@@ -100,7 +123,7 @@ public final class Seqlock {
             if (s1 == 0) return Optional.empty();
             if ((s1 & 1) != 0) continue;
             var c = new GameCamera(s.get(INT, o + 4), s.get(LONG, o + 8), vec(s, o + 16), vec(s, o + 28),
-                    vec(s, o + 40), s.get(FLOAT, o + 52), vec(s, o + 56), vec(s, o + 68));
+                    vec(s, o + 40), s.get(FLOAT, o + 52), vec(s, o + 56), vec(s, o + 68), s.get(INT, o + 80));
             VarHandle.acquireFence();
             if (getAcquire(s, o) == s1) return Optional.of(c);
         }

@@ -119,6 +119,33 @@ struct InboxTeleport
   f32 dir[3];
 };
 
+// The floating origin moves (GXC_MSG_ORIGIN): to epoch, by shift cells of ORIGIN_CELL units;
+// everything in the game moves the other way, by -shift * ORIGIN_CELL.
+const f32 ORIGIN_CELL = 65536.f;
+struct InboxOrigin
+{
+  u32 epoch;
+  s32 shift[3];
+};
+
+// The other solar systems as points of light (GXC_MSG_STARS): count x STAR_BYTES, big-endian.
+const u32 STARS_MAX = 4096, STAR_BYTES = 20;
+struct InboxStars
+{
+  u32 count;
+  const u8* list;  // per star: f32 dir[3] (unit), f32 size (pixels), u32 rgba
+};
+
+// The stars as display lists of points (vertex format fmt: f32 position, RGBA8 color), one per
+// size class STAR_SIZES[k] (sixths of a pixel, as GXSetPointSize takes them), each at a 32-byte
+// boundary of out and padded with GX_NOP: offset[k] and bytes[k] (0: none of that size). Positions
+// are the unit directions: drawn with the camera's rotation scaled to a distance. out holds
+// STARS_DL_BYTES.
+const u32 STAR_CLASSES = 4;
+const u8 STAR_SIZES[STAR_CLASSES] = {6, 12, 18, 30};
+const u32 STARS_DL_BYTES = STAR_CLASSES * 64 + STARS_MAX * 16;
+void StarLists(const InboxStars& s, u32 fmt, u8* out, u32 offset[STAR_CLASSES], u32 bytes[STAR_CLASSES]);
+
 struct InboxEntities
 {
   u32 count;
@@ -148,6 +175,8 @@ struct InboxRecord
     SEAT = 112,
     SKY = 113,
     CRACK = 115,
+    ORIGIN = 116,
+    STARS = 117,
   };
   u32 type;
   InboxPlanet planet;
@@ -162,6 +191,8 @@ struct InboxRecord
   InboxHurt hurt;
   InboxSeat seat;
   InboxTeleport teleport;
+  InboxOrigin origin;
+  InboxStars stars;
   f32 sky[3];  // SKY: the light of full sky light now, 0 to 1
 };
 
@@ -181,6 +212,12 @@ void ViewEye(const f32 view[12], f32 eye[3], f32 fwd[3]);
 
 // view (3x4 row-major) times a translation by t: the position matrix of something placed at t.
 void ViewTranslate(const f32 view[12], const f32 t[3], f32 out[12]);
+
+// The same matrix built camera-relative: view's rotation, and its translation R (t - eye) worked
+// out in double (the Gekko's FPU does doubles natively, nearly as fast). ViewTranslate adds R t to -R eye,
+// two big numbers that cancel and leave the last bits of a float far from the origin; this keeps
+// whatever precision t - eye has, so what is near the camera is drawn steady at any distance.
+void ViewRelative(const f32 view[12], const f32 eye[3], const f32 t[3], f32 out[12]);
 
 // Whether a sphere (c, r) cannot be seen from cam: wholly behind the camera (fwd: unit view
 // direction), or in the shadow of the opaque ball (center, occluder radius) seen from cam.

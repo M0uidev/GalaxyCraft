@@ -1,5 +1,8 @@
 package dev.moui.galaxycraft.client;
 
+import dev.moui.galaxycraft.universe.GameOrigin;
+import dev.moui.galaxycraft.universe.SystemIndex;
+
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
 import dev.moui.galaxycraft.voxel.gen.PlanetGenerator;
 import dev.moui.galaxycraft.voxel.gen.TerrainNoise;
@@ -199,6 +202,27 @@ public final class PlanetClient {
         generating = generateAsync(bp);
     }
 
+    /** How long a planet being made waits for an answer from the game's or the server's thread, s. */
+    static final int ANSWER_SECONDS = 30;
+
+    /**
+     * The answer to a task handed to Minecraft's thread (or its server's) from the planet maker. Not
+     * waited for forever: leaving a world drops the tasks still queued (and stops the server), and
+     * the maker, one thread, would wait for an answer that never comes, every planet after it queued
+     * behind (entering again, nothing loaded and Mario never landed). The planet being made is
+     * given up instead.
+     */
+    static <T> T answer(java.util.concurrent.CompletableFuture<T> f, String what) {
+        try {
+            return f.get(ANSWER_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.util.concurrent.ExecutionException e) {
+            throw new java.util.concurrent.CompletionException(e.getCause());
+        } catch (java.util.concurrent.TimeoutException | InterruptedException e) {
+            f.cancel(false);
+            throw new java.util.concurrent.CancellationException("no answer for " + what + " (the world was left?)");
+        }
+    }
+
     /** bp's planet made on another thread (null without Minecraft's worldgen: no single player world). */
     static java.util.concurrent.CompletableFuture<VoxelPlanet> generateAsync(PlanetBlueprint bp) {
         McWorldgen gen = worldgen();
@@ -207,7 +231,7 @@ public final class PlanetClient {
         for (String b : PlanetGenerator.blocks()) known.put(b, blocks.parse(b));
         // Trees bring states of their own: those are looked up on this thread too, as they come.
         java.util.function.ToIntFunction<String> ids = name -> known.computeIfAbsent(name,
-                n -> Minecraft.getInstance().submit(() -> blocks.parse(n)).join());
+                n -> answer(Minecraft.getInstance().submit(() -> blocks.parse(n)), "block " + n));
         TerrainNoise noise = gen.noise(bp.seed());
         McBlocks b = blocks;
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
@@ -273,6 +297,11 @@ public final class PlanetClient {
     /** Places a block item as a right click would (end-to-end tests). */
     public static boolean placeItem(Vector3d eyeGal, Vector3d lookGal, ItemStack stack, Vector3d marioFeetGal) {
         return blocks != null && focus.placeBlock(eyeGal, lookGal, blocks.placer(stack), marioFeetGal);
+    }
+
+    /** Minecraft's text for a block state id (end-to-end tests). */
+    public static String stateName(int state) {
+        return blocks == null ? "" : blocks.name(state);
     }
 
     /** Minecraft's text for the block in a cell of the planet (end-to-end tests). */
@@ -516,6 +545,10 @@ public final class PlanetClient {
                 && bridge.send(Layout.MSG_ATLAS, piece); ) atlasLink.sent();
         if (!bridge.stage().equals(stage)) enterStage(bridge.stage());
         boolean space = galaxy != null && Layout.SPACE_STAGE.equals(stage);
+        marioUniverse = world.queryPos();
+        // The floating origin first: what this tick sends is from wherever it is now.
+        UniverseClient.tick(bridge, world, landPending || generating != null, landPending && landOn != null && stream != null
+                ? stream.entry(landOn.planet()).map(GalaxyCatalog.Entry::center).orElse(null) : null);
         for (ShadowWorld.Bed b; (b = ShadowWorld.pollBed()) != null; ) slept(b, player);
         // The player died and came back (Minecraft made it anew): Mario lands at the bed, else where he stood.
         if (space && lastPlayer != null && player != lastPlayer) {
@@ -652,7 +685,7 @@ public final class PlanetClient {
         // The player hurt by the shadow: Mario reels in the game too.
         for (ShadowWorld.Hurt h; (h = ShadowWorld.pollHurt()) != null; )
             if (session.active() && h.planet() == session.planet()) {
-                Vector3d from = session.galOf(h.from());
+                Vector3d from = GameOrigin.toGame(session.galOf(h.from()));
                 bridge.send(Layout.MSG_HURT, java.nio.ByteBuffer.allocate(16).putFloat((float) from.x).putFloat((float) from.y)
                         .putFloat((float) from.z).putInt(h.kind()).array());
             }
@@ -683,6 +716,35 @@ public final class PlanetClient {
         }
     }
 
+    private static Vector3d marioUniverse;
+
+    /** Endless systems around the world's galaxy (-Dgalaxycraft.endless=false: the world's galaxy alone). */
+    static final boolean ENDLESS = !"false".equals(System.getProperty("galaxycraft.endless"));
+
+    /** A saved spot with its planet as this run's index (a generated system's planet by its sector and n). */
+    private static GalaxySave.Spot resolved(GalaxySave.Spot s) {
+        if (s == null || s.system() == null) return s;
+        return SystemIndex.parse(s.system()).map(sector -> new GalaxySave.Spot(SystemIndex.index(sector, s.planet()), s.dx(), s.dy(),
+                s.dz(), s.yaw(), s.pitch())).orElse(null);
+    }
+
+    /** A spot as saved: a generated system's planet by its sector and n, which every run has the same. */
+    private static GalaxySave.Spot saved(GalaxySave.Spot s) {
+        return SystemIndex.ref(s.planet()).map(r -> new GalaxySave.Spot(r.n(), s.dx(), s.dy(), s.dz(), s.yaw(), s.pitch(),
+                SystemIndex.name(r.sector()))).orElse(s);
+    }
+
+    /** Where the game said Mario is at the last tick, universe units (null: not known). */
+    public static Vector3d marioUniverse() {
+        return marioUniverse == null ? null : new Vector3d(marioUniverse);
+    }
+
+    /** The floating origin moved: planet records still queued are made again from it. */
+    static void originMoved() {
+        for (PlanetSession s : leaving) s.originMoved();
+        if (stream != null) stream.originMoved();
+    }
+
     /** A right click with what is in hand, where the player looks (tests). */
     public static void useHeld(LocalPlayer player, GravityFrame frame, Vector3d marioFeetGal) {
         Vector3d eye = frame.toGal(vec(player.getEyePosition()));
@@ -700,7 +762,7 @@ public final class PlanetClient {
         for (PlanetSession s : planets())
             if (s.active() && s.planet() == b.planet()) {
                 Vector3d d = s.galOf(CellSpace.point(s.planet().grid, b.cell(), 0.5, 1, 0.5)).sub(s.center());
-                GalaxySave.Spot spot = new GalaxySave.Spot(indexOf(s), d.x, d.y, d.z, player.getYRot(), player.getXRot());
+                GalaxySave.Spot spot = saved(new GalaxySave.Spot(indexOf(s), d.x, d.y, d.z, player.getYRot(), player.getXRot()));
                 saver.execute(() -> {
                     try {
                         g.writeBed(spot);
@@ -719,7 +781,7 @@ public final class PlanetClient {
     private static GalaxySave.Spot respawnSpot() {
         GalaxySave g = galaxy;
         if (g == null) return null;
-        GalaxySave.Spot bed = g.bed().orElse(null);
+        GalaxySave.Spot bed = resolved(g.bed().orElse(null));
         if (bed != null)
             for (PlanetSession s : planets())
                 if (s.active() && indexOf(s) == bed.planet()) {
@@ -735,9 +797,9 @@ public final class PlanetClient {
                         }
                     });
                     Minecraft.getInstance().player.sendSystemMessage(Component.translatable("block.minecraft.spawn.not_valid"));
-                    return g.spot().orElse(null);
+                    return resolved(g.spot().orElse(null));
                 }
-        return bed != null ? bed : g.spot().orElse(null);
+        return bed != null ? bed : resolved(g.spot().orElse(null));
     }
 
     /**
@@ -792,7 +854,7 @@ public final class PlanetClient {
         boolean onSeat = s != null && f.active() && s.planet() == f.planet();
         boolean on = onSeat || walker != null;
         if (on || riding) {
-            Vector3d at = walker != null ? walker : onSeat ? f.galOf(s.pos()) : new Vector3d();
+            Vector3d at = GameOrigin.toGame(walker != null ? walker : onSeat ? f.galOf(s.pos()) : GameOrigin.offset());
             if (bridge.send(Layout.MSG_SEAT, java.nio.ByteBuffer.allocate(16).putFloat((float) at.x).putFloat((float) at.y)
                     .putFloat((float) at.z).putInt(!on ? 0 : walker != null && marioFlies ? 2 : 1).array()))
                 riding = on;
@@ -871,7 +933,7 @@ public final class PlanetClient {
         if (FIXED_DIR) return;
         galaxy = g;
         store = new PlanetStore(g.planets());
-        landOn = g.spot().orElse(null);
+        landOn = resolved(g.spot().orElse(null));
         landPending = true;
         homeAsked = false;
         hadSaved = false;
@@ -896,6 +958,7 @@ public final class PlanetClient {
         leaving.clear();
         focus = session;
         dropAllPending = !bridge.send(Layout.MSG_PLANET, PlanetSession.dropAll());
+        UniverseClient.leave(bridge);
         galaxy = null;
         store = null;
         stage = null;
@@ -940,6 +1003,7 @@ public final class PlanetClient {
         Vector3d at = on.teleportToward(dir);
         if (at == null) return;
         focus = on;
+        Flight.end(player);
         if (GalaxyCraftClient.walking()) GalaxyCraftClient.moveTo(on.galOf(at));
         landPending = false;
         GalaxyCraft.LOG.info("Entered the world's galaxy: Mario onto planet {} toward {}", indexOf(on), dir);
@@ -952,7 +1016,7 @@ public final class PlanetClient {
         Vector3d feet = GalaxyCraftClient.galaxyPos().orElse(null);
         if (g == null || on == null || feet == null || player == null) return;
         Vector3d d = new Vector3d(feet).sub(on.center());
-        GalaxySave.Spot spot = new GalaxySave.Spot(indexOf(on), d.x, d.y, d.z, player.getYRot(), player.getXRot());
+        GalaxySave.Spot spot = saved(new GalaxySave.Spot(indexOf(on), d.x, d.y, d.z, player.getYRot(), player.getXRot()));
         saver.execute(() -> {
             try {
                 g.writeSpot(spot);
@@ -1023,6 +1087,21 @@ public final class PlanetClient {
         landPending = true;
     }
 
+    /** Every planet streamed (complete or far), its gravity: universe units. */
+    static java.util.List<PlanetLayout.Sphere> streamedSpheres() {
+        return stream == null ? java.util.List.of() : stream.spheres();
+    }
+
+    /** Where that planet's file is (end-to-end tests); null out of a world. */
+    public static java.nio.file.Path planetFile(int index) {
+        return store == null || stage == null ? null : store.file(PlanetStore.key(stage, index));
+    }
+
+    /** That planet's entry, the world's galaxy's or a generated system's (end-to-end tests). */
+    public static java.util.Optional<GalaxyCatalog.Entry> entry(int index) {
+        return stream == null ? java.util.Optional.empty() : stream.all().stream().filter(e -> e.index() == index).findFirst();
+    }
+
     /** The galaxy's catalog (end-to-end tests); empty without one. */
     public static java.util.List<GalaxyCatalog.Entry> catalog() {
         return stream == null ? java.util.List.of() : java.util.List.copyOf(stream.entries());
@@ -1048,7 +1127,13 @@ public final class PlanetClient {
                 }
             });
         }
-        stream = new GalaxyStream(g, store, stage, made);
+        double reach = 0; // the world's galaxy's own reach: generated systems keep away from it
+        for (GalaxyCatalog.Entry e : made.entries())
+            reach = Math.max(reach, e.center().length() * GravityFrame.SCALE + PlanetSession.gravityRadius(e.radius()));
+        dev.moui.galaxycraft.universe.Universe universe = new dev.moui.galaxycraft.universe.Universe(made.options().seed(),
+                1 / GravityFrame.SCALE).withHome(reach);
+        stream = new GalaxyStream(g, store, stage, made, ENDLESS ? universe : null);
+        UniverseClient.enter(universe);
         GalaxyCraft.LOG.info("The world's galaxy: {} planets", made.entries().size());
     }
 

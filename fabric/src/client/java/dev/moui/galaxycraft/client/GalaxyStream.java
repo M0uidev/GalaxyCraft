@@ -2,6 +2,10 @@ package dev.moui.galaxycraft.client;
 
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.gravity.GravityFrame;
+import dev.moui.galaxycraft.universe.OriginPolicy;
+import dev.moui.galaxycraft.universe.SystemIndex;
+import dev.moui.galaxycraft.universe.UPos;
+import dev.moui.galaxycraft.universe.Universe;
 import dev.moui.galaxycraft.voxel.FarPlanet;
 import dev.moui.galaxycraft.voxel.GalaxyCatalog;
 import dev.moui.galaxycraft.voxel.GalaxySave;
@@ -45,6 +49,16 @@ final class GalaxyStream {
     private final String stage;
     private final List<GalaxyCatalog.Entry> entries;
     private final GalaxyCatalog.Options options;
+    /**
+     * The endless universe around the world's galaxy (its home system): the generated systems near
+     * Mario, their planets as entries like the world's own (indexes from SystemIndex, centers in
+     * universe units), streamed the same way. Null: the world's galaxy alone.
+     */
+    private final Universe universe;
+    private final Map<Universe.Sector, List<GalaxyCatalog.Entry>> systems = new java.util.LinkedHashMap<>();
+    /** A system's planets join within this many blocks of its center, and leave past UNLOAD_BLOCKS. */
+    static final double LOAD_BLOCKS = 6000, UNLOAD_BLOCKS = 8000;
+    private List<GalaxyCatalog.Entry> all;
     private final Map<Integer, FarPlanet> far = new HashMap<>();
     private final List<FarPlanet> farLeaving = new ArrayList<>();
     /** Planets being read or made off this thread: a PlanetStore.Saved or a VoxelPlanet. */
@@ -65,20 +79,95 @@ final class GalaxyStream {
     private int ticks = EVERY - 1;
     private List<Integer> wanted = List.of(), ahead = List.of();
 
-    GalaxyStream(GalaxySave save, PlanetStore store, String stage, GalaxySave.Galaxy galaxy) {
+    GalaxyStream(GalaxySave save, PlanetStore store, String stage, GalaxySave.Galaxy galaxy, Universe universe) {
         this.save = save;
         this.store = store;
         this.stage = stage;
         this.options = galaxy.options();
         this.entries = new ArrayList<>(galaxy.entries());
+        this.universe = universe;
     }
 
+    /** The world's own galaxy (galaxy.json). */
     List<GalaxyCatalog.Entry> entries() {
         return entries;
     }
 
+    /** Every planet streamed: the world's galaxy's and the generated systems' near Mario. */
+    List<GalaxyCatalog.Entry> all() {
+        if (all == null) {
+            all = new ArrayList<>(entries);
+            for (List<GalaxyCatalog.Entry> s : systems.values()) all.addAll(s);
+        }
+        return all;
+    }
+
+    /** Every streamed planet's gravity (universe units): what a pulse slows down for. */
+    List<PlanetLayout.Sphere> spheres() {
+        List<PlanetLayout.Sphere> out = new ArrayList<>();
+        for (GalaxyCatalog.Entry e : all()) out.add(new PlanetLayout.Sphere(e.center(), PlanetSession.gravityRadius(e.radius()) * UNITS));
+        return out;
+    }
+
+    /** That planet's entry; a generated system's is made then if its system is not in yet. */
     Optional<GalaxyCatalog.Entry> entry(int index) {
-        return entries.stream().filter(e -> e.index() == index).findFirst();
+        Optional<GalaxyCatalog.Entry> e = all().stream().filter(x -> x.index() == index).findFirst();
+        if (e.isPresent() || !SystemIndex.generated(index)) return e;
+        SystemIndex.ref(index).ifPresent(r -> load(r.sector()));
+        return all().stream().filter(x -> x.index() == index).findFirst();
+    }
+
+    /** The systems near Mario in, the far ones out (only once none of their planets is complete or being made). */
+    private void systemsNear(Vector3d from) {
+        if (universe == null) return;
+        UPos at = UPos.of(from);
+        for (Universe.Star star : universe.around(at, 1))
+            if (!star.home() && star.center().minus(at).length() < LOAD_BLOCKS * UNITS) load(star.sector());
+        for (Universe.Sector s : new ArrayList<>(systems.keySet())) {
+            Universe.Star star = universe.star(s).orElse(null);
+            if (star != null && star.center().minus(at).length() < UNLOAD_BLOCKS * UNITS) continue;
+            List<GalaxyCatalog.Entry> planets = systems.get(s);
+            boolean busy = planets.stream().anyMatch(e -> {
+                PlanetSession ps = PlanetClient.sessionOf(e.index());
+                return ps != null && ps.active() || making.containsKey(e.index()) || promoting.containsKey(e.index());
+            });
+            if (busy) continue;
+            for (GalaxyCatalog.Entry e : planets) {
+                dropFar(e.index());
+                meshes.keySet().removeIf(k -> k >> 4 == e.index());
+                fromCells.remove(e.index());
+                recent.remove(e.index());
+                failed.remove(e.index());
+            }
+            systems.remove(s);
+            all = null;
+            GalaxyCraft.LOG.info("System {} left behind", SystemIndex.name(s));
+        }
+    }
+
+    /** Out between systems: no planet's system. */
+    private static final Universe.Sector NOWHERE = new Universe.Sector(Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE);
+
+    /** The sector of the system a planet is in (the world's galaxy: home). */
+    private static Universe.Sector sectorOf(GalaxyCatalog.Entry e) {
+        return SystemIndex.ref(e.index()).map(SystemIndex.Ref::sector).orElse(Universe.Sector.HOME);
+    }
+
+    /** A generated system's planets, as entries (made from the sector's hash: the same every time). */
+    private void load(Universe.Sector s) {
+        if (universe == null || systems.containsKey(s)) return;
+        Universe.Star star = universe.star(s).orElse(null);
+        McWorldgen gen = PlanetClient.worldgen();
+        if (star == null || star.home() || gen == null) return;
+        Vector3d c = star.center().minus(UPos.ZERO);
+        List<GalaxyCatalog.Entry> planets = new ArrayList<>();
+        for (GalaxyCatalog.Entry e : universe.system(star, gen.biomes().land()).entries())
+            planets.add(new GalaxyCatalog.Entry(SystemIndex.index(s, e.index()), c.x + e.x(), c.y + e.y(), c.z + e.z(), e.radius(),
+                    e.kind(), e.biome(), e.blueprint(), e.seed()));
+        systems.put(s, planets);
+        all = null;
+        GalaxyCraft.LOG.info("System {} in: {} planets, {} blocks from home", SystemIndex.name(s), planets.size(),
+                Math.round(c.length() / UNITS));
     }
 
     /** That planet could not be made (it is not waited for). */
@@ -105,6 +194,7 @@ final class GalaxyStream {
             }
         if (from != null && ++ticks >= EVERY) {
             ticks = 0;
+            systemsNear(from);
             decide(from);
         }
         if (from != null) {
@@ -118,6 +208,11 @@ final class GalaxyStream {
     private void decide(Vector3d from) {
         List<PlanetLayout.Sphere> spheres = new ArrayList<>();
         Set<Integer> had = new HashSet<>();
+        // Only the planets of the system Mario is in can be complete: a small system would
+        // otherwise fill its places with another's, thousands of blocks off.
+        Universe.Sector here = universe == null ? null
+                : universe.systemAt(UPos.of(from), OriginPolicy.SYSTEM_MARGIN).map(Universe.Star::sector).orElse(NOWHERE);
+        List<GalaxyCatalog.Entry> entries = all().stream().filter(e -> here == null || here.equals(sectorOf(e))).toList();
         for (int k = 0; k < entries.size(); k++) {
             GalaxyCatalog.Entry e = entries.get(k);
             spheres.add(new PlanetLayout.Sphere(e.center(), PlanetSession.gravityRadius(e.radius()) * UNITS));
@@ -128,7 +223,7 @@ final class GalaxyStream {
         int n = Math.min(PlanetLayout.NEAR_PLANETS, ranked.size());
         wanted = ranked.subList(0, n).stream().map(k -> entries.get(k).index()).toList();
         ahead = ranked.subList(n, Math.min(n + 1, ranked.size())).stream().map(k -> entries.get(k).index()).toList();
-        for (GalaxyCatalog.Entry e : entries) {
+        for (GalaxyCatalog.Entry e : all()) {
             PlanetSession s = PlanetClient.sessionOf(e.index());
             boolean active = s != null && s.active();
             if (active && !wanted.contains(e.index()) && s != PlanetClient.focus()) demote(e, s, from);
@@ -154,7 +249,7 @@ final class GalaxyStream {
         else if (java.nio.file.Files.isRegularFile(store.file(key))) {
             f = CompletableFuture.supplyAsync(() -> {
                 try {
-                    return store.read(key, blocks, name -> Minecraft.getInstance().submit(() -> blocks.parse(name)).join())
+                    return store.read(key, blocks, name -> PlanetClient.answer(Minecraft.getInstance().submit(() -> blocks.parse(name)), "block " + name))
                             .orElseThrow(() -> new IllegalStateException("no file"));
                 } catch (IOException ex) {
                     throw new java.io.UncheckedIOException(ex);
@@ -239,7 +334,7 @@ final class GalaxyStream {
     /** Every planet not complete is far; its view as detailed as it looks big, a few built per tick. */
     private void meshFar(Vector3d from) {
         int built = 0;
-        for (GalaxyCatalog.Entry e : entries) {
+        for (GalaxyCatalog.Entry e : all()) {
             PlanetSession s = PlanetClient.sessionOf(e.index());
             boolean complete = s != null && s.active();
             if (complete && !promoting.containsKey(e.index())) {
@@ -311,6 +406,12 @@ final class GalaxyStream {
             for (PlanetSession.Msg m; bulk.getAsBoolean() && (m = f.peek()) != null && bridge.send(m.type(), m.payload()); ) f.sent();
     }
 
+    /** The floating origin moved: far planets' records still queued are made again from it. */
+    void originMoved() {
+        for (FarPlanet f : far.values()) f.originMoved();
+        for (FarPlanet f : farLeaving) f.originMoved();
+    }
+
     /** The world is left (the game drops every planet itself): ids given back, nothing more made. */
     void clear() {
         for (FarPlanet f : far.values()) f.remove();
@@ -325,6 +426,14 @@ final class GalaxyStream {
 
     /** A planet added or changed by hand (editor, commands): its entry, written to galaxy.json. */
     void put(GalaxyCatalog.Entry e) {
+        all = null;
+        if (SystemIndex.generated(e.index())) {
+            // A generated system's planet changed by hand: for this visit (its blocks are saved in its file).
+            for (List<GalaxyCatalog.Entry> s : systems.values())
+                s.replaceAll(x -> x.index() == e.index() ? e : x);
+            dropFar(e.index());
+            return;
+        }
         entries.removeIf(x -> x.index() == e.index());
         entries.add(e);
         entries.sort(java.util.Comparator.comparingInt(GalaxyCatalog.Entry::index));
@@ -337,6 +446,8 @@ final class GalaxyStream {
     }
 
     void removeEntry(int index) {
+        all = null;
+        for (List<GalaxyCatalog.Entry> s : systems.values()) s.removeIf(x -> x.index() == index);
         entries.removeIf(x -> x.index() == index);
         recent.remove(index);
         dropFar(index);

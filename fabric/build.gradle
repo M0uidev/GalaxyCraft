@@ -68,6 +68,12 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftUniverse")) { // tools/gxvoxel.sh universe: UniverseProbe, the floating origin and endless systems
+				vmArg "-Dgalaxycraft.universeProbe=true"
+				vmArg "-Dgalaxycraft.planetDir=" // empty: each world keeps its own galaxy, as when playing
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftWalk")) { // tools/gxvoxel.sh walk: WalkProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.walk=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"

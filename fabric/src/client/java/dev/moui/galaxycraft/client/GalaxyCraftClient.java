@@ -184,7 +184,22 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 })).then(literal("status").executes(c -> {
                     c.getSource().sendFeedback(Component.literal(status(c.getSource().getPlayer())));
                     return 1;
-                })).then(literal("planet")
+                })).then(literal("origin")
+                        // Debug: pin the floating origin that many blocks out (the game's numbers grow
+                        // as far: far-away floats), or let it follow again.
+                        .then(literal("auto").executes(c -> {
+                            UniverseClient.pin(null);
+                            return 1;
+                        }))
+                        .then(argument("x", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg())
+                                .then(argument("y", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg())
+                                        .then(argument("z", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg()).executes(c -> {
+                                            UniverseClient.pin(new Vector3d(com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(c, "x"),
+                                                    com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(c, "y"),
+                                                    com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(c, "z")));
+                                            return 1;
+                                        })))))
+                        .then(literal("planet")
                         .then(literal("spawn")
                                 .executes(c -> planetCommand(c.getSource(), () -> PlanetClient.requestSpawn(PlanetClient.DEFAULT_RADIUS)))
                                 .then(argument("radius", IntegerArgumentType.integer(VoxelPlanet.MIN_RADIUS, VoxelPlanet.MAX_RADIUS))
@@ -219,7 +234,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         boolean walker = ownPhysics() && frame != null && mc.player != null && bridge.gameLinked();
         // The elytra in Mario's modes: Mario himself flies there (in his Launch Star pose), not Steve.
         boolean marioFlies = walker && !walking() && mc.player.isFallFlying() && view() != View.FIRST;
-        PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt))) : null,
+        PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt)), pt) : null,
                 walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
         SkinClient.frame(bridge);
         bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
@@ -359,6 +374,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null || frame == null || !walking()) return;
         Vector3d mc = frame.toMc(gal);
+        mc = frame.rebase(mc).orElse(mc); // far off (a warp): near Minecraft's x, z = 0, not across its world
         player.setPos(mc.x, mc.y + WALK_LIFT, mc.z);
         player.setDeltaMovement(Vec3.ZERO);
         player.setOldPosAndRot();
@@ -392,6 +408,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         bridge.setEntering(EnteringScreen.entering(client));
         bridge.poll();
         EnteringScreen.tick(client);
+        Warp.tick(client);
         PlanetClient.flushDropAll(bridge);
         LocalPlayer player = client.player;
         if (player == null) return;
@@ -486,10 +503,14 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             // The old position moves by the same shift: drawing between ticks stays smooth (a
             // straight flight through space, up frozen, rebases every couple of seconds).
             frame.rebase(vec(player.position())).ifPresent(np -> {
-                double dy = np.y - player.getY();
+                double dx = np.x - player.getX(), dy = np.y - player.getY(), dz = np.z - player.getZ();
                 player.setPos(np.x, np.y, np.z);
+                player.xo += dx;
+                player.xOld += dx;
                 player.yo += dy;
                 player.yOld += dy;
+                player.zo += dz;
+                player.zOld += dz;
             });
             if (ownPhysics() && !flying && !Flight.active()) alignToBlocks(player);
         }

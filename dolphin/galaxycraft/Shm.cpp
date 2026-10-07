@@ -189,6 +189,7 @@ void WriteWorld(Shm& shm, const WorldState& w)
   std::memcpy(s.gravity, &w.gravity, 12);
   std::memcpy(s.query_pos, &w.query_pos, 12);
   s.flags = w.flags;
+  s.origin_epoch = w.origin_epoch;
   SeqWrite(shm, GXC_OFF_WORLD, s);
 }
 
@@ -197,7 +198,7 @@ std::optional<WorldState> ReadWorld(const Shm& shm)
   auto s = SeqRead<GxcWorldState>(shm, GXC_OFF_WORLD);
   if (!s)
     return std::nullopt;
-  WorldState w{s->scene_id, s->frame_id, {}, {}, s->flags};
+  WorldState w{s->scene_id, s->frame_id, {}, {}, s->flags, s->origin_epoch};
   std::memcpy(&w.gravity, s->gravity, 12);
   std::memcpy(&w.query_pos, s->query_pos, 12);
   return w;
@@ -245,6 +246,7 @@ void WriteGameCamera(Shm& shm, const GameCamera& c)
   s.fov_y = c.fov_y;
   std::memcpy(s.mario_pos, &c.mario_pos, 12);
   std::memcpy(s.mario_front, &c.mario_front, 12);
+  s.origin_epoch = c.origin_epoch;
   SeqWrite(shm, GXC_OFF_GAMECAM, s);
 }
 
@@ -253,7 +255,7 @@ std::optional<GameCamera> ReadGameCamera(const Shm& shm)
   auto s = SeqRead<GxcGameCamera>(shm, GXC_OFF_GAMECAM);
   if (!s)
     return std::nullopt;
-  GameCamera c{s->flags, s->frame_id, {}, {}, {}, s->fov_y, {}, {}};
+  GameCamera c{s->flags, s->frame_id, {}, {}, {}, s->fov_y, {}, {}, s->origin_epoch};
   std::memcpy(&c.cam_pos, s->cam_pos, 12);
   std::memcpy(&c.cam_dir, s->cam_dir, 12);
   std::memcpy(&c.cam_up, s->cam_up, 12);

@@ -59,12 +59,17 @@ public final class EntityWire {
     /** GXC_MSG_ENTITIES: the first ENT_MAX pieces. */
     public static byte[] frame(List<Piece> pieces) {
         int n = Math.min(pieces.size(), Layout.ENT_MAX);
+        // Galaxy pieces are in universe units: the game has them from its floating origin. One held in
+        // Steve's hand is from his hand.
+        org.joml.Vector3d o = dev.moui.galaxycraft.universe.GameOrigin.offset();
         ByteBuffer b = ByteBuffer.allocate(4 + n * Layout.ENT_BYTES).order(ByteOrder.BIG_ENDIAN);
         b.putInt(n);
         for (int i = 0; i < n; i++) {
             Piece p = pieces.get(i);
             b.putShort((short) p.model).putShort((short) p.skin).putInt(p.overlay).putInt(p.tint);
-            for (double v : p.mtx) b.putFloat((float) v);
+            boolean held = (p.model & HELD) != 0;
+            for (int k = 0; k < 12; k++)
+                b.putFloat((float) (held || k % 4 != 3 ? p.mtx[k] : p.mtx[k] - (k == 3 ? o.x : k == 7 ? o.y : o.z)));
         }
         return b.array();
     }
@@ -82,6 +87,8 @@ public final class EntityWire {
 
     /** Model ids with this bit are drawn facing the camera (particles): only their scale is kept. */
     public static final int BILLBOARD = 0x8000;
+    /** Model bit: held in Steve's hand, its matrix from Minecraft's hand frame (not the galaxy). */
+    public static final int HELD = 0x4000;
 
     /** A square 16 pixels a side around the origin (y down), showing (u0, v0) to (u1, v1), unshaded. */
     public static List<Quad> square(float u0, float v0, float u1, float v1) {

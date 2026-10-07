@@ -66,6 +66,7 @@ struct HostBridge::Mailbox
   u32 inbox_addr = 0;
   u32 inbox_size = 0;
   std::array<char, 32> stage_name{};
+  u32 origin_epoch = 0;
 
   static Mailbox Parse(const u8* b)
   {
@@ -94,6 +95,7 @@ struct HostBridge::Mailbox
     m.inbox_size = BE32(b + offsetof(GxcMailbox, inbox_size));
     std::memcpy(m.stage_name.data(), b + offsetof(GxcMailbox, stage_name), m.stage_name.size());
     m.stage_name.back() = 0;
+    m.origin_epoch = BE32(b + offsetof(GxcMailbox, origin_epoch));
     return m;
   }
 };
@@ -187,7 +189,9 @@ void HostBridge::Tick(GuestMemory& mem)
   {
     const u64 hb = m_shm.GetU64(offsetof(GxcHeader, mod_heartbeat_ms));
     const u32 flags = m_shm.GetU32(offsetof(GxcHeader, mod_flags));
-    m_in_world = hb != 0 && now - hb < IN_WORLD_TIMEOUT_MS && (flags & GXC_MOD_IN_WORLD) != 0;
+    // The mod may beat after now was read (WaitForMod waits for exactly that): not an age in the
+    // future, which unsigned would make huge, Minecraft out of its world, and a relink.
+    m_in_world = hb != 0 && (now > hb ? now - hb : 0) < IN_WORLD_TIMEOUT_MS && (flags & GXC_MOD_IN_WORLD) != 0;
     m_entering = m_in_world && (flags & GXC_MOD_ENTERING) != 0;
   }
   if (m_boot_space)
@@ -254,18 +258,18 @@ void HostBridge::Tick(GuestMemory& mem)
     m_player = p;
   }
   const u64 mod_hb = m_shm.GetU64(offsetof(GxcHeader, mod_heartbeat_ms));
-  const bool mod_alive = mod_hb != 0 && now - mod_hb < GXC_HEARTBEAT_TIMEOUT_MS;
+  const bool mod_alive = mod_hb != 0 && (now > mod_hb ? now - mod_hb : 0) < GXC_HEARTBEAT_TIMEOUT_MS;
 
   // SMG2 owns the movement: the player follows Mario, so the query is always where Mario is.
   WorldState w{mbx.scene_id, m_frame, mbx.gravity, mbx.anchor,
-               GXC_WORLD_FOLLOW | (m_anchored ? GXC_WORLD_ANCHOR : 0u)};
+               GXC_WORLD_FOLLOW | (m_anchored ? GXC_WORLD_ANCHOR : 0u), mbx.origin_epoch};
   WriteWorld(m_shm, w);
   // The game's camera, with Mario from the same frame: the mod's Galaxy view follows it.
   const bool camera = m_ticks_since_game_frame <= IN_GAME_TICKS && mbx.cam_fov > 0;
   WriteGameCamera(m_shm, {(camera ? GXC_GAMECAM_VALID : 0u) |
                               ((mbx.game_flags & GXC_MBX_GAME_DEMO) ? GXC_GAMECAM_DEMO : 0u),
                           m_frame, mbx.cam_pos, mbx.cam_dir, mbx.cam_up, mbx.cam_fov, mbx.anchor,
-                          mbx.mario_front});
+                          mbx.mario_front, mbx.origin_epoch});
 
   if (m_dev_follow)
   {
@@ -347,7 +351,7 @@ void HostBridge::QueueInbox(const Msg& msg)
       msg.type != GXC_MSG_OUTLINE && msg.type != GXC_MSG_HELD && msg.type != GXC_MSG_ATLAS &&
       msg.type != GXC_MSG_SKIN && msg.type != GXC_MSG_MODEL && msg.type != GXC_MSG_ENTITIES &&
       msg.type != GXC_MSG_HURT && msg.type != GXC_MSG_SEAT && msg.type != GXC_MSG_SKY &&
-      msg.type != GXC_MSG_CRACK)
+      msg.type != GXC_MSG_CRACK && msg.type != GXC_MSG_ORIGIN && msg.type != GXC_MSG_STARS)
     return;
   // Entity frames say where everything is now: an older one still waiting is stale.
   if (msg.type == GXC_MSG_ENTITIES)

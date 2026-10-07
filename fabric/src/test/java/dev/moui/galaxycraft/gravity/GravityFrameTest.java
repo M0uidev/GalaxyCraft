@@ -169,4 +169,27 @@ class GravityFrameTest {
         Vector3d d = new Vector3d(0, 0, 1);
         assertTrue(f.dirToGal(d, 0.3).distance(f.dirToGal(d)) < 1e-12, "no swing back to last tick's turn");
     }
+
+    @Test void aSlideMovesThePlayerInTheGalaxyNotInMinecraft() {
+        GravityFrame f = new GravityFrame(v(1000, 2000, 3000), v(5, 100, 7), v(0.3, -1, 0.2));
+        Vector3d mc = v(5, 100, 7);
+        f.startTick();
+        f.slide(v(800, 0, -1600));
+        org.junit.jupiter.api.Assertions.assertTrue(f.toGal(mc).distance(v(1800, 2000, 1400)) < 1e-6, "moved by the slide");
+        org.junit.jupiter.api.Assertions.assertTrue(f.toGal(mc, 0).distance(v(1000, 2000, 3000)) < 1e-6, "drawn from where it was");
+        org.junit.jupiter.api.Assertions.assertTrue(f.toGal(mc, 0.5).distance(v(1400, 2000, 2200)) < 1e-6, "halfway between ticks");
+        f.startTick();
+        org.junit.jupiter.api.Assertions.assertTrue(f.toGal(mc, 0).distance(v(1800, 2000, 1400)) < 1e-6, "next tick starts there");
+    }
+
+    @Test void farInMinecraftThePlayerIsPutBackNearZeroWhereItIsInTheGalaxy() {
+        GravityFrame f = new GravityFrame(v(0, 0, 0), v(0, 100, 0), v(0, -1, 0));
+        Vector3d far = f.toMc(v(5000.25 * 80, 30 * 80, -7000.5 * 80));
+        Vector3d gal = f.toGal(far);
+        Vector3d np = f.rebase(far).orElseThrow();
+        assertTrue(Math.abs(np.x) <= 0.5 && Math.abs(np.z) <= 0.5, "near zero: " + np);
+        assertEquals(far.x - Math.floor(far.x), np.x - Math.floor(np.x), 1e-9, "the same place in its block");
+        assertTrue(f.toGal(np).distance(gal) < 1e-6, "the same place in the galaxy");
+        assertTrue(f.rebase(np).isEmpty(), "and stays");
+    }
 }

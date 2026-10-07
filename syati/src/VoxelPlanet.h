@@ -7,6 +7,9 @@
 // with the old scene's heap) with records meant for this scene.
 void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size);
 void VoxelPlanetFrame(uint32_t scene_id, uint32_t* inbox_addr, uint32_t* inbox_size);
+// After VoxelPlanetFrame: the floating origin's epoch now, and anchor (Mario's position taken before
+// the frame's records) moved as the game was by the origin's moves among them.
+void VoxelPlanetOrigin(uint32_t* epoch, float anchor[3]);
 // Mario moved this frame (before VoxelPlanetFrame): replaced collision may go once he has moved a while.
 void VoxelPlanetMarioMoved();
 // After Mario's movement: right after a teleport he is held where he lands until the game has the
@@ -51,5 +54,7 @@ struct VoxelStats
   // MEM2's free memory in all (free_mem2 is its largest free block: what one allocation can get),
   // and the bytes the module holds there now.
   uint32_t total_free_mem2, module_bytes;
+  // The floating origin: moves applied (GXC_MSG_ORIGIN), the epoch now; stars on the sky.
+  uint32_t origin_moves, origin_epoch, stars;
 };
 extern VoxelStats gVoxelStats;

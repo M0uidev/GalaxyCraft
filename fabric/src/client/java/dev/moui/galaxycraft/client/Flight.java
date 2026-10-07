@@ -2,9 +2,13 @@ package dev.moui.galaxycraft.client;
 
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.gravity.CosmicWind;
+import dev.moui.galaxycraft.universe.OriginPolicy;
+import dev.moui.galaxycraft.universe.UPos;
+import dev.moui.galaxycraft.universe.Universe;
 import dev.moui.galaxycraft.gravity.GravityBody;
 import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.proto.Seqlock;
+import dev.moui.galaxycraft.voxel.PlanetLayout;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +22,7 @@ import org.joml.Vector3d;
  * rockets, durability) and Mario is seated at its feet. Out of every gravity (the void) there is
  * no gravity and up stays as it was; far out, the cosmic wind brings the player back.
  */
-final class Flight {
+public final class Flight {
     /** Standing on the ground this many ticks after a flight hands the player back to its mode. */
     private static final int LAND_TICKS = 10;
     /** Mario is on the ground (no take-off yet) if there is ground this far under his feet, blocks. */
@@ -124,7 +128,10 @@ final class Flight {
         if (fromSpace) player.resetFallDistance();
         Vector3d posBlocks = frame.toGal(vec(player.position())).mul(GravityFrame.SCALE);
         Vector3d velGal = frame.dirToGal(vec(player.getDeltaMovement()));
-        Vector3d dv = CosmicWind.push(voidNow && !player.isFallFlying(), posBlocks, velGal, bodies());
+        boolean stranded = voidNow && !player.isFallFlying();
+        pulse(player, frame, voidNow, posBlocks);
+        Vector3d dv = pulse > 0 ? new Vector3d() // no wind while pulsing
+                : CosmicWind.push(stranded, posBlocks, velGal, windBodies(posBlocks, stranded));
         if (dv.lengthSquared() > 0) {
             Vector3d mc = frame.dirToMc(dv);
             player.setDeltaMovement(player.getDeltaMovement().add(mc.x, mc.y, mc.z));
@@ -132,14 +139,84 @@ final class Flight {
         return voidNow;
     }
 
+    /**
+     * The pulse (No Man's Sky's): gliding out in the void with sprint held, the player speeds up to
+     * PULSE_MAX blocks a tick where it looks, and slows down again near any planet's gravity (it never
+     * enters one at that speed) or when sprint is let go. It slides the gravity frame: the player stays
+     * where it is in Minecraft (its server would pull back such a speed), only its place in the galaxy
+     * moves. Only with the endless universe.
+     */
+    private static void pulse(LocalPlayer player, GravityFrame frame, boolean voidNow, Vector3d posBlocks) {
+        boolean want = voidNow && player.isFallFlying() && PlanetClient.ENDLESS && UniverseClient.universe() != null
+                && net.minecraft.client.Minecraft.getInstance().options.keySprint.isDown();
+        // Room ahead: the nearest gravity's edge, a tenth of it a tick at most (it eases in).
+        double room = Double.MAX_VALUE;
+        Vector3d posUnits = new Vector3d(posBlocks).div(GravityFrame.SCALE);
+        for (PlanetLayout.Sphere s : PlanetClient.streamedSpheres())
+            room = Math.min(room, (s.center().distance(posUnits) - s.gravity()) * GravityFrame.SCALE);
+        double cap = Math.max(0, Math.min(PULSE_MAX, (room - PULSE_MARGIN) / 10));
+        pulse = want ? Math.min(pulse + PULSE_ACCEL, cap) : Math.min(pulse * 0.85, cap);
+        if (pulse < 0.05) pulse = 0;
+        if (pulse == 0) return;
+        Vector3d look = frame.dirToGal(dev.moui.galaxycraft.gravity.LookMath.direction(player.getYRot(), player.getXRot()));
+        frame.slide(look.normalize().mul(pulse / GravityFrame.SCALE));
+    }
+
+    /** Pulse: blocks a tick at most (400 blocks/s), gained per tick (top speed in 3 s), kept off gravity by. */
+    static final double PULSE_MAX = 20, PULSE_ACCEL = 20 / 60.0, PULSE_MARGIN = 64;
+    private static double pulse;
+
+    /** The pulse's speed now, blocks a tick (0: none). */
+    public static double pulseSpeed() {
+        return pulse;
+    }
+
+    /**
+     * A landing (warp, travel, coming back after dying) puts Mario down somewhere else: a glide or
+     * a pulse under way ends there, or the player would fly on and carry Mario off with it (it is
+     * seated where the flying player is), out of the landing. On the server too: it owns the glide.
+     */
+    static void end(LocalPlayer player) {
+        boolean was = active || pulse > 0 || player != null && player.isFallFlying();
+        reset();
+        if (player == null) return;
+        if (player.isFallFlying()) player.stopFallFlying();
+        player.setNoGravity(false);
+        player.setDeltaMovement(Vec3.ZERO);
+        net.minecraft.server.MinecraftServer server = net.minecraft.client.Minecraft.getInstance().getSingleplayerServer();
+        java.util.UUID id = player.getUUID();
+        if (server != null) server.execute(() -> {
+            net.minecraft.server.level.ServerPlayer p = server.getPlayerList().getPlayer(id);
+            if (p != null && p.isFallFlying()) p.stopFallFlying();
+        });
+        if (was) GalaxyCraft.LOG.info("A landing ended the flight");
+    }
+
     /** Leaving the galaxy (unlinked, world closed): nothing carries over. */
     static void reset() {
+        pulse = 0;
         active = false;
         inVoid = false;
         fromSpace = false;
         landed = 0;
         lastMario = null;
         turn.reset();
+    }
+
+    /**
+     * What the wind pulls toward: the planets, inside a system. Out between systems (endless
+     * universe) a glide is free, and a stranded player drifts to the nearest system's planets
+     * (its whole reach as one body).
+     */
+    static List<GravityBody> windBodies(Vector3d posBlocks, boolean stranded) {
+        Universe u = UniverseClient.universe();
+        if (u == null || !PlanetClient.ENDLESS) return bodies();
+        UPos at = UPos.of(new Vector3d(posBlocks).div(GravityFrame.SCALE));
+        if (u.systemAt(at, OriginPolicy.SYSTEM_MARGIN).isPresent()) return bodies();
+        if (!stranded) return List.of();
+        return u.around(at, 1).stream().findFirst()
+                .<List<GravityBody>>map(s -> List.of(new GravityBody.Sphere(s.center().minus(UPos.ZERO).mul(GravityFrame.SCALE), u.reach(s))))
+                .orElse(List.of());
     }
 
     /** Every planet's gravity, blocks. */

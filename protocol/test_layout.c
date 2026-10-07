@@ -12,6 +12,7 @@ _Static_assert(offsetof(GxcWorldState, frame_id) == 8, "world.frame");
 _Static_assert(offsetof(GxcWorldState, gravity) == 16, "world.gravity");
 _Static_assert(offsetof(GxcWorldState, query_pos) == 28, "world.query");
 _Static_assert(offsetof(GxcWorldState, flags) == 40, "world.flags");
+_Static_assert(offsetof(GxcWorldState, origin_epoch) == 44, "world.epoch");
 
 _Static_assert(sizeof(GxcPlayerState) == 96, "player");
 _Static_assert(offsetof(GxcPlayerState, pos) == 16, "player.pos");
@@ -31,6 +32,7 @@ _Static_assert(offsetof(GxcGameCamera, cam_up) == 40, "gamecam.up");
 _Static_assert(offsetof(GxcGameCamera, fov_y) == 52, "gamecam.fov");
 _Static_assert(offsetof(GxcGameCamera, mario_pos) == 56, "gamecam.mario");
 _Static_assert(offsetof(GxcGameCamera, mario_front) == 68, "gamecam.front");
+_Static_assert(offsetof(GxcGameCamera, origin_epoch) == 80, "gamecam.epoch");
 
 _Static_assert(sizeof(GxcInputState) == 96, "input");
 _Static_assert(offsetof(GxcInputState, mouse_x) == 8, "input.mx");
@@ -53,10 +55,11 @@ _Static_assert(GXC_TOTAL_SIZE == 30134304, "total");
 
 _Static_assert(sizeof(GxcMbxPart) == 60, "mbx part");
 _Static_assert(offsetof(GxcMbxPart, mtx) == 12, "mbx part.mtx");
-_Static_assert(sizeof(GxcMailbox) == 4048, "mailbox");
+_Static_assert(sizeof(GxcMailbox) == 4052, "mailbox");
+_Static_assert(offsetof(GxcMailbox, origin_epoch) == 4048, "mbx.origin_epoch");
 _Static_assert(offsetof(GxcMailbox, stage_name) == 4016, "mbx.stage");
 _Static_assert(offsetof(GxcMailbox, inbox_addr) == 4008, "mbx.inbox");
-_Static_assert(sizeof(GxcPlanet) == 36 && sizeof(GxcOutline) == 100 && sizeof(GxcChunk) == 32 && sizeof(GxcInboxHeader) == 16, "voxel");
+_Static_assert(sizeof(GxcPlanet) == 36 && sizeof(GxcOutline) == 8 + 24 * GXC_OUTLINE_MAX_EDGES && sizeof(GxcChunk) == 32 && sizeof(GxcInboxHeader) == 16, "voxel");
 _Static_assert(sizeof(GxcHeld) == 2064 && offsetof(GxcHeld, sprite) == 16 && GXC_MSG_HELD == 106, "held");
 _Static_assert(sizeof(GxcAtlas) == 24 && GXC_MSG_ATLAS == 107, "atlas");
 _Static_assert(sizeof(GxcPointerState) == 16 && GXC_OFF_POINTER >= GXC_OFF_GAMECAM + sizeof(GxcGameCamera) &&
@@ -79,11 +82,12 @@ _Static_assert(offsetof(GxcMailbox, parts) == 168, "mbx.parts");
 _Static_assert(GXC_MBX_GAME_FOLLOWING == 1u && GXC_MBX_GAME_DEMO == 2u, "mbx flags");
 _Static_assert(GXC_MBX_FOLLOW == 2u && GXC_WORLD_FOLLOW == 2u && GXC_MBX_GALAXY_VIEW == 4u &&
                GXC_MBX_THIRD_PERSON == 8u && GXC_MBX_HIDE_POINTER == 16u && GXC_MBX_HITBOXES == 32u, "flags");
-_Static_assert(GXC_VERSION == 10u && GXC_MBX_VERSION == 5u, "v10");
+_Static_assert(GXC_VERSION == 11u && GXC_MBX_VERSION == 6u, "v11");
 _Static_assert(sizeof(GxcTextState) == 264 && GXC_OFF_TEXT >= GXC_OFF_GAMECAM + sizeof(GxcGameCamera) &&
                GXC_OFF_TEXT + sizeof(GxcTextState) <= GXC_OFF_RING_S2M, "text");
 _Static_assert(GXC_PLAYER_SCREEN == 4u && GXC_PLAYER_FLYING == 8u && GXC_PLAYER_HITBOXES == 16u &&
                GXC_PLAYER_WALKING == 32u && GXC_PLAYER_PLUS == 64u, "player flags");
 _Static_assert(GXC_MSG_MARIO_SKIN == 114, "mario skin");
+_Static_assert(GXC_MSG_ORIGIN == 116 && GXC_MSG_STARS == 117 && GXC_ORIGIN_CELL == 65536 && GXC_STAR_BYTES == 20, "universe");
 
 int main(void) { puts("OK"); return 0; }

@@ -20,9 +20,14 @@ public final class GalaxySave {
     /**
      * Where the player stands: on the planet of that file index (PlanetStore.key), in the direction
      * (dx, dy, dz) from its center (galaxy axes, any length), looking that way (Minecraft's yaw and
-     * pitch).
+     * pitch). system: null for the world's own galaxy; else a generated system's sector
+     * (SystemIndex.name), and planet is n in it.
      */
-    public record Spot(int planet, double dx, double dy, double dz, float yaw, float pitch) {
+    public record Spot(int planet, double dx, double dy, double dz, float yaw, float pitch, String system) {
+        public Spot(int planet, double dx, double dy, double dz, float yaw, float pitch) {
+            this(planet, dx, dy, dz, yaw, pitch, null);
+        }
+
         boolean usable() {
             return planet >= 0 && Double.isFinite(dx + dy + dz) && dx * dx + dy * dy + dz * dz > 1e-12;
         }

@@ -22,7 +22,16 @@ final class EnteringScreen extends Screen {
     private long fadeFrom;
 
     private EnteringScreen() {
-        super(Component.literal("Entering the galaxy"));
+        this("Entering the galaxy");
+    }
+
+    private EnteringScreen(String text) {
+        super(Component.literal(text));
+    }
+
+    /** A warp to another system: the same dark screen and zoom in, with what it says. */
+    static void warping(Minecraft mc, String text) {
+        mc.gui.setScreen(new EnteringScreen(text));
     }
 
     /** Shown at the first tick with no screen after a world is entered (Minecraft's own loading screen goes first). */
@@ -80,7 +89,7 @@ final class EnteringScreen extends Screen {
         g.fill(0, 0, width, height, alpha << 24 | 0x05060C);
         if (fadeFrom == 0) {
             int dots = (int) (System.currentTimeMillis() / 400 % 4);
-            g.centeredText(font, "Entering the galaxy" + ".".repeat(dots), width / 2, height / 2 - 4, 0xFFFFFFFF);
+            g.centeredText(font, title.getString() + ".".repeat(dots), width / 2, height / 2 - 4, 0xFFFFFFFF);
         }
     }
 

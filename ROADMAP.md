@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (blocks show what they hold done; signs open their editor when put down)
+Last updated: 2026-10-06 (infinite universe now: research, design and its core)
 
 ---
 
@@ -23,13 +23,12 @@ Last updated: 2026-10-06 (blocks show what they hold done; signs open their edit
 
 | Feature | Status | Notes |
 |---|---|---|
-| (nothing in progress) | | Pick the next one from **Next**. |
+| Infinite universe | now | Stage 3 of the galaxy: endless solar systems generated per 8192-block sector from the seed (the world's galaxy is the home system), a floating origin so SMG2's floats never shake, pulse and warp travel. Design: [spec](docs/superpowers/specs/2026-10-06-galaxycraft-infinite-universe-design.md). 2026-10-06: research and the pure core (sectors, systems, origin, 20 tests) on `feat/infinite-universe`; next, on the PC: the spike on moving everything in SMG2 at once, then the origin end to end. Open questions in the spec's §8. |
 
 ## Next
 
 | Feature | Status | Notes |
 |---|---|---|
-| Infinite universe | next | Stage 3 of the galaxy: No Man's Sky-like endless space, planets generated per sector as you explore (the catalog grows), a floating origin (SMG2's floats), faster travel than elytra. Builds on the galaxy options' catalog and streaming. |
 | Flat space stations | next | Player-built **flat** platforms floating in space, to play flat Minecraft (farms, builds) without the sphere's distortion. Hook ready: `CosmicWind` takes any `GravityBody`, not only spheres. |
 
 ---
@@ -126,6 +125,7 @@ Last updated: 2026-10-06 (blocks show what they hold done; signs open their edit
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-06: Make SMG2 use 64-bit numbers instead of 32 so far-away positions stay precise (user, about the infinite universe). Looked into: SMG2's engine, CPU SIMD and GPU are 32-bit throughout, so not the engine itself; our own code goes 64-bit (free on the Wii's CPU) and the floating origin covers the rest. Spec §2b.
 - 2026-10-06: Follow-ups of "blocks show what they hold" (Claude): the enchanting table's book
   turning to the player and the bell swinging (still drawn at rest); a crowd of 100 signs and 50
   banners costs ~2.7 ms a frame, could be made cheaper (pieces that do not move sent once).
