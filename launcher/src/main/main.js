@@ -49,7 +49,7 @@ function config() {
 function mode() {
   const s = state.settings;
   if (s.playFrom === 'folder' || s.playFrom === 'release') return s.playFrom;
-  return !app.isPackaged || s.gameRoot ? 'folder' : 'release';
+  return !app.isPackaged || s.gameRoot || process.env.GXC_ROOT ? 'folder' : 'release';
 }
 
 function romInfo() {

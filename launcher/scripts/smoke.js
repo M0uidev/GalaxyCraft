@@ -21,6 +21,11 @@ const FAKE_CS = `using System; using System.IO; using System.Threading;
 class Fake { static void Main(string[] a) {
   string me = Path.GetFileNameWithoutExtension(Environment.GetCommandLineArgs()[0]).ToLowerInvariant();
   string args = string.Join(" ", a);
+  if (me == "dolphin-tool") { // extract -i ROM -s PATH -o OUT -q: from the fake disc folder next to the ROM
+    string to = Path.Combine(a[6], "DATA", "files", a[4].Replace('/', Path.DirectorySeparatorChar));
+    Directory.CreateDirectory(Path.GetDirectoryName(to));
+    File.Copy(a[2] + ".files" + Path.DirectorySeparatorChar + a[4].Replace('/', Path.DirectorySeparatorChar), to, true);
+    return; }
   if (me == "java") { Console.WriteLine("fake minecraft: " + args); Console.Out.Flush(); while (true) Thread.Sleep(1000); }
   Console.WriteLine("fake dolphin " + Environment.GetEnvironmentVariable("GALAXYCRAFT_BOOT") + " " + args); Console.Out.Flush();
   Thread.Sleep(3000); Console.WriteLine("fake dolphin closes"); } }`;
@@ -178,7 +183,7 @@ async function main() {
   }
 
   await app.close();
-  if (!WIN && !process.env.SMOKE_EXE) await playerMode(tmp, errors);
+  if (!process.env.SMOKE_EXE) await playerMode(tmp, errors);
   fs.rmSync(tmp, { recursive: true, force: true });
   if (errors.length) throw new Error(`The page reported errors:\n${errors.join('\n')}`);
   console.log(`smoke: ok, screenshots in ${SHOTS}`);
@@ -214,10 +219,21 @@ async function playerMode(tmp, errors) {
   fs.writeFileSync(path.join(mod, 'patches.json'), JSON.stringify([{ out: 'ObjectData/Mario.arc', disc: 'ObjectData/Mario.arc', yaz0: false, patch: 'patches/ObjectData/Mario.arc.gxd' }]));
   const dol = path.join(dir, 'dolphin');
   fs.mkdirSync(dol, { recursive: true });
-  fs.writeFileSync(path.join(dol, 'dolphin-emu'), '#!/bin/sh\necho "fake dolphin $GALAXYCRAFT_BOOT $*"\nsleep 3\n', { mode: 0o755 });
-  fs.writeFileSync(path.join(dol, 'dolphin-tool'), '#!/bin/sh\nmkdir -p "$7/DATA/files/$(dirname "$5")"\ncp "$3.files/$5" "$7/DATA/files/$5"\n', { mode: 0o755 });
-  const java = path.join(dir, 'java');
-  fs.writeFileSync(java, '#!/bin/sh\necho "fake minecraft: $*"\nwhile true; do sleep 1; done\n', { mode: 0o755 });
+  const names = WIN ? { exe: 'Dolphin.exe', tool: 'dolphin-tool.exe' } : { exe: 'dolphin-emu', tool: 'dolphin-tool' };
+  let java;
+  if (WIN) {
+    const fake = compileFakeExe(dir);
+    if (!fake) { console.log('smoke: player: no C# compiler, skipped'); return; }
+    fs.copyFileSync(fake, path.join(dol, names.exe));
+    fs.copyFileSync(fake, path.join(dol, names.tool));
+    java = path.join(dir, 'java.exe');
+    fs.copyFileSync(fake, java);
+  } else {
+    fs.writeFileSync(path.join(dol, names.exe), '#!/bin/sh\necho "fake dolphin $GALAXYCRAFT_BOOT $*"\nsleep 3\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(dol, names.tool), '#!/bin/sh\nmkdir -p "$7/DATA/files/$(dirname "$5")"\ncp "$3.files/$5" "$7/DATA/files/$5"\n', { mode: 0o755 });
+    java = path.join(dir, 'java');
+    fs.writeFileSync(java, '#!/bin/sh\necho "fake minecraft: $*"\nwhile true; do sleep 1; done\n', { mode: 0o755 });
+  }
   const files = {};
   await tar.c({ gzip: true, file: path.join(dir, 'module-0.2.0.tar.gz'), cwd: mod }, ['.']);
   await tar.c({ gzip: true, file: path.join(dir, 'dolphin-linux-x64-0.2.0.tar.gz'), cwd: dol }, ['.']);
@@ -234,7 +250,7 @@ async function playerMode(tmp, errors) {
   const entry = (f) => ({ file: f, url: `${base}/${f}`, sha256: crypto.createHash('sha256').update(files[f]).digest('hex'), size: files[f].length });
   const manifest = { format: 1, version: '0.2.0', minecraft: { version: '26.3', fabricLoader: '0.19.5' },
     module: entry('module-0.2.0.tar.gz'), mods: [entry('galaxycraft-0.2.0.jar')],
-    dolphin: { [`${process.platform}-${process.arch}`]: { ...entry('dolphin-linux-x64-0.2.0.tar.gz'), exe: 'dolphin-emu', tool: 'dolphin-tool' } } };
+    dolphin: { [`${process.platform}-${process.arch}`]: { ...entry('dolphin-linux-x64-0.2.0.tar.gz'), ...names } } };
 
   const userData = path.join(dir, 'userData');
   fs.mkdirSync(userData, { recursive: true });
@@ -243,7 +259,7 @@ async function playerMode(tmp, errors) {
     GXL_GAME_MANIFEST: `${base}/game.json`, GXL_TEST_ACCOUNT: JSON.stringify({ name: 'Tester', uuid: '0123456789abcdef0123456789abcdef' }),
     GXL_TEST_MINECRAFT: java };
   delete env.ELECTRON_RUN_AS_NODE;
-  const app = await electron.launch({ executablePath: require('electron'), args: [APP, '--no-sandbox'], env });
+  const app = await electron.launch({ executablePath: require('electron'), args: [APP, ...(WIN ? [] : ['--no-sandbox'])], env });
   const page = await app.firstWindow();
   page.on('pageerror', (e) => errors.push(`player pageerror: ${e.message}`));
   await page.setViewportSize({ width: 1280, height: 780 });
@@ -267,7 +283,7 @@ async function playerMode(tmp, errors) {
   await page.waitForFunction(() => /fake minecraft/.test(document.querySelector('#log').textContent), null, { timeout: 15000 });
   await shot('22-player-playing');
   const log = await page.textContent('#log');
-  assert.match(log, /fake dolphin space -u .* -e .*game\/0\.2\.0\/galaxycraft\.json/);
+  assert.match(log, /fake dolphin space -u .* -e .*game[\\/]0\.2\.0[\\/]galaxycraft\.json/);
   assert.match(log, /--username Tester/);
   assert.match(log, /-Dgalaxycraft\.hidden=true/);
   assert.match(log, /--accessToken \*{8}/);
