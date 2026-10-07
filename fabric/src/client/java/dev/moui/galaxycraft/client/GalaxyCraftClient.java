@@ -148,6 +148,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             resetFrame();
         }));
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> DolphinStarter.stop());
+        ClientTickEvents.END_CLIENT_TICK.register(DolphinStarter::keepScreen);
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             // From Mojang's launcher: Dolphin is started here, and the window hidden only once it runs.
             boolean dolphinUp = !DolphinStarter.wanted() || DolphinStarter.start(client);

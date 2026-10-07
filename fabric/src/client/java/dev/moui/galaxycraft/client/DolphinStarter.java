@@ -17,6 +17,8 @@ import net.minecraft.client.Minecraft;
  */
 final class DolphinStarter {
     private static volatile Process dolphin;
+    /** Dolphin could not start: our screen stays up (the title screen would replace it otherwise). */
+    private static boolean needInstall;
 
     private DolphinStarter() {}
 
@@ -31,7 +33,7 @@ final class DolphinStarter {
         Optional<PlayConfig> cfg = PlayConfig.read(file);
         if (cfg.isEmpty()) {
             GalaxyCraft.LOG.error("[Dolphin] {} is missing or unreadable: not starting Dolphin", file);
-            client.gui.setScreen(new NeedInstallScreen());
+            needInstall = true;
             return false;
         }
         PlayConfig c = cfg.get();
@@ -57,9 +59,14 @@ final class DolphinStarter {
             return true;
         } catch (Exception e) {
             GalaxyCraft.LOG.error("[Dolphin] could not start {}", c.cmd(), e);
-            client.gui.setScreen(new NeedInstallScreen());
+            needInstall = true;
             return false;
         }
+    }
+
+    /** Each tick: keeps the "press INSTALL" screen up while Dolphin could not start. */
+    static void keepScreen(Minecraft client) {
+        if (needInstall && !(client.gui.screen() instanceof NeedInstallScreen)) client.gui.setScreen(new NeedInstallScreen());
     }
 
     /** Dolphin and everything it started. */
