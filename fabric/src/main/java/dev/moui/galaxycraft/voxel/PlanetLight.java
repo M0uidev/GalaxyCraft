@@ -84,9 +84,9 @@ public final class PlanetLight {
         java.util.Arrays.fill(light, (byte) 0);
         int layers = g.layers;
         head = tail = 0;
-        int perFace = light.length / 6;
+        int perFace = light.length / g.faces();
         // Faces apart on their own threads: a big planet has tens of millions of cells.
-        java.util.stream.IntStream.range(0, 6).parallel().forEach(f -> {
+        java.util.stream.IntStream.range(0, g.faces()).parallel().forEach(f -> {
             for (int base = f * perFace; base < (f + 1) * perFace; base += layers) {
                 int l = MAX;
                 for (int k = layers - 1; k >= 0 && l > 0; k--) {

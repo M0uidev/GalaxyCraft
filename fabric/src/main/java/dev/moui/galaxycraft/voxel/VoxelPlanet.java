@@ -185,6 +185,11 @@ public final class VoxelPlanet {
     }
 
     /** A planet as saved by {@link #cells()}, its ids those of blocks. */
+    /** A station's cells (no crust: depth 0). */
+    public static VoxelPlanet flat(FlatGrid grid, char[] cells, Blocks blocks) {
+        return new VoxelPlanet(grid, 0, cells, blocks);
+    }
+
     public static VoxelPlanet of(CellGrid grid, int depth, char[] cells, Blocks blocks) {
         return new VoxelPlanet(grid, depth, cells, blocks);
     }
@@ -491,7 +496,8 @@ public final class VoxelPlanet {
             for (int s = 0; s < 6; s++) {
                 int nb = grid.neighbor(c, s);
                 if (nb >= 0 && chunkOf(nb) != chunk && !occludes(nb)) return true;
-                if (nb < 0 && s == CubeSphere.TOP) return true;
+                // Past the top of a sphere's layers, or any side of a station's box: open.
+                if (nb < 0 && (s == CubeSphere.TOP || grid.faces() == 1)) return true;
             }
         }
         return false;
