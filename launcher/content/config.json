@@ -1,4 +1,4 @@
 {
   "_help": "msaClientId: the Azure app (client) id used to sign in with Microsoft accounts. It must be approved by Mojang for Minecraft's services (see launcher/README.md, 'Microsoft sign-in'). GXL_MSA_CLIENT_ID overrides it.",
-  "msaClientId": ""
+  "msaClientId": "67297000-c443-49a6-a2e0-22a04d2c4160"
 }
