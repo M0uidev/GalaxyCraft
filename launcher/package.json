@@ -20,7 +20,8 @@
     "release": "node scripts/release.js"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "tar": "^7.5.22"
   },
   "devDependencies": {
     "electron": "^44.6.0",

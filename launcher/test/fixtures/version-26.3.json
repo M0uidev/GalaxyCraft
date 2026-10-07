@@ -1,0 +1,34 @@
+{
+  "arguments": {
+    "game": ["--username", "${auth_player_name}", "--version", "${version_name}", "--gameDir", "${game_directory}",
+      "--assetsDir", "${assets_root}", "--assetIndex", "${assets_index_name}", "--uuid", "${auth_uuid}",
+      "--accessToken", "${auth_access_token}", "--clientId", "${clientid}", "--xuid", "${auth_xuid}",
+      "--versionType", "${version_type}",
+      {"rules": [{"action": "allow", "features": {"is_demo_user": true}}], "value": "--demo"},
+      {"rules": [{"action": "allow", "features": {"has_custom_resolution": true}}], "value": ["--width", "${resolution_width}", "--height", "${resolution_height}"]},
+      {"rules": [{"action": "allow", "features": {"is_quick_play_singleplayer": true}}], "value": ["--quickPlaySingleplayer", "${quickPlaySingleplayer}"]}],
+    "jvm": [
+      {"rules": [{"action": "allow", "os": {"name": "osx"}}], "value": ["-XstartOnFirstThread"]},
+      {"rules": [{"action": "allow", "os": {"name": "windows"}}], "value": "-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump"},
+      {"rules": [{"action": "allow", "os": {"arch": "x86"}}], "value": "-Xss1M"},
+      "-Djava.library.path=${natives_directory}", "-Djna.tmpdir=${natives_directory}",
+      "-Dorg.lwjgl.system.SharedLibraryExtractPath=${natives_directory}", "-Dio.netty.native.workdir=${natives_directory}",
+      "-Dminecraft.launcher.brand=${launcher_name}", "-Dminecraft.launcher.version=${launcher_version}", "-cp", "${classpath}"]
+  },
+  "assetIndex": {"id": "29", "sha1": "aa", "size": 10, "totalSize": 100, "url": "https://piston-meta.mojang.com/v1/packages/aa/29.json"},
+  "assets": "29",
+  "downloads": {"client": {"sha1": "cc", "size": 30000000, "url": "https://piston-data.mojang.com/v1/objects/cc/client.jar"}},
+  "id": "26.3",
+  "javaVersion": {"component": "java-runtime-epsilon", "majorVersion": 25},
+  "libraries": [
+    {"downloads": {"artifact": {"path": "com/mojang/brigadier/1.3.10/brigadier-1.3.10.jar", "sha1": "b1", "size": 1, "url": "https://libraries.minecraft.net/com/mojang/brigadier/1.3.10/brigadier-1.3.10.jar"}}, "name": "com.mojang:brigadier:1.3.10"},
+    {"downloads": {"artifact": {"path": "org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3.jar", "sha1": "l1", "size": 2, "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3.jar"}}, "name": "org.lwjgl:lwjgl:3.3.3"},
+    {"downloads": {"artifact": {"path": "org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3-natives-linux.jar", "sha1": "l2", "size": 3, "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3-natives-linux.jar"}}, "name": "org.lwjgl:lwjgl:3.3.3:natives-linux", "rules": [{"action": "allow", "os": {"name": "linux"}}]},
+    {"downloads": {"artifact": {"path": "org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3-natives-windows.jar", "sha1": "l3", "size": 4, "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3-natives-windows.jar"}}, "name": "org.lwjgl:lwjgl:3.3.3:natives-windows", "rules": [{"action": "allow", "os": {"name": "windows"}}]},
+    {"downloads": {"artifact": {"path": "org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3-natives-windows-arm64.jar", "sha1": "l4", "size": 5, "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3-natives-windows-arm64.jar"}}, "name": "org.lwjgl:lwjgl:3.3.3:natives-windows-arm64", "rules": [{"action": "allow", "os": {"name": "windows", "arch": "arm64"}}]},
+    {"downloads": {"artifact": {"path": "org/ow2/asm/asm/9.6/asm-9.6.jar", "sha1": "a0", "size": 6, "url": "https://libraries.minecraft.net/org/ow2/asm/asm/9.6/asm-9.6.jar"}}, "name": "org.ow2.asm:asm:9.6"}
+  ],
+  "logging": {"client": {"argument": "-Dlog4j.configurationFile=${path}", "file": {"id": "client-1.21.2.xml", "sha1": "lg", "size": 7, "url": "https://piston-data.mojang.com/v1/objects/lg/client-1.21.2.xml"}, "type": "log4j2-xml"}},
+  "mainClass": "net.minecraft.client.main.Main",
+  "type": "release"
+}

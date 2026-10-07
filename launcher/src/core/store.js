@@ -29,6 +29,7 @@ function defaultInstallation() {
     fullscreen: false,
     gradleArgs: '',
     dolphinArgs: '',
+    javaArgs: '', // empty: the release's (memory for Minecraft)
     created: '2026-10-07T00:00:00.000Z',
     lastPlayed: null,
   };
@@ -39,6 +40,8 @@ function defaultState() {
     version: 1,
     settings: {
       gameRoot: '', // empty: found by the launcher
+      playFrom: 'auto', // auto: the game folder if there is one, else the released game
+      rom: '', // the player's Super Mario Galaxy 2
       onPlay: 'keep',
       showLogOnPlay: false,
       accent: 'grass',
@@ -73,6 +76,7 @@ function normalizeInstallation(raw, fallbackId) {
     fullscreen: bool(r.fullscreen, d.fullscreen),
     gradleArgs: str(r.gradleArgs, '', 1000),
     dolphinArgs: str(r.dolphinArgs, '', 1000),
+    javaArgs: str(r.javaArgs, '', 1000),
     created: str(r.created, new Date().toISOString(), 40),
     lastPlayed: typeof r.lastPlayed === 'string' ? r.lastPlayed : null,
   };
@@ -84,6 +88,8 @@ function normalize(raw) {
   const s = r.settings && typeof r.settings === 'object' ? r.settings : {};
   const settings = {
     gameRoot: str(s.gameRoot, ''),
+    playFrom: oneOf(s.playFrom, ['auto', 'release', 'folder'], 'auto'),
+    rom: str(s.rom, '', 1000),
     onPlay: oneOf(s.onPlay, ON_PLAY, d.settings.onPlay),
     showLogOnPlay: bool(s.showLogOnPlay, d.settings.showLogOnPlay),
     accent: s.accent === 'custom' || (typeof s.accent === 'string' && Object.hasOwn(ACCENTS, s.accent)) ? s.accent : d.settings.accent,

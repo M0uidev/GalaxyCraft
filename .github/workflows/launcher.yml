@@ -12,7 +12,7 @@ on:
       - 'launcher/**'
       - 'ROADMAP.md'
       - 'fabric/src/client/java/dev/moui/galaxycraft/client/GalaxyOptions.java'
-      - 'fabric/src/main/java/dev/moui/galaxycraft/settings/Movement.java'
+      - 'fabric/**'
       - '.github/workflows/launcher.yml'
   pull_request:
     paths:
@@ -99,6 +99,65 @@ jobs:
             launcher/dist/*.blockmap
             launcher/dist/latest*.yml
           if-no-files-found: error
+
+  mod:
+    name: Game mod
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the mod
+        working-directory: fabric
+        run: ./gradlew build -x test --no-configuration-cache
+      - name: The jar
+        run: |
+          mkdir -p out
+          for f in fabric/build/libs/*.jar; do case "$f" in *-sources.jar|*-dev.jar) ;; *) cp "$f" out/ ;; esac; done
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: game-mod
+          path: out/*.jar
+          if-no-files-found: error
+
+  minecraft:
+    name: Minecraft (${{ matrix.name }})
+    needs: mod
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            run: xvfb-run -a
+          - name: Windows
+            os: windows-latest
+            run: ''
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: launcher
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: launcher/package-lock.json
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: game-mod
+          path: launcher/mods
+      - name: Minecraft and Fabric from Mojang's and Fabric's servers, started with the mod
+        env:
+          MODS_DIR: mods
+        run: ${{ matrix.run }} node scripts/mc-integration.js "$RUNNER_TEMP/mc"
 
   release:
     name: Release
