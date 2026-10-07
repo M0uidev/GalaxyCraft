@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-07 (the launcher's PLAY works with the Minecraft Launcher; first release next)
+Last updated: 2026-10-07 (v0.1.1 released)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-07 (the launcher's PLAY works with the Minecraft Launcher;
 
 | Feature | Status | Notes |
 |---|---|---|
-| First release (Linux and Windows) | now | v0.1.1 from `master`: the user retests Windows with CI's `windows-test-build` (playtest fixes + playing from the Minecraft Launcher), then `npm run release -- patch`, then a new player's INSTALL from the release. Our launcher's PLAY also works without signing in here: it opens the Minecraft Launcher (Play there starts the game), and closes it when the game ends. |
+| First release (Linux and Windows) | now | v0.1.1 published 2026-10-07 (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
 
 ## Next
 
