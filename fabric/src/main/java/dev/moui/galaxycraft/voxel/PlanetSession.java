@@ -96,6 +96,10 @@ public final class PlanetSession {
     /** In pending: -2 - tile, its far view goes once the chunks queued before it are out. */
     private static final int HIDE_MARK = -2;
     static final int PLANET_GONE = 1;
+    /** GxcPlanet flag (GXC_PLANET_FLAT): a station; its gravity box follows the flags word. */
+    public static final int PLANET_FLAT = 2;
+    /** A station's gravity box past its blocks: above (blocks), and on the four sides. */
+    public static final double BOX_ABOVE = 24, BOX_SIDES = 2;
     /** Updates between sending again the faces of the far view that edits changed. */
     static final int FAR_UPDATES = 40;
 
@@ -117,6 +121,8 @@ public final class PlanetSession {
     private boolean builtStale; // edited again while its message waited for room
     private boolean builtUrgent; // and wanted in the urgent lane
     private VoxelPlanet planet;
+    /** The station this session streams (null: a planet). */
+    private Station station;
     private Vector3d center;
     private float tpGround; // galaxy units from the center: where the next teleport lands
     private Vector3d tpDir = new Vector3d(0, 1, 0); // and the direction from the center it lands along
@@ -248,9 +254,68 @@ public final class PlanetSession {
         unsaved = true;
     }
 
-    /** How far its gravity reaches from its center, galaxy units. */
+    /** How far its gravity reaches from its center, galaxy units (a station's: the farthest corner of its box). */
     public double gravityUnits() {
-        return planet == null ? 0 : gravityRadius(planet.surface()) * unitsPerBlock;
+        if (planet == null) return 0;
+        if (station != null) {
+            Vector3d[] box = box();
+            double r = 0;
+            for (int m = 0; m < 8; m++)
+                r = Math.max(r, new Vector3d((m & 1) == 0 ? box[0].x : box[1].x, (m & 2) == 0 ? box[0].y : box[1].y,
+                        (m & 4) == 0 ? box[0].z : box[1].z).length());
+            return r * unitsPerBlock;
+        }
+        return gravityRadius(planet.surface()) * unitsPerBlock;
+    }
+
+    /** A station: it goes up where its center says, turned as it is. */
+    public void spawnStation(Station s) {
+        start(s.planet, s.center);
+        station = s;
+        unsaved = true;
+    }
+
+    /** The station this session streams; null for a planet. */
+    public Station station() {
+        return station;
+    }
+
+    /**
+     * The same body on a new grid (a station regrown): same id and place, everything sent again,
+     * the chunks around Mario first. The game drops the old chunks when the record comes.
+     */
+    public void swap(VoxelPlanet p) {
+        planet = p;
+        farVersion = new int[PlanetLod.tileCount(p)];
+        farWant = new int[farVersion.length];
+        farCols = new int[farVersion.length];
+        tileSpheres = null;
+        guestHasIt = false;
+        unsaved = true;
+        scene = host = Integer.MIN_VALUE; // the next update sends it all
+        if (mario != null) for (int c : residency(mario, mario)) queueUrgent(c);
+    }
+
+    /** A station's gravity box in its own axes from its center, blocks: {min, max}. */
+    Vector3d[] box() {
+        StationShape.Bounds b = station.bounds;
+        return new Vector3d[] {new Vector3d(b.x0() - 0.5 - BOX_SIDES, b.y0() - 0.5, b.z0() - 0.5 - BOX_SIDES),
+                new Vector3d(b.x1() + 0.5 + BOX_SIDES, b.y1() + 0.5 + BOX_ABOVE, b.z1() + 0.5 + BOX_SIDES)};
+    }
+
+    /** A station's blocks fit in a ball this big around its center, blocks. */
+    double stationRadius() {
+        StationShape.Bounds b = station.bounds;
+        double x = Math.max(-b.x0(), b.x1()) + 0.5, y = Math.max(-b.y0(), b.y1()) + 0.5, z = Math.max(-b.z0(), b.z1()) + 0.5;
+        return Math.sqrt(x * x + y * y + z * z);
+    }
+
+    /** Its gravity as a body, scale: blocks per unit of center (GravityFrame.SCALE). */
+    public dev.moui.galaxycraft.gravity.GravityBody body(double scale) {
+        Vector3d c = new Vector3d(center).mul(scale);
+        if (station == null) return new dev.moui.galaxycraft.gravity.GravityBody.Sphere(c, gravityUnits() * scale);
+        Vector3d[] box = box();
+        return new dev.moui.galaxycraft.gravity.GravityBody.Box(c, station.rotation, box[0], box[1]);
     }
 
     /** A saved planet, as it was (but for what lies below today's crust: see sealBelowCrust). */
@@ -330,7 +395,7 @@ public final class PlanetSession {
      * moment). No one digs there; he is to be landed on the ground again.
      */
     public boolean marioAtCore() {
-        return planet != null && mario != null && mario.length() < CORE;
+        return planet != null && station == null && mario != null && mario.length() < CORE;
     }
 
     /** A teleport waits for its landing ground to go first: not on its way to the game yet. */
@@ -346,6 +411,7 @@ public final class PlanetSession {
             guestHasIt = true;
             sendAll();
         }
+        if (station != null) return land(stationGround(toward));
         Vector3d land = new Vector3d(toward);
         tpDir = new Vector3d(toward).normalize(); // planet space has the galaxy's axes
         tpGround = (float) (ground(land) * unitsPerBlock);
@@ -360,6 +426,46 @@ public final class PlanetSession {
         urgent.add(TP_MARK);
         tpQueued = true;
         return new Vector3d(land);
+    }
+
+    /**
+     * Where Mario lands on a station going toward a point (planet blocks): on top of the highest
+     * block of the column under it (kept within the station), else on the core.
+     */
+    Vector3d stationGround(Vector3d toward) {
+        FlatGrid g = station.grid();
+        StationShape.Bounds b = station.bounds;
+        Vector3d s = g.toStation(toward);
+        int x = (int) Math.max(b.x0(), Math.min(b.x1(), Math.round(s.x))), z = (int) Math.max(b.z0(), Math.min(b.z1(), Math.round(s.z)));
+        Vector3d top = new Vector3d(0, 0.5, 0);
+        for (int y = g.oy + g.layers - 1; y >= g.oy; y--) {
+            int c = g.cellOf(x, y, z);
+            if (c >= 0 && planet.get(c) != Blocks.AIR) {
+                top.set(x, y + 0.5, z);
+                break;
+            }
+        }
+        return station.rotation.transform(top);
+    }
+
+    /** Mario onto that point (planet blocks): the game drops him along the line from the center through it. */
+    private Vector3d land(Vector3d at) {
+        tpDir = new Vector3d(at).normalize();
+        tpGround = (float) (at.length() * unitsPerBlock);
+        landing = new Vector3d(at);
+        landingUpdates = 0;
+        watchUpdates = 0;
+        dev.moui.galaxycraft.GalaxyCraft.LOG.info("Teleport onto station {}: lands at {}", id, at);
+        for (int c : residency(landing, landing)) queueUrgent(c);
+        urgent.add(TP_MARK);
+        tpQueued = true;
+        return new Vector3d(at);
+    }
+
+    /** Up at a point (planet blocks): away from a planet's center, a station's own up. */
+    Vector3d up(Vector3d at) {
+        if (station != null) return station.grid().up();
+        return at.lengthSquared() < 1e-12 ? new Vector3d(0, 1, 0) : new Vector3d(at).normalize();
     }
 
     /**
@@ -392,10 +498,10 @@ public final class PlanetSession {
             farDirty.stream().forEach(this::queueFar);
             farDirty.clear();
         }
-        if (mario != null) underground(PlanetMesher.covered(planet, planet.grid.cellAt(new Vector3d(mario).normalize(mario.length() + 1.5))));
+        if (mario != null) underground(PlanetMesher.covered(planet, planet.grid.cellAt(new Vector3d(up(mario)).mul(1.5).add(mario))));
         if (landing != null && (mario != null && mario.distance(landing) < NEAR || ++landingUpdates > LANDING_UPDATES)) landing = null;
         // A while after a teleport, says if Mario ended under the ground (users see him inside the planet).
-        if (watchUpdates >= 0 && ++watchUpdates >= WATCH_UPDATES) {
+        if (watchUpdates >= 0 && ++watchUpdates >= WATCH_UPDATES && station == null) {
             watchUpdates = -1;
             double under = mario == null ? 0 : ground(mario) - mario.length();
             if (under > 2)
@@ -907,6 +1013,7 @@ public final class PlanetSession {
     private void start(VoxelPlanet p, Vector3d c) {
         release();
         planet = p;
+        station = null;
         center = c;
         id = takeId();
         farVersion = new int[PlanetLod.tileCount(p)];
@@ -1302,17 +1409,30 @@ public final class PlanetSession {
         return ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN).array();
     }
 
-    /** GxcPlanet (36 bytes the host swaps), then flags big-endian (passed on as is). */
+    /**
+     * GxcPlanet (36 bytes the host swaps), then flags big-endian (passed on as is); a station's
+     * then its gravity box, big-endian too: up, forward, half extents, the box's center from its
+     * center (galaxy units).
+     */
     private byte[] planetPayload(int planetId, int flags) {
-        ByteBuffer b = ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN).putInt(planetId);
+        boolean flat = station != null && (flags & PLANET_GONE) == 0;
+        if (flat) flags |= PLANET_FLAT;
+        ByteBuffer b = ByteBuffer.allocate(flat ? 88 : 40).order(ByteOrder.LITTLE_ENDIAN).putInt(planetId);
         Vector3d c = GameOrigin.toGame(center == null ? new Vector3d() : center);
         b.putFloat((float) c.x).putFloat((float) c.y).putFloat((float) c.z);
-        double surface = planet == null ? 0 : planet.surface();
-        b.putFloat((float) (surface * unitsPerBlock)).putFloat((float) (gravityRadius(surface) * unitsPerBlock));
-        b.putInt(planet == null || !detail || flags != 0 ? 0 : planet.chunkCount());
+        double surface = planet == null ? 0 : flat ? stationRadius() : planet.surface();
+        b.putFloat((float) (surface * unitsPerBlock)).putFloat((float) (flat ? gravityUnits() : gravityRadius(surface) * unitsPerBlock));
+        b.putInt(planet == null || !detail || (flags & PLANET_GONE) != 0 ? 0 : planet.chunkCount());
         b.putFloat((float) (planet == null ? 0 : planet.occluder() * unitsPerBlock));
         b.putFloat((float) (MARIO_RADIUS * unitsPerBlock));
         b.order(ByteOrder.BIG_ENDIAN).putInt(flags);
+        if (flat) {
+            Vector3d[] box = box();
+            Vector3d up = station.rotation.transform(new Vector3d(0, 1, 0)), forward = station.rotation.transform(new Vector3d(0, 0, 1));
+            Vector3d half = new Vector3d(box[1]).sub(box[0]).mul(0.5 * unitsPerBlock);
+            Vector3d mid = station.rotation.transform(new Vector3d(box[0]).add(box[1]).mul(0.5)).mul(unitsPerBlock);
+            for (Vector3d v : new Vector3d[] {up, forward, half, mid}) b.putFloat((float) v.x).putFloat((float) v.y).putFloat((float) v.z);
+        }
         return b.array();
     }
 

@@ -251,6 +251,10 @@ typedef struct {
  * view, no chunks.
  */
 #define GXC_PLANET_GONE 1u /* this planet (planet_id) leaves the scene */
+/* A station: after the flags, big-endian f32 up[3], forward[3], half[3] (its gravity box's half
+ * extents along right = up x forward, up, forward) and box_center[3] (from center), galaxy units:
+ * a box gravity pulls toward -up inside that box. */
+#define GXC_PLANET_FLAT 2u
 typedef struct {
   uint32_t planet_id; /* 0: no planet (the module drops them all) */
   float center[3];    /* galaxy units */
