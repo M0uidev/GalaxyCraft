@@ -72,7 +72,7 @@ dependencia, por `tools/steve/build.py`) lo deja igual para los dos sistemas. Ve
 
 - `tools/gxplay.sh` usa bash, `wait -n`, `pkill` y `$HOME/.local/opt/jdk-25*`. Reescribirlo como
   `tools/gxplay.py`, con `subprocess` y el `.exe` según el sistema, deja un solo lanzador.
-- Falta `fabric/gradlew.bat`: se genera con `gradle wrapper`.
+- `fabric/gradlew.bat` ya está (2026-10-07, con el lanzador).
 - `PlanetClient.planetDir()` cae en `~/.local/share/galaxycraft/planets` si no hay
   `XDG_DATA_HOME`. En Windows debería ir a `%APPDATA%\galaxycraft\planets`.
 - La ruta por defecto del juego (`~/Documents/Games/Dolphin Games`) sirve igual en Windows, o se
@@ -92,6 +92,7 @@ hace falta nada de esto: se puede seguir probando en Linux y portarlo al final.
 2. Probar el heartbeat entre Java y Dolphin en Windows.
 3. Backend de input DInput en el parche, con `OnXInput2` generalizado.
 4. Compilar Dolphin en Windows: CMake + MSVC primero, si falla los `.props`.
-5. `syati/build.sh` y `tools/gxplay.sh` en Python, y `gradlew.bat`.
+5. `syati/build.sh` en Python. `tools/gxplay.sh` ya tiene su par multiplataforma: el lanzador
+   (`launcher/`, 2026-10-07) hace lo mismo en Linux y en Windows, y CI lo prueba en los dos.
 6. Carpeta de planetas en `%APPDATA%`.
 7. Si hace falta, el harness de pruebas.

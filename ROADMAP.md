@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (infinite universe done; nothing in progress)
+Last updated: 2026-10-07 (desktop launcher now: also installs and updates the game for players)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-06 (infinite universe done; nothing in progress)
 
 | Feature | Status | Notes |
 |---|---|---|
-| (nothing in progress) | | Pick the next one from **Next**. |
+| Desktop launcher | now | A Minecraft Launcher-style app for **Linux and Windows** from one codebase: news, patch notes (from this roadmap), installations with their own worlds and settings, skins, themes and backgrounds. **For everyone**: players sign in with their Microsoft account, choose their own Super Mario Galaxy 2, INSTALL and PLAY without the repository; new releases install themselves (UPDATE). One `npm run release` publishes launcher and game for both systems. Developers keep PLAY from their game folder. Built on `feat/launcher`, to be tried on Linux before merging. [Spec](docs/superpowers/specs/2026-10-07-galaxycraft-desktop-launcher-design.md), [launcher/README.md](launcher/README.md). |
 
 ## Next
 
@@ -73,7 +73,7 @@ Last updated: 2026-10-06 (infinite universe done; nothing in progress)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Windows support | planned | Research done, nothing changed yet: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. |
+| Windows support | planned | Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory on Windows still to do. |
 | Multiplayer | idea | Out of the first design's scope. |
 | Minecraft on one PC, Dolphin on another | idea | Would need a network transport instead of shared memory. |
 
@@ -126,6 +126,12 @@ Last updated: 2026-10-06 (infinite universe done; nothing in progress)
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-07: Launcher follow-ups (Claude, from the launcher work): register the sign-in app in
+  Azure and send it to Mojang for approval (launcher/README.md, "Microsoft sign-in"); the first
+  `npm run pack-game` and release; Super Mario Galaxy 2 from other regions; building Dolphin and
+  the module from the launcher; a code signing certificate so Windows does not warn.
+- 2026-10-07: New players use their own Super Mario Galaxy 2 and their Minecraft account, and
+  launchers get new game releases by themselves (user). Taken into the launcher (Now).
 - 2026-10-06: Follow-ups of the infinite universe (Claude): a generated system's planet replaced or
   added in the editor lasts only the visit (its blocks are saved, its catalog entry is not: the
   spec's `sectors/<s>.json`); stars are drawn without a depth test, so in third person a few may

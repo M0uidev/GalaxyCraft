@@ -1,0 +1,88 @@
+{
+  "name": "super-minecraft-galaxy-launcher",
+  "productName": "Super Minecraft Galaxy Launcher",
+  "version": "0.1.0",
+  "description": "The launcher for Super Minecraft Galaxy: news, installations, settings and the Play button.",
+  "author": "M0uidev <m0ui.devv@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/M0uidev/GalaxyCraft",
+  "main": "src/main/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "test": "node --test test/*.test.js",
+    "smoke": "node scripts/smoke.js",
+    "notes": "node scripts/patch-notes.js",
+    "dist": "npm run notes && electron-builder",
+    "dist:linux": "npm run notes && electron-builder --linux",
+    "dist:win": "npm run notes && electron-builder --win",
+    "release": "node scripts/release.js",
+    "pack-game": "node scripts/pack-game.js",
+    "mc-integration": "node scripts/mc-integration.js"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "tar": "^7.5.22"
+  },
+  "devDependencies": {
+    "electron": "^44.6.0",
+    "electron-builder": "^26.15.3",
+    "playwright-core": "^1.63.0"
+  },
+  "build": {
+    "appId": "dev.moui.galaxycraft.launcher",
+    "productName": "Super Minecraft Galaxy Launcher",
+    "artifactName": "SuperMinecraftGalaxy-Launcher-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "content/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "M0uidev",
+        "repo": "GalaxyCraft",
+        "releaseType": "release"
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Game",
+      "icon": "build/icon.png",
+      "executableName": "super-minecraft-galaxy-launcher",
+      "synopsis": "Launcher for Super Minecraft Galaxy",
+      "maintainer": "M0uidev <m0ui.devv@gmail.com>",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Super Minecraft Galaxy"
+    }
+  },
+  "desktopName": "super-minecraft-galaxy-launcher.desktop"
+}

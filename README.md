@@ -94,6 +94,10 @@ syati/build.sh       # the module, its Riivolution patch and Steve's model for S
 tools/gxplay.sh      # starts the patched Dolphin and Minecraft together
 ```
 
+Or open the **launcher** (`cd launcher && npm install && npm start`): news, patch notes,
+installations with their own worlds and settings, skins, themes, and a PLAY button that does
+what `gxplay.sh` does, on Linux and Windows. See [launcher/README.md](launcher/README.md).
+
 Minecraft's menu opens in Dolphin's window while SMG2 boots behind it by itself, skipping its
 title and file select. Each Minecraft world is a galaxy: entering one puts you in
 **GalaxyCraftSpace** (an empty galaxy under SMG2's starry sky) on that world's planets, where you
@@ -144,6 +148,7 @@ shares `/dev/shm/galaxycraft_v1` with `gxplay.sh`, so don't run them while playi
 | `dolphin/` | Dolphin patch (`patches/`) and the host bridge (`galaxycraft/`) |
 | `syati/` | The SMG2 module: planets, gravity, collision, camera, Mario's radius patches |
 | `protocol/` | Shared-memory protocol |
+| `launcher/` | The desktop launcher (Electron), for Linux and Windows |
 | `tools/` | Dev harness, routes through the game, Steve's model, test scripts |
 | `docs/` | Design notes and plans per phase (in Spanish) |
 

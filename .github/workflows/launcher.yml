@@ -1,0 +1,223 @@
+# The launcher on Linux and Windows: every push that touches it is tested and packaged on both
+# systems (unit tests, then the real app opened and clicked through, from source and packaged,
+# with a fake game played end to end). A tag v<version> (npm run release, in launcher/) also
+# publishes one GitHub Release with both installers, which installed launchers update from.
+name: Launcher
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths:
+      - 'launcher/**'
+      - 'ROADMAP.md'
+      - 'fabric/src/client/java/dev/moui/galaxycraft/client/GalaxyOptions.java'
+      - 'fabric/**'
+      - '.github/workflows/launcher.yml'
+  pull_request:
+    paths:
+      - 'launcher/**'
+      - '.github/workflows/launcher.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: launcher-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            package: --linux AppImage deb
+            exe: dist/linux-unpacked/super-minecraft-galaxy-launcher
+            run: xvfb-run -a
+          - name: Windows
+            os: windows-latest
+            package: --win nsis
+            exe: dist/win-unpacked/Super Minecraft Galaxy Launcher.exe
+            run: ''
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: launcher
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: launcher/package-lock.json
+
+      - name: Tag matches the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(node -p "require('./package.json').version")
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME but package.json says $version"; exit 1; }
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Smoke test (from source)
+        run: ${{ matrix.run }} npm run smoke
+
+      - name: Package
+        run: npm run notes && npx electron-builder ${{ matrix.package }} --publish never
+
+      - name: Smoke test (packaged)
+        env:
+          SMOKE_EXE: ${{ matrix.exe }}
+        run: ${{ matrix.run }} npm run smoke
+
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ matrix.name }}
+          path: launcher/smoke-shots/
+          if-no-files-found: ignore
+
+      - name: Installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-${{ matrix.name }}
+          path: |
+            launcher/dist/*.AppImage
+            launcher/dist/*.deb
+            launcher/dist/*.exe
+            launcher/dist/*.blockmap
+            launcher/dist/latest*.yml
+          if-no-files-found: error
+
+  mod:
+    name: Game mod
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the mod
+        working-directory: fabric
+        run: ./gradlew build -x test --no-configuration-cache
+      - name: The jar
+        run: |
+          mkdir -p out
+          for f in fabric/build/libs/*.jar; do case "$f" in *-sources.jar|*-dev.jar) ;; *) cp "$f" out/ ;; esac; done
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: game-mod
+          path: out/*.jar
+          if-no-files-found: error
+
+  minecraft:
+    name: Minecraft (${{ matrix.name }})
+    needs: mod
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            run: xvfb-run -a
+          - name: Windows
+            os: windows-latest
+            run: ''
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: launcher
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: launcher/package-lock.json
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: game-mod
+          path: launcher/mods
+      # Windows runners have no GPU driver (OpenGL 1.1 only): Mesa's software OpenGL stands in.
+      - name: Software OpenGL (Windows)
+        if: runner.os == 'Windows'
+        uses: ssciwr/setup-mesa-dist-win@v2
+      - name: Minecraft and Fabric from Mojang's and Fabric's servers, started with the mod
+        env:
+          MODS_DIR: mods
+        run: ${{ matrix.run }} node scripts/mc-integration.js "$RUNNER_TEMP/mc"
+
+  dolphin:
+    name: Dolphin for players
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/dolphin.yml
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, mod, minecraft, dolphin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: The module was made from these sources
+        run: node launcher/scripts/module-hash.js --check
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: launcher-*
+          path: out
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: game-mod
+          path: mod
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dolphin-linux-x64
+          path: dolphin-dist
+
+      - name: The game release (game.json and its files)
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          tar -czf "out/module-$V.tar.gz" -C release/module .
+          [ "$(ls mod/*.jar | wc -l)" = 1 ] || { echo "expected one mod jar"; ls mod; exit 1; }
+          cp mod/*.jar "out/galaxycraft-$V.jar"
+          cp dolphin-dist/dolphin-linux-x64.tar.gz "out/dolphin-linux-x64-$V.tar.gz"
+          node launcher/scripts/game-manifest.js --version "$V" --dir out \
+            --base "https://github.com/${{ github.repository }}/releases/download/$GITHUB_REF_NAME"
+          ls -la out
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Super Minecraft Galaxy ${{ github.ref_name }}
+          generate_release_notes: true
+          files: out/*
+          body: |
+            **Get the launcher:** Linux: the `.AppImage` (`chmod +x` it, then open it) or the `.deb`. Windows: the `.exe` installer (SmartScreen may warn because it is not signed yet: *More info* > *Run anyway*).
+
+            Sign in with the Microsoft account that owns Minecraft: Java Edition, choose your own Super Mario Galaxy 2 (USA), press INSTALL, then PLAY. Launchers already installed update themselves and the game.
