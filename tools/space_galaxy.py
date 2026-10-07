@@ -14,18 +14,18 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bcsv  # noqa: E402
+import hostexe  # noqa: E402
 import rarc  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DOLPHIN_TOOL = os.path.join(ROOT, "dolphin/build/Binaries/dolphin-tool")
+DOLPHIN_TOOL = hostexe.dolphin_tool()
 NAME = "GalaxyCraftSpace"
 BASE = "RedBlueExGalaxy"
 KEEP_OBJECTS = {"GalaxySky"}  # the starry sky; everything else in the base galaxy goes
 
 
 def game_image():
-    game = os.environ.get("GXC_GAME") or next(iter(sorted(glob.glob(
-        os.path.expanduser("~/Documents/Games/Dolphin Games/*.rvz")))), None)
+    game = hostexe.default_game()
     if not game or not os.path.isfile(game):
         sys.exit("space_galaxy: no game image; set GXC_GAME")
     return game

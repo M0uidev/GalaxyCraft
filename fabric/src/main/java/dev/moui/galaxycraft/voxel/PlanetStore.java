@@ -36,6 +36,20 @@ public final class PlanetStore {
         this.dir = dir;
     }
 
+    /**
+     * GalaxyCraft's data folder, the one the launcher uses too: %APPDATA%\galaxycraft on Windows,
+     * $XDG_DATA_HOME/galaxycraft (~/.local/share/galaxycraft) elsewhere. Planets go in its planets/.
+     */
+    public static Path dataDir(String osName, java.util.function.Function<String, String> env, String home) {
+        if (osName.startsWith("Windows")) {
+            String appData = env.apply("APPDATA");
+            return (appData != null && !appData.isEmpty() ? Path.of(appData) : Path.of(home, "AppData", "Roaming"))
+                    .resolve("galaxycraft");
+        }
+        String xdg = env.apply("XDG_DATA_HOME");
+        return (xdg != null && !xdg.isEmpty() ? Path.of(xdg) : Path.of(home, ".local", "share")).resolve("galaxycraft");
+    }
+
     public Path file(String stage) {
         return dir.resolve(stage.replaceAll("[^A-Za-z0-9_.-]", "_") + ".gxplanet");
     }
