@@ -1,0 +1,4 @@
+node_modules/
+dist/
+content/patch-notes.json
+smoke-shots/

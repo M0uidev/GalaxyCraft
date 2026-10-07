@@ -1,0 +1,27 @@
+{
+  "_help": "News shown in the launcher. Newest first is automatic; \"pinned\": true keeps one on top. Fields: id, title, date (YYYY-MM-DD), tag (news | update | dev | event), body (markdown: **bold**, `code`, [links](https://...), blank line = new paragraph), image and link (https only). Launchers read this file from GitHub's master branch, so pushing it publishes the post.",
+  "news": [
+    {
+      "id": "launcher-arrives",
+      "title": "A launcher of our own",
+      "date": "2026-10-07",
+      "tag": "update",
+      "pinned": true,
+      "body": "Super Minecraft Galaxy now opens with its own launcher, on Linux and Windows: news, patch notes, **installations** with their own worlds and settings, and the big green PLAY button.\n\nMake it yours in **Settings**: accent colors, backgrounds (or your own picture), and what the launcher does while you play."
+    },
+    {
+      "id": "the-name",
+      "title": "Super Minecraft Galaxy",
+      "date": "2026-10-06",
+      "tag": "news",
+      "body": "GalaxyCraft has a real name now: **Super Minecraft Galaxy**. Menus, chat and Dolphin all say it. Your worlds carry over as they are."
+    },
+    {
+      "id": "blocks-show",
+      "title": "Blocks show what they hold",
+      "date": "2026-10-06",
+      "tag": "update",
+      "body": "Signs show their text (colors and glowing text too), banners their patterns, player heads their skins. Shelves and campfires show their items, chest lids open, and Steve raises his shield."
+    }
+  ]
+}

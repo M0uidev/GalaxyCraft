@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file: https:; font-src 'self'; connect-src 'none'; media-src 'none'; object-src 'none'">
+  <title>Super Minecraft Galaxy Launcher</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="account" title="Your skin, from the selected installation (Skins tab)">
+        <img id="account-head" class="pixel" alt="">
+        <div>
+          <div id="account-name" class="account-name">Steve</div>
+          <div class="account-sub">Super Minecraft Galaxy</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-item" data-page="news"><span class="nav-icon" data-icon="news"></span>News</button>
+        <button class="nav-item active" data-page="game"><img class="nav-icon pixel" data-block="planet" alt="">Super Minecraft Galaxy</button>
+      </nav>
+      <div class="sidebar-foot">
+        <button class="nav-item" data-page="settings"><span class="nav-icon" data-icon="gear"></span>Settings</button>
+        <button id="update-chip" class="update-chip hidden"></button>
+        <div id="version" class="version"></div>
+      </div>
+    </aside>
+
+    <main>
+      <!-- The game: Play, Installations, Skins, Patch Notes -->
+      <section class="page active" id="page-game">
+        <header class="product-header">
+          <h1 class="logo"><span>SUPER</span> MINECRAFT <span class="accent-text">GALAXY</span></h1>
+          <nav class="tabs" role="tablist">
+            <button class="tab-btn active" data-tab="play">Play</button>
+            <button class="tab-btn" data-tab="installations">Installations</button>
+            <button class="tab-btn" data-tab="skins">Skins</button>
+            <button class="tab-btn" data-tab="notes">Patch Notes</button>
+          </nav>
+        </header>
+
+        <div class="tab active" id="tab-play">
+          <div class="hero">
+            <canvas id="scene"></canvas>
+            <div id="custom-bg" class="custom-bg hidden"></div>
+            <div class="hero-shade"></div>
+            <div class="hero-title">
+              <div class="hero-logo">SUPER<br>MINECRAFT<br><span class="accent-text">GALAXY</span></div>
+              <div class="hero-tag">Minecraft inside Super Mario Galaxy 2</div>
+            </div>
+            <div class="playbar">
+              <div class="picker-wrap">
+                <button id="picker" class="picker" aria-haspopup="listbox">
+                  <img id="picker-icon" class="pixel" alt="">
+                  <span class="picker-text"><span id="picker-name"></span><span id="picker-sub" class="muted"></span></span>
+                  <span class="chev">▾</span>
+                </button>
+                <div id="picker-menu" class="picker-menu hidden" role="listbox"></div>
+              </div>
+              <div class="play-center">
+                <button id="play" class="play-btn">PLAY</button>
+                <div id="play-status" class="play-status"></div>
+              </div>
+              <div class="playbar-right">
+                <button id="log-btn" class="ghost-btn" title="Dolphin's and Minecraft's output">Log</button>
+                <button id="folder-btn" class="ghost-btn" title="Open this installation's game folder">Folder</button>
+              </div>
+            </div>
+          </div>
+          <div class="below">
+            <div id="setup" class="setup hidden"></div>
+            <div class="below-grid">
+              <div>
+                <h2 class="section-title">Latest news</h2>
+                <div id="play-news" class="cards"></div>
+              </div>
+              <div>
+                <h2 class="section-title">Coming next</h2>
+                <div id="play-next" class="next-list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab" id="tab-installations">
+          <div class="toolbar">
+            <input id="inst-search" class="input" placeholder="Search installations" type="search">
+            <select id="inst-sort" class="input select">
+              <option value="played">Latest played</option>
+              <option value="name">Name</option>
+            </select>
+            <span class="grow"></span>
+            <button id="inst-new" class="btn primary">New installation</button>
+          </div>
+          <div id="inst-list" class="inst-list"></div>
+        </div>
+
+        <div class="tab" id="tab-skins">
+          <div class="skins">
+            <div class="skin-preview">
+              <img id="skin-body" class="pixel" alt="">
+              <div id="skin-fallback" class="skin-fallback hidden"></div>
+            </div>
+            <div class="skin-form">
+              <h2 class="section-title">Your skin</h2>
+              <p class="muted">Any Minecraft account's name: its skin goes on Mario and on Steve in the game, for
+                the installation <strong id="skin-inst"></strong>. Empty is Steve. In the game, <code>/skin &lt;name&gt;</code>
+                does the same.</p>
+              <div class="row">
+                <input id="skin-name" class="input" maxlength="16" placeholder="Account name (e.g. Notch)" spellcheck="false">
+                <button id="skin-preview-btn" class="btn">Preview</button>
+                <button id="skin-save" class="btn primary">Use this skin</button>
+              </div>
+              <div id="skin-msg" class="muted small"></div>
+              <h3 class="sub-title">Recent</h3>
+              <div id="skin-recent" class="skin-recent"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab" id="tab-notes">
+          <div class="notes-wrap">
+            <div id="notes" class="notes"></div>
+            <div id="notes-source" class="muted small"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-news">
+        <header class="page-header"><h1 class="logo">NEWS</h1></header>
+        <div class="scroll"><div id="news" class="news"></div></div>
+      </section>
+
+      <section class="page" id="page-settings">
+        <header class="page-header"><h1 class="logo">SETTINGS</h1></header>
+        <div class="scroll"><div id="settings" class="settings"></div></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="console" class="console hidden">
+    <div class="console-bar">
+      <strong>Log</strong>
+      <select id="log-filter" class="input select small">
+        <option value="">Everything</option>
+        <option value="Launcher">Launcher</option>
+        <option value="Dolphin">Dolphin</option>
+        <option value="Minecraft">Minecraft</option>
+      </select>
+      <span class="grow"></span>
+      <button id="log-copy" class="ghost-btn">Copy</button>
+      <button id="log-clear" class="ghost-btn">Clear</button>
+      <button id="log-close" class="ghost-btn">Close</button>
+    </div>
+    <pre id="log" class="log"></pre>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toasts" class="toasts"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-06 (blocks show what they hold done; signs open their editor when put down)
+Last updated: 2026-10-07 (desktop launcher for Linux and Windows now, on `feat/launcher`)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-06 (blocks show what they hold done; signs open their edit
 
 | Feature | Status | Notes |
 |---|---|---|
-| (nothing in progress) | | Pick the next one from **Next**. |
+| Desktop launcher | now | A Minecraft Launcher-style app for **Linux and Windows** from one codebase: news, patch notes (from this roadmap), installations with their own worlds and settings, skins, themes and backgrounds, PLAY doing what `gxplay.sh` does. One `npm run release` publishes both systems and installed launchers update themselves. Built on `feat/launcher`, to be tried on Linux before merging. [Spec](docs/superpowers/specs/2026-10-07-galaxycraft-desktop-launcher-design.md), [launcher/README.md](launcher/README.md). |
 
 ## Next
 
@@ -74,7 +74,7 @@ Last updated: 2026-10-06 (blocks show what they hold done; signs open their edit
 
 | Feature | Status | Notes |
 |---|---|---|
-| Windows support | planned | Research done, nothing changed yet: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. |
+| Windows support | planned | Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory on Windows still to do. |
 | Multiplayer | idea | Out of the first design's scope. |
 | Minecraft on one PC, Dolphin on another | idea | Would need a network transport instead of shared memory. |
 
@@ -125,6 +125,11 @@ Last updated: 2026-10-06 (blocks show what they hold done; signs open their edit
 ## Inbox
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
+
+- 2026-10-07: Launcher follow-ups (Claude, from the launcher work): play without the repository
+  (the launcher downloads a built game: Dolphin, module and mod), Microsoft account sign-in and
+  Minecraft started without Gradle, building Dolphin and the module from the launcher, a code
+  signing certificate so Windows does not warn about the installer.
 
 - 2026-10-06: Follow-ups of "blocks show what they hold" (Claude): the enchanting table's book
   turning to the player and the bell swinging (still drawn at rest); a crowd of 100 signs and 50
