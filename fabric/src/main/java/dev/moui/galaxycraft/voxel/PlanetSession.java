@@ -821,7 +821,7 @@ public final class PlanetSession {
         List<int[]> sets = placer.place(planet, cell, face, hit, CellSpace.direction(g, cell, lookGal));
         if (sets == null || sets.isEmpty()) return false;
         Vector3d feet = local(marioFeetGal);
-        Vector3d up = new Vector3d(feet).normalize();
+        Vector3d up = up(feet);
         for (int[] set : sets) {
             if (set[0] < 0 || (set[0] != cell && !planet.info(set[0]).replaceable())) return false;
             if (!planet.blocks.info(set[1]).collides()) continue;

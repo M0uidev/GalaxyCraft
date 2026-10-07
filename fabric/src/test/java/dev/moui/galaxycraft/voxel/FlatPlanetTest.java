@@ -56,6 +56,18 @@ class FlatPlanetTest {
         assertNotNull(PlanetLod.tile(p, 0, 80));
     }
 
+    @Test void farViewIsTheSlabNotTheSpaceAroundIt() {
+        VoxelPlanet p = slab();
+        FlatGrid g = (FlatGrid) p.grid;
+        LodSource.Patch all = LodSource.of(p).patch(0, 0, g.n, 0, g.n);
+        assertEquals(STONE, all.block()); // not air, though most columns are empty
+        assertEquals(3, all.height()); // the slab's top (y = 0 is layer 2), not lowered by the empty ones
+        assertEquals(Blocks.AIR, LodSource.of(p).patch(0, 0, 2, 0, 2).block());
+        // Patches of empty space draw nothing: the far view is no wider than the slab (±4.5 blocks).
+        float[] sphere = PlanetLod.coarse(LodSource.of(p), 8, 80)[0].sphere();
+        assertTrue(sphere[3] < 80 * 8, "far view radius " + sphere[3] / 80 + " blocks");
+    }
+
     @Test void aSolidChunkAtTheBoxsEdgeShows() {
         FlatGrid g = new FlatGrid(16, 16, -8, -2, -8, new Quaterniond());
         char[] cells = new char[g.cellCount()];

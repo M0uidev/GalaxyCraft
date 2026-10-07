@@ -110,6 +110,14 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftStationGame")) { // tools/gxvoxel.sh station: StationDolphinProbe in the dev Dolphin
+				vmArg "-Dgalaxycraft.stationGame=true"
+				vmArg "-Dgalaxycraft.stationsAnywhere=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftMemory")) { // tools/gxvoxel.sh memory: MemoryProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.memory=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"

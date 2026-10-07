@@ -125,6 +125,7 @@ public final class PlanetLod {
         for (int a = 0; a < ma; a++)
             for (int b = 0; b < mb; b++) {
                 LodSource.Patch t = patch[a][b];
+                if (t.block() == Blocks.AIR) continue; // empty space (beside a station's slab): nothing to draw
                 int i0 = i0r + a * s, i1 = Math.min(i1r, i0 + s), j0 = j0r + b * s, j1 = Math.min(j1r, j0 + s);
                 int h = t.height();
                 Vector3d mid = g.vertex(face, i0, j0, h).add(g.vertex(face, i1, j1, h)).mul(0.5);
@@ -152,12 +153,12 @@ public final class PlanetLod {
 
     /**
      * The wall on the edge from column vertex (ia, ja) to (ib, jb) of patch t down to its neighbor
-     * nb if that is lower, or down skirt layers if there is none (the face's edge); facing away
+     * nb if that is lower, or down skirt layers if there is none (the face's edge, or empty space); facing away
      * from mid, the middle of t's top.
      */
     private static void wall(LodSource p, List<PlanetMesher.Quad> out, LodSource.Patch t, LodSource.Patch nb, int face, int ia, int ja,
             int ib, int jb, Vector3d mid, int skirt) {
-        int low = nb == null ? Math.max(0, t.height() - skirt) : nb.height();
+        int low = nb == null || nb.block() == Blocks.AIR ? Math.max(0, t.height() - skirt) : nb.height();
         if (low >= t.height()) return;
         CellGrid g = p.grid();
         int high = t.height();

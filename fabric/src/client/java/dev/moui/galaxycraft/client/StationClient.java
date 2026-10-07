@@ -198,7 +198,7 @@ public final class StationClient {
     /** Where a station goes up in front of the player, and how it is turned; null if the player is nowhere. */
     public record Spot(Vector3d center, Quaterniond rotation) {}
 
-    static Spot spot(Player player) {
+    public static Spot spot(Player player) {
         GravityFrame frame = GalaxyCraftClient.frame();
         Optional<Vector3d> feet = GalaxyCraftClient.galaxyPos();
         if (frame == null || feet.isEmpty()) return null;

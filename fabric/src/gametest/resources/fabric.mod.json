@@ -16,6 +16,7 @@
 			"dev.moui.galaxycraft.gametest.MiningProbe",
 			"dev.moui.galaxycraft.gametest.DrawnBlocksProbe",
 			"dev.moui.galaxycraft.gametest.ElytraProbe",
+			"dev.moui.galaxycraft.gametest.StationDolphinProbe",
 			"dev.moui.galaxycraft.gametest.MemoryProbe",
 			"dev.moui.galaxycraft.gametest.LodProbe",
 			"dev.moui.galaxycraft.gametest.TpProbe",
