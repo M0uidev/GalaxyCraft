@@ -73,7 +73,7 @@ Last updated: 2026-10-07 (Windows support and play from the Minecraft Launcher m
 
 | Feature | Status | Notes |
 |---|---|---|
-| Windows support | now | In **Now**. Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory ported on `feat/windows`, untested by hand. |
+| Windows support | done | Merged 2026-10-07 (feacda7); first played on Windows the same day. Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory ported on `feat/windows`, untested by hand. |
 | Multiplayer | idea | Out of the first design's scope. |
 | Minecraft on one PC, Dolphin on another | idea | Would need a network transport instead of shared memory. |
 
@@ -120,6 +120,8 @@ Last updated: 2026-10-07 (Windows support and play from the Minecraft Launcher m
 | 2026-10-06 | The game is called **Super Minecraft Galaxy** everywhere players see it (menus, chat, Dolphin, game list, README); code keeps the galaxycraft ids so worlds carry over. Discord server renamed to match | 0e844e7 |
 | 2026-10-06 | Infinite universe: endless solar systems around the world's galaxy (generated per 8192-block sector from the seed, planets streamed as you approach, edits saved per planet), a floating origin so SMG2's floats never shake (tested a million blocks out), the other systems as stars on the sky, the pulse (sprint while gliding in the void, 400 blocks/s) and free warps (K at a star, M for the galaxy map). Also: a host bug that relinked the game for nothing, and the planet maker waiting forever after leaving a world. Guide: [UNIVERSO.md](docs/UNIVERSO.md) | f0115a5 |
 | 2026-10-07 | Desktop launcher for Linux and Windows, like the Minecraft Launcher: news, patch notes, installations with their own worlds and settings, skins, themes and backgrounds, and PLAY. For players: sign in with a Microsoft account, choose your own Super Mario Galaxy 2 (USA), INSTALL and PLAY without the repository; new releases come as UPDATE. Tested on Linux (real PLAY into a world). [launcher/README.md](launcher/README.md) | 7cc48a6 |
+| 2026-10-07 | Windows: the same game and worlds as on Linux (Dolphin built for Windows, its keyboard, mouse and shared memory); first played on Windows | feacda7 |
+| 2026-10-07 | Play from the Minecraft Launcher: INSTALL adds a "Super Minecraft Galaxy" installation to Mojang's launcher, and the mod starts Dolphin and closes both together. Tested on Linux by starting Minecraft as the Minecraft Launcher would. [Spec](docs/superpowers/specs/2026-10-07-play-from-minecraft-launcher-design.md) | 6a77d69 |
 
 ---
 
