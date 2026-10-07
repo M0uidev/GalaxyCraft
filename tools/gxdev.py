@@ -50,6 +50,8 @@ def prepare_user_dir(speed):
         ini = config / "Dolphin.ini"
         ini.write_text(re.sub(r"EmulationSpeed = .*", f"EmulationSpeed = {speed:.8f}", ini.read_text()))
     PAD.parent.mkdir(exist_ok=True)
+    if not hasattr(os, "mkfifo"):
+        die("the Wii Remote pipe (Dolphin's Pipes) is Unix only: the dev harness runs on Linux")
     if not PAD.exists():
         os.mkfifo(PAD)
 
@@ -117,7 +119,7 @@ def stop():
             break
         time.sleep(0.1)
     else:
-        os.kill(pid, signal.SIGKILL)
+        os.kill(pid, getattr(signal, "SIGKILL", signal.SIGTERM))
     PID_FILE.unlink(missing_ok=True)
     print("stopped")
 

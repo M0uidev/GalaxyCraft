@@ -36,7 +36,7 @@ public final class CameraProbe implements FabricClientGameTest {
 
     private static void gx(String c) {
         try {
-            new ProcessBuilder("python3", Path.of(System.getProperty("galaxycraft.repoRoot", ".")).resolve("tools/gxdev.py").toString(), "ctl", c)
+            new ProcessBuilder(Python.exe(), Path.of(System.getProperty("galaxycraft.repoRoot", ".")).resolve("tools/gxdev.py").toString(), "ctl", c)
                     .inheritIO().start().waitFor();
         } catch (Exception e) { throw new AssertionError(e); }
     }

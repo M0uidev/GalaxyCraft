@@ -384,7 +384,7 @@ public final class MarioFitTest implements FabricClientGameTest {
     private static String tool(String name, String... args) {
         try {
             String[] cmd = new String[args.length + 2];
-            cmd[0] = "python3";
+            cmd[0] = Python.exe();
             cmd[1] = Path.of(System.getProperty("galaxycraft.repoRoot"), "tools", name).toString();
             System.arraycopy(args, 0, cmd, 2, args.length);
             Process p = new ProcessBuilder(cmd).start();
@@ -402,7 +402,7 @@ public final class MarioFitTest implements FabricClientGameTest {
 
     private static void gxdev(String... args) {
         String[] cmd = new String[args.length + 2];
-        cmd[0] = "python3";
+        cmd[0] = Python.exe();
         cmd[1] = Path.of(System.getProperty("galaxycraft.repoRoot"), "tools/gxdev.py").toString();
         System.arraycopy(args, 0, cmd, 2, args.length);
         try {
