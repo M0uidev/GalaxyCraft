@@ -6,6 +6,7 @@
 #include "syati.h"
 
 #include "Game/Gravity/PointGravity.h"
+#include "Game/Gravity/ParallelGravity.h"
 #include "Game/Map/CollisionParts.h"
 #include "EntityDraw.h"
 #include "AtlasAnim.h"
@@ -86,6 +87,7 @@ struct Planet
   f32 center[3];
   f32 surface, occluder, mario_radius;
   PointGravity* gravity;
+  ParallelGravity* flat;  // a station's box gravity (GXC_PLANET_FLAT), from gFlat; 0 for a planet
   Slot* slots;
   u32 slot_count;
   u32* drawn;
@@ -95,6 +97,43 @@ struct Planet
   u32 far_count;  // 6 for a planet drawn only (its whole faces), FAR_VIEW_PARTS once it has tiles
 };
 Planet gPlanets[MAX_PLANETS];
+// Stations' box gravities: an entry past the point gravities' borrows one while it is a station.
+const u32 FLAT_SLOTS = 8;
+ParallelGravity* gFlat[FLAT_SLOTS];
+bool gFlatUsed[FLAT_SLOTS];
+
+// A box gravity pulling nowhere: no room inside, far off.
+void FlatOff(ParallelGravity* g)
+{
+  for (int r = 0; r < 3; r++)
+    for (int c = 0; c < 4; c++)
+      g->mLocalMtx.mMtx[r][c] = c == 3 ? 1.0e9f : 0.f;
+  g->updateIdentityMtx();
+}
+
+// A station's box gravity as its record says: down is -up inside the box. Fields set as
+// setPlane and setRangeBox do (the header's setRangeBox does not match the game's symbol).
+void FlatOn(ParallelGravity* g, const gxc::InboxPlanet& in)
+{
+  f32 m[3][4];
+  gxc::FlatBoxMatrix(in, m);
+  for (int r = 0; r < 3; r++)
+    for (int c = 0; c < 4; c++)
+      g->mLocalMtx.mMtx[r][c] = m[r][c];
+  g->mLocalPlaneUpVec = TVec3f(in.up[0], in.up[1], in.up[2]);
+  g->mLocalPlanePosition = TVec3f(m[0][3], m[1][3], m[2][3]);
+  g->mRangeType = ParallelGravity::RangeType_Box;
+  g->updateIdentityMtx();
+}
+
+// Moves a station's box gravity with the floating origin.
+void FlatMove(ParallelGravity* g, const f32 d[3])
+{
+  for (int k = 0; k < 3; k++)
+    g->mLocalMtx.mMtx[k][3] += d[k];
+  g->mLocalPlanePosition.x += d[0], g->mLocalPlanePosition.y += d[1], g->mLocalPlanePosition.z += d[2];
+  g->updateIdentityMtx();
+}
 // The camera is this far above a planet's surface (or its radius, if more), galaxy units, or
 // farther: its far view alone is drawn, covered parts and all, not its chunks.
 const f32 FAR_VIEW_ABOVE = 96.f * 80.f;
@@ -379,6 +418,16 @@ public:
       MR::registerGravity(g);
       gPlanets[i].gravity = g;
     }
+    for (u32 i = 0; i < FLAT_SLOTS; i++)
+    {
+      ParallelGravity* g = new ParallelGravity();
+      g->mPriority = 100;
+      g->mRangeType = ParallelGravity::RangeType_Box;
+      FlatOff(g);
+      MR::registerGravity(g);
+      gFlat[i] = g;
+      gFlatUsed[i] = false;
+    }
     makeActorAppeared();
   }
 
@@ -493,6 +542,8 @@ public:
         p.gravity->mLocalPos = TVec3f(p.center[0], p.center[1], p.center[2]);
         p.gravity->updateIdentityMtx();
       }
+      if (p.flat)
+        FlatMove(p.flat, d);
       // Its collision: the base matrix and the previous one both (resetAllMtx), so the game takes it
       // for a floor put there, not one that moved 400 blocks in a frame carrying Mario along.
       TPos3f m;
@@ -622,8 +673,18 @@ public:
           Drop(gPlanets[i]);
       return;
     }
+    if (in.flat)
+    {
+      ApplyStation(in);
+      return;
+    }
     const bool pulls = in.gravity_range > 1.f;
     Planet* p = Find(in.id);
+    if (p && p->flat)  // a station no more: it goes, and comes back as a planet
+    {
+      Drop(*p);
+      p = 0;
+    }
     if (p && pulls && !p->gravity)  // drawn only until now, and it pulls from now on: into a slot that can
     {
       Drop(*p);
@@ -662,6 +723,46 @@ public:
       Teleport(*p, gPendingTeleport);
   }
 
+  // A station's record: an entry past the point gravities (where planets that only draw go), a
+  // box gravity of gFlat's, then the same as a planet's (slots, center, a pending teleport).
+  void ApplyStation(const gxc::InboxPlanet& in)
+  {
+    Planet* p = Find(in.id);
+    if (p && !p->flat && p->gravity)  // was a planet with a point gravity: not the entry for it
+    {
+      Drop(*p);
+      p = 0;
+    }
+    for (u32 i = GRAVITY_SLOTS; !p && i < MAX_PLANETS; i++)
+      if (!gPlanets[i].id)
+        p = &gPlanets[i];
+    if (p && !p->flat)
+      for (u32 f = 0; f < FLAT_SLOTS; f++)
+        if (!gFlatUsed[f])
+        {
+          gFlatUsed[f] = true;
+          p->flat = gFlat[f];
+          break;
+        }
+    if (!p || !p->flat)
+    {
+      gVoxelStats.alloc_failed++;
+      return;
+    }
+    p->id = in.id;
+    if (in.chunk_count != p->slot_count)
+      NewSlots(*p, in.chunk_count);
+    for (int k = 0; k < 3; k++)
+      p->center[k] = in.center[k];
+    p->surface = in.surface;
+    p->occluder = 0.f;
+    p->mario_radius = in.mario_radius;
+    FlatOn(p->flat, in);
+    mTranslation = TVec3f(p->center[0], p->center[1], p->center[2]);
+    if (gTeleportPending && (gPendingTeleport.planet == 0 || gPendingTeleport.planet == p->id))
+      Teleport(*p, gPendingTeleport);
+  }
+
   void Drop(Planet& p)
   {
     NewSlots(p, 0);
@@ -678,6 +779,14 @@ public:
       p.gravity->mRange = 1.f;
       p.gravity->updateIdentityMtx();
     }
+    if (p.flat)
+    {
+      FlatOff(p.flat);
+      for (u32 f = 0; f < FLAT_SLOTS; f++)
+        if (gFlat[f] == p.flat)
+          gFlatUsed[f] = false;
+      p.flat = 0;
+    }
     if (mOutlinePlanet == p.id)
       mOutlineOn = false;
     if (mCrackPlanet == p.id)
@@ -690,6 +799,16 @@ public:
     for (u32 i = 0; i < MAX_PLANETS; i++)
     {
       const Planet& p = gPlanets[i];
+      if (p.id && p.flat && p.mario_radius > 0.f)
+      {
+        f32 scalar;
+        if (p.flat->isInRange(TVec3f(pos[0], pos[1], pos[2]), &scalar))
+        {
+          *radius = p.mario_radius;  // a station's cells are all the same size
+          return true;
+        }
+        continue;
+      }
       if (!p.id || p.mario_radius <= 0.f || !p.gravity || p.gravity->mRange <= 1.f)
         continue;
       const f32 d[3] = {pos[0] - p.center[0], pos[1] - p.center[1], pos[2] - p.center[2]};

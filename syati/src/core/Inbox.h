@@ -15,9 +15,18 @@ struct InboxPlanet
   f32 occluder;
   f32 mario_radius;  // 0: Mario keeps his own collision sphere
   u32 flags;         // PLANET_GONE: this planet (id) leaves; chunk_count 0: only its far view
+  // PLANET_FLAT, a station: its gravity is a box pulling toward -up (galaxy units).
+  bool flat;
+  f32 up[3], forward[3];
+  f32 half[3];        // half extents along right (up x forward), up, forward
+  f32 box_center[3];  // from center
 };
 
-const u32 PLANET_GONE = 1;
+const u32 PLANET_GONE = 1, PLANET_FLAT = 2;
+
+// A station's gravity box as a 3x4 matrix (rows; columns: right * half[0], up * half[1],
+// forward * half[2]; translation: center + box_center), as ParallelGravity's setRangeBox takes it.
+void FlatBoxMatrix(const InboxPlanet& p, f32 out[3][4]);
 // A chunk record's slot word: the planet's id in the top byte, FAR_VIEW for a part of its far view
 // (the slot below is then its tile: face, then up to 16 × 16 tiles of it, PlanetLod.tile, and
 // FAR_COVERED if the tile is chunks in the game), else the chunk's slot.

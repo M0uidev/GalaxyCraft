@@ -356,6 +356,37 @@ static void TestAtlasAnim()
 
 // Several planets: a chunk's slot carries its planet's id in the top byte, a far view's part has
 // bit 23 set (its tile below, bit 22 if covered); a planet may come with flags (GONE); a teleport may name its planet.
+static void TestInboxFlatPlanet()
+{
+  std::vector<u8> b;  // a station: the flags, then its gravity box
+  Put32(b, 102u << 16), Put32(b, 88), Put32(b, 7), PutF(b, 100.f), PutF(b, 0.f), PutF(b, 0.f), PutF(b, 400.f),
+      PutF(b, 900.f), Put32(b, 12), PutF(b, 0.f), PutF(b, 24.f), Put32(b, PLANET_FLAT);
+  PutF(b, 0.f), PutF(b, 1.f), PutF(b, 0.f);      // up
+  PutF(b, 0.f), PutF(b, 0.f), PutF(b, 1.f);      // forward
+  PutF(b, 520.f), PutF(b, 1000.f), PutF(b, 520.f);  // half extents
+  PutF(b, 0.f), PutF(b, 960.f), PutF(b, 0.f);    // the box's center from the station's
+  InboxRecord r;
+  u32 off = 0;
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::PLANET);
+  CHECK(r.planet.flat && r.planet.flags == PLANET_FLAT && r.planet.chunk_count == 12);
+  CHECK(r.planet.up[1] == 1.f && r.planet.forward[2] == 1.f && r.planet.half[0] == 520.f && r.planet.box_center[1] == 960.f);
+  f32 m[3][4];
+  FlatBoxMatrix(r.planet, m);
+  // Columns: right (up x forward) * half x, up * half y, forward * half z; translation: the box's center.
+  CHECK(m[0][0] == 520.f && m[1][1] == 1000.f && m[2][2] == 520.f && m[0][1] == 0.f);
+  CHECK(m[0][3] == 100.f && m[1][3] == 960.f && m[2][3] == 0.f);
+  std::vector<u8> planet;  // a planet's record never reads past its flags
+  Put32(planet, 102u << 16), Put32(planet, 40), Put32(planet, 8), PutF(planet, 0.f), PutF(planet, 0.f), PutF(planet, 0.f),
+      PutF(planet, 1.f), PutF(planet, 2.f), Put32(planet, 0), PutF(planet, 0.f), PutF(planet, 0.f), Put32(planet, 0);
+  off = 0;
+  CHECK(NextInboxRecord(planet.data(), planet.size(), &off, 512, &r) && !r.planet.flat);
+  std::vector<u8> bad;  // FLAT without its box
+  Put32(bad, 102u << 16), Put32(bad, 40), Put32(bad, 8), PutF(bad, 0.f), PutF(bad, 0.f), PutF(bad, 0.f),
+      PutF(bad, 1.f), PutF(bad, 2.f), Put32(bad, 0), PutF(bad, 0.f), PutF(bad, 0.f), Put32(bad, PLANET_FLAT);
+  off = 0;
+  CHECK(!NextInboxRecord(bad.data(), bad.size(), &off, 512, &r));
+}
+
 static void TestInboxPlanetIdsAndFarView()
 {
   std::vector<u8> b;
@@ -879,6 +910,7 @@ int main()
   TestInboxTranslucentChunks();
   TestAtlasAnim();
   TestInboxPlanetIdsAndFarView();
+  TestInboxFlatPlanet();
   TestPlanetDropAndViewTranslate();
   TestCodePatch();
   TestInboxOutline();
