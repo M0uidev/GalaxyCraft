@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-07 (Windows support in progress, in a cloud session)
+Last updated: 2026-10-07 (play from the Minecraft Launcher, MVP, in a cloud session)
 
 ---
 
@@ -24,6 +24,7 @@ Last updated: 2026-10-07 (Windows support in progress, in a cloud session)
 | Feature | Status | Notes |
 |---|---|---|
 | Windows support | now | A cloud session ports it on `feat/windows` (2026-10-07), following [docs/WINDOWS.md](docs/WINDOWS.md); CI builds Dolphin for Windows; the user playtests on their Windows dual boot. |
+| Play from the Minecraft Launcher | now | MVP: sign in with Mojang's Minecraft Launcher instead of ours (while Mojang reviews our sign-in app). INSTALL adds a "Super Minecraft Galaxy" installation there; the mod starts Dolphin. A cloud session builds it (2026-10-07). [Spec](docs/superpowers/specs/2026-10-07-play-from-minecraft-launcher-design.md) |
 
 ## Next
 
@@ -127,6 +128,9 @@ Last updated: 2026-10-07 (Windows support in progress, in a cloud session)
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-07: After the Minecraft Launcher MVP (user): Prism Launcher too (one-click PLAY through
+  `prismlauncher --launch`), a "Start Minecraft with…" setting per installation, our PLAY opening
+  the other launcher, and our launcher showing/stopping a Minecraft it did not start.
 - 2026-10-07: Launcher follow-ups (Claude, from the launcher work): Mojang's approval of the sign-in
   app "SMG Launcher" (registered in Azure and sent to Mojang 2026-10-07); the first
   release (`release/module` is made, 2026-10-07); trying a player's INSTALL from that release; Super Mario Galaxy 2 from other regions; building Dolphin and
