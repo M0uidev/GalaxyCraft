@@ -1,12 +1,17 @@
-# The patched Dolphin for players, built and packed so it runs on any recent Linux (Qt and the
-# libraries inside). Built when the Dolphin patch changes, on demand, and for each release
-# (launcher.yml calls it). Windows comes once the patch builds there (docs/WINDOWS.md).
+# The patched Dolphin for players, built and packed so it runs on any recent Linux or Windows
+# (Qt and the libraries inside). Built when the Dolphin patch changes, on demand, and for each
+# release (launcher.yml calls it). Before the long builds, the host library's tests and the
+# heartbeat's clock check run on both systems. On Windows the packed Dolphin is then booted with a
+# tiny program and the mod's side of the shared memory is played against it (tools/ci).
 name: Dolphin
 
 on:
   push:
     paths:
       - 'dolphin/**'
+      - 'protocol/**'
+      - 'tools/ci/**'
+      - 'fabric/src/main/java/dev/moui/galaxycraft/proto/Layout.java'
       - '.github/workflows/dolphin.yml'
   workflow_dispatch:
   workflow_call:
@@ -15,6 +20,129 @@ permissions:
   contents: read
 
 jobs:
+  host:
+    name: Host library (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-22.04
+            exe: ''
+          - name: Windows
+            os: windows-2022
+            exe: .exe
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Build tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends g++-12 ninja-build
+          echo "CXX=g++-12" >> "$GITHUB_ENV"
+      - name: Tests (MSVC with /W4 /WX on Windows, GCC with -Werror on Linux)
+        run: |
+          [ "$RUNNER_OS" = Windows ] && export CXX=cl
+          cmake -S dolphin/galaxycraft -B hostbuild -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          ninja -C hostbuild
+          hostbuild/galaxycraft_host_tests${{ matrix.exe }}
+      - name: The heartbeat's clocks agree (Java's System.nanoTime and C++'s steady_clock)
+        run: |
+          probe="$PWD/hostbuild/clock_probe${{ matrix.exe }}"
+          [ "$RUNNER_OS" = Windows ] && probe=$(cygpath -w "$probe")
+          java tools/ci/ClockCheck.java "$probe"
+
+  windows:
+    name: Dolphin (Windows)
+    needs: host
+    runs-on: windows-2022
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Dolphin's sources and the patch are LF; Git for Windows would turn them CRLF.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      # Saved even when the build fails, so the next run picks up the compiled files.
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            dolphin/src
+            dolphin/build-win
+          key: dolphin-win-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: dolphin-win-
+
+      - name: Build and pack
+        run: dolphin/package-windows.sh
+
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            dolphin/src
+            dolphin/build-win
+          key: dolphin-win-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: It boots, shares the memory with the mod and agrees on the time
+        run: |
+          python tools/ci/make_dol.py "$RUNNER_TEMP/loop.dol"
+          USER_DIR="$RUNNER_TEMP/dolphin-user"
+          export GALAXYCRAFT=1
+          dist/dolphin-win32-x64/Dolphin.exe -b -u "$(cygpath -w "$USER_DIR")" -v Null \
+            -C "Dolphin.DSP.Backend=No Audio Output" -C Dolphin.Interface.ConfirmStop=False \
+            -e "$(cygpath -w "$RUNNER_TEMP/loop.dol")" \
+            > "$RUNNER_TEMP/dolphin-stdout.txt" 2>&1 &
+          DOLPHIN=$!
+          WINPID=$(cat /proc/$DOLPHIN/winpid 2>/dev/null || true)
+          javac -d "$RUNNER_TEMP/shmcheck" fabric/src/main/java/dev/moui/galaxycraft/proto/Layout.java tools/ci/ShmCheck.java
+          status=0
+          java -cp "$RUNNER_TEMP/shmcheck" ShmCheck $WINPID || status=$?
+          taskkill //F //IM Dolphin.exe || true
+          echo "--- Dolphin's output"; cat "$RUNNER_TEMP/dolphin-stdout.txt" || true
+          echo "--- galaxycraft.log"; cat "$USER_DIR/Logs/galaxycraft.log" || true
+          grep -q "bridge running on" "$USER_DIR/Logs/galaxycraft.log"
+          grep -q "clocks agree" "$USER_DIR/Logs/galaxycraft.log"
+          exit $status
+
+      - name: Logs of the boot check
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dolphin-windows-boot-logs
+          path: |
+            ${{ runner.temp }}/dolphin-user/Logs/
+            ${{ runner.temp }}/dolphin-stdout.txt
+          if-no-files-found: ignore
+
+      # Download, unzip, run Dolphin.exe: the folder is the zip GitHub makes of this artifact.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dolphin-win32-x64
+          path: dist/dolphin-win32-x64/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dolphin-win32-x64-tar
+          path: dist/dolphin-win32-x64.tar.gz
+          if-no-files-found: error
+
   linux:
     name: Dolphin (Linux)
     runs-on: ubuntu-22.04

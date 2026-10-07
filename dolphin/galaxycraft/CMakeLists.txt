@@ -28,3 +28,8 @@ if(PROJECT_IS_TOP_LEVEL)
   target_link_libraries(galaxycraft_host_tests PRIVATE galaxycraft_host)
   target_compile_options(galaxycraft_host_tests PRIVATE ${GALAXYCRAFT_WARNINGS})
 endif()
+
+if(PROJECT_IS_TOP_LEVEL)
+  # tools/ci/ClockCheck.java: Java's System.nanoTime and this steady_clock are the same clock.
+  add_executable(clock_probe tests/clock_probe.cpp)
+endif()
