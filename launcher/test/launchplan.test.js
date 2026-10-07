@@ -53,3 +53,13 @@ test('Windows: java.exe, backslashes, the installation\'s options', () => {
   assert.equal(mc.args.at(-1), '--offline');
   assert.match(describePlan(plan, 'win32')[0], /^\[Dolphin\] C:\\g\\Dolphin.exe -u /);
 });
+
+test('the chosen disc\'s descriptor, and no token in the log', () => {
+  const paths = platformPaths({ platform: 'linux', env: {}, home: '/h' });
+  const plan = buildPlan({ root: '/g', paths, inst: store.defaultInstallation(), javaHome: '/j', dolphinBin: '/d', descriptor: '/h/dev.json', env: {} });
+  assert.equal(plan.processes[0].args[3], '/h/dev.json');
+  plan.processes[1].args.push('--accessToken', 'secret-token');
+  const lines = describePlan(plan, 'linux').join('\n');
+  assert.doesNotMatch(lines, /secret-token/);
+  assert.match(lines, /--accessToken \*{8}/);
+});

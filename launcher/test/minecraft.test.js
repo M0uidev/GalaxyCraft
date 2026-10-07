@@ -61,15 +61,16 @@ test('the command line, as the official launcher builds it', () => {
   const { cmd, args } = mc.command({ version: v, dirs, auth, java: '/rt/bin/java', jvmArgs: ['-Xmx4G', '-Dgalaxycraft.hidden=true'],
     platform: 'linux', arch: 'x64', launcher: { name: 'smg', version: '1.0' } });
   assert.equal(cmd, '/rt/bin/java');
-  assert.deepEqual(args.slice(0, 3), ['-Xmx4G', '-Dgalaxycraft.hidden=true', '-Dlog4j.configurationFile=/mc/assets/log_configs/client-1.21.2.xml']);
+  const j = (...p) => path.join(...p);
+  assert.deepEqual(args.slice(0, 3), ['-Xmx4G', '-Dgalaxycraft.hidden=true', `-Dlog4j.configurationFile=${j('/mc/assets', 'log_configs', 'client-1.21.2.xml')}`]);
   assert.ok(!args.includes('-XstartOnFirstThread'));
   assert.ok(!args.includes('--demo'));
   assert.ok(!args.includes('--quickPlaySingleplayer'));
   assert.ok(args.includes('-Djava.library.path=/mc/natives'));
   assert.ok(args.includes('-DFabricMcEmu= net.minecraft.client.main.Main '));
   const cp = args[args.indexOf('-cp') + 1].split(':');
-  assert.equal(cp[0], '/mc/libraries/org/ow2/asm/asm/9.9/asm-9.9.jar');
-  assert.equal(cp.at(-1), '/mc/versions/26.3/26.3.jar');
+  assert.equal(cp[0], j('/mc/libraries', 'org', 'ow2', 'asm', 'asm', '9.9', 'asm-9.9.jar'));
+  assert.equal(cp.at(-1), j('/mc/versions', '26.3', '26.3.jar'));
   const main = args.indexOf('net.fabricmc.loader.impl.launch.knot.KnotClient');
   assert.ok(main > args.indexOf('-cp'));
   const game = args.slice(main + 1);

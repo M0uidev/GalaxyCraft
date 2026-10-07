@@ -54,6 +54,15 @@ main { flex: 1; min-width: 0; position: relative; }
 
 /* ---- sidebar ---- */
 .sidebar { width: 248px; flex: none; background: var(--bg-sidebar); display: flex; flex-direction: column; border-right: 1px solid #000; }
+.account { cursor: pointer; }
+.account:hover { background: #222; }
+.account-menu { margin: 0 8px; background: #2c2c2c; border: 1px solid #4a4a4a; border-radius: var(--radius); padding: 4px; }
+.account-menu button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 8px 10px; cursor: pointer; border-radius: 3px; }
+.account-menu button:hover { background: #3d3d3d; }
+.account-menu .muted { padding: 6px 10px; font-size: 12px; }
+.progress { width: 300px; height: 6px; background: #000a; border-radius: 3px; overflow: hidden; }
+.progress > div { height: 100%; width: 0; background: var(--accent-text); transition: width .2s; }
+.step-done { color: var(--ok); }
 .account { display: flex; gap: 12px; align-items: center; padding: 18px 16px; border-bottom: 1px solid #2b2b2b; }
 .account img { width: 40px; height: 40px; background: #333; border-radius: 3px; }
 .account-name { font-weight: 700; }

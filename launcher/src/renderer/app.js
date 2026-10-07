@@ -24,7 +24,9 @@ const SVG = {
 const ui = {
   info: null, // launcher.get(): state, version, platform, ...
   game: { state: 'idle' },
-  check: null, // preflight of the selected installation
+  check: null, // preflight of the selected installation (game folder)
+  status: null, // api.status(): mode, account, disc, and for players what the button does
+  progress: null, // install progress
   news: [],
   roadmap: { notes: [], upcoming: [], source: '' },
   log: [],
@@ -162,14 +164,82 @@ function showTab(name) {
 // ---- play ------------------------------------------------------------------------------------
 
 async function refreshCheck() {
-  ui.check = await api.preflight(S().selected);
+  ui.status = await api.status(S().selected);
+  ui.check = ui.status.folder || null;
+  renderAccount();
   renderPlay();
+}
+
+const release = () => ui.status && ui.status.mode === 'release';
+
+function renderAccount() {
+  const a = ui.status && ui.status.account;
+  const name = a ? a.name : (release() ? 'Not signed in' : (ui.skin || 'Steve'));
+  $('#account-name').textContent = name;
+  $('#account-sub').textContent = a ? 'Minecraft account' : release() ? 'Click to sign in' : 'Super Minecraft Galaxy';
+  const head = $('#account-head');
+  if (a) remoteImage(head, `https://mc-heads.net/avatar/${encodeURIComponent(a.uuid)}/40`, iconUrl('grass', 40));
+  else if (!ui.skin) remoteImage(head, '', iconUrl('grass', 40));
+}
+
+function toggleAccountMenu() {
+  const menu = $('#account-menu');
+  if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
+  const a = ui.status && ui.status.account;
+  menu.innerHTML = a
+    ? `<div class="muted">Signed in as <strong>${esc(a.name)}</strong></div><button data-act="out">Sign out</button>`
+    : `<button data-act="in">Sign in with Microsoft</button>${ui.status && ui.status.signInReady ? '' : '<div class="muted">Sign-in is not set up in this launcher yet.</div>'}`;
+  menu.classList.remove('hidden');
+  $$('[data-act]', menu).forEach((b) => {
+    b.onclick = async () => {
+      menu.classList.add('hidden');
+      if (b.dataset.act === 'in') await signIn();
+      else { await api.signOut(); toast('Signed out'); refreshCheck(); }
+    };
+  });
+}
+
+async function signIn() {
+  const r = await api.signIn();
+  if (r.ok) toast(`Signed in as ${r.account.name}`);
+  else if (r.code !== 'cancelled') toast(r.error, true);
+  await refreshCheck();
+}
+
+async function chooseRom() {
+  const r = await api.chooseRom();
+  if (!r) return;
+  if (r.check.ok) toast(`Super Mario Galaxy 2 (${r.check.format}) chosen`);
+  else toast(r.check.reason, true);
+  ui.info.state = (await api.get()).state;
+  await refreshCheck();
+  if ($('#page-settings').classList.contains('active')) renderSettings();
+}
+
+async function install() {
+  ui.progress = { phase: 'game', done: 0, total: 0, bytes: 0, totalBytes: 0 };
+  renderPlay();
+  const r = await api.install();
+  ui.progress = null;
+  if (r.ok) toast('Super Minecraft Galaxy is installed. Have fun!');
+  else { toast(r.error, true); openLog(); }
+  await refreshCheck();
+}
+
+function progressText(p) {
+  if (!p) return '';
+  const pct = p.totalBytes ? Math.floor((100 * p.bytes) / p.totalBytes) : p.total ? Math.floor((100 * p.done) / p.total) : 0;
+  const what = { game: 'Downloading the game', disc: 'Making the game files from your Super Mario Galaxy 2', minecraft: 'Getting Minecraft ready' }[p.phase] || 'Installing';
+  const mb = p.totalBytes ? ` · ${(p.bytes / 1e6).toFixed(0)} / ${(p.totalBytes / 1e6).toFixed(0)} MB` : p.total ? ` · ${p.done}/${p.total}` : '';
+  return { pct, text: `${what}${p.label && p.phase === 'minecraft' && p.label !== 'Minecraft' ? ` (${p.label})` : ''}${mb}` };
 }
 
 async function refreshSkin() {
   try {
     ui.skin = (await api.gameSettings(S().selected)).values.skin || '';
   } catch { ui.skin = ''; }
+  // A signed-in account shows itself; otherwise the installation's skin.
+  if (ui.status && (ui.status.account || ui.status.mode === 'release')) { renderAccount(); return; }
   remoteImage($('#account-head'), ui.skin ? skinHeadUrl(ui.skin) : '', iconUrl('grass', 40));
   $('#account-name').textContent = ui.skin || 'Steve';
 }
@@ -223,7 +293,27 @@ function renderPlay() {
     btn.textContent = 'CLOSING';
     btn.disabled = true;
     status.textContent = 'Closing both sides...';
+  } else if (release()) {
+    const st = ui.status.player;
+    const busy = ui.status.installing || ui.progress;
+    const bar = $('#play-progress');
+    bar.classList.toggle('hidden', !busy);
+    if (busy) {
+      const p = progressText(ui.progress);
+      btn.textContent = `${ui.status.installing && ui.status.player.action === 'update' ? 'UPDATING' : 'INSTALLING'} ${p.pct || 0}%`;
+      btn.disabled = true;
+      btn.classList.add('starting');
+      $('div', bar).style.width = `${p.pct || 0}%`;
+      status.textContent = p.text || 'Installing...';
+    } else {
+      btn.textContent = st.label;
+      btn.disabled = ['unsupported', 'unavailable', 'checking'].includes(st.action) || (st.action === 'signin' && !ui.status.signInReady);
+      status.textContent = st.detail;
+      if (st.action === 'play') status.classList.add('good');
+      if (['unsupported', 'unavailable'].includes(st.action)) status.classList.add('bad');
+    }
   } else {
+    $('#play-progress').classList.add('hidden');
     btn.textContent = 'PLAY';
     const c = ui.check;
     btn.disabled = !c || !c.ok;
@@ -240,9 +330,30 @@ function renderPlay() {
   renderSetup();
 }
 
+function renderReleaseSetup(box) {
+  const st = ui.status;
+  const show = st.player.action !== 'play' || !st.account;
+  box.classList.toggle('hidden', !show);
+  if (!show) return;
+  const steps = [
+    { ok: !!st.account, label: 'Minecraft account', detail: st.account ? st.account.name : 'The Microsoft account that owns Minecraft: Java Edition.',
+      button: st.account ? '' : `<button class="btn primary" data-step="signin" ${st.signInReady ? '' : 'disabled'}>Sign in</button>` },
+    { ok: !!(st.rom && st.rom.check.ok), label: 'Super Mario Galaxy 2', detail: st.rom ? (st.rom.check.ok ? `${st.rom.path} (${st.rom.check.format}, ${st.rom.check.gameId})` : st.rom.check.reason)
+      : 'Your own copy, USA version (SB4E01): .iso, .rvz, .wbfs. It never leaves your computer.', button: '<button class="btn" data-step="rom">Choose file</button>' },
+    { ok: !!st.installedVersion, label: 'The game', detail: st.installedVersion ? `Version ${st.installedVersion}${st.latestVersion && st.latestVersion !== st.installedVersion ? `, ${st.latestVersion} is out` : ''}`
+      : st.latestVersion ? `Version ${st.latestVersion} is ready to install.` : 'Looking for the latest release...', button: '' },
+  ];
+  box.innerHTML = `<h3>Get ready to play</h3>${steps.map((x) => `
+    <div class="check"><span class="mark ${x.ok ? 'ok' : 'warn'}">${x.ok ? '✓' : '•'}</span><strong>${esc(x.label)}</strong>
+      <div class="detail">${esc(x.detail)}${x.button ? `<div style="margin-top:6px">${x.button}</div>` : ''}</div></div>`).join('')}`;
+  const b1 = $('[data-step=signin]', box); if (b1) b1.onclick = signIn;
+  const b2 = $('[data-step=rom]', box); if (b2) b2.onclick = chooseRom;
+}
+
 function renderSetup() {
   const c = ui.check;
   const box = $('#setup');
+  if (release()) { renderReleaseSetup(box); return; }
   const show = c && (!c.ok || c.checks.some((x) => !x.ok));
   box.classList.toggle('hidden', !show);
   if (!show) return;
@@ -275,12 +386,19 @@ async function onPlay() {
     api.stop();
     return;
   }
+  if (release()) {
+    const a = ui.status.player.action;
+    if (a === 'signin') return signIn();
+    if (a === 'rom') return chooseRom();
+    if (a === 'install' || a === 'update') return install();
+  }
   if (S().settings.playSound) chime();
   ui.game = { state: 'starting' };
   renderPlay();
   if (S().settings.showLogOnPlay) openLog();
   const r = await api.play(S().selected);
   if (!r.ok) {
+    if (r.code === 'expired' || r.code === 'signin') await api.signOut();
     toast(r.error || 'The game did not start.', true);
     ui.game = { state: 'idle' };
     renderPlay();
@@ -413,6 +531,9 @@ async function editInstallation(inst) {
           <div class="row"><input class="input" id="ed-java" value="${esc(draft.javaHome)}" placeholder="Found by the launcher" spellcheck="false">
           <button class="btn" data-browse="ed-java">Browse</button></div>
           <div class="help">A JDK 25 folder (the one holding bin/). Empty: the launcher finds one.</div></div>
+        <div class="field"><label for="ed-javaargs">Java arguments</label>
+          <input class="input" id="ed-javaargs" value="${esc(draft.javaArgs || '')}" placeholder="-Xmx4G" spellcheck="false">
+          <div class="help">For Minecraft in the released game: memory and the like. Empty: the release's (-Xmx4G).</div></div>
         <div class="field"><label for="ed-dolphin">Dolphin arguments</label>
           <input class="input" id="ed-dolphin" value="${esc(draft.dolphinArgs)}" placeholder="-C Dolphin.Display.RenderToMain=True" spellcheck="false"></div>
         <div class="field"><label for="ed-gradle">Gradle arguments</label>
@@ -449,6 +570,7 @@ async function editInstallation(inst) {
       dualCore: $('#ed-dual', el).checked,
       fullscreen: $('#ed-full', el).checked,
       dolphinArgs: $('#ed-dolphin', el).value,
+      javaArgs: $('#ed-javaargs', el).value,
       gradleArgs: $('#ed-gradle', el).value,
     };
     ui.info.state = await api.saveInstallation(saved);
@@ -555,6 +677,15 @@ async function renderSettings() {
   const platform = { linux: 'Linux', win32: 'Windows', darwin: 'macOS' }[ui.info.platform] || ui.info.platform;
   $('#settings').innerHTML = `
     <section class="set-section"><h2>Game</h2>
+      <div class="field"><span class="field-label">Super Mario Galaxy 2</span>
+        <div class="row"><input class="input" id="st-rom" value="${esc(s.rom)}" placeholder="Your own copy, USA version (.iso, .rvz, .wbfs)" readonly>
+        <button class="btn" id="st-rom-choose">Choose</button></div>
+        <div class="help">${ui.status && ui.status.rom ? esc(ui.status.rom.check.ok ? `${ui.status.rom.check.title} · ${ui.status.rom.check.gameId} · ${ui.status.rom.check.format}` : ui.status.rom.check.reason) : 'The launcher makes Steve and the space galaxy from it on your computer; nothing of it is uploaded.'}</div></div>
+      <div class="field"><span class="field-label">Play</span><div class="radio-group">
+        ${[['auto', 'Automatic: my game folder if I chose one, else the released game'], ['release', 'The released game (installed and updated by the launcher)'], ['folder', 'My game folder (a GalaxyCraft checkout I build myself)']]
+          .map(([v, l]) => `<label class="radio"><input type="radio" name="playfrom" value="${v}" ${s.playFrom === v ? 'checked' : ''}>${l}</label>`).join('')}
+      </div><div class="help">Now: ${ui.status && ui.status.mode === 'release' ? `the released game${ui.status.installedVersion ? ` ${esc(ui.status.installedVersion)}` : ''}${ui.status.latestVersion ? ` (latest ${esc(ui.status.latestVersion)})` : ''}` : 'your game folder'}.
+        <a href="#" id="st-check-game">Check for game updates</a></div></div>
       <div class="field"><label for="st-root">Game folder</label>
         <div class="row"><input class="input" id="st-root" value="${esc(s.gameRoot)}" placeholder="${esc(c.root || 'Not found: choose the GalaxyCraft folder')}" spellcheck="false">
         <button class="btn" id="st-root-browse">Browse</button><button class="btn" id="st-root-auto">Find it</button></div>
@@ -607,6 +738,10 @@ async function renderSettings() {
     applyTheme();
   };
   $('#st-root-browse').onclick = chooseGameRoot;
+  $('#st-rom-choose').onclick = chooseRom;
+  $$('input[name=playfrom]').forEach((r) => { r.onchange = async () => { await set({ playFrom: r.value }); await refreshCheck(); renderSettings(); }; });
+  $('#st-check-game').onclick = async (e) => { e.preventDefault(); ui.status = await api.checkLatest(); renderPlay(); renderSettings();
+    toast(ui.status.latestVersion ? `Latest game: ${ui.status.latestVersion}` : 'Could not reach the game\'s releases', !ui.status.latestVersion); };
   $('#st-root-auto').onclick = async () => { await set({ gameRoot: '' }); await refreshCheck(); renderSettings(); };
   $('#st-root').onchange = async (e) => { await set({ gameRoot: e.target.value.trim() }); await refreshCheck(); renderSettings(); };
   $$('input[name=onplay]').forEach((r) => { r.onchange = () => set({ onPlay: r.value }); });
@@ -679,6 +814,11 @@ async function main() {
   $$('.nav-item[data-page]').forEach((b) => { b.onclick = () => showPage(b.dataset.page); });
   $$('.tab-btn').forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
   $('#play').onclick = onPlay;
+  $('#account').onclick = toggleAccountMenu;
+  $('#account').onkeydown = (e) => { if (e.key === 'Enter') toggleAccountMenu(); };
+  api.onInstallProgress((p) => { ui.progress = p; if (ui.status) ui.status.installing = ui.status.installing || { version: '' }; renderPlay(); });
+  api.onInstallState((st) => { if (ui.status) ui.status.installing = st; if (!st) ui.progress = null; renderPlay(); });
+  api.onLatest(() => refreshCheck());
   $('#picker').onclick = (e) => { e.stopPropagation(); $('#picker-menu').classList.toggle('hidden'); };
   document.addEventListener('click', (e) => { if (!e.target.closest('.picker-wrap')) $('#picker-menu').classList.add('hidden'); });
   $('#log-btn').onclick = () => ($('#console').classList.contains('hidden') ? openLog() : $('#console').classList.add('hidden'));

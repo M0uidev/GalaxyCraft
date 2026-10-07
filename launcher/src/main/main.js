@@ -14,7 +14,13 @@ const notes = require('../core/notes');
 const { platformPaths } = require('../core/paths');
 const { preflight } = require('../core/preflight');
 const { buildPlan } = require('../core/launchplan');
+const gamepack = require('../core/gamepack');
+const minecraft = require('../core/minecraft');
+const disc = require('../core/disc');
+const { playerState } = require('../core/playstate');
 const { GameRunner } = require('./runner');
+const { Installer } = require('./installer');
+const { Accounts } = require('./accounts');
 const updater = require('./updater');
 
 const OFFLINE = process.env.GXL_OFFLINE === '1';
@@ -28,6 +34,29 @@ let state = null;
 let quitWhenGameEnds = false;
 const runner = new GameRunner();
 const logBuffer = [];
+let accounts = null;
+let installer = null;
+let latest = null; // the newest release's game.json (parsed), an Error, or null before the first check
+let installing = null; // { version } while installing
+
+function config() {
+  let c = {};
+  try { c = JSON.parse(fs.readFileSync(path.join(CONTENT, 'config.json'), 'utf8')); } catch { /* defaults */ }
+  return { msaClientId: process.env.GXL_MSA_CLIENT_ID || c.msaClientId || '' };
+}
+
+/** Where PLAY takes the game from: a game folder (developers) or the released game (players). */
+function mode() {
+  const s = state.settings;
+  if (s.playFrom === 'folder' || s.playFrom === 'release') return s.playFrom;
+  return !app.isPackaged || s.gameRoot ? 'folder' : 'release';
+}
+
+function romInfo() {
+  const rom = state.settings.rom;
+  if (!rom) return null;
+  return { path: rom, check: fs.existsSync(rom) ? disc.identify(rom) : { ok: false, reason: `The file is gone: ${rom}` } };
+}
 
 // ---- state ---------------------------------------------------------------------------------
 
@@ -126,12 +155,87 @@ function settingsFile(inst) {
   return path.join(store.gameDirOf(inst, paths()), 'config', 'galaxycraft.properties');
 }
 
+/** Everything the Play tab shows for an installation, in either mode. */
+function status(instId) {
+  const m = mode();
+  const rom = romInfo();
+  const base = { mode: m, rom, account: accounts.current(), signInReady: accounts.available,
+    installing, latestVersion: latest && !(latest instanceof Error) ? latest.version : null };
+  if (m === 'folder') return { ...base, folder: check(instId) };
+  const installed = installer.installed();
+  return { ...base, installedVersion: installed ? installed.version : null,
+    player: playerState({ account: base.account, signInReady: accounts.available, rom, installed, latest, system: gamepack.systemKey() }) };
+}
+
+async function checkLatest() {
+  if (OFFLINE && !process.env.GXL_GAME_MANIFEST) { latest = new Error('offline'); return latest; }
+  latest = await installer.latest();
+  send('game:latest', { version: latest instanceof Error ? null : latest.version, error: latest instanceof Error ? latest.message : null });
+  return latest;
+}
+
+async function installLatest() {
+  if (installing) return { ok: false, error: 'Already installing.' };
+  const rom = romInfo();
+  if (!rom || !rom.check.ok) return { ok: false, error: 'Choose your Super Mario Galaxy 2 first.' };
+  const target = latest && !(latest instanceof Error) ? latest : await checkLatest();
+  if (target instanceof Error) return { ok: false, error: target.message };
+  installing = { version: target.version };
+  send('install:state', installing);
+  try {
+    await installer.install(target, rom.path);
+    return { ok: true };
+  } catch (e) {
+    runner.log('Launcher', `Install failed: ${e.message}`, 'stderr');
+    return { ok: false, error: e.message };
+  } finally {
+    installing = null;
+    send('install:state', null);
+  }
+}
+
+/** PLAY for players: the installed release, the player's disc and Minecraft account. */
+async function playRelease(inst) {
+  const st = status(inst.id).player;
+  if (st.action !== 'play' && st.action !== 'update') return { ok: false, error: st.detail };
+  const sessionInfo = await accounts.session();
+  const rom = romInfo();
+  const i = await installer.prepare(rom.path);
+  const ready = await installer.minecraft(i.manifest);
+  const gameDir = store.gameDirOf(inst, paths());
+  installer.syncMods(i, gameDir);
+  const mcCommand = minecraft.command({
+    version: ready.version, java: ready.java, dirs: { ...ready.dirs, game: gameDir }, auth: sessionInfo,
+    jvmArgs: gamepack.minecraftJvmArgs(i.manifest, inst), launcher: { name: 'super-minecraft-galaxy', version: app.getVersion() },
+  });
+  return gamepack.playerPlan({ paths: paths(), inst, lay: i.lay, dolphinExe: path.join(i.lay.dolphin, i.sys.exe), mcCommand });
+}
+
+/** PLAY from a game folder (developers): as tools/gxplay.sh, with the chosen disc if there is one. */
+function playFolder(inst) {
+  const pf = check(inst.id);
+  if (!pf.ok) throw new Error(`${pf.reason.label}: ${pf.reason.detail}. ${pf.reason.fix}`);
+  let descriptor = null;
+  const rom = romInfo();
+  if (rom && rom.check.ok) {
+    descriptor = path.join(paths().dataDir, 'dev-galaxycraft.json');
+    fs.mkdirSync(path.dirname(descriptor), { recursive: true });
+    fs.writeFileSync(descriptor, JSON.stringify(gamepack.devDescriptor(rom.path, pf.root), null, 2));
+  }
+  return buildPlan({ root: pf.root, paths: paths(), inst, javaHome: pf.java.home, dolphinBin: pf.dolphinBin, descriptor });
+}
+
 async function play(instId) {
   if (runner.busy) return { ok: false, error: 'The game is already running.' };
   const inst = instOf(instId);
-  const pf = check(inst.id);
-  if (!pf.ok) return { ok: false, error: `${pf.reason.label}: ${pf.reason.detail}. ${pf.reason.fix}` };
-  const plan = buildPlan({ root: pf.root, paths: paths(), inst, javaHome: pf.java.home, dolphinBin: pf.dolphinBin });
+  let plan;
+  try {
+    plan = mode() === 'folder' ? playFolder(inst) : await playRelease(inst);
+    if (plan && plan.ok === false) return plan;
+  } catch (e) {
+    runner.log('Launcher', e.message, 'stderr');
+    return { ok: false, error: e.message, code: e.code };
+  }
   setState({ ...state, selected: inst.id,
     installations: state.installations.map((x) => (x.id === inst.id ? { ...x, lastPlayed: new Date().toISOString() } : x)) });
   const started = await runner.start(plan, { installation: inst.id });
@@ -210,6 +314,7 @@ handle('launcher:get', () => ({
   packaged: app.isPackaged,
   offline: OFFLINE,
   dataDir: paths().dataDir,
+  mode: mode(),
   game: runner.info.state ? runner.info : { state: 'idle' },
   update: updater.status(),
 }));
@@ -222,6 +327,23 @@ handle('inst:delete', (id) => setState(store.deleteInstallation(state, id)));
 handle('inst:gameDir', (id) => store.gameDirOf(instOf(id), paths()));
 
 handle('preflight', (id) => check(id));
+handle('status', (id) => status(id));
+handle('game:checkLatest', async () => { await checkLatest(); return status(state.selected); });
+handle('game:install', () => installLatest());
+handle('account:signIn', async () => {
+  try { return { ok: true, account: await accounts.signIn() }; } catch (e) { return { ok: false, error: e.message, code: e.code }; }
+});
+handle('account:signOut', () => { accounts.signOut(); return accounts.current(); });
+handle('rom:choose', async () => {
+  const r = await dialog.showOpenDialog(win, {
+    title: 'Choose your Super Mario Galaxy 2 (USA)', properties: ['openFile'],
+    filters: [{ name: 'Wii games', extensions: ['iso', 'rvz', 'wbfs', 'wia', 'ciso', 'gcz'] }, { name: 'All files', extensions: ['*'] }],
+  });
+  if (r.canceled) return null;
+  const check = disc.identify(r.filePaths[0]);
+  if (check.ok) setState({ ...state, settings: { ...state.settings, rom: r.filePaths[0] } });
+  return { path: r.filePaths[0], check };
+});
 handle('game:play', (id) => play(id));
 handle('game:stop', () => runner.stop());
 handle('game:log', () => logBuffer);
@@ -288,6 +410,28 @@ if (!app.requestSingleInstanceLock()) {
     nativeTheme.themeSource = 'dark';
     loadState();
     createWindow();
+    accounts = new Accounts({ file: path.join(app.getPath('userData'), 'accounts.json'), clientId: config().msaClientId,
+      fetchFn: (url, opts) => net.fetch(url, opts), parent: win });
+    let ensureMinecraftFn;
+    if (process.env.GXL_TEST_MINECRAFT && !app.isPackaged) {
+      // Smoke test from source: a stand-in Java instead of Minecraft's download.
+      const mcv = require('../core/minecraft');
+      const fx = (f) => JSON.parse(fs.readFileSync(path.join(APP_DIR, 'test', 'fixtures', f), 'utf8'));
+      ensureMinecraftFn = async (dirs) => ({ version: mcv.merge(fx('fabric-profile.json'), fx('version-26.3.json')),
+        java: process.env.GXL_TEST_MINECRAFT, dirs: { ...dirs, natives: dirs.natives } });
+    }
+    installer = new Installer({ paths: paths(), fetchFn: (url, opts) => net.fetch(url, opts),
+      manifestUrl: process.env.GXL_GAME_MANIFEST || gamepack.LATEST_URL, ensureMinecraftFn });
+    installer.on('log', (l) => runner.log('Launcher', l));
+    let lastProgress = 0;
+    installer.on('progress', (p) => {
+      const now = Date.now();
+      if (now - lastProgress < 100 && p.done !== p.total) return;
+      lastProgress = now;
+      send('install:progress', p);
+    });
+    checkLatest();
+    setInterval(checkLatest, 30 * 60 * 1000).unref();
     updater.init({
       enabled: app.isPackaged && !OFFLINE && state.settings.checkUpdates,
       onStatus: (s) => send('update:state', s),

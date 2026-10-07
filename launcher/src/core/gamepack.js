@@ -15,7 +15,8 @@ const MANAGED = '.super-minecraft-galaxy.json';
 const SYSTEMS = { 'linux-x64': 'Linux', 'win32-x64': 'Windows', 'darwin-arm64': 'macOS', 'darwin-x64': 'macOS' };
 const systemKey = (platform = process.platform, arch = process.arch) => `${platform}-${arch}`;
 
-const isFile = (f) => f && typeof f === 'object' && typeof f.url === 'string' && /^https:\/\//.test(f.url)
+// https, or this machine (tests serve a release locally).
+const isFile = (f) => f && typeof f === 'object' && typeof f.url === 'string' && /^(https:\/\/|http:\/\/127\.0\.0\.1[:/])/.test(f.url)
   && typeof f.sha256 === 'string' && /^[0-9a-f]{64}$/.test(f.sha256) && typeof f.file === 'string'
   && /^[\w.+-]+$/.test(f.file);
 

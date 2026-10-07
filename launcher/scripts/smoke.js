@@ -178,9 +178,109 @@ async function main() {
   }
 
   await app.close();
+  if (!WIN && !process.env.SMOKE_EXE) await playerMode(tmp, errors);
   fs.rmSync(tmp, { recursive: true, force: true });
   if (errors.length) throw new Error(`The page reported errors:\n${errors.join('\n')}`);
   console.log(`smoke: ok, screenshots in ${SHOTS}`);
+}
+
+// ---- a player: the released game, installed and played -------------------------------------
+
+async function playerMode(tmp, errors) {
+  const http = require('node:http');
+  const crypto = require('node:crypto');
+  const tar = require('tar');
+  const delta = require('../src/core/delta');
+  const step = (s) => console.log(`smoke: player: ${s}`);
+  const dir = path.join(tmp, 'player');
+  fs.mkdirSync(dir, { recursive: true });
+
+  // The player's disc (a header, and the one file the patch needs, beside it for the fake tool).
+  const rom = path.join(dir, 'Super Mario Galaxy 2.iso');
+  const head = Buffer.alloc(0x400);
+  head.write('SB4E01', 0, 'latin1'); head.writeUInt32BE(0x5d1c9ea3, 0x18); head.write('SUPER MARIO GALAXY 2', 0x20);
+  fs.writeFileSync(rom, head);
+  const discArc = crypto.randomBytes(30000);
+  fs.mkdirSync(`${rom}.files/ObjectData`, { recursive: true });
+  fs.writeFileSync(`${rom}.files/ObjectData/Mario.arc`, discArc);
+
+  // A release: module (with its disc patch), Dolphin for Linux (scripts), the mod.
+  const mod = path.join(dir, 'module');
+  fs.mkdirSync(path.join(mod, 'patches', 'ObjectData'), { recursive: true });
+  fs.mkdirSync(path.join(mod, 'dolphin-play'), { recursive: true });
+  fs.writeFileSync(path.join(mod, 'galaxycraft.xml'), '<wiidisc/>');
+  fs.writeFileSync(path.join(mod, 'dolphin-play', 'Dolphin.ini'), '[Core]\n');
+  fs.writeFileSync(path.join(mod, 'patches', 'ObjectData', 'Mario.arc.gxd'), delta.encode(discArc, Buffer.concat([discArc, Buffer.from('steve')])));
+  fs.writeFileSync(path.join(mod, 'patches.json'), JSON.stringify([{ out: 'ObjectData/Mario.arc', disc: 'ObjectData/Mario.arc', yaz0: false, patch: 'patches/ObjectData/Mario.arc.gxd' }]));
+  const dol = path.join(dir, 'dolphin');
+  fs.mkdirSync(dol, { recursive: true });
+  fs.writeFileSync(path.join(dol, 'dolphin-emu'), '#!/bin/sh\necho "fake dolphin $GALAXYCRAFT_BOOT $*"\nsleep 3\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(dol, 'dolphin-tool'), '#!/bin/sh\nmkdir -p "$7/DATA/files/$(dirname "$5")"\ncp "$3.files/$5" "$7/DATA/files/$5"\n', { mode: 0o755 });
+  const java = path.join(dir, 'java');
+  fs.writeFileSync(java, '#!/bin/sh\necho "fake minecraft: $*"\nwhile true; do sleep 1; done\n', { mode: 0o755 });
+  const files = {};
+  await tar.c({ gzip: true, file: path.join(dir, 'module-0.2.0.tar.gz'), cwd: mod }, ['.']);
+  await tar.c({ gzip: true, file: path.join(dir, 'dolphin-linux-x64-0.2.0.tar.gz'), cwd: dol }, ['.']);
+  fs.writeFileSync(path.join(dir, 'galaxycraft-0.2.0.jar'), 'jar');
+  for (const f of ['module-0.2.0.tar.gz', 'dolphin-linux-x64-0.2.0.tar.gz', 'galaxycraft-0.2.0.jar']) files[f] = fs.readFileSync(path.join(dir, f));
+  const server = http.createServer((req, res) => {
+    const name = req.url.slice(1);
+    const body = name === 'game.json' ? Buffer.from(JSON.stringify(manifest)) : files[name];
+    if (!body) { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { 'content-length': body.length }); res.end(body);
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const entry = (f) => ({ file: f, url: `${base}/${f}`, sha256: crypto.createHash('sha256').update(files[f]).digest('hex'), size: files[f].length });
+  const manifest = { format: 1, version: '0.2.0', minecraft: { version: '26.3', fabricLoader: '0.19.5' },
+    module: entry('module-0.2.0.tar.gz'), mods: [entry('galaxycraft-0.2.0.jar')],
+    dolphin: { [`${process.platform}-${process.arch}`]: { ...entry('dolphin-linux-x64-0.2.0.tar.gz'), exe: 'dolphin-emu', tool: 'dolphin-tool' } } };
+
+  const userData = path.join(dir, 'userData');
+  fs.mkdirSync(userData, { recursive: true });
+  fs.writeFileSync(path.join(userData, 'launcher.json'), JSON.stringify({ settings: { playFrom: 'release', rom } }));
+  const env = { ...process.env, GXL_USER_DATA: userData, GXL_OFFLINE: '1', GXC_DATA_DIR: path.join(dir, 'data'),
+    GXL_GAME_MANIFEST: `${base}/game.json`, GXL_TEST_ACCOUNT: JSON.stringify({ name: 'Tester', uuid: '0123456789abcdef0123456789abcdef' }),
+    GXL_TEST_MINECRAFT: java };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const app = await electron.launch({ executablePath: require('electron'), args: [APP, '--no-sandbox'], env });
+  const page = await app.firstWindow();
+  page.on('pageerror', (e) => errors.push(`player pageerror: ${e.message}`));
+  await page.setViewportSize({ width: 1280, height: 780 });
+  await page.waitForSelector('body[data-ready="1"]');
+  const shot = (name) => page.screenshot({ path: path.join(SHOTS, `${name}.png`) });
+
+  step('INSTALL');
+  await page.waitForFunction(() => document.querySelector('#play').textContent === 'INSTALL', null, { timeout: 15000 });
+  assert.equal(await page.textContent('#account-name'), 'Tester');
+  await page.waitForTimeout(300);
+  await shot('20-player-install');
+  await page.click('#play');
+  await page.waitForFunction(() => document.querySelector('#play').textContent === 'PLAY', null, { timeout: 30000 });
+  await shot('21-player-ready');
+  assert.ok(fs.existsSync(path.join(dir, 'data', 'game', '0.2.0', 'module', 'ObjectData', 'Mario.arc')), 'disc file made');
+
+  step('PLAY');
+  await page.click('#play');
+  await page.waitForFunction(() => document.querySelector('#play').textContent === 'STOP', null, { timeout: 15000 });
+  await page.click('#log-btn');
+  await page.waitForFunction(() => /fake minecraft/.test(document.querySelector('#log').textContent), null, { timeout: 15000 });
+  await shot('22-player-playing');
+  const log = await page.textContent('#log');
+  assert.match(log, /fake dolphin space -u .* -e .*game\/0\.2\.0\/galaxycraft\.json/);
+  assert.match(log, /--username Tester/);
+  assert.match(log, /-Dgalaxycraft\.hidden=true/);
+  assert.match(log, /--accessToken \*{8}/);
+  // The launcher's own lines never show the token (the fake Java echoing its arguments does).
+  const launcherLines = log.split('\n').filter((l) => l.startsWith('[Launcher]')).join('\n');
+  assert.match(launcherLines, /--accessToken \*{8}/);
+  assert.doesNotMatch(launcherLines, /--accessToken test/);
+  assert.ok(fs.existsSync(path.join(dir, 'data', 'minecraft', 'mods', 'galaxycraft-0.2.0.jar')), 'mod in the game folder');
+  const desc = JSON.parse(fs.readFileSync(path.join(dir, 'data', 'game', '0.2.0', 'galaxycraft.json'), 'utf8'));
+  assert.equal(desc['base-file'], rom);
+  await page.waitForFunction(() => document.querySelector('#play').textContent === 'PLAY', null, { timeout: 30000 });
+  await app.close();
+  server.close();
 }
 
 main().catch((e) => {

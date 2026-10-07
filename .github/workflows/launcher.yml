@@ -154,6 +154,10 @@ jobs:
         with:
           name: game-mod
           path: launcher/mods
+      # Windows runners have no GPU driver (OpenGL 1.1 only): Mesa's software OpenGL stands in.
+      - name: Software OpenGL (Windows)
+        if: runner.os == 'Windows'
+        uses: ssciwr/setup-mesa-dist-win@v2
       - name: Minecraft and Fabric from Mojang's and Fabric's servers, started with the mod
         env:
           MODS_DIR: mods

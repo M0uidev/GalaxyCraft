@@ -33,7 +33,7 @@ function splitArgs(text) {
  *   dolphinBin the patched Dolphin's binary
  *   env        the launcher's environment (copied into both processes)
  */
-function buildPlan({ root, paths, inst, javaHome, dolphinBin, env = process.env }) {
+function buildPlan({ root, paths, inst, javaHome, dolphinBin, descriptor = null, env = process.env }) {
   const p = pathFor(paths.platform);
   const win = paths.platform === 'win32';
   const gameDir = gameDirOf(inst, paths);
@@ -66,7 +66,7 @@ function buildPlan({ root, paths, inst, javaHome, dolphinBin, env = process.env 
     env: { ...env, GALAXYCRAFT: '1', GALAXYCRAFT_BOOT: 'space' },
     args: [
       '-u', dolphinDir,
-      '-e', modulePatch(root, paths.platform),
+      '-e', descriptor || modulePatch(root, paths.platform), // the chosen disc's descriptor, else the build's
       // Background input and hotkeys without focus, for this run only (-C is not saved).
       '-C', 'Dolphin.Input.BackgroundInput=True',
       '-C', 'Dolphin.General.HotkeysRequireFocus=False',
@@ -107,7 +107,9 @@ function describe(plan, platform = process.platform) {
   const q = platform === 'win32'
     ? (a) => (/[\s"]/.test(a) || a === '' ? `"${a.replace(/"/g, '\\"')}"` : a)
     : (a) => (/[\s"'$`\\]/.test(a) || a === '' ? `'${a.replace(/'/g, "'\\''")}'` : a);
-  return plan.processes.map((proc) => `[${proc.name}] ${[proc.cmd, ...proc.args].map(q).join(' ')}`);
+  // Secrets never reach the log.
+  const hide = (args) => args.map((a, i) => (/^--(accessToken|session)$/.test(args[i - 1] || '') ? '********' : a));
+  return plan.processes.map((proc) => `[${proc.name}] ${[proc.cmd, ...hide(proc.args)].map(q).join(' ')}`);
 }
 
 module.exports = { HIDDEN_MATCH, SMG2_SAVE, MEM2_BYTES, splitArgs, buildPlan, describe };

@@ -10,13 +10,14 @@
 <body>
   <div id="app">
     <aside class="sidebar">
-      <div class="account" title="Your skin, from the selected installation (Skins tab)">
+      <div class="account" id="account" title="Your Minecraft account" role="button" tabindex="0">
         <img id="account-head" class="pixel" alt="">
         <div>
           <div id="account-name" class="account-name">Steve</div>
-          <div class="account-sub">Super Minecraft Galaxy</div>
+          <div id="account-sub" class="account-sub">Super Minecraft Galaxy</div>
         </div>
       </div>
+      <div id="account-menu" class="account-menu hidden"></div>
       <nav class="nav">
         <button class="nav-item" data-page="news"><span class="nav-icon" data-icon="news"></span>News</button>
         <button class="nav-item active" data-page="game"><img class="nav-icon pixel" data-block="planet" alt="">Super Minecraft Galaxy</button>
@@ -61,6 +62,7 @@
               </div>
               <div class="play-center">
                 <button id="play" class="play-btn">PLAY</button>
+                <div id="play-progress" class="progress hidden"><div></div></div>
                 <div id="play-status" class="play-status"></div>
               </div>
               <div class="playbar-right">
