@@ -121,6 +121,9 @@ TEST(input_writer_publishes_the_pointer_when_it_changes)
   in.Pointer(1.5f, 0.75f, false);
   std::memcpy(&p, f.shm->Data() + GXC_OFF_POINTER, sizeof(p));
   CHECK(p.flags == 0 && p.seq == 4);
+  in.Pointer(1.5f, 0.75f, false, true);  // Dolphin's window went to the background
+  std::memcpy(&p, f.shm->Data() + GXC_OFF_POINTER, sizeof(p));
+  CHECK(p.flags == GXC_POINTER_BACKGROUND && p.seq == 6);
 }
 
 TEST(input_writer_ignores_out_of_range_keys)

@@ -223,13 +223,14 @@ void InputWriter::Text(u32 codepoint)
   m_shm.StoreRelease(GXC_OFF_TEXT, seq + 2);
 }
 
-void InputWriter::Pointer(float x, float y, bool inside)
+void InputWriter::Pointer(float x, float y, bool inside, bool background)
 {
-  if (x == m_pointer_x && y == m_pointer_y && inside == m_pointer_inside)
+  if (x == m_pointer_x && y == m_pointer_y && inside == m_pointer_inside &&
+      background == m_pointer_background)
     return;
-  m_pointer_x = x, m_pointer_y = y, m_pointer_inside = inside;
+  m_pointer_x = x, m_pointer_y = y, m_pointer_inside = inside, m_pointer_background = background;
   GxcPointerState s{};
-  s.flags = inside ? GXC_POINTER_INSIDE : 0u;
+  s.flags = (inside ? GXC_POINTER_INSIDE : 0u) | (background ? GXC_POINTER_BACKGROUND : 0u);
   s.x = x;
   s.y = y;
   const u32 seq = m_shm.GetU32(GXC_OFF_POINTER);

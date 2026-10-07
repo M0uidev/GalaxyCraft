@@ -49,6 +49,7 @@ function config() {
 function mode() {
   const s = state.settings;
   if (s.playFrom === 'folder' || s.playFrom === 'release') return s.playFrom;
+  if (process.env.GXL_GAME_MANIFEST) return 'release'; // a game.json to install (CI's Windows test build)
   return !app.isPackaged || s.gameRoot || process.env.GXC_ROOT ? 'folder' : 'release';
 }
 

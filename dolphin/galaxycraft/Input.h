@@ -50,9 +50,9 @@ public:
   void SetKeys(const u8 keys[64]);
   // A character typed (GxcTextState), for Minecraft's text fields.
   void Text(u32 codepoint);
-  // Where the pointer is over the render window (GxcPointerState: 0..1, inside or not);
-  // publishes only if it changed.
-  void Pointer(float x, float y, bool inside);
+  // Where the pointer is over the render window (GxcPointerState: 0..1, inside or not), and
+  // whether that window is in the background; publishes only if something changed.
+  void Pointer(float x, float y, bool inside, bool background = false);
 
 private:
   void Publish();
@@ -64,5 +64,6 @@ private:
   u32 m_text_count = 0;
   float m_pointer_x = -1, m_pointer_y = -1;
   bool m_pointer_inside = false;
+  bool m_pointer_background = false;
 };
 }  // namespace gxc

@@ -51,6 +51,12 @@ async function stopTree(child, graceMs = 5000) {
   const exited = child.exitCode !== null || child.signalCode !== null;
   if (WIN) {
     if (exited) return;
+    // Asked first (WM_CLOSE: Dolphin closes as from its window), forced after graceMs.
+    await run('taskkill', ['/pid', String(child.pid), '/T']);
+    for (let waited = 0; waited < graceMs; waited += 100) {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      await sleep(100);
+    }
     await run('taskkill', ['/pid', String(child.pid), '/T', '/F']);
     return;
   }

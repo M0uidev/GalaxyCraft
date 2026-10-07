@@ -11,14 +11,15 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Minecraft's window is hidden behind Dolphin's: it counts as focused while the host is linked.
+ * Minecraft's window is hidden behind Dolphin's: while the host is linked it counts as focused
+ * when Dolphin's is.
  * F5 also reaches SMG2's own camera in Mario mode.
  */
 @Mixin(Minecraft.class)
 abstract class MinecraftMixin {
     @Inject(method = "isWindowActive", at = @At("HEAD"), cancellable = true)
     private void galaxycraft$hostFocused(CallbackInfoReturnable<Boolean> cir) {
-        if (GalaxyCraftClient.exportingOverlay()) cir.setReturnValue(true);
+        if (GalaxyCraftClient.exportingOverlay()) cir.setReturnValue(GalaxyCraftClient.hostFocused());
     }
 
     @Redirect(method = "handleKeybinds", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/CameraType;cycle()Lnet/minecraft/client/CameraType;"))

@@ -22,6 +22,8 @@ public final class Layout {
     /** GxcPointerState: the mouse over the host's window (0..1) while a Minecraft screen is open. */
     public static final long OFF_POINTER = 448;
     public static final int POINTER_INSIDE = 1;
+    /** Another window is in front of the host's (Alt+Tab): Minecraft counts as unfocused. */
+    public static final int POINTER_BACKGROUND = 2;
     /** GxcTextState: characters typed in the host's window. */
     public static final long OFF_TEXT = 512;
     public static final int TEXT_RING = 64;
