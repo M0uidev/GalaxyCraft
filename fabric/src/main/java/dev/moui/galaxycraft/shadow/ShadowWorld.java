@@ -312,7 +312,8 @@ public final class ShadowWorld {
             BlockPos pos = new BlockPos(map.x(cell), map.y(cell), map.z(cell));
             mirrorNow(level, pos);
             BlockState state = level.getBlockState(pos);
-            if (state.isAir() || !sp.getMainHandItem().canDestroyBlock(state, level, pos, sp)) return;
+            // Unbreakable blocks (a station's core, bedrock) stay, whoever asks.
+            if (state.isAir() || state.getDestroySpeed(level, pos) < 0 || !sp.getMainHandItem().canDestroyBlock(state, level, pos, sp)) return;
             var blockEntity = level.getBlockEntity(pos);
             Block block = state.getBlock();
             BlockState adjusted = block.playerWillDestroy(level, pos, state, sp);

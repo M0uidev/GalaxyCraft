@@ -46,11 +46,13 @@ public final class StationProbe implements FabricClientGameTest {
     private PlanetSession s;
     private ShadowLink link;
     private Vector3d mario;
+    private TestSingleplayerContext sp;
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
         if (!Boolean.getBoolean("galaxycraft.station")) return;
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
+            this.sp = sp;
             sp.getServer().runCommand("time set day");
             sp.getServer().runCommand("gamerule random_tick_speed 1000");
             ctx.waitTicks(20);
@@ -194,24 +196,22 @@ public final class StationProbe implements FabricClientGameTest {
         });
     }
 
-    /** The chest at (4, 1, 0) in the shadow, on the server thread; false if there is none. */
+    /**
+     * The chest at (4, 1, 0) in the shadow, on the server thread; false if there is none. The test
+     * ticks the server in step with the client, so the client thread must never wait on it.
+     */
     private boolean withChest(ClientGameTestContext ctx, Station st, java.util.function.Consumer<ChestBlockEntity> use) {
-        boolean[] found = new boolean[1];
-        ctx.runOnClient(mc -> {
+        BlockPos pos = ctx.computeOnClient(mc -> {
             ShadowMap map = ShadowMap.of(s.planet(), "station-" + st.id);
-            FlatGrid g = st.grid();
-            int c = g.cellOf(4, 1, 0);
-            BlockPos pos = new BlockPos(map.x(c), map.y(c), map.z(c));
-            var server = mc.getSingleplayerServer();
-            server.submit(() -> {
-                var level = server.getLevel(ShadowWorld.KEY);
-                if (level != null && level.getBlockEntity(pos) instanceof ChestBlockEntity chest) {
-                    use.accept(chest);
-                    found[0] = true;
-                }
-            }).join();
+            int c = st.grid().cellOf(4, 1, 0);
+            return new BlockPos(map.x(c), map.y(c), map.z(c));
         });
-        return found[0];
+        return sp.getServer().computeOnServer(server -> {
+            var level = server.getLevel(ShadowWorld.KEY);
+            if (level == null || !(level.getBlockEntity(pos) instanceof ChestBlockEntity chest)) return false;
+            use.accept(chest);
+            return true;
+        });
     }
 
     private void run(ClientGameTestContext ctx, int ticks) {
