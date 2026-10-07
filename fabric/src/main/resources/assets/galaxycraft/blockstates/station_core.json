@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "galaxycraft:block/station_core"
+    }
+  }
+}

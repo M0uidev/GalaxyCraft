@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "I": "minecraft:iron_block",
+    "G": "minecraft:glass",
+    "P": "minecraft:ender_pearl"
+  },
+  "pattern": [
+    "IGI",
+    "GPG",
+    "IGI"
+  ],
+  "result": {
+    "id": "galaxycraft:station_core"
+  }
+}
