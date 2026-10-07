@@ -87,6 +87,7 @@ public final class Warp {
     public static void to(Minecraft mc, Universe.Star s) {
         int index = s.home() ? PlanetClient.catalog().getFirst().index() : SystemIndex.index(s.sector(), 0);
         GalaxyCraftClient.say("warping to " + label(s));
+        Flight.end(mc.player); // no glide or pulse into the warp (the landing ends any left too)
         PlanetClient.travelTo(index);
         EnteringScreen.warping(mc, "Warping to " + (s.home() ? "home" : "system " + SystemIndex.name(s.sector())));
     }

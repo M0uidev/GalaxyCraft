@@ -171,6 +171,27 @@ public final class Flight {
         return pulse;
     }
 
+    /**
+     * A landing (warp, travel, coming back after dying) puts Mario down somewhere else: a glide or
+     * a pulse under way ends there, or the player would fly on and carry Mario off with it (it is
+     * seated where the flying player is), out of the landing. On the server too: it owns the glide.
+     */
+    static void end(LocalPlayer player) {
+        boolean was = active || pulse > 0 || player != null && player.isFallFlying();
+        reset();
+        if (player == null) return;
+        if (player.isFallFlying()) player.stopFallFlying();
+        player.setNoGravity(false);
+        player.setDeltaMovement(Vec3.ZERO);
+        net.minecraft.server.MinecraftServer server = net.minecraft.client.Minecraft.getInstance().getSingleplayerServer();
+        java.util.UUID id = player.getUUID();
+        if (server != null) server.execute(() -> {
+            net.minecraft.server.level.ServerPlayer p = server.getPlayerList().getPlayer(id);
+            if (p != null && p.isFallFlying()) p.stopFallFlying();
+        });
+        if (was) GalaxyCraft.LOG.info("A landing ended the flight");
+    }
+
     /** Leaving the galaxy (unlinked, world closed): nothing carries over. */
     static void reset() {
         pulse = 0;

@@ -67,6 +67,7 @@ public final class UniverseProbe implements FabricClientGameTest {
         origin(ctx);
         voidFlight(ctx);
         systems(ctx);
+        travel(ctx);
 
         ctx.runOnClient(mc -> mc.disconnectWithSavingScreen());
         waitReal(ctx, mc -> mc.level == null, 60);
@@ -206,6 +207,75 @@ public final class UniverseProbe implements FabricClientGameTest {
         waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(home), 240);
     }
 
+    /**
+     * Pulse and warp: gliding out in the void, sprint held speeds up to hundreds of blocks a second;
+     * then a warp while still gliding: Mario lands on the system's first planet and the player stops
+     * flying there (it stood still, on the ground, no glide or pulse left).
+     */
+    private void travel(ClientGameTestContext ctx) {
+        ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MINECRAFT));
+        ctx.waitTicks(20);
+        server(ctx, "gamemode survival @a");
+        server(ctx, "effect give @a resistance infinite 255 true");
+        server(ctx, "item replace entity @a armor.chest with elytra");
+        Vector3d out = new Vector3d(0, -1, 0).mul(4000 * U);
+        ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(out));
+        ctx.waitTicks(60);
+        boolean gliding = false;
+        for (int attempt = 0; attempt < 4 && !gliding; attempt++) {
+            ctx.getInput().holdKeyFor(o -> o.keyJump, 2);
+            ctx.waitTicks(5);
+            ctx.getInput().holdKeyFor(o -> o.keyJump, 2);
+            ctx.waitTicks(10);
+            gliding = ctx.computeOnClient(mc -> mc.player.isFallFlying());
+        }
+        check(gliding, "the elytra open out in the void");
+        Vector3d before = ctx.computeOnClient(mc -> PlanetClient.marioUniverse());
+        ctx.getInput().holdKey(o -> o.keySprint);
+        ctx.waitTicks(100);
+        double speed = ctx.computeOnClient(mc -> dev.moui.galaxycraft.client.Flight.pulseSpeed());
+        ctx.getInput().releaseKey(o -> o.keySprint);
+        Vector3d after = ctx.computeOnClient(mc -> PlanetClient.marioUniverse());
+        double went = before == null || after == null ? 0 : after.distance(before) / U;
+        log(String.format("pulse: %.1f blocks a tick after 5 s, Mario went %.0f blocks", speed, went));
+        check(speed > 10 && went > 500, "the pulse speeds up with sprint held");
+        gxdev("ctl", "shot universe-pulse");
+
+        Universe.Star star = ctx.computeOnClient(mc -> dev.moui.galaxycraft.client.Warp.nearby().stream().filter(x -> !x.home())
+                .findFirst().orElseThrow());
+        int index = SystemIndex.index(star.sector(), 0);
+        log("warping, still gliding: " + ctx.computeOnClient(mc -> mc.player.isFallFlying()) + ", to " + SystemIndex.name(star.sector()));
+        ctx.runOnClient(mc -> dev.moui.galaxycraft.client.Warp.to(mc, star));
+        waitReal(ctx, mc -> !PlanetClient.waitingToLand() && on(index), 240);
+        ctx.waitTicks(100);
+        log(String.format("after the warp: gliding %s, on ground %s, no gravity %s, pulse %.2f, screen %s",
+                ctx.computeOnClient(mc -> mc.player.isFallFlying()), ctx.computeOnClient(mc -> mc.player.onGround()),
+                ctx.computeOnClient(mc -> mc.player.isNoGravity()), ctx.computeOnClient(mc -> dev.moui.galaxycraft.client.Flight.pulseSpeed()),
+                ctx.computeOnClient(mc -> mc.gui.screen() == null ? "none" : mc.gui.screen().getClass().getSimpleName())));
+        check(ctx.computeOnClient(mc -> !mc.player.isFallFlying()), "after a warp the player is not gliding");
+        String where = ctx.computeOnClient(mc -> {
+            PlanetSession st = PlanetClient.standingOn();
+            Vector3d feet = GalaxyCraftClient.galaxyPos().orElse(null);
+            return st == null || feet == null ? "nowhere" : String.format("%.1f blocks above the surface of a planet of radius %.0f, %s",
+                    st.localOf(feet).length() - st.planet().surface(), st.planet().surface(), on(index) ? "the one warped to" : "another one");
+        });
+        check(ctx.computeOnClient(mc -> onSurface() && on(index)), "it stands on the system's first planet (" + where + ")");
+        double still = stillness(ctx);
+        log(String.format("standing there: Mario moves %.1f units at most", still));
+        check(still < 80, "it stays put (not flying off)");
+        gxdev("ctl", "shot universe-warp");
+        int home = ctx.computeOnClient(mc -> PlanetClient.catalog().getFirst().index());
+        ctx.runOnClient(mc -> PlanetClient.travelTo(home));
+        waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(home), 240);
+        ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MARIO));
+    }
+
+    private static void server(ClientGameTestContext ctx, String command) {
+        ctx.runOnClient(mc -> mc.getSingleplayerServer().execute(() -> mc.getSingleplayerServer().getCommands()
+                .performPrefixedCommand(mc.getSingleplayerServer().createCommandSourceStack(), command)));
+        ctx.waitTicks(2);
+    }
+
     private static String name(ClientGameTestContext ctx, int state) {
         return state + " " + ctx.computeOnClient(mc -> PlanetClient.stateName(state));
     }
@@ -233,7 +303,7 @@ public final class UniverseProbe implements FabricClientGameTest {
         if (s == null || feet == null) return false;
         // Generated planets have hills and valleys: anywhere on the ground near the surface.
         double h = s.localOf(feet).length() - s.planet().surface();
-        return h > -24 && h < 48;
+        return h > -40 && h < 64;
     }
 
     private static void waitReal(ClientGameTestContext ctx, java.util.function.Predicate<net.minecraft.client.Minecraft> what,

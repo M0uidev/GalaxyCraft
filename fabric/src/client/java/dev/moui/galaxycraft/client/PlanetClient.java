@@ -982,6 +982,7 @@ public final class PlanetClient {
         Vector3d at = on.teleportToward(dir);
         if (at == null) return;
         focus = on;
+        Flight.end(player);
         if (GalaxyCraftClient.walking()) GalaxyCraftClient.moveTo(on.galOf(at));
         landPending = false;
         GalaxyCraft.LOG.info("Entered the world's galaxy: Mario onto planet {} toward {}", indexOf(on), dir);
