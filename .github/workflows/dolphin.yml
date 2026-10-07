@@ -64,7 +64,8 @@ jobs:
   windows:
     name: Dolphin (Windows)
     needs: host
-    runs-on: windows-2022
+    # Dolphin at the pin needs Visual Studio 2026 (MSVC 19.51, Source/PCH/pch.h).
+    runs-on: windows-2025-vs2026
     timeout-minutes: 240
     defaults:
       run:
