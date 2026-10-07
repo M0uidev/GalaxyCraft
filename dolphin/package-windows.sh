@@ -22,6 +22,11 @@ if ! cmp -s patches/0001-galaxycraft.patch src/.galaxycraft.patch; then
   git -C src apply ../patches/0001-galaxycraft.patch
   cp patches/0001-galaxycraft.patch src/.galaxycraft.patch
 fi
+# A cached build made with another MSVC (an older runner image) starts again.
+if [ -f build-win/CMakeCache.txt ]; then
+  cxx=$(sed -n 's/^CMAKE_CXX_COMPILER:[A-Z]*=//p' build-win/CMakeCache.txt)
+  case "$cxx" in "$(cygpath -m "$VCToolsInstallDir")"*) ;; *) echo "package-windows.sh: new compiler, clean build"; rm -rf build-win ;; esac
+fi
 cmake -S src -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF \
   -DENABLE_ANALYTICS=OFF -DUSE_DISCORD_PRESENCE=OFF -DUSE_RETRO_ACHIEVEMENTS=OFF \
   -DENABLE_AUTOUPDATE=OFF -DUSE_UPNP=OFF -DENCODE_FRAMEDUMPS=OFF

@@ -86,8 +86,8 @@ jobs:
           path: |
             dolphin/src
             dolphin/build-win
-          key: dolphin-win-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: dolphin-win-
+          key: dolphin-win-vs2026-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: dolphin-win-vs2026-
 
       - name: Build and pack
         run: dolphin/package-windows.sh
@@ -98,7 +98,7 @@ jobs:
           path: |
             dolphin/src
             dolphin/build-win
-          key: dolphin-win-${{ github.run_id }}-${{ github.run_attempt }}
+          key: dolphin-win-vs2026-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: It boots, shares the memory with the mod and agrees on the time
         run: |
