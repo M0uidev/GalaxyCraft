@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-07 (Windows support in progress, in a cloud session)
+Last updated: 2026-10-07 (Windows port built by CI on `feat/windows`, waiting for the playtest)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-07 (Windows support in progress, in a cloud session)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Windows support | now | A cloud session ports it on `feat/windows` (2026-10-07), following [docs/WINDOWS.md](docs/WINDOWS.md); CI builds Dolphin for Windows; the user playtests on their Windows dual boot. |
+| Windows support | now | Ported on `feat/windows` (2026-10-07), following [docs/WINDOWS.md](docs/WINDOWS.md): shared memory in %TEMP%, DirectInput keyboard and mouse, Dolphin built with MSVC by CI and booted there against the mod's side (clocks agree). Next: the user playtests the `windows-test-build` artifact on their Windows dual boot (checklist in docs/WINDOWS.md), then merge. |
 
 ## Next
 
@@ -73,7 +73,7 @@ Last updated: 2026-10-07 (Windows support in progress, in a cloud session)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Windows support | now | In **Now**. Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory on Windows still to do. |
+| Windows support | now | In **Now**. Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory ported on `feat/windows`, untested by hand. |
 | Multiplayer | idea | Out of the first design's scope. |
 | Minecraft on one PC, Dolphin on another | idea | Would need a network transport instead of shared memory. |
 

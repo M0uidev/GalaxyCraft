@@ -156,6 +156,14 @@ números, y CI sigue compilando y probando lo mismo que antes.
      `dolphin-windows-boot-logs`.
    - `launcher.yml`: un release también lleva `dolphin-win32-x64-<v>.tar.gz` (el `game.json` ya lo
      anunciaba para `win32-x64`), y los tests del mod (`./gradlew test`) corren en Linux y Windows.
+     Pasan todos menos, a veces, los dos de `FlightLoadTest` (`flyingFastTheBlocksKeepUp`,
+     `aSlowMachineStillLoadsWhatIsNearestFirst`): miden contra 6 ms de reloj por tick y las
+     máquinas de CI son más lentas que un PC de escritorio; fallaron en Linux y en Windows por igual
+     y en otra corrida pasaron en Linux. No se tocaron; los releases no esperan a ese job.
+   - Resultado en CI (2026-10-07, run 12 de *Dolphin*): Dolphin arranca con `GALAXYCRAFT=1`, la
+     memoria compartida queda en `C:\Users\<usuario>\AppData\Local\Temp\galaxycraft_v1`, Java la
+     encuentra en la misma ruta, el pid es el de Dolphin.exe, Java ve el heartbeat de Dolphin con 8 ms
+     y Dolphin ve el de Java con 6 ms ("clocks agree").
 5. **`syati/build.py`** hace lo mismo que hacía `build.sh` (mismas fuentes en el mismo orden,
    mismas opciones y archivos); `build.sh` ahora solo lo llama. CodeWarrior y Kamek corren como
    los tiene el toolchain: en Linux el script `mwcceppc` (wine) y el Kamek de .NET, en Windows los
