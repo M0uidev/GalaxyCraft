@@ -127,8 +127,8 @@ Last updated: 2026-10-07 (desktop launcher done, tested on Linux; nothing in pro
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
-- 2026-10-07: Launcher follow-ups (Claude, from the launcher work): send the sign-in app to Mojang
-  for approval (registered in Azure 2026-10-07, client id in launcher/content/config.json); the first
+- 2026-10-07: Launcher follow-ups (Claude, from the launcher work): Mojang's approval of the sign-in
+  app "SMG Launcher" (registered in Azure and sent to Mojang 2026-10-07); the first
   release (`release/module` is made, 2026-10-07); trying a player's INSTALL from that release; Super Mario Galaxy 2 from other regions; building Dolphin and
   the module from the launcher; a code signing certificate so Windows does not warn.
 - 2026-10-07: New players use their own Super Mario Galaxy 2 and their Minecraft account, and
