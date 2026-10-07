@@ -17,7 +17,9 @@
     "dist": "npm run notes && electron-builder",
     "dist:linux": "npm run notes && electron-builder --linux",
     "dist:win": "npm run notes && electron-builder --win",
-    "release": "node scripts/release.js"
+    "release": "node scripts/release.js",
+    "pack-game": "node scripts/pack-game.js",
+    "mc-integration": "node scripts/mc-integration.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

@@ -163,27 +163,61 @@ jobs:
           MODS_DIR: mods
         run: ${{ matrix.run }} node scripts/mc-integration.js "$RUNNER_TEMP/mc"
 
+  dolphin:
+    name: Dolphin for players
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/dolphin.yml
+
   release:
     name: Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, mod, minecraft, dolphin]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: The module was made from these sources
+        run: node launcher/scripts/module-hash.js --check
+
       - uses: actions/download-artifact@v4
         with:
           pattern: launcher-*
           path: out
           merge-multiple: true
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: game-mod
+          path: mod
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dolphin-linux-x64
+          path: dolphin-dist
+
+      - name: The game release (game.json and its files)
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          tar -czf "out/module-$V.tar.gz" -C release/module .
+          [ "$(ls mod/*.jar | wc -l)" = 1 ] || { echo "expected one mod jar"; ls mod; exit 1; }
+          cp mod/*.jar "out/galaxycraft-$V.jar"
+          cp dolphin-dist/dolphin-linux-x64.tar.gz "out/dolphin-linux-x64-$V.tar.gz"
+          node launcher/scripts/game-manifest.js --version "$V" --dir out \
+            --base "https://github.com/${{ github.repository }}/releases/download/$GITHUB_REF_NAME"
+          ls -la out
+
       - uses: softprops/action-gh-release@v2
         with:
-          name: Super Minecraft Galaxy Launcher ${{ github.ref_name }}
+          name: Super Minecraft Galaxy ${{ github.ref_name }}
           generate_release_notes: true
           files: out/*
           body: |
-            **Linux:** download the `.AppImage` (it updates itself; `chmod +x` it, then open it) or the `.deb`.
-            **Windows:** download the `.exe` installer. Windows SmartScreen may warn because the installer is not signed yet: *More info* > *Run anyway*.
+            **Get the launcher:** Linux: the `.AppImage` (`chmod +x` it, then open it) or the `.deb`. Windows: the `.exe` installer (SmartScreen may warn because it is not signed yet: *More info* > *Run anyway*).
 
-            Launchers already installed download this version by themselves and install it when restarted.
+            Sign in with the Microsoft account that owns Minecraft: Java Edition, choose your own Super Mario Galaxy 2 (USA), press INSTALL, then PLAY. Launchers already installed update themselves and the game.

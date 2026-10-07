@@ -1,0 +1,72 @@
+# The patched Dolphin for players, built and packed so it runs on any recent Linux (Qt and the
+# libraries inside). Built when the Dolphin patch changes, on demand, and for each release
+# (launcher.yml calls it). Windows comes once the patch builds there (docs/WINDOWS.md).
+name: Dolphin
+
+on:
+  push:
+    paths:
+      - 'dolphin/**'
+      - '.github/workflows/dolphin.yml'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Dolphin (Linux)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build tools and libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++-12 ninja-build pkg-config ccache \
+            libevdev-dev libudev-dev libsystemd-dev libxi-dev libxrandr-dev libusb-1.0-0-dev libbluetooth-dev \
+            libasound2-dev libpulse-dev libgl1-mesa-dev libegl1-mesa-dev libcurl4-openssl-dev libxkbcommon-dev \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1 libxcb-shape0 libfuse2 file
+          echo "CC=gcc-12" >> "$GITHUB_ENV"
+          echo "CXX=g++-12" >> "$GITHUB_ENV"
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.8.3
+          modules: qtwaylandcompositor
+          cache: true
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            dolphin/src
+            ~/.cache/ccache
+          key: dolphin-linux-${{ hashFiles('dolphin/patches/**', 'dolphin/galaxycraft/**', 'dolphin/package-linux.sh') }}
+          restore-keys: dolphin-linux-
+
+      - name: Build and pack
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          CCACHE_MAXSIZE: 2G
+        run: |
+          # A cached source tree may hold an older patch: start it again from the pin.
+          if [ -d dolphin/src ]; then git -C dolphin/src checkout -q -- . && git -C dolphin/src clean -fdq; fi
+          dolphin/package-linux.sh
+
+      - name: It runs from the bundle
+        run: |
+          mkdir -p /tmp/try && tar -xzf dist/dolphin-linux-x64.tar.gz -C /tmp/try
+          /tmp/try/usr/bin/dolphin-tool --help | head -5 || true
+          /tmp/try/usr/bin/dolphin-tool extract --help > /dev/null 2>&1 || /tmp/try/usr/bin/dolphin-tool --help > /dev/null
+          QT_QPA_PLATFORM=offscreen timeout 20 /tmp/try/usr/bin/dolphin-emu --version
+          ls /tmp/try/usr/bin/Sys | head
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dolphin-linux-x64
+          path: dist/dolphin-linux-x64.tar.gz
+          if-no-files-found: error
