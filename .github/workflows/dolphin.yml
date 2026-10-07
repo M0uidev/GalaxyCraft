@@ -57,9 +57,12 @@ jobs:
           if [ -d dolphin/src ]; then git -C dolphin/src checkout -q -- . && git -C dolphin/src clean -fdq; fi
           dolphin/package-linux.sh
 
-      - name: It runs from the bundle
+      - name: It runs from the bundle (without CI's Qt in the environment, as on a player's machine)
         run: |
+          unset LD_LIBRARY_PATH QT_PLUGIN_PATH QML2_IMPORT_PATH QT_ROOT_DIR
           mkdir -p /tmp/try && tar -xzf dist/dolphin-linux-x64.tar.gz -C /tmp/try
+          ! ldd /tmp/try/usr/bin/dolphin-emu | grep "not found"
+          ldd /tmp/try/usr/bin/dolphin-emu | grep -i qt6 | head -3
           /tmp/try/usr/bin/dolphin-tool --help | head -5 || true
           /tmp/try/usr/bin/dolphin-tool extract --help > /dev/null 2>&1 || /tmp/try/usr/bin/dolphin-tool --help > /dev/null
           QT_QPA_PLATFORM=offscreen timeout 20 /tmp/try/usr/bin/dolphin-emu --version
