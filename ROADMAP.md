@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-07 (Windows support and play from the Minecraft Launcher merged; first release next)
+Last updated: 2026-10-07 (credits and Discord/YouTube links done; first release next)
 
 ---
 
@@ -122,6 +122,7 @@ Last updated: 2026-10-07 (Windows support and play from the Minecraft Launcher m
 | 2026-10-07 | Desktop launcher for Linux and Windows, like the Minecraft Launcher: news, patch notes, installations with their own worlds and settings, skins, themes and backgrounds, and PLAY. For players: sign in with a Microsoft account, choose your own Super Mario Galaxy 2 (USA), INSTALL and PLAY without the repository; new releases come as UPDATE. Tested on Linux (real PLAY into a world). [launcher/README.md](launcher/README.md) | 7cc48a6 |
 | 2026-10-07 | Windows: the same game and worlds as on Linux (Dolphin built for Windows, its keyboard, mouse and shared memory); first played on Windows | feacda7 |
 | 2026-10-07 | Play from the Minecraft Launcher: INSTALL adds a "Super Minecraft Galaxy" installation to Mojang's launcher, and the mod starts Dolphin and closes both together. Tested on Linux by starting Minecraft as the Minecraft Launcher would. [Spec](docs/superpowers/specs/2026-10-07-play-from-minecraft-launcher-design.md) | 6a77d69 |
+| 2026-10-07 | Credits and community links: "by @M0uiDev" on the title screen and in the launcher (it opens the YouTube channel), a "Join the Discord" button on the title screen, Discord and YouTube in the launcher's sidebar and About | a1c1501 |
 
 ---
 
