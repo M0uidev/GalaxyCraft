@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-07 (the real Power Star in the launcher; first release next)
+Last updated: 2026-10-07 (the launcher's PLAY works with the Minecraft Launcher; first release next)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-07 (the real Power Star in the launcher; first release nex
 
 | Feature | Status | Notes |
 |---|---|---|
-| First release (Linux and Windows) | now | v0.1.1 from `master`: the user retests Windows with CI's `windows-test-build` (playtest fixes + playing from the Minecraft Launcher), then `npm run release -- patch`, then a new player's INSTALL from the release. |
+| First release (Linux and Windows) | now | v0.1.1 from `master`: the user retests Windows with CI's `windows-test-build` (playtest fixes + playing from the Minecraft Launcher), then `npm run release -- patch`, then a new player's INSTALL from the release. Our launcher's PLAY also works without signing in here: it opens the Minecraft Launcher (Play there starts the game), and closes it when the game ends. |
 
 ## Next
 
@@ -124,6 +124,7 @@ Last updated: 2026-10-07 (the real Power Star in the launcher; first release nex
 | 2026-10-07 | Play from the Minecraft Launcher: INSTALL adds a "Super Minecraft Galaxy" installation to Mojang's launcher, and the mod starts Dolphin and closes both together. Tested on Linux by starting Minecraft as the Minecraft Launcher would. [Spec](docs/superpowers/specs/2026-10-07-play-from-minecraft-launcher-design.md) | 6a77d69 |
 | 2026-10-07 | Credits and community links: "by @M0uiDev" on the title screen and in the launcher (it opens the YouTube channel), a "Join the Discord" button on the title screen, Discord and YouTube in the launcher's sidebar and About | a1c1501 |
 | 2026-10-07 | The real Power Star from Super Mario Galaxy 2 in the launcher: its icon, the Home Planet background and the star installation icon; a bolder app icon that reads at small sizes | 95333b8 |
+| 2026-10-07 | The launcher's PLAY without signing in to it: it opens the Minecraft Launcher with Super Minecraft Galaxy selected, shows the game running, and closes the Minecraft Launcher when the game ends (a setting keeps it open); INSTALL no longer downloads Minecraft then | 535e352 |
 
 ---
 

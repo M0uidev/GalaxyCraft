@@ -13,6 +13,33 @@ Windows** (Electron, plain JavaScript, no bundler). Design: [the spec](../docs/s
 
 Settings > Game > Play switches between them.
 
+## Minecraft from the official Minecraft Launcher
+
+For the released game, Minecraft can come from Mojang's own **Minecraft Launcher**, signed in
+there, instead of from this launcher with its own Microsoft sign-in (Settings > Game >
+Minecraft; *Automatic*, the default, uses the Minecraft Launcher unless an account is signed in
+here). Then:
+
+- No SIGN IN here: CHOOSE GAME, INSTALL (Minecraft and Java are the Minecraft Launcher's: only
+  Fabric's version is fetched), PLAY.
+- INSTALL and each PLAY register the game in the Minecraft Launcher (`src/main/mcprofile.js`, see
+  [the spec](../docs/superpowers/specs/2026-10-07-play-from-minecraft-launcher-design.md)): Fabric's
+  version in its `versions/`, the *Super Minecraft Galaxy* installation in `launcher_profiles.json`
+  (this installation's game folder and mods, `-Dgalaxycraft.hidden=true
+  -Dgalaxycraft.startDolphin=true`, the player's own installations left alone, last used so it is
+  the one selected), and `<data>/play.json`, from which the mod starts Dolphin.
+- PLAY opens the Minecraft Launcher (`MinecraftLauncher.exe`, the Microsoft Store's, or
+  `minecraft-launcher`; `GXL_MINECRAFT_LAUNCHER` names another) and says to press its Play; Play
+  there starts Minecraft, and the mod starts Dolphin and closes the two together. This launcher
+  starts nothing itself: it watches for that Minecraft by its command line (STOP stops it, Dolphin
+  with it). When it ends, the Minecraft Launcher is closed too (found by its program: the
+  Microsoft Store package or `MinecraftLauncher.exe`, never Bedrock); this launcher stays.
+  Settings > Game > *Close the Minecraft Launcher when the game closes* turns that off.
+- Pressing Play in the Minecraft Launcher without this launcher open works too (the mod starts
+  Dolphin); nothing closes the Minecraft Launcher then.
+- If the Minecraft Launcher was open while the installation was added, it may only list it after
+  being restarted.
+
 A new player: opens the launcher, **SIGN IN** (Microsoft account that owns Minecraft: Java
 Edition), **CHOOSE GAME** (their own Super Mario Galaxy 2, USA: `.iso`, `.rvz`, `.wbfs`...),
 **INSTALL**, **PLAY**. When a new release is out, the button says **UPDATE**. The launcher
@@ -93,7 +120,8 @@ approved apps do that, so the launcher needs an app registration of its own:
    asks for the client id). Until they approve it, sign-in stops with "app registration is not
    approved by Mojang yet".
 
-`GXL_MSA_CLIENT_ID` overrides the file for testing. Tokens are kept encrypted with the system's
+`GXL_MSA_CLIENT_ID` overrides the file for testing. Until Mojang approves it, players can use
+[the Minecraft Launcher instead](#minecraft-from-the-official-minecraft-launcher). Tokens are kept encrypted with the system's
 keychain (Electron safeStorage) and never written to the log.
 
 ## Make it yours

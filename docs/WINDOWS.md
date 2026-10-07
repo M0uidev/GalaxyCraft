@@ -207,7 +207,14 @@ Desde lo que arma CI, sin Visual Studio. En la página de Actions de la rama `fe
    carpeta. Trae `game.json`, este Dolphin, el módulo y el mod, `PLAY-TEST.cmd` y `LEEME.txt`.
 3. Cerrar el lanzador y abrir `PLAY-TEST.cmd`: abre el lanzador instalado con
    `GXL_GAME_MANIFEST` apuntando a ese `game.json` (en vez del último release de GitHub).
-4. Iniciar sesión, elegir el Super Mario Galaxy 2 (USA), **INSTALL** (versión 0.0.1) y **PLAY**.
+4. Elegir el Super Mario Galaxy 2 (USA), **INSTALL** (versión 0.0.1) y **PLAY**. Sin iniciar sesión
+   en el lanzador (el inicio de sesión de Microsoft espera la aprobación de Mojang), Minecraft sale
+   del **Minecraft Launcher** oficial: tenerlo instalado y con la sesión iniciada. INSTALL le agrega
+   la instalación *Super Minecraft Galaxy* (Fabric, los mods, el mismo directorio de juego); PLAY
+   abre el Minecraft Launcher, y ahí se aprieta **Jugar** con esa instalación elegida: Minecraft
+   arranca y el mod abre Dolphin. Cerrar Minecraft cierra Dolphin y al revés, y al terminar el
+   lanzador cierra el Minecraft Launcher. Ver
+   [launcher/README.md](../launcher/README.md#minecraft-from-the-official-minecraft-launcher).
 
 Lista de comprobación (anotar qué pasa en cada punto):
 

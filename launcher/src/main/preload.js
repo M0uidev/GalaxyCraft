@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('launcher', {
   signOut: call('account:signOut'),
   chooseRom: call('rom:choose'),
   play: call('game:play'),
+  openMinecraftLauncher: call('official:open'),
   stop: call('game:stop'),
   log: call('game:log'),
   gameSettings: call('gamesettings:get'),

@@ -15,6 +15,9 @@ const ACCENTS = {
 const BACKGROUNDS = ['planet', 'nebula', 'night', 'sunrise'];
 const ICONS = ['grass', 'planet', 'star', 'dirt', 'stone', 'diamond', 'tnt', 'ice', 'mushroom', 'crafting'];
 const ON_PLAY = ['keep', 'hide', 'close'];
+// Who starts Minecraft for the released game: this launcher with the account signed in here, the
+// official Minecraft Launcher (signed in there), or automatic (this one only with an account).
+const MINECRAFT_FROM = ['auto', 'launcher', 'official'];
 
 const DEFAULT_ID = 'default';
 
@@ -41,6 +44,8 @@ function defaultState() {
     settings: {
       gameRoot: '', // empty: found by the launcher
       playFrom: 'auto', // auto: the game folder if there is one, else the released game
+      minecraftFrom: 'auto',
+      closeMinecraftLauncher: true, // with the game, when Minecraft comes from it
       rom: '', // the player's Super Mario Galaxy 2
       onPlay: 'keep',
       showLogOnPlay: false,
@@ -89,6 +94,8 @@ function normalize(raw) {
   const settings = {
     gameRoot: str(s.gameRoot, ''),
     playFrom: oneOf(s.playFrom, ['auto', 'release', 'folder'], 'auto'),
+    minecraftFrom: oneOf(s.minecraftFrom, MINECRAFT_FROM, 'auto'),
+    closeMinecraftLauncher: bool(s.closeMinecraftLauncher, d.settings.closeMinecraftLauncher),
     rom: str(s.rom, '', 1000),
     onPlay: oneOf(s.onPlay, ON_PLAY, d.settings.onPlay),
     showLogOnPlay: bool(s.showLogOnPlay, d.settings.showLogOnPlay),
@@ -158,7 +165,7 @@ function gameDirOf(inst, paths) {
 }
 
 module.exports = {
-  ACCENTS, BACKGROUNDS, ICONS, ON_PLAY, DEFAULT_ID,
+  ACCENTS, BACKGROUNDS, ICONS, ON_PLAY, MINECRAFT_FROM, DEFAULT_ID,
   defaultState, defaultInstallation, normalize, normalizeInstallation,
   saveInstallation, duplicateInstallation, deleteInstallation, gameDirOf,
 };

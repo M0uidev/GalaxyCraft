@@ -1,6 +1,7 @@
 'use strict';
 // What the big button does for a player (the released game, not a game folder): sign in,
-// choose the game, install, update, or play, with the reason when it cannot.
+// choose the game, install, update, or play, with the reason when it cannot. With Minecraft from
+// the official Minecraft Launcher, the player signs in there, not here.
 const { compareVersions, supported } = require('./gamepack');
 
 /**
@@ -10,10 +11,11 @@ const { compareVersions, supported } = require('./gamepack');
  *   installed  { version, manifest } or null
  *   latest     the newest game.json (parsed), an Error (offline), or null (not checked yet)
  *   system     this system's key (linux-x64, win32-x64)
+ *   official   Minecraft comes from the Minecraft Launcher: no account needed here
  * Returns { action, label, detail, version? } with action one of
  *   signin | rom | install | update | play | unsupported | unavailable | checking
  */
-function playerState({ account, signInReady, rom, installed, latest, system }) {
+function playerState({ account, signInReady, rom, installed, latest, system, official = false }) {
   const latestOk = latest && !(latest instanceof Error) ? latest : null;
   const manifest = installed ? installed.manifest : latestOk;
   if (!installed && !latest) return { action: 'checking', label: 'PLAY', detail: 'Looking for the game...' };
@@ -24,8 +26,9 @@ function playerState({ account, signInReady, rom, installed, latest, system }) {
   if (!sup.ok && !(installed && supported(installed.manifest, system).ok)) {
     return { action: 'unsupported', label: 'COMING SOON', detail: `Super Minecraft Galaxy is not out for ${sup.system} yet: it is coming. Follow the News.` };
   }
-  // Without our own sign-in the player still chooses the game and installs; PLAY is then in the Minecraft Launcher.
-  if (!account && (signInReady || installed)) {
+  // Without an account here: with the Minecraft Launcher, PLAY goes on; else the player still
+  // chooses the game and installs (then plays from the Minecraft Launcher themselves).
+  if (!account && !official && (signInReady || installed)) {
     return { action: 'signin', label: 'SIGN IN', detail: signInReady ? 'Sign in with the Microsoft account that owns Minecraft: Java Edition.'
       : 'Microsoft sign-in is not set up in this launcher yet.' };
   }
@@ -35,7 +38,8 @@ function playerState({ account, signInReady, rom, installed, latest, system }) {
   if (latestOk && compareVersions(latestOk.version, installed.version) > 0 && supported(latestOk, system).ok) {
     return { action: 'update', label: 'UPDATE', detail: `Version ${latestOk.version} is out (you have ${installed.version}).`, version: latestOk.version };
   }
-  return { action: 'play', label: 'PLAY', detail: `Super Minecraft Galaxy ${installed.version}`, version: installed.version };
+  return { action: 'play', label: 'PLAY', detail: `Super Minecraft Galaxy ${installed.version}${official ? ' · Minecraft from the Minecraft Launcher' : ''}`,
+    version: installed.version };
 }
 
 module.exports = { playerState };

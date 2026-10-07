@@ -39,3 +39,10 @@ test('a system without a release yet', () => {
   // An update that drops this system does not take the installed game away.
   assert.equal(playerState({ ...base, latest: manifest('0.3.0', ['win32-x64']) }).action, 'play');
 });
+
+test('Minecraft from the Minecraft Launcher: no sign-in here', () => {
+  assert.equal(playerState({ ...base, account: null, official: true }).action, 'play');
+  assert.match(playerState({ ...base, account: null, official: true }).detail, /Minecraft Launcher/);
+  assert.equal(playerState({ ...base, account: null, installed: null, official: true }).action, 'install');
+  assert.equal(playerState({ ...base, account: null, rom: null, official: true }).label, 'CHOOSE GAME');
+});

@@ -175,12 +175,14 @@ async function refreshCheck() {
 }
 
 const release = () => ui.status && ui.status.mode === 'release';
+/** Minecraft comes from the official Minecraft Launcher (the player signs in there). */
+const viaOfficial = () => release() && ui.status.minecraftFrom === 'official';
 
 function renderAccount() {
   const a = ui.status && ui.status.account;
-  const name = a ? a.name : (release() ? 'Not signed in' : (ui.skin || 'Steve'));
+  const name = a ? a.name : viaOfficial() ? 'Minecraft Launcher' : (release() ? 'Not signed in' : (ui.skin || 'Steve'));
   $('#account-name').textContent = name;
-  $('#account-sub').textContent = a ? 'Minecraft account' : release() ? 'Click to sign in' : 'Super Minecraft Galaxy';
+  $('#account-sub').textContent = a ? 'Minecraft account' : viaOfficial() ? 'Minecraft starts from there' : release() ? 'Click to sign in' : 'Super Minecraft Galaxy';
   const head = $('#account-head');
   if (a) remoteImage(head, `https://mc-heads.net/avatar/${encodeURIComponent(a.uuid)}/40`, iconUrl('grass', 40));
   else if (!ui.skin) remoteImage(head, '', iconUrl('grass', 40));
@@ -283,10 +285,21 @@ function renderPlay() {
   btn.classList.toggle('running', g === 'running');
   btn.classList.toggle('starting', g === 'starting' || g === 'stopping');
   status.className = 'play-status';
+  status.title = '';
   if (g === 'starting') {
     btn.textContent = 'STARTING';
     btn.disabled = true;
-    status.textContent = 'Starting Dolphin and Minecraft...';
+    status.textContent = viaOfficial() ? 'Opening the Minecraft Launcher...' : 'Starting Dolphin and Minecraft...';
+  } else if (g === 'running' && ui.game.waiting) {
+    btn.textContent = 'STOP';
+    btn.disabled = false;
+    $('#play-progress').classList.add('hidden');
+    status.innerHTML = `Now press <strong>Play</strong> in the Minecraft Launcher; Dolphin opens with it. <a href="#" id="open-official">Open it</a>`;
+    status.title = 'The "Super Minecraft Galaxy" installation is chosen there; Minecraft then shows up in the window Dolphin opens.';
+    $('#open-official').onclick = async (e) => {
+      e.preventDefault();
+      if (!(await api.openMinecraftLauncher())) toast('The Minecraft Launcher was not found: open it yourself.', true);
+    };
   } else if (g === 'running') {
     btn.textContent = 'STOP';
     btn.disabled = false;
@@ -313,7 +326,7 @@ function renderPlay() {
       btn.textContent = st.label;
       btn.disabled = ['unsupported', 'unavailable', 'checking'].includes(st.action) || (st.action === 'signin' && !ui.status.signInReady);
       status.textContent = st.detail;
-      if (!ui.status.account && ui.status.installedVersion) {
+      if (!ui.status.account && ui.status.installedVersion && !viaOfficial()) {
         status.textContent += ui.status.minecraftLauncher
           ? ' Not signed in? Play from the Minecraft Launcher: choose "Super Minecraft Galaxy" and press PLAY.'
           : ' Install the Minecraft Launcher (minecraft.net), sign in, then press INSTALL again.';
@@ -341,12 +354,19 @@ function renderPlay() {
 
 function renderReleaseSetup(box) {
   const st = ui.status;
-  const show = st.player.action !== 'play' || !st.account;
+  const official = viaOfficial();
+  const show = st.player.action !== 'play' || (official ? !st.officialLauncher.ok : !st.account);
   box.classList.toggle('hidden', !show);
   if (!show) return;
+  const minecraftStep = official
+    ? { ok: st.officialLauncher.ok, label: 'Minecraft Launcher',
+      detail: st.officialLauncher.ok ? 'Minecraft starts from the official Minecraft Launcher, with the account signed in there.'
+        : 'Install the official Minecraft Launcher, open it once and sign in with the account that owns Minecraft: Java Edition.',
+      button: st.officialLauncher.ok ? '' : '<button class="btn" data-step="get-official">Get the Minecraft Launcher</button>' }
+    : { ok: !!st.account, label: 'Minecraft account', detail: st.account ? st.account.name : 'The Microsoft account that owns Minecraft: Java Edition.',
+      button: st.account ? '' : `<button class="btn primary" data-step="signin" ${st.signInReady ? '' : 'disabled'}>Sign in</button>` };
   const steps = [
-    { ok: !!st.account, label: 'Minecraft account', detail: st.account ? st.account.name : 'The Microsoft account that owns Minecraft: Java Edition.',
-      button: st.account ? '' : `<button class="btn primary" data-step="signin" ${st.signInReady ? '' : 'disabled'}>Sign in</button>` },
+    minecraftStep,
     { ok: !!(st.rom && st.rom.check.ok), label: 'Super Mario Galaxy 2', detail: st.rom ? (st.rom.check.ok ? `${st.rom.path} (${st.rom.check.format}, ${st.rom.check.gameId})` : st.rom.check.reason)
       : 'Your own copy, USA version (SB4E01): .iso, .rvz, .wbfs. It never leaves your computer.', button: '<button class="btn" data-step="rom">Choose file</button>' },
     { ok: !!st.installedVersion, label: 'The game', detail: st.installedVersion ? `Version ${st.installedVersion}${st.latestVersion && st.latestVersion !== st.installedVersion ? `, ${st.latestVersion} is out` : ''}`
@@ -356,6 +376,7 @@ function renderReleaseSetup(box) {
     <div class="check"><span class="mark ${x.ok ? 'ok' : 'warn'}">${x.ok ? '✓' : '•'}</span><strong>${esc(x.label)}</strong>
       <div class="detail">${esc(x.detail)}${x.button ? `<div style="margin-top:6px">${x.button}</div>` : ''}</div></div>`).join('')}`;
   const b1 = $('[data-step=signin]', box); if (b1) b1.onclick = signIn;
+  const b3 = $('[data-step=get-official]', box); if (b3) b3.onclick = () => api.openUrl('https://www.minecraft.net/download');
   const b2 = $('[data-step=rom]', box); if (b2) b2.onclick = chooseRom;
 }
 
@@ -695,6 +716,13 @@ async function renderSettings() {
           .map(([v, l]) => `<label class="radio"><input type="radio" name="playfrom" value="${v}" ${s.playFrom === v ? 'checked' : ''}>${l}</label>`).join('')}
       </div><div class="help">Now: ${ui.status && ui.status.mode === 'release' ? `the released game${ui.status.installedVersion ? ` ${esc(ui.status.installedVersion)}` : ''}${ui.status.latestVersion ? ` (latest ${esc(ui.status.latestVersion)})` : ''}` : 'your game folder'}.
         <a href="#" id="st-check-game">Check for game updates</a></div></div>
+      <div class="field"><span class="field-label">Minecraft</span><div class="radio-group">
+        ${[['auto', 'Automatic: this launcher if I signed in here, else the Minecraft Launcher'], ['official', 'The official Minecraft Launcher (sign in there; PLAY here opens Dolphin, then press Play there)'], ['launcher', 'This launcher (sign in here with Microsoft)']]
+          .map(([v, l]) => `<label class="radio"><input type="radio" name="mcfrom" value="${v}" ${s.minecraftFrom === v ? 'checked' : ''}>${l}</label>`).join('')}
+      </div><div class="help">For the released game. ${ui.status && ui.status.minecraftFrom ? `Now: ${ui.status.minecraftFrom === 'official' ? 'the Minecraft Launcher' : 'this launcher'}.` : ''}
+        ${ui.status && ui.status.officialLauncher ? (ui.status.officialLauncher.ok ? `Minecraft Launcher folder: ${esc(ui.status.officialLauncher.dir)}.` : 'The Minecraft Launcher was not found: install it and open it once.') : ''}</div>
+        <label class="switch" style="margin-top:8px"><input type="checkbox" id="st-close-official" ${s.closeMinecraftLauncher ? 'checked' : ''}>
+          <span><span class="label">Close the Minecraft Launcher when the game closes</span><span class="help">When Minecraft or Dolphin closes, everything closes but this launcher.</span></span></label></div>
       <div class="field"><label for="st-root">Game folder</label>
         <div class="row"><input class="input" id="st-root" value="${esc(s.gameRoot)}" placeholder="${esc(c.root || 'Not found: choose the GalaxyCraft folder')}" spellcheck="false">
         <button class="btn" id="st-root-browse">Browse</button><button class="btn" id="st-root-auto">Find it</button></div>
@@ -756,6 +784,8 @@ async function renderSettings() {
     toast(ui.status.latestVersion ? `Latest game: ${ui.status.latestVersion}` : 'Could not reach the game\'s releases', !ui.status.latestVersion); };
   $('#st-root-auto').onclick = async () => { await set({ gameRoot: '' }); await refreshCheck(); renderSettings(); };
   $('#st-root').onchange = async (e) => { await set({ gameRoot: e.target.value.trim() }); await refreshCheck(); renderSettings(); };
+  $('#st-close-official').onchange = (e) => set({ closeMinecraftLauncher: e.target.checked });
+  $$('input[name=mcfrom]').forEach((r) => { r.onchange = async () => { await set({ minecraftFrom: r.value }); await refreshCheck(); renderSettings(); }; });
   $$('input[name=onplay]').forEach((r) => { r.onchange = () => set({ onPlay: r.value }); });
   $('#st-log').onchange = (e) => set({ showLogOnPlay: e.target.checked });
   $$('[data-accent]').forEach((b) => { b.onclick = async () => { await set({ accent: b.dataset.accent }); renderSettings(); }; });
