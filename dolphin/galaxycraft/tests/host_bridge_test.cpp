@@ -571,6 +571,28 @@ TEST(boot_space_escape_is_minecrafts_also_with_no_gravity)
   CHECK(f.bridge.MinecraftTakesEscape());
 }
 
+TEST(void_with_no_gravity_is_playing_so_the_mouse_stays_captured)
+{
+  // Out in GalaxyCraftSpace Mario has no gravity (not "in game"), but he is playable: the mouse
+  // turns the view, it does not turn into a free cursor.
+  Fixture f;
+  f.bridge.SetBootSpace(true);
+  f.mem.PutF32(MBX + 24, 0), f.mem.PutF32(MBX + 28, 0), f.mem.PutF32(MBX + 32, 0);  // no gravity
+  f.shm->SetU32(offsetof(GxcHeader, mod_flags), GXC_MOD_IN_WORLD);
+  f.ModReports(1, {10, 20, 30});
+  u32 seq = 0;
+  for (int i = 0; i < 3; i++)
+    f.mem.PutU32(MBX + 12, ++seq), f.Tick();
+  CHECK(!f.bridge.InGame() && f.bridge.Playing());
+  f.mem.PutU32(MBX + 48, GXC_MBX_GAME_DEMO);  // a cutscene is not playing
+  f.mem.PutU32(MBX + 12, ++seq), f.Tick();
+  CHECK(!f.bridge.Playing());
+  f.mem.PutU32(MBX + 48, 0);
+  for (int i = 0; i < 31; i++)  // no game frames: no Mario
+    f.Tick();
+  CHECK(!f.bridge.Playing());
+}
+
 TEST(without_boot_space_there_is_no_menu)
 {
   Fixture f;

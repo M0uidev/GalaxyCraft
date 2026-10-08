@@ -290,7 +290,7 @@ index 0000000000..32d1ff72c0
 +        state.bridge->ScreenOpen() || state.bridge->Flying() || state.bridge->Walking();
 +    const u8* keys = state.dev_keys ? state.dev_keys->first.data() : screen ? none : state.keys;
 +    const u32 buttons = state.dev_keys ? state.dev_keys->second : screen ? 0u : state.buttons;
-+    pad = state.mario.Update(keys, buttons, state.bridge->InGame(), state.bridge->GalaxyView(),
++    pad = state.mario.Update(keys, buttons, state.bridge->Playing(), state.bridge->GalaxyView(),
 +                             state.bridge->ItemActive(), state.bridge->McFeel());
 +    state.bridge->SetGait(pad.sprint, pad.sneak, pad.walking);
 +    // Minecraft's pause menu opens SMG2's own: the mod holds + for a few frames.
@@ -616,7 +616,7 @@ index 0000000000..32d1ff72c0
 +// Minecraft turns with the mouse: playing in its view, no Minecraft screen open (s_mutex held).
 +static bool CaptureRule(const State& state)
 +{
-+  return state.bridge->Following() && state.bridge->InGame() && !state.bridge->GalaxyView() &&
++  return state.bridge->Following() && state.bridge->Playing() && !state.bridge->GalaxyView() &&
 +         !state.bridge->ScreenOpen();
 +}
 +
