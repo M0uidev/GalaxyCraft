@@ -107,12 +107,16 @@ const u32 FLAT_SLOTS = 8;
 ParallelGravity* gFlat[FLAT_SLOTS];
 bool gFlatUsed[FLAT_SLOTS];
 
-// A box gravity pulling nowhere: no room inside, far off.
+// A box gravity pulling nowhere: a box one unit wide, far off. Not axes of length 0: the game
+// measures a point along each axis against its length, and with none every point is inside
+// (0 is never past 0), so an unused box pulled everywhere and fought the planets' gravity.
 void FlatOff(ParallelGravity* g)
 {
   for (int r = 0; r < 3; r++)
     for (int c = 0; c < 4; c++)
-      g->mLocalMtx.mMtx[r][c] = c == 3 ? 1.0e9f : 0.f;
+      g->mLocalMtx.mMtx[r][c] = c == 3 ? 1.0e9f : r == c ? 1.f : 0.f;
+  g->mLocalPlaneUpVec = TVec3f(0.f, 1.f, 0.f);
+  g->mLocalPlanePosition = TVec3f(1.0e9f, 1.0e9f, 1.0e9f);
   g->updateIdentityMtx();
 }
 
