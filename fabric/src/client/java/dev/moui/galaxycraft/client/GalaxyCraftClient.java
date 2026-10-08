@@ -18,6 +18,7 @@ import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.view.CameraDistance;
 import dev.moui.galaxycraft.view.CameraMath;
 import dev.moui.galaxycraft.view.IntroCamera;
+import dev.moui.galaxycraft.universe.GameOrigin;
 import dev.moui.galaxycraft.view.View;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
@@ -103,7 +104,16 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         dev.moui.galaxycraft.station.StationHooks.set(StationClient.HOOKS);
         bridge = new BridgeClient(Path.of(Layout.SHM_PATH), () -> System.nanoTime() / 1_000_000L,
                 new BridgeClient.PartListener() {
-                    @Override public void onUpsert(int partId, double[] mtx, byte[] kcl) {
+                    @Override public void onUpsert(int partId, double[] gameMtx, byte[] kcl) {
+                        // The game's parts are in its floats, relative to the floating origin; the field keeps
+                        // them in the universe's units, as the player's frame is (a part from an epoch too
+                        // old to place is left out: its next record comes in the new one).
+                        double[] mtx = gameMtx.clone();
+                        Vector3d at = GameOrigin.fromGame(new Vector3d(mtx[3], mtx[7], mtx[11]), UniverseClient.gameEpoch());
+                        if (at == null) return;
+                        mtx[3] = at.x;
+                        mtx[7] = at.y;
+                        mtx[11] = at.z;
                         try {
                             GalaxyCraft.FIELD.upsertPart(partId, mtx, kcl);
                         } catch (IllegalArgumentException e) {
