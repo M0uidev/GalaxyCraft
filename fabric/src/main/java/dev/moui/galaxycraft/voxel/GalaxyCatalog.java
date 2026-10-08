@@ -18,14 +18,26 @@ public final class GalaxyCatalog {
     /** Tries to place a planet before it is left out. */
     static final int TRIES = 400;
 
-    /** Room between two planets' gravity, blocks. */
+    /**
+     * The world layout new worlds get: 2 spaces planets far apart (and lets other systems reach
+     * farther). Worlds saved before keep 1, so their planets stay where their blocks were saved.
+     */
+    public static final int LAYOUT = 2;
+
+    /** Empty space between two planets' gravities, by layout. */
     public enum Spacing {
-        NEAR(24), NORMAL(96), FAR(300);
+        NEAR(24, 150), NORMAL(96, 600), FAR(300, 1500);
 
-        public final int blocks;
+        private final int old, wide;
 
-        Spacing(int blocks) {
-            this.blocks = blocks;
+        Spacing(int old, int wide) {
+            this.old = old;
+            this.wide = wide;
+        }
+
+        /** Blocks between gravities in that layout. */
+        public int blocks(int layout) {
+            return layout >= 2 ? wide : old;
         }
     }
 
@@ -85,24 +97,30 @@ public final class GalaxyCatalog {
      * of generated ones (and a "random" first) come from land.
      */
     public static Result make(Options options, int firstRadius, List<String> land, double unitsPerBlock) {
+        return make(options, firstRadius, land, unitsPerBlock, 1);
+    }
+
+    /** As make, in that layout (its spacing). */
+    public static Result make(Options options, int firstRadius, List<String> land, double unitsPerBlock, int layout) {
         Options o = options.clamp();
+        int spacing = o.spacing().blocks(layout);
         Random rnd = new Random(o.seed());
         List<Entry> out = new ArrayList<>();
         First f = o.first();
         long firstSeed = rnd.nextLong();
         if (f.isBlueprint()) out.add(new Entry(0, 0, 0, 0, clampRadius(firstRadius), Kind.BLUEPRINT, null, f.name(), firstSeed));
         else out.add(new Entry(0, 0, 0, 0, clampRadius(firstRadius), Kind.GENERATED, pick(f.biome(), land, rnd), null, firstSeed));
-        double step = (2 * PlanetSession.gravityRadius(o.maxRadius()) + o.spacing().blocks) * unitsPerBlock / 2;
+        double step = (2 * PlanetSession.gravityRadius(o.maxRadius()) + spacing) * unitsPerBlock / 2;
         for (int k = 1; k < o.count(); k++) {
             int radius = o.minRadius() + rnd.nextInt(o.maxRadius() - o.minRadius() + 1);
             String biome = land.get(rnd.nextInt(land.size()));
             long seed = rnd.nextLong();
             double g = PlanetSession.gravityRadius(radius) * unitsPerBlock;
-            double base = (PlanetSession.gravityRadius(out.getFirst().radius()) + o.spacing().blocks) * unitsPerBlock + g;
+            double base = (PlanetSession.gravityRadius(out.getFirst().radius()) + spacing) * unitsPerBlock + g;
             Vector3d at = null;
             for (int t = 0; t < TRIES && at == null; t++) {
                 Vector3d c = direction(rnd).mul(base + t / 25 * step);
-                if (fits(out, c, radius, o.spacing().blocks, unitsPerBlock)) at = c;
+                if (fits(out, c, radius, spacing, unitsPerBlock)) at = c;
             }
             if (at != null) out.add(new Entry(out.size(), at.x, at.y, at.z, radius, Kind.GENERATED, biome, null, seed));
         }

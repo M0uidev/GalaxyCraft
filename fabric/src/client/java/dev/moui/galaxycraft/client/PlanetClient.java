@@ -1190,7 +1190,7 @@ public final class PlanetClient {
         for (GalaxyCatalog.Entry e : made.entries())
             reach = Math.max(reach, e.center().length() * GravityFrame.SCALE + PlanetSession.gravityRadius(e.radius()));
         dev.moui.galaxycraft.universe.Universe universe = new dev.moui.galaxycraft.universe.Universe(made.options().seed(),
-                1 / GravityFrame.SCALE).withHome(reach);
+                1 / GravityFrame.SCALE, made.layout()).withHome(reach);
         stream = new GalaxyStream(g, store, stage, made, ENDLESS ? universe : null);
         UniverseClient.enter(universe);
         GalaxyCraft.LOG.info("The world's galaxy: {} planets", made.entries().size());
@@ -1217,9 +1217,10 @@ public final class PlanetClient {
                 firstRadius = 48;
             } else firstRadius = bp.radius();
         }
-        GalaxyCatalog.Result r = GalaxyCatalog.make(o, firstRadius, dev.moui.galaxycraft.voxel.gen.LegacyBiome.land(), 1 / GravityFrame.SCALE);
+        GalaxyCatalog.Result r = GalaxyCatalog.make(o, firstRadius, dev.moui.galaxycraft.voxel.gen.LegacyBiome.land(), 1 / GravityFrame.SCALE,
+                GalaxyCatalog.LAYOUT);
         if (r.placed() < r.asked()) say(player, r.placed() + " of " + r.asked() + " planets fit in the galaxy");
-        return new GalaxySave.Galaxy(1, o, r.entries());
+        return new GalaxySave.Galaxy(GalaxyCatalog.LAYOUT, o, r.entries());
     }
 
     /**

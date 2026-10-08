@@ -86,4 +86,10 @@ class GalaxySaveTest {
         }
         assertEquals(3, made.options().count());
     }
+
+    @Test void aGalaxySavedBeforeLayoutsIsLayoutOne() {
+        assertEquals(1, new GalaxySave.Galaxy(0, null, java.util.List.of()).layout());
+        assertEquals(1, new GalaxySave.Galaxy(1, null, java.util.List.of()).layout());
+        assertEquals(2, new GalaxySave.Galaxy(2, null, java.util.List.of()).layout());
+    }
 }

@@ -55,7 +55,12 @@ public final class GalaxySave {
     }
 
     /** The world's planets: the options it was made with and the catalog (galaxy.json). */
-    public record Galaxy(int version, GalaxyCatalog.Options options, java.util.List<GalaxyCatalog.Entry> entries) {}
+    public record Galaxy(int version, GalaxyCatalog.Options options, java.util.List<GalaxyCatalog.Entry> entries) {
+        /** Its world layout (GalaxyCatalog.LAYOUT): saves from before layouts (version 0 or 1) are 1. */
+        public int layout() {
+            return Math.max(1, version);
+        }
+    }
 
     public Optional<Galaxy> galaxy() {
         Path f = dir.resolve("galaxy.json");

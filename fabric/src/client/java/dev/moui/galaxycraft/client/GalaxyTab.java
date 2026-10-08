@@ -64,7 +64,7 @@ final class GalaxyTab extends GridLayoutTab {
                     case NEAR -> "Near";
                     case NORMAL -> "Normal";
                     case FAR -> "Far";
-                }), spacing).withValues(GalaxyCatalog.Spacing.values())
+                } + " (" + s.blocks(GalaxyCatalog.LAYOUT) + " blocks)"), spacing).withValues(GalaxyCatalog.Spacing.values())
                 .create(0, 0, W, 20, Component.literal("Spacing"), (b, v) -> changed(() -> spacing = v)));
         rows.addChild(new Slider("Others' radius from", GalaxyCatalog.MIN_RADIUS, GalaxyCatalog.MAX_RADIUS, min,
                 v -> "Others from: " + v, v -> min = v));

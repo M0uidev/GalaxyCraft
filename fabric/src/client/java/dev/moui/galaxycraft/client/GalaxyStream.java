@@ -49,6 +49,8 @@ final class GalaxyStream {
     private final String stage;
     private final List<GalaxyCatalog.Entry> entries;
     private final GalaxyCatalog.Options options;
+    /** The world's layout, kept when the galaxy is saved again. */
+    private final int layout;
     /**
      * The endless universe around the world's galaxy (its home system): the generated systems near
      * Mario, their planets as entries like the world's own (indexes from SystemIndex, centers in
@@ -84,6 +86,7 @@ final class GalaxyStream {
         this.store = store;
         this.stage = stage;
         this.options = galaxy.options();
+        this.layout = galaxy.layout();
         this.entries = new ArrayList<>(galaxy.entries());
         this.universe = universe;
     }
@@ -461,7 +464,7 @@ final class GalaxyStream {
     }
 
     private void write() {
-        GalaxySave.Galaxy g = new GalaxySave.Galaxy(1, options, List.copyOf(entries));
+        GalaxySave.Galaxy g = new GalaxySave.Galaxy(layout, options, List.copyOf(entries));
         PlanetClient.saveLater(() -> {
             try {
                 save.writeGalaxy(g);

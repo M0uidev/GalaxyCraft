@@ -53,7 +53,7 @@ class GalaxyCatalogTest {
                 }
                 for (int j = 0; j < i; j++) {
                     GalaxyCatalog.Entry b = es.get(j);
-                    double need = (PlanetSession.gravityRadius(a.radius()) + PlanetSession.gravityRadius(b.radius()) + sp.blocks) * U;
+                    double need = (PlanetSession.gravityRadius(a.radius()) + PlanetSession.gravityRadius(b.radius()) + sp.blocks(1)) * U;
                     assertTrue(a.center().distance(b.center()) >= need - 1e-6, sp + ": " + i + " and " + j + " too close");
                 }
             }
@@ -80,5 +80,27 @@ class GalaxyCatalogTest {
         var e = GalaxyCatalog.added(es, new org.joml.Vector3d(1, 2, 3), 40, GalaxyCatalog.Kind.BLUEPRINT, null, "X", 0);
         assertEquals(3, e.index());
         assertEquals("X", e.blueprint());
+    }
+
+    @Test void spacingWidensWithTheLayout() {
+        assertEquals(96, GalaxyCatalog.Spacing.NORMAL.blocks(1));
+        assertEquals(600, GalaxyCatalog.Spacing.NORMAL.blocks(2));
+        assertEquals(150, GalaxyCatalog.Spacing.NEAR.blocks(2));
+        assertEquals(1500, GalaxyCatalog.Spacing.FAR.blocks(2));
+        assertEquals(2, GalaxyCatalog.LAYOUT);
+        var old = GalaxyCatalog.make(opts(12, GalaxyCatalog.Spacing.NORMAL, 5), 32, LAND, U);
+        assertEquals(old, GalaxyCatalog.make(opts(12, GalaxyCatalog.Spacing.NORMAL, 5), 32, LAND, U, 1), "layout 1 is today's");
+        var wide = GalaxyCatalog.make(opts(12, GalaxyCatalog.Spacing.NORMAL, 5), 32, LAND, U, 2);
+        double nearest = Double.MAX_VALUE;
+        for (var a : wide.entries())
+            for (var b : wide.entries())
+                if (a != b) nearest = Math.min(nearest, a.center().distance(b.center()) / U);
+        assertTrue(nearest > 600, "nearest centers " + nearest + " blocks apart");
+    }
+
+    @Test void aBigGalaxyFarApartStillFits() {
+        var o = new GalaxyCatalog.Options(64, 32, 128, GalaxyCatalog.First.generated("random", 64), GalaxyCatalog.Spacing.FAR, 3);
+        var r = GalaxyCatalog.make(o, 64, LAND, U, 2);
+        assertEquals(64, r.entries().size(), r.entries().size() + " of 64 placed");
     }
 }
