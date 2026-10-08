@@ -445,6 +445,8 @@ handle('game:log', () => logBuffer);
 
 // The report to send when something fails: a zip of the logs and settings the player saves where
 // they like (see core/report.js). Never uploaded.
+const PCI_VENDORS = { 0x10de: 'NVIDIA', 0x1002: 'AMD', 0x8086: 'Intel', 0x106b: 'Apple' };
+
 handle('report:export', async (instId) => {
   const inst = instOf(instId);
   const gameDir = store.gameDirOf(inst, paths());
@@ -455,8 +457,10 @@ handle('report:export', async (instId) => {
   if (live) files.push({ name: 'launcher/window-log.txt', data: report.redact(report.tail(live), { home: paths().home }) });
   let gpu = '';
   try {
-    const info = await app.getGPUInfo('basic');
-    gpu = (info.gpuDevice || []).map((d) => `${d.vendorString || d.vendorId} ${d.deviceString || d.deviceId}`.trim()).join('; ');
+    const info = await app.getGPUInfo('complete');
+    const aux = info.auxAttributes || {};
+    gpu = [aux.glRenderer, aux.glVersion && `GL ${aux.glVersion}`, aux.driverVersion && `driver ${aux.driverVersion}`].filter(Boolean).join(', ');
+    if (!gpu) gpu = (info.gpuDevice || []).map((d) => `${d.vendorString || PCI_VENDORS[d.vendorId] || `vendor 0x${d.vendorId.toString(16)}`} ${d.deviceString || `device 0x${d.deviceId.toString(16)}`}`).join('; ');
   } catch { /* unknown */ }
   const when = new Date();
   files.unshift({

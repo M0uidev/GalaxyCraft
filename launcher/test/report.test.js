@@ -108,13 +108,20 @@ test('collect: only the newest crash reports, and big logs are cut to their end'
   assert.ok(files.find((f) => f.name === 'minecraft/latest.log').data.length < 200);
 });
 
+test('collect: the settings file does not carry the skins looked up', () => {
+  const fs = fakeFs({ '/u/launcher.json': JSON.stringify({ settings: { onPlay: 'keep', recentSkins: ['notch'] } }) });
+  const [f] = report.collect({ fs, paths: P, gameDir: '/g', stateFile: '/u/launcher.json' });
+  assert.ok(f.data.includes('onPlay'));
+  assert.ok(!f.data.includes('notch'));
+});
+
 test('systemText: versions, system, game state and the files, without account data', () => {
   const text = report.systemText({
     version: '0.1.2', platform: 'linux', arch: 'x64', osRelease: '7.2', electron: '44.0',
     totalMem: 16 * 2 ** 30, cpus: 'Ryzen 5 x12', gpu: 'RTX 3060',
     game: { state: 'stopped', crashed: true, by: 'Minecraft', code: 1 },
     installation: { name: 'Super Minecraft Galaxy', dualCore: true, javaArgs: '', gameDir: '/h/g' },
-    settings: { onPlay: 'keep', msaClientId: 'abc' },
+    settings: { onPlay: 'keep', msaClientId: 'abc', recentSkins: ['notch'] },
     files: ['launcher/launcher.log'], when: new Date('2026-10-08T12:00:00Z'), home: '/h',
   });
   assert.match(text, /Launcher 0\.1\.2/);
@@ -124,6 +131,7 @@ test('systemText: versions, system, game state and the files, without account da
   assert.match(text, /2026-10-08T12:00:00/);
   assert.match(text, /launcher\/launcher\.log/);
   assert.ok(!text.includes('/h/g'));
+  assert.ok(!text.includes('notch') && !text.includes('abc'));
 });
 
 test('defaultName: smg-report-<date>-<time>.zip', () => {

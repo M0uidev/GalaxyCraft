@@ -110,6 +110,17 @@ function tail(text, maxBytes = MAX_FILE_BYTES) {
 
 // ---- what goes in ------------------------------------------------------------------------------
 
+/** The launcher's settings without the skins looked up (other players' names). */
+function withoutSkins(text) {
+  try {
+    const j = JSON.parse(text);
+    if (j.settings) delete j.settings.recentSkins;
+    return JSON.stringify(j, null, 2);
+  } catch {
+    return text;
+  }
+}
+
 /**
  * The report's files: [{ name, data }], redacted and cut. Files that do not exist are skipped.
  *   fs        { exists, list, read, mtime? } (mtime orders the crash reports)
@@ -121,10 +132,10 @@ function collect({ fs, paths, gameDir, stateFile, maxBytes = MAX_FILE_BYTES }) {
   const p = paths.path;
   const home = paths.home;
   const out = [];
-  const add = (name, file) => {
+  const add = (name, file, prepare = (t) => t) => {
     try {
       if (!fs.exists(file)) return;
-      out.push({ name, data: redact(tail(fs.read(file), maxBytes), { home }) });
+      out.push({ name, data: redact(tail(prepare(fs.read(file)), maxBytes), { home }) });
     } catch {
       /* unreadable: leave it out */
     }
@@ -160,7 +171,7 @@ function collect({ fs, paths, gameDir, stateFile, maxBytes = MAX_FILE_BYTES }) {
   add('dolphin/dolphin.log', p.join(dolphinLogs, 'dolphin.log'));
   add('dolphin/galaxycraft.log', p.join(dolphinLogs, 'galaxycraft.log'));
 
-  if (stateFile) add('config/launcher.json', stateFile);
+  if (stateFile) add('config/launcher.json', stateFile, withoutSkins);
   return out;
 }
 
@@ -186,8 +197,8 @@ function systemText({ version, platform, arch, osRelease, electron, totalMem, cp
   }
   if (installation) lines.push('', 'Installation:', JSON.stringify(installation, null, 2));
   if (settings) {
-    // not the sign-in app's id: it is not a secret, but it is not needed either
-    const { msaClientId, ...rest } = settings; // eslint-disable-line no-unused-vars
+    // not the sign-in app's id (not needed) nor the skins looked up (other players' names)
+    const { msaClientId, recentSkins, ...rest } = settings; // eslint-disable-line no-unused-vars
     lines.push('', 'Settings:', JSON.stringify(rest, null, 2));
   }
   lines.push('', 'Files in this report:', ...(files || []).map((f) => `  ${f}`));
