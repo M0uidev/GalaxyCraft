@@ -710,8 +710,14 @@ public final class PlanetClient {
                 mining.stop();
                 session.setCrack(-1, -1, null);
             }
-            // Minecraft gets the same clicks and swings the arm by itself.
-            if (item && pressed(buttons, MOUSE_RIGHT) && !hit) use(player, eye, look, world.queryPos(), aim);
+            // Minecraft gets the same clicks and swings the arm by itself. Held, again every
+            // USE_REPEAT ticks, as Minecraft's (its rightClickDelay).
+            if ((buttons & MOUSE_RIGHT) == 0) useDelay = 0;
+            else if (useDelay > 0) useDelay--;
+            if (item && (buttons & MOUSE_RIGHT) != 0 && useDelay == 0 && !hit) {
+                use(player, eye, look, world.queryPos(), aim);
+                useDelay = USE_REPEAT;
+            }
         }
         else {
             ShadowWorld.mario(null);
@@ -1244,6 +1250,10 @@ public final class PlanetClient {
     private static boolean key(Optional<Seqlock.InputState> in, int usage) {
         return in.map(i -> (i.keys()[usage / 8] >> (usage % 8) & 1) != 0).orElse(false);
     }
+
+    /** Ticks between uses while the right button is held (Minecraft's rightClickDelay). */
+    private static final int USE_REPEAT = 4;
+    private static int useDelay;
 
     private static boolean pressed(int buttons, int mask) {
         return (buttons & mask) != 0 && (lastButtons & mask) == 0;
