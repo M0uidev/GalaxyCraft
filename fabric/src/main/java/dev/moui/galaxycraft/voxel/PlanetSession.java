@@ -1279,6 +1279,22 @@ public final class PlanetSession {
         farStep = Math.max(8, blocks);
     }
 
+    /** Dev trace (GXC_TRACE_BODIES): the state of the tiles within a few blocks of Mario, and whether far views are drawn near. */
+    public String traceTiles(Vector3d mario) {
+        if (planet == null || mario == null) return "no planet";
+        StringBuilder b = new StringBuilder();
+        BitSet seen = new BitSet();
+        for (int c : chunksNear(mario, 40)) {
+            int t = PlanetLod.tileOfChunk(planet, c);
+            if (seen.get(t)) continue;
+            seen.set(t);
+            b.append(String.format("[tile %d shown=%b farOnGuest=%b held=%b cols=%d/%d inFarPending=%b blocking=%b] ", t, shown.get(t),
+                    farOnGuest.get(t), farHeld.get(t), farCols[t], farWant[t], farPendingSet.get(t), farBlocking.get(t)));
+        }
+        return b + "detail=" + detail + " pending=" + pending.size() + " urgent=" + urgent.size() + " farPending=" + farPending.size()
+                + " farLater=" + farLater.size() + " shown=" + shown.cardinality() + " farOnGuest=" + farOnGuest.cardinality();
+    }
+
     /** Whether the game draws a tile's far view up close (not covered by its chunks; tests). */
     boolean farDrawnNear(int t) {
         return farOnGuest.get(t);

@@ -809,6 +809,7 @@ public final class PlanetClient {
             GalaxyCraft.LOG.info("trace:   mario local {} {} {} blocks, cell {}, {} of {} chunks within 8 blocks have collision",
                     Math.round(l.x * 10) / 10.0, Math.round(l.y * 10) / 10.0, Math.round(l.z * 10) / 10.0, s.cellAt(mario),
                     near, s.chunksNear(mario, 8).size());
+            GalaxyCraft.LOG.info("trace:   tiles near Mario: {}", s.traceTiles(mario));
             Vector3d gc = GameOrigin.toGame(s.center()), gm = GameOrigin.toGame(mario);
             GalaxyCraft.LOG.info("trace:   game coordinates (units): body centre {} {} {}, mario {} {} {}, origin epoch {}, offset {}",
                     Math.round(gc.x), Math.round(gc.y), Math.round(gc.z), Math.round(gm.x), Math.round(gm.y), Math.round(gm.z),
