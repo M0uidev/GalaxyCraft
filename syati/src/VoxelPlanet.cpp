@@ -147,6 +147,9 @@ void FlatMove(ParallelGravity* g, const f32 d[3])
 // The camera is this far above a planet's surface (or its radius, if more), galaxy units, or
 // farther: its far view alone is drawn, covered parts and all, not its chunks.
 const f32 FAR_VIEW_ABOVE = 96.f * 80.f;
+// How far from the camera a far view may be drawn and still pass the depth test against the sky
+// (units): planets 500 blocks off showed, so its depth is farther than that; 375 blocks keeps clear.
+const f32 SKY_DEPTH = 375.f * 80.f;
 
 // Replaced chunks' memory is freed a few frames later: Mario's binder may still read the last
 // triangle it stood on, the GPU the last display list. A planet streaming in replaces dozens of
@@ -1377,15 +1380,18 @@ public:
     const bool translucent = pass == PASS_CLEAR;
     if (p.far && pass == PASS_FAR)
     {
-      // Past the camera's far plane the GPU would clip it away: drawn smaller and nearer by the
-      // same factor, about the camera, it looks the same and stays in front of that plane.
+      // Past the camera's far plane the GPU would clip it away, and past the sky (drawn before,
+      // writing a nearer depth than the far plane's) the depth test hides it: planets seemed to
+      // pop in out of nowhere a few hundred blocks off. So it is drawn smaller and nearer by the
+      // same factor, about the camera, inside both: it looks the same.
       // GX's perspective: m22 = -n/(f-n), m23 = -fn/(f-n), so f = m23/m22.
       const f32 farZ = proj[5] != 0.f ? proj[6] / proj[5] : 0.f;
+      const f32 limit = farZ > 0.f && farZ < SKY_DEPTH ? farZ : SKY_DEPTH;
       const f32 dist = gxc::Sqrt(eye[0] * eye[0] + eye[1] * eye[1] + eye[2] * eye[2]);
       const f32 reach = dist + p.surface + 32.f * 80.f;
       f32 scale = 1.f;
-      if (farZ > 0.f && reach > 0.9f * farZ)  // its far side kept under 0.99 f, nearer ones nearer
-        scale = farZ * (0.9f + 0.09f * (1.f - 0.9f * farZ / reach)) / reach;
+      if (reach > 0.9f * limit)  // its far side kept under 0.99 of the limit, nearer ones nearer
+        scale = limit * (0.9f + 0.09f * (1.f - 0.9f * limit / reach)) / reach;
       if (scale < 1.f)
       {
         f32 at[3];

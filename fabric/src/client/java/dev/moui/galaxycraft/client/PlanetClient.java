@@ -108,6 +108,11 @@ public final class PlanetClient {
     /** The world's galaxy streamed from its catalog (null: no world, or game tests' fixed folder). */
     private static GalaxyStream stream;
 
+    /** How a planet of the galaxy shows now (tests): complete, far<patches>, dot or none. */
+    public static String shownAs(int index) {
+        return stream == null ? "none" : stream.shownAs(index);
+    }
+
     /** The world's galaxy streaming, or null outside one. */
     static GalaxyStream stream() {
         return stream;

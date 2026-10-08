@@ -151,6 +151,15 @@ final class GalaxyStream {
         }
     }
 
+    /** How a planet shows now (tests): complete, far (and its patches), dot, or none (not known here). */
+    String shownAs(int index) {
+        PlanetSession s = PlanetClient.sessionOf(index);
+        if (s != null && s.active()) return "complete";
+        FarPlanet f = far.get(index);
+        if (f != null && f.patches() > 0 && f.queued() == 0) return "far" + f.patches();
+        return all().stream().anyMatch(e -> e.index() == index) ? "dot" : "none";
+    }
+
     /** Whether that system's planets are known here (shown as dots or more): home always. */
     boolean knows(Universe.Sector s) {
         return s.equals(Universe.Sector.HOME) || systems.containsKey(s);
