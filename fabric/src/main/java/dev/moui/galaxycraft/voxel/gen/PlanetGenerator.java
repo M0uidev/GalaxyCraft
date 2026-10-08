@@ -42,6 +42,13 @@ public final class PlanetGenerator {
         return land.get(new Random(bp.seed()).nextInt(land.size()));
     }
 
+    /** The biome a one-biome blueprint gets: its own, or for "random" one of 1.7's land biomes by its seed. */
+    public static String biome(PlanetBlueprint bp) {
+        if (!PlanetBlueprint.RANDOM.equals(bp.biome())) return bp.biome();
+        List<String> land = LegacyBiome.land();
+        return land.get(new Random(bp.seed()).nextInt(land.size()));
+    }
+
     /** A generated planet's cells, before they are a VoxelPlanet (that is made on the game's thread). */
     public record Cells(CubeSphere grid, int depth, char[] cells, dev.moui.galaxycraft.voxel.PlanetBiomes biomes) {
         public VoxelPlanet planet(Blocks blocks) {
