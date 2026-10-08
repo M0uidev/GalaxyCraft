@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-08 (Now: 1.7 terrain rework; Next: far view bugs, swimming)
+Last updated: 2026-10-08 (v0.1.2 released; Now: 1.7 terrain rework; Next: far view bugs, swimming)
 
 ---
 
@@ -24,7 +24,7 @@ Last updated: 2026-10-08 (Now: 1.7 terrain rework; Next: far view bugs, swimming
 | Feature | Status | Notes |
 |---|---|---|
 | Planets with Minecraft 1.7 terrain | now | User 2026-10-08: today's terrain "not that good", old terrain fits small worlds. 3D density with overhangs, several biomes per planet scaled to its size, oceans, rivers, beaches, cave labyrinths, heights scaled to the radius. Then check whether trees still come out broken (one block above the grass, a trunk missing a log). [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-legacy-terrain-design.md) |
-| First release (Linux and Windows) | now | v0.1.1 published 2026-10-07 (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
+| First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
 
 ## Next
 
