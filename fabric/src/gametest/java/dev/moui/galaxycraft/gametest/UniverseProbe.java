@@ -4,6 +4,7 @@ import dev.moui.galaxycraft.client.GalaxyCraftClient;
 import dev.moui.galaxycraft.client.GalaxyOptions;
 import dev.moui.galaxycraft.client.PendingGalaxy;
 import dev.moui.galaxycraft.client.PlanetClient;
+import dev.moui.galaxycraft.client.StationClient;
 import dev.moui.galaxycraft.client.UniverseClient;
 import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.universe.GameOrigin;
@@ -12,6 +13,7 @@ import dev.moui.galaxycraft.universe.UPos;
 import dev.moui.galaxycraft.universe.Universe;
 import dev.moui.galaxycraft.voxel.GalaxyCatalog;
 import dev.moui.galaxycraft.voxel.PlanetSession;
+import dev.moui.galaxycraft.voxel.Station;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -23,6 +25,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
+import net.minecraft.world.InteractionHand;
 import org.joml.Vector3d;
 
 /**
@@ -36,6 +39,7 @@ public final class UniverseProbe implements FabricClientGameTest {
     private static final Pattern FLAGS = Pattern.compile("flags=[0-9a-f]+/([0-9a-f]+) .*stage=(\\S+)");
     private static final double U = 80;
     private boolean ok = true;
+    private String packed;
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
@@ -65,6 +69,14 @@ public final class UniverseProbe implements FabricClientGameTest {
         ctx.waitTicks(10);
         ctx.runOnClient(mc -> mc.player.setXRot(0));
         origin(ctx);
+        if (Boolean.getBoolean("galaxycraft.universeStation")) { // the control: origin at home
+            ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MINECRAFT));
+            ctx.waitTicks(40);
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(new Vector3d(0, 1, 0).mul(3000 * U)));
+            ctx.waitTicks(80);
+            packed = stationInVoid(ctx, "near", null);
+            packed = stationInVoid(ctx, "near (unfolded)", packed);
+        }
         voidFlight(ctx);
         systems(ctx);
         travel(ctx);
@@ -109,6 +121,55 @@ public final class UniverseProbe implements FabricClientGameTest {
         check(back < 1, "standing still at home is still");
     }
 
+    /**
+     * -Dgalaxycraft.universeStation=true: a station goes up out here, the origin far from home (the
+     * real galaxy's case), Mario is landed on it and must stand: its slab top is y = 0.5 of the station.
+     */
+    private String stationInVoid(ClientGameTestContext ctx, String label, String unfoldId) {
+        if (!Boolean.getBoolean("galaxycraft.universeStation")) return null;
+        log("station in the void (" + label + "), origin at " + ctx.computeOnClient(mc -> GameOrigin.offset().div(U)) + " blocks, epoch "
+                + ctx.computeOnClient(mc -> GameOrigin.epoch()));
+        PlanetSession s = ctx.computeOnClient(mc -> {
+            StationClient.Spot at = StationClient.spot(mc.player);
+            if (at == null) return null;
+            return unfoldId == null ? StationClient.place(mc.player, InteractionHand.MAIN_HAND, at)
+                    : StationClient.unfold(mc.player, InteractionHand.MAIN_HAND, unfoldId, at);
+        });
+        check(s != null, "a station goes up in the void");
+        if (s == null) return null;
+        String id = ctx.computeOnClient(mc -> StationClient.of(s).orElseThrow().id);
+        ctx.waitFor(mc -> s.queued() == 0, 1200);
+        ctx.waitTicks(40);
+        for (Movement m : new Movement[] {Movement.MINECRAFT, Movement.MARIO}) {
+            ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(m));
+            ctx.waitTicks(20);
+            ctx.runOnClient(mc -> PlanetClient.teleport());
+            for (int i = 0; i < 10; i++) {
+                ctx.waitTicks(20);
+                log(String.format("  %s +%d: %s", m, 20 * i + 20, ctx.computeOnClient(mc -> {
+                    Vector3d gal = GalaxyCraftClient.galaxyPos().orElse(null);
+                    Vector3d up = GalaxyCraftClient.galaxyUp().orElse(null);
+                    return gal == null ? "no pos" : String.format("local %s, up %s, onGround %s, focus is the station %s, mc pos %s",
+                            round(s.localOf(gal)), up == null ? "?" : round(up), mc.player.onGround(), PlanetClient.focus() == s, mc.player.position());
+                })));
+            }
+            double h = ctx.computeOnClient(mc -> {
+                Station st = StationClient.of(s).orElseThrow();
+                Vector3d gal = GalaxyCraftClient.galaxyPos().orElseThrow();
+                Vector3d base = s.galOf(st.rotation.transform(new Vector3d(0, 0.5, 0)));
+                Vector3d up = s.galOf(st.rotation.transform(new Vector3d(0, 1.5, 0))).sub(base);
+                return new Vector3d(gal).sub(base).dot(up) / up.lengthSquared();
+            });
+            log(String.format("%s: %.2f blocks above the slab, %d collision chunks, game parts %s", m, h, s.collisionChunks(),
+                    gxdev("ctl", "mbx").replaceAll("(?s).*(parts=\\d+).*", "$1").strip()));
+            check(h > -0.3 && h < 3, m + " stands on the station");
+        }
+        gxdev("ctl", "shot universe-station");
+        ctx.runOnClient(mc -> StationClient.pack(s));
+        ctx.waitTicks(40);
+        return id;
+    }
+
     /** Out past the home system in the void, moving on: the origin follows, Mario's place never jumps. */
     private void voidFlight(ClientGameTestContext ctx) {
         ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MINECRAFT));
@@ -139,6 +200,7 @@ public final class UniverseProbe implements FabricClientGameTest {
         log(String.format("Mario in the game's numbers: %.0f %.0f %.0f units", game.x, game.y, game.z));
         check(game.length() < 5 * 65536, "the game's numbers stay small out there");
         gxdev("ctl", "shot universe-void");
+        stationInVoid(ctx, "far (unfolded)", packed);
         // Home again.
         log("before going home: " + republished());
         ctx.runOnClient(mc -> PlanetClient.travelTo(PlanetClient.catalog().getFirst().index()));
@@ -318,6 +380,10 @@ public final class UniverseProbe implements FabricClientGameTest {
             if (p != null && first != null) worst = Math.max(worst, p.distance(first));
         }
         return worst;
+    }
+
+    private static String round(Vector3d v) {
+        return String.format("(%.2f %.2f %.2f)", v.x, v.y, v.z);
     }
 
     private static boolean onSurface() {

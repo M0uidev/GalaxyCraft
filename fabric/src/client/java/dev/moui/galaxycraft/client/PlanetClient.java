@@ -777,6 +777,7 @@ public final class PlanetClient {
             for (PlanetSession.Msg m; (m = s.peek(bulk)) != null && bridge.send(m.type(), m.payload()); ) s.sent();
         leaving.removeIf(s -> s.queued() == 0);
         rescue();
+        traceBodies(world.queryPos());
         if (stream != null) stream.send(bridge, bulk);
         if (++sinceSave >= SAVE_TICKS) {
             sinceSave = 0;
@@ -785,6 +786,36 @@ public final class PlanetClient {
     }
 
     private static Vector3d marioUniverse;
+
+    /** -Dgalaxycraft.traceBodies: each second near a body, how it shows and whether it has collision (a fall through one). */
+    private static final boolean TRACE_BODIES = Boolean.getBoolean("galaxycraft.traceBodies");
+    private static int traceTicks;
+    private static Vector3d traceLast;
+
+    private static void traceBodies(Vector3d mario) {
+        if (!TRACE_BODIES || mario == null || ++traceTicks < 20) return;
+        traceTicks = 0;
+        double speed = traceLast == null ? 0 : mario.distance(traceLast) * GravityFrame.SCALE; // blocks per second
+        traceLast = new Vector3d(mario);
+        for (PlanetSession s : bodies()) {
+            if (!s.active()) continue;
+            double past = s.center().distance(mario) - PlanetSession.gravityRadius(s.planet().surface()) / GravityFrame.SCALE;
+            if (past * GravityFrame.SCALE > 400) continue;
+            GalaxyCraft.LOG.info("trace: {}{} {} blocks past gravity, {} blocks/s, detail {}, {} collision chunks, {} to send",
+                    s == focus ? "* " : "", indexOf(s), Math.round(past * GravityFrame.SCALE), Math.round(speed), s.detail(),
+                    s.collisionChunks(), s.queued());
+            Vector3d l = s.localOf(mario);
+            long near = s.chunksNear(mario, 8).stream().filter(s::collides).count();
+            GalaxyCraft.LOG.info("trace:   mario local {} {} {} blocks, cell {}, {} of {} chunks within 8 blocks have collision",
+                    Math.round(l.x * 10) / 10.0, Math.round(l.y * 10) / 10.0, Math.round(l.z * 10) / 10.0, s.cellAt(mario),
+                    near, s.chunksNear(mario, 8).size());
+            Vector3d gc = GameOrigin.toGame(s.center()), gm = GameOrigin.toGame(mario);
+            GalaxyCraft.LOG.info("trace:   game coordinates (units): body centre {} {} {}, mario {} {} {}, origin epoch {}, offset {}",
+                    Math.round(gc.x), Math.round(gc.y), Math.round(gc.z), Math.round(gm.x), Math.round(gm.y), Math.round(gm.z),
+                    GameOrigin.epoch(), GameOrigin.offset());
+        }
+        if (stream != null) stream.trace(mario, speed);
+    }
 
     /** Endless systems around the world's galaxy (-Dgalaxycraft.endless=false: the world's galaxy alone). */
     static final boolean ENDLESS = !"false".equals(System.getProperty("galaxycraft.endless"));

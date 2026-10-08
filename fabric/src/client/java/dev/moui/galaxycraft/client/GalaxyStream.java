@@ -151,6 +151,19 @@ final class GalaxyStream {
         }
     }
 
+    /** -Dgalaxycraft.traceBodies: the catalog planets within 1500 blocks of their gravity that are not complete, and what is being done about them. */
+    void trace(Vector3d from, double speed) {
+        for (GalaxyCatalog.Entry e : all()) {
+            PlanetSession s = PlanetClient.sessionOf(e.index());
+            if (s != null && s.active()) continue;
+            double past = (e.center().distance(from) - PlanetSession.gravityRadius(e.radius()) * UNITS) / UNITS;
+            if (past > 1500) continue;
+            GalaxyCraft.LOG.info("trace: planet {} not complete, {} blocks past gravity, {} blocks/s, {}, wanted {}, ahead {}, making {}, failed {}",
+                    e.index(), Math.round(past), Math.round(speed), shownAs(e.index()), wanted.contains(e.index()), ahead.contains(e.index()),
+                    making.containsKey(e.index()), failed.contains(e.index()));
+        }
+    }
+
     /** How a planet shows now (tests): complete, far (and its patches), dot, or none (not known here). */
     String shownAs(int index) {
         PlanetSession s = PlanetClient.sessionOf(index);

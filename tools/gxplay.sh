@@ -71,7 +71,7 @@ GALAXYCRAFT=1 GALAXYCRAFT_BOOT=space dolphin/build/Binaries/dolphin-emu -u "$DOL
   -C Dolphin.Interface.ConfirmStop=False &
 DOLPHIN=$!
 # Minecraft itself (not a game test): its title screen, its worlds, its options, kept between runs.
-(cd fabric && exec ./gradlew runClient -PgalaxycraftHidden -PgalaxycraftGameDir="$GAME_DIR" \
+(cd fabric && exec ./gradlew runClient -PgalaxycraftHidden -PgalaxycraftGameDir="$GAME_DIR" ${GXC_TRACE_BODIES:+-PgalaxycraftTraceBodies} \
   --console=plain -q) &
 MINECRAFT=$!
 trap 'kill $DOLPHIN $MINECRAFT 2> /dev/null' INT TERM
