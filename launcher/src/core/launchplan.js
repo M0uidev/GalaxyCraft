@@ -6,6 +6,8 @@ const { gameDirOf } = require('./store');
 
 /** The Java processes of Minecraft run hidden for the game say this in their command line. */
 const HIDDEN_MATCH = 'galaxycraft.hidden=true';
+/** Dolphin's batch mode: the game's window only, without Dolphin's own main window (game list). */
+const DOLPHIN_BATCH = '-b';
 /** SMG2's (USA) save in a Dolphin user folder. */
 const SMG2_SAVE = ['Wii', 'title', '00010000', '53423445'];
 /** The game needs 256 MiB of MEM2 (Dolphin's RAM override): the module keeps planets there. */
@@ -66,6 +68,7 @@ function buildPlan({ root, paths, inst, javaHome, dolphinBin, descriptor = null,
     env: { ...env, GALAXYCRAFT: '1', GALAXYCRAFT_BOOT: 'space' },
     args: [
       '-u', dolphinDir,
+      DOLPHIN_BATCH,
       '-e', descriptor || modulePatch(root, paths.platform), // the chosen disc's descriptor, else the build's
       // Background input and hotkeys without focus, for this run only (-C is not saved).
       '-C', 'Dolphin.Input.BackgroundInput=True',
@@ -112,4 +115,4 @@ function describe(plan, platform = process.platform) {
   return plan.processes.map((proc) => `[${proc.name}] ${[proc.cmd, ...hide(proc.args)].map(q).join(' ')}`);
 }
 
-module.exports = { HIDDEN_MATCH, SMG2_SAVE, MEM2_BYTES, splitArgs, buildPlan, describe };
+module.exports = { DOLPHIN_BATCH, HIDDEN_MATCH, SMG2_SAVE, MEM2_BYTES, splitArgs, buildPlan, describe };
