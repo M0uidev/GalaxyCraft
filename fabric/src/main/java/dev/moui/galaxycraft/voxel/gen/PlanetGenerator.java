@@ -25,10 +25,10 @@ public final class PlanetGenerator {
     static final String STONE = "minecraft:stone", WATER = BiomeSurface.WATER, ICE = BiomeSurface.ICE, LAVA = "minecraft:lava",
             GRAVEL = "minecraft:gravel", SANDSTONE = "minecraft:sandstone", SAND = "minecraft:sand", RED_SAND = "minecraft:red_sand";
     /** Badlands' terracotta bands, bottom to top, repeating. */
-    static final List<String> BANDS = List.of("minecraft:terracotta", "minecraft:orange_terracotta", "minecraft:terracotta",
-            "minecraft:yellow_terracotta", "minecraft:terracotta", "minecraft:terracotta", "minecraft:brown_terracotta",
-            "minecraft:terracotta", "minecraft:red_terracotta", "minecraft:white_terracotta", "minecraft:terracotta",
-            "minecraft:light_gray_terracotta", "minecraft:orange_terracotta", "minecraft:terracotta");
+    static final List<String> BANDS = List.of("minecraft:terracotta", "minecraft:orange_terracotta", "minecraft:orange_terracotta",
+            "minecraft:yellow_terracotta", "minecraft:terracotta", "minecraft:white_terracotta", "minecraft:brown_terracotta",
+            "minecraft:orange_terracotta", "minecraft:red_terracotta", "minecraft:red_terracotta", "minecraft:terracotta",
+            "minecraft:light_gray_terracotta", "minecraft:yellow_terracotta", "minecraft:orange_terracotta", "minecraft:brown_terracotta");
 
     private PlanetGenerator() {}
 
