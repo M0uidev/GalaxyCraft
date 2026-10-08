@@ -972,6 +972,10 @@ static void TestShell()
   CHECK(ShellAlpha(10.f, 100.f) == 1.f);
   CHECK(std::fabs(ShellAlpha(-25.f, 100.f) - 0.75f) < 1e-6f);
   CHECK(ShellAlpha(-100.f, 100.f) == 0.f && ShellAlpha(-500.f, 100.f) == 0.f);
+  // In space all shells show; inside one gravity, only its own (fading), not the others'.
+  CHECK(ShellShown(10.f, 100.f, false) == 1.f);
+  CHECK(ShellShown(10.f, 100.f, true) == 0.f);
+  CHECK(std::fabs(ShellShown(-25.f, 100.f, true) - 0.75f) < 1e-6f);
 }
 
 int main()

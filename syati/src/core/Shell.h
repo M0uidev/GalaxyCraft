@@ -20,4 +20,9 @@ void ShellBoxList(u32 fmt, u8 out[SHELL_BOX_DL_BYTES]);
 // (negative: inside it): all of it from outside, fading out over `fade` units inside, so on a
 // planet's ground (deeper in than that) nothing shows.
 f32 ShellAlpha(f32 outside, f32 fade);
+
+// A body's shell shows how much (0..1), the camera `outside` units past its gravity's edge, and
+// `in_any`: the camera is inside some body's gravity. Out in space every shell shows; inside a
+// gravity only that body's own (fading as above), not the others' around it.
+f32 ShellShown(f32 outside, f32 fade, bool in_any);
 }  // namespace gxc

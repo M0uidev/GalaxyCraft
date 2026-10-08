@@ -112,6 +112,13 @@ void ShellBoxList(u32 fmt, u8 out[SHELL_BOX_DL_BYTES])
   Pad(p, out + SHELL_BOX_DL_BYTES);
 }
 
+f32 ShellShown(f32 outside, f32 fade, bool in_any)
+{
+  if (in_any && outside >= 0.f)
+    return 0.f;
+  return ShellAlpha(outside, fade);
+}
+
 f32 ShellAlpha(f32 outside, f32 fade)
 {
   if (outside >= 0.f)
