@@ -1382,37 +1382,41 @@ public:
     {
       // Past the camera's far plane the GPU would clip it away, and past the sky (drawn before,
       // writing a nearer depth than the far plane's) the depth test hides it: planets seemed to
-      // pop in out of nowhere a few hundred blocks off. So it is drawn smaller and nearer by the
-      // same factor, about the camera, inside both: it looks the same.
+      // pop in out of nowhere a few hundred blocks off. So a part that far is drawn smaller and
+      // nearer by the same factor, about the camera, inside both: it looks the same. Each part
+      // has its own factor (1 up to 0.9 of the limit), so what is near stays where it is and
+      // does not slip in front of the chunks, as the whole planet shrunk together did.
       // GX's perspective: m22 = -n/(f-n), m23 = -fn/(f-n), so f = m23/m22.
       const f32 farZ = proj[5] != 0.f ? proj[6] / proj[5] : 0.f;
       const f32 limit = farZ > 0.f && farZ < SKY_DEPTH ? farZ : SKY_DEPTH;
-      const f32 dist = gxc::Sqrt(eye[0] * eye[0] + eye[1] * eye[1] + eye[2] * eye[2]);
-      const f32 reach = dist + p.surface + 32.f * 80.f;
-      f32 scale = 1.f;
-      if (reach > 0.9f * limit)  // its far side kept under 0.99 of the limit, nearer ones nearer
-        scale = limit * (0.9f + 0.09f * (1.f - 0.9f * limit / reach)) / reach;
-      if (scale < 1.f)
-      {
-        f32 at[3];
-        for (int k = 0; k < 3; k++)
-          at[k] = p.center[k] + eye[k] * (1.f - scale);  // camera + (center - camera) * scale
-        gxc::ViewRelative(view, eyeAt, at, planet);
-        for (int r = 0; r < 3; r++)
-          for (int c = 0; c < 3; c++)
-            planet[4 * r + c] *= scale;
-      }
-      GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(planet), GX_PNMTX0);
       for (u32 f = 0; f < p.far_count; f++)
       {
         const FarPart& part = p.far[f];
         if (!part.dl || (part.covered && !afar) || gxc::SphereHidden(eye, fwd, origin, p.occluder, part.sphere, part.sphere[3]))
           continue;
+        const f32 off[3] = {part.sphere[0] - eye[0], part.sphere[1] - eye[1], part.sphere[2] - eye[2]};
+        const f32 reach = gxc::Sqrt(off[0] * off[0] + off[1] * off[1] + off[2] * off[2]) + part.sphere[3];
+        f32 scale = 1.f;
+        f32 shown[12];
+        const f32* mtx = planet;
+        if (reach > 0.9f * limit)  // its far side kept under 0.99 of the limit, nearer ones nearer
+        {
+          scale = limit * (0.9f + 0.09f * (1.f - 0.9f * limit / reach)) / reach;
+          f32 at[3];
+          for (int k = 0; k < 3; k++)
+            at[k] = p.center[k] + eye[k] * (1.f - scale);  // camera + (center - camera) * scale
+          gxc::ViewRelative(view, eyeAt, at, shown);
+          for (int r = 0; r < 3; r++)
+            for (int c = 0; c < 3; c++)
+              shown[4 * r + c] *= scale;
+          mtx = shown;
+        }
         f32 pos[12];
-        gxc::ViewTranslate(planet, part.sphere, pos);
+        gxc::ViewTranslate(mtx, part.sphere, pos);
         const f32 at[3] = {pos[3], pos[7], pos[11]};
         if (gxc::SphereOutsideView(proj, at, part.sphere[3] * scale))
           continue;
+        GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(const_cast<f32*>(mtx)), GX_PNMTX0);
         GXCallDisplayList(part.dl, part.dl_size);
         (*far)++;
       }
