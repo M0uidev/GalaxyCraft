@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-08 (v0.1.2 released; Now: 1.7 terrain rework; Next: far view bugs, swimming)
+Last updated: 2026-10-08 (export-report idea in Inbox; v0.1.2 released; Now: 1.7 terrain rework; Next: far view bugs, swimming)
 
 ---
 
@@ -139,6 +139,10 @@ Last updated: 2026-10-08 (v0.1.2 released; Now: 1.7 terrain rework; Next: far vi
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-08: Export report (user): a button in the launcher's log that saves one zip with the
+  launcher, Minecraft and Dolphin logs, crash reports, settings and a system summary, home folders
+  and tokens blanked, for players to send when something fails. Built on `feat/export-report`,
+  awaiting playtest; not uploaded anywhere.
 - 2026-10-07: Follow-ups of flat stations (Claude, review): a station's bounds grow only from what
   the player places, not from what Minecraft adds by itself (flowing water, growing trees, pistons);
   Mario's own movement keeps SMG2's crouch (user: "not made for that").

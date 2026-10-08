@@ -90,7 +90,8 @@ async function main() {
   const fake = fakeGame(tmp);
   if (!fake) console.log('smoke: no C# compiler, PLAY is not tried');
 
-  const env = { ...process.env, GXL_USER_DATA: userData, GXL_OFFLINE: '1', GXC_DATA_DIR: dataDir, ELECTRON_ENABLE_LOGGING: '1' };
+  const env = { ...process.env, GXL_USER_DATA: userData, GXL_OFFLINE: '1', GXC_DATA_DIR: dataDir, ELECTRON_ENABLE_LOGGING: '1',
+    GXL_REPORT_FILE: path.join(tmp, 'report.zip') };
   delete env.ELECTRON_RUN_AS_NODE;
   if (fake) env.GXC_ROOT = fake.root;
   const { executablePath, args } = target();
@@ -180,6 +181,13 @@ async function main() {
     assert.match(log, /Dolphin ended/);
     assert.ok(fs.existsSync(path.join(dataDir, 'dolphin', 'Config', 'Dolphin.ini')), 'Dolphin\'s folder seeded');
     await shot('11-after');
+    // Export report: a zip with the system summary and the logs of this run.
+    await page.click('#log-report');
+    await page.waitForFunction(() => /Report saved/.test(document.querySelector('#toasts').textContent), null, { timeout: 10000 });
+    const zipFile = path.join(tmp, 'report.zip');
+    assert.ok(fs.existsSync(zipFile), 'report.zip written');
+    const zip = fs.readFileSync(zipFile);
+    for (const name of ['system.txt', 'launcher/launcher.log', 'config/launcher.json']) assert.ok(zip.includes(Buffer.from(name)), `${name} in the report`);
   }
 
   await app.close();
