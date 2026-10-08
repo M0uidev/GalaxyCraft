@@ -13,6 +13,7 @@
 #include "Inbox.h"
 #include "Kcl.h"
 #include "Parts.h"
+#include "Shell.h"
 #include "ViewMath.h"
 
 using namespace gxc;
@@ -931,8 +932,51 @@ static void TestSneakStep()
   CHECK(std::fabs(out[1] - 0.05f) < 1e-6f);  // up and down are his own (a step, a slope)
 }
 
+static float BeF32(const u8* p)
+{
+  const u32 u = (u32(p[0]) << 24) | (u32(p[1]) << 16) | (u32(p[2]) << 8) | p[3];
+  float f;
+  std::memcpy(&f, &u, 4);
+  return f;
+}
+
+static void TestShell()
+{
+  static u8 sphere[SHELL_SPHERE_DL_BYTES], box[SHELL_BOX_DL_BYTES];
+  ShellSphereList(6, sphere);
+  CHECK(sphere[0] == (0xA8 | 6));
+  CHECK(((sphere[1] << 8) | sphere[2]) == int(SHELL_SPHERE_VERTS));
+  bool unit = true, top = false, bottom = false;
+  for (u32 v = 0; v < SHELL_SPHERE_VERTS; v++)
+  {
+    const u8* p = sphere + 3 + 12 * v;
+    const float x = BeF32(p), y = BeF32(p + 4), z = BeF32(p + 8);
+    unit = unit && std::fabs(x * x + y * y + z * z - 1.f) < 1e-4f;
+    top = top || y > 0.9999f;
+    bottom = bottom || y < -0.9999f;
+  }
+  CHECK(unit && top && bottom);
+  CHECK(sphere[SHELL_SPHERE_DL_BYTES - 1] == 0);
+  ShellBoxList(6, box);
+  CHECK(((box[1] << 8) | box[2]) == int(SHELL_BOX_VERTS));
+  bool onSides = true;
+  for (u32 v = 0; v < SHELL_BOX_VERTS; v++)
+  {
+    const u8* p = box + 3 + 12 * v;
+    float m = 0;
+    for (int k = 0; k < 3; k++)
+      m = std::fmax(m, std::fabs(BeF32(p + 4 * k)));
+    onSides = onSides && std::fabs(m - 1.f) < 1e-6f;  // every line lies on the cube's sides
+  }
+  CHECK(onSides);
+  CHECK(ShellAlpha(10.f, 100.f) == 1.f);
+  CHECK(std::fabs(ShellAlpha(-25.f, 100.f) - 0.75f) < 1e-6f);
+  CHECK(ShellAlpha(-100.f, 100.f) == 0.f && ShellAlpha(-500.f, 100.f) == 0.f);
+}
+
 int main()
 {
+  TestShell();
   TestSneakStep();
   TestInboxRecords();
   TestInboxRejectsBadChunks();

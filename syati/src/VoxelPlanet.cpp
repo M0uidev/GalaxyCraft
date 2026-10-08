@@ -14,6 +14,7 @@
 #include "Graves.h"
 #include "HeldItem.h"
 #include "Inbox.h"
+#include "Shell.h"
 #include "VoxelPlanet.h"
 
 #include "Boot.h"
@@ -43,6 +44,10 @@ namespace
 const u32 INBOX_BYTES = 256 * 1024;
 // Mario is put this far above the surface by a teleport (half a block).
 const f32 DROP_ABOVE = 40.f;
+// A gravity's edge (DrawShells): its lines' color and their most alpha (of 255), and how deep
+// inside it they fade out (32 blocks: under a planet's surface, so none show on the ground).
+const u8 SHELL_RGB[3] = {130, 200, 255};
+const f32 SHELL_ALPHA = 110.f, SHELL_FADE = 32.f * 80.f;
 
 struct Slot
 {
@@ -1155,8 +1160,113 @@ public:
     const Planet* outlined = mOutlineOn ? Find(mOutlinePlanet) : 0;
     if (outlined)
       DrawOutline(view, outlined->center);
+    DrawShells(view);
     if (gHitboxOn)
       DrawHitbox();
+  }
+
+  // Where each body's gravity begins (a planet's pull, a station's box), as faint blue lines:
+  // seen from space, fading out once inside it (gone on the ground). Behind the planets (depth
+  // tested, none written).
+  void DrawShells(const f32 view[12]) const
+  {
+    static u8* sphere = 0;
+    static u8* box = 0;
+    if (!sphere)
+    {
+      sphere = Alloc32(gxc::SHELL_SPHERE_DL_BYTES);
+      box = Alloc32(gxc::SHELL_BOX_DL_BYTES);
+      if (!sphere || !box)
+      {
+        gVoxelStats.alloc_failed++;
+        sphere = 0;
+        return;
+      }
+      gxc::ShellSphereList(GX_VTXFMT6, sphere);
+      gxc::ShellBoxList(GX_VTXFMT6, box);
+      DCFlushRange(sphere, gxc::SHELL_SPHERE_DL_BYTES);
+      DCFlushRange(box, gxc::SHELL_BOX_DL_BYTES);
+    }
+    const TVec3f cam = MR::getCamPos();
+    bool set = false;
+    for (u32 i = 0; i < MAX_PLANETS; i++)
+    {
+      const Planet& p = gPlanets[i];
+      if (!p.id)
+        continue;
+      f32 m[12];
+      f32 outside;
+      if (p.flat)
+      {
+        // The box's matrix: its axes times its half sizes, then its middle.
+        const f32(*b)[4] = p.flat->mLocalMtx.mMtx;
+        const f32 d[3] = {cam.x - b[0][3], cam.y - b[1][3], cam.z - b[2][3]};
+        outside = -1.0e30f;
+        for (int k = 0; k < 3; k++)
+        {
+          const f32 len2 = b[0][k] * b[0][k] + b[1][k] * b[1][k] + b[2][k] * b[2][k];
+          if (len2 <= 0.f)
+            continue;
+          const f32 along = (d[0] * b[0][k] + d[1] * b[1][k] + d[2] * b[2][k]) / len2;
+          const f32 past = ((along < 0.f ? -along : along) - 1.f) * gxc::Sqrt(len2);
+          if (past > outside)
+            outside = past;
+        }
+        f32 local[12];
+        for (int r = 0; r < 3; r++)
+          for (int c = 0; c < 4; c++)
+            local[4 * r + c] = b[r][c];
+        gxc::Mul34(view, local, m);
+      }
+      else if (p.gravity && p.gravity->mRange > 1.f)
+      {
+        const f32 r = p.gravity->mRange;
+        const f32 d[3] = {cam.x - p.center[0], cam.y - p.center[1], cam.z - p.center[2]};
+        outside = gxc::Sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) - r;
+        gxc::ViewTranslate(view, p.center, m);
+        for (int row = 0; row < 3; row++)
+          for (int c = 0; c < 3; c++)
+            m[4 * row + c] *= r;
+      }
+      else
+      {
+        continue;
+      }
+      const f32 a = SHELL_ALPHA * gxc::ShellAlpha(outside, SHELL_FADE);
+      if (a < 1.f)
+        continue;
+      if (!set)
+      {
+        GXClearVtxDesc();
+        GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
+        GXSetVtxAttrFmt(GX_VTXFMT6, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
+        GXSetNumChans(1);
+        GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_REG, 0, GX_DF_NONE, GX_AF_NONE);
+        GXSetNumTexGens(0);
+        GXSetNumTevStages(1);
+        GXSetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD_NULL, GX_TEXMAP_NULL, GX_COLOR0A0);
+        GXSetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
+        GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
+        GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+        GXSetZMode(GX_TRUE, GX_LEQUAL, GX_FALSE);
+        GXSetCullMode(GX_CULL_NONE);
+        GXSetLineWidth(9, GX_TO_ZERO);  // sixths of a pixel
+        set = true;
+      }
+      const GXColor color = {SHELL_RGB[0], SHELL_RGB[1], SHELL_RGB[2], static_cast<u8>(a)};
+      GXSetChanMatColor(GX_COLOR0A0, color);
+      GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(m), GX_PNMTX0);
+      if (p.flat)
+        GXCallDisplayList(box, gxc::SHELL_BOX_DL_BYTES);
+      else
+        GXCallDisplayList(sphere, gxc::SHELL_SPHERE_DL_BYTES);
+    }
+    if (set)  // as the outline leaves it for what draws next
+    {
+      GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_NOOP);
+      GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
+      GXSetCullMode(GX_CULL_FRONT);
+    }
   }
 
   // Its far view's tiles and its chunks: the mod sends each tile as one or the other (chunks within
