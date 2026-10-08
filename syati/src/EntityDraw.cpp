@@ -49,6 +49,14 @@ bool gSeatFlying = false;
 f32 gSeatLast[3];
 const f32 FLY_TURN_MIN = 2.f;  // units a frame: slower than this, he keeps facing as he was
 const char* const FLY_ANIM = "SpaceFlyLoop";
+// Riding 3: the player walks as Mario (the Player model setting): his own model, turned where he
+// goes and playing the animation that fits how: all in MarioAnime.arc.
+bool gSeatWalking = false;
+f32 gWalkSpeed[2] = {0.f, 0.f};  // smoothed: horizontal and up, units a frame
+const f32 WALK_TURN_MIN = 1.f;   // horizontal units a frame: slower than this he keeps facing as he was
+const f32 WALK_MIN = 0.8f;       // below it he stands
+const f32 RUN_MIN = 4.8f;        // from it he runs (Minecraft's walk is 5.7 at 100%, sneaking 1.7; sprint 7.5)
+const f32 AIR_UP = 1.5f, AIR_DOWN = -2.5f;  // going up / down faster than this he is jumping / falling
 // Carried by the mod (Minecraft's movement, the elytra, a cart), Mario is set where the player is
 // each frame: to the game he falls and flies, and it plays a long fall's wind and the Launch Star's
 // flight. Not his own fall or flight: silenced while he is carried.
@@ -72,6 +80,9 @@ extern "C" bool isAnimationRun__11MarioModuleCFPCc(const void* self, const char*
 extern "C" void resetSleepTimer__5MarioFv(void* self);
 // MarioActor::mMario (Mario, a MarioModule).
 const u32 MARIO_OF_ACTOR = 0x584;
+
+// The planet already drew the entities this frame (EntityDrawRender).
+bool gPlanetDrew = false;
 
 class EntityDrawActor : public LiveActor
 {
@@ -133,7 +144,19 @@ public:
     gHurtsTaken += taken;
   }
 
+  // The planet draws the entities itself, between its opaque faces and its water (EntityDrawRender),
+  // so the water blends over what is in it; this is only for frames it did not.
   virtual void draw() const
+  {
+    if (gPlanetDrew)
+    {
+      gPlanetDrew = false;
+      return;
+    }
+    DrawAll();
+  }
+
+  static void DrawAll()
   {
     gDrawn = 0;
     if (!gCount || !gList)
@@ -261,6 +284,12 @@ public:
 };
 }  // namespace
 
+void EntityDrawRender()
+{
+  EntityDrawActor::DrawAll();
+  gPlanetDrew = true;
+}
+
 void EntityDrawCreate()
 {
   // A new scene: the old one's heap (and everything in it) is gone; the mod sends it all again.
@@ -348,7 +377,41 @@ void EntityDrawSeat(const gxc::InboxSeat& seat)
   }
   gSeatFrames = seat.riding ? SEAT_FRAMES : 0;
   gSeatFlying = seat.riding == 2;
+  gSeatWalking = seat.riding == 3;
   gSeats++;
+}
+
+// Mario at the player's feet, turned where it goes, in the animation of how it goes.
+static void WalkAsMario()
+{
+  f32 d[3] = {gSeat[0] - gSeatLast[0], gSeat[1] - gSeatLast[1], gSeat[2] - gSeatLast[2]};
+  const TVec3f* g = MR::getPlayerGravity();
+  f32 up[3] = {0.f, 1.f, 0.f};
+  if (g)
+  {
+    const f32 gl = gxc::Sqrt(g->x * g->x + g->y * g->y + g->z * g->z);
+    if (gl > 0.001f)
+      up[0] = -g->x / gl, up[1] = -g->y / gl, up[2] = -g->z / gl;
+  }
+  const f32 rise = d[0] * up[0] + d[1] * up[1] + d[2] * up[2];
+  f32 flat[3] = {d[0] - rise * up[0], d[1] - rise * up[1], d[2] - rise * up[2]};
+  const f32 along = gxc::Sqrt(flat[0] * flat[0] + flat[1] * flat[1] + flat[2] * flat[2]);
+  gWalkSpeed[0] += (along - gWalkSpeed[0]) * 0.4f;
+  gWalkSpeed[1] += (rise - gWalkSpeed[1]) * 0.4f;
+  if (along > WALK_TURN_MIN)
+    MR::setPlayerFrontVec(TVec3f(flat[0] / along, flat[1] / along, flat[2] / along), 1);
+  const char* anim = "Wait";
+  if (gWalkSpeed[1] > AIR_UP)
+    anim = "Jump";
+  else if (gWalkSpeed[1] < AIR_DOWN)
+    anim = "Fall";
+  else if (gWalkSpeed[0] >= RUN_MIN)
+    anim = "Run";
+  else if (gWalkSpeed[0] >= WALK_MIN)
+    anim = "Walk";
+  const void* mario = *reinterpret_cast<void* const*>(static_cast<u8*>(gMario) + MARIO_OF_ACTOR);
+  if (mario && !isAnimationRun__11MarioModuleCFPCc(mario, anim))
+    MR::startBckPlayer(anim, static_cast<const char*>(0));
 }
 
 void EntityDrawAfterMario()
@@ -374,6 +437,11 @@ void EntityDrawAfterMario()
   TVec3f* v = MR::getPlayerVelocity();
   if (v)
     v->set(0.f, 0.f, 0.f);
+  if (gSeatWalking && gMario)
+  {
+    WalkAsMario();
+    return;
+  }
   if (!gSeatFlying || !gMario)
     return;
   f32 d[3] = {gSeat[0] - gSeatLast[0], gSeat[1] - gSeatLast[1], gSeat[2] - gSeatLast[2]};

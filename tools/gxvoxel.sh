@@ -6,6 +6,7 @@
 #   tools/gxvoxel.sh          (captures: ~/.local/share/galaxycraft-dev/ScreenShots/SB4E01/voxel-*.png)
 #   tools/gxvoxel.sh held     HeldItemTest instead: Steve holds the hotbar's items (held-*.png)
 #   tools/gxvoxel.sh entities EntityTest instead: mobs, TNT and drops drawn by the game (entities-*.png)
+#   tools/gxvoxel.sh water    WaterProbe instead: water over what is in it, the view from under it (water-*.png)
 #   tools/gxvoxel.sh perf     PerfProbe instead: what each kind of planet costs the emulator (perf-*.png);
 #                             GXC_PERF_ARGS="-PperfOnly=caves -PperfRadius=128" narrows or changes it
 #   tools/gxvoxel.sh lod      LodProbe instead: a planet seen from 40 to 1200 blocks off (lod-*.png)
@@ -67,6 +68,7 @@ cd "$(dirname "$0")/.." || exit 1
 G="python3 tools/gxdev.py"
 if [ "${1:-}" = held ]; then TEST=HeldItemTest PROP=galaxycraftHeld TAG=held
 elif [ "${1:-}" = entities ]; then TEST=EntityTest PROP=galaxycraftEntities TAG=entities
+elif [ "${1:-}" = water ]; then TEST=WaterProbe PROP=galaxycraftWater TAG=water
 elif [ "${1:-}" = perf ]; then TEST=PerfProbe PROP=galaxycraftPerf TAG=perf
 elif [ "${1:-}" = walk ]; then TEST=WalkProbe PROP=galaxycraftWalk TAG=walk
 elif [ "${1:-}" = movement ]; then TEST=MovementProbe PROP=galaxycraftMovement TAG=movement

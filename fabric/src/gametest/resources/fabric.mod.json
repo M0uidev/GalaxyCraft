@@ -26,6 +26,7 @@
 			"dev.moui.galaxycraft.gametest.PlanetEditorProbe",
 			"dev.moui.galaxycraft.gametest.HeldItemTest",
 			"dev.moui.galaxycraft.gametest.EntityTest",
+			"dev.moui.galaxycraft.gametest.WaterProbe",
 			"dev.moui.galaxycraft.gametest.MarioFitTest",
 			"dev.moui.galaxycraft.gametest.WalkOnStubPlanetTest",
 			"dev.moui.galaxycraft.gametest.DolphinOverlayDemo",

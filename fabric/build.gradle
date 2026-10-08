@@ -32,6 +32,13 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftWater")) { // tools/gxvoxel.sh water: WaterProbe in the dev Dolphin
+				vmArg "-Dgalaxycraft.water=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftEntities")) { // tools/gxvoxel.sh entities: EntityTest in the dev Dolphin
 				vmArg "-Dgalaxycraft.entities=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"

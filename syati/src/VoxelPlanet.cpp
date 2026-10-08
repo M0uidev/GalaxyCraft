@@ -1145,6 +1145,12 @@ public:
     for (u32 i = 0; i < MAX_PLANETS; i++)
       if (gPlanets[i].id)
         DrawPlanet(gPlanets[i], view, proj, &drawn, &far, PASS_SOLID);
+    // The entities (mobs, drops, Steve) before the water, so it blends over the part of them in it.
+    // They leave the state and the texture their own.
+    EntityDrawRender();
+    GXLoadTexObj(&tex, GX_TEXMAP0);
+    UseCornerLight();
+    GXSetZCompLoc(GX_FALSE);
     // Water, over everything opaque: blended by its texture's alpha, hiding nothing behind it (no
     // depth written), seen from both sides (from under the surface too).
     GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);

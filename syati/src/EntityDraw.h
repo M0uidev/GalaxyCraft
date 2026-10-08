@@ -7,6 +7,9 @@
 // inside SMG2 (EntityDraw.cpp). Create once per scene, after VoxelPlanetCreate (its memory comes
 // from the planet's heap).
 void EntityDrawCreate();
+// Draws the entities now, leaving the GX state its own: the planet calls it between its opaque faces
+// and its water, which must blend over them (a frame the planet does not, the entities draw alone).
+void EntityDrawRender();
 // GXC_MSG_SKIN, MODEL and ENTITIES records from the inbox.
 void EntityDrawSkin(const gxc::InboxSkin& skin);
 void EntityDrawModel(const gxc::InboxModel& model);
