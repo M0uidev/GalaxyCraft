@@ -107,16 +107,16 @@ const u32 FLAT_SLOTS = 8;
 ParallelGravity* gFlat[FLAT_SLOTS];
 bool gFlatUsed[FLAT_SLOTS];
 
-// A box gravity pulling nowhere: a box one unit wide, far off. Not axes of length 0: the game
-// measures a point along each axis against its length, and with none every point is inside
-// (0 is never past 0), so an unused box pulled everywhere and fought the planets' gravity.
+// A box gravity pulling nowhere: switched off (mActivated), its box empty and far off. Off is
+// needed: with axes of length 0 the game finds every point inside the box (0 is never past an
+// extent of 0), and an unused station's gravity pulled everywhere, fighting the planets'. (A real
+// box far off instead kept planets from loading: not that.)
 void FlatOff(ParallelGravity* g)
 {
+  g->mActivated = false;
   for (int r = 0; r < 3; r++)
     for (int c = 0; c < 4; c++)
-      g->mLocalMtx.mMtx[r][c] = c == 3 ? 1.0e9f : r == c ? 1.f : 0.f;
-  g->mLocalPlaneUpVec = TVec3f(0.f, 1.f, 0.f);
-  g->mLocalPlanePosition = TVec3f(1.0e9f, 1.0e9f, 1.0e9f);
+      g->mLocalMtx.mMtx[r][c] = c == 3 ? 1.0e9f : 0.f;
   g->updateIdentityMtx();
 }
 
@@ -133,6 +133,7 @@ void FlatOn(ParallelGravity* g, const gxc::InboxPlanet& in)
   g->mLocalPlanePosition = TVec3f(m[0][3], m[1][3], m[2][3]);
   g->mRangeType = ParallelGravity::RangeType_Box;
   g->updateIdentityMtx();
+  g->mActivated = true;
 }
 
 // Moves a station's box gravity with the floating origin.
