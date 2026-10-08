@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-08 (v0.1.2 released; Now: 1.7 terrain rework; Next: far view bugs, swimming)
+Last updated: 2026-10-08 (Export report done; v0.1.2 released; Now: 1.7 terrain rework; Next: far view bugs, swimming)
 
 ---
 
@@ -132,6 +132,7 @@ Last updated: 2026-10-08 (v0.1.2 released; Now: 1.7 terrain rework; Next: far vi
 | 2026-10-07 | Gravity shells: where each planet's and station's gravity begins, drawn as faint blue lines seen from space, fading out once inside | 44aca6b |
 | 2026-10-08 | Sneaking exactly like Minecraft on round planets: you stay on top of the block at its edge and corners, never stepping down or sliding off; holding right-click keeps placing; no block goes into the player | 9089508 |
 | 2026-10-08 | Gravity shells only out in space (inside a gravity, only its own, fading); no fall or flight wind sounds and no snoring while Minecraft's movement carries Mario | 9089508 |
+| 2026-10-08 | Export report in the launcher: one button saves a zip with the logs, crash reports, settings and a system summary (home folders and tokens blanked, nothing uploaded) to send when something fails | c77618e |
 
 ---
 

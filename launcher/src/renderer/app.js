@@ -841,6 +841,18 @@ function renderLog() {
   pre.scrollTop = pre.scrollHeight;
 }
 
+async function exportReport() {
+  const btn = $('#log-report');
+  btn.disabled = true;
+  try {
+    const r = await api.exportReport(S().selected);
+    if (r.ok) toast('Report saved. Send that zip when you ask for help: it holds logs and settings, no passwords.');
+    else if (!r.canceled) toast(`Could not save the report: ${r.error}`, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function openLog() {
   $('#console').classList.remove('hidden');
   renderLog();
@@ -873,6 +885,7 @@ async function main() {
   $('#log-close').onclick = () => $('#console').classList.add('hidden');
   $('#log-clear').onclick = () => { ui.log = []; renderLog(); };
   $('#log-folder').onclick = () => api.openPath(ui.info.logsDir);
+  $('#log-report').onclick = exportReport;
   $('#log-copy').onclick = () => { navigator.clipboard.writeText(ui.log.map((e) => `[${e.source}] ${e.line}`).join('\n')); toast('Log copied'); };
   $('#log-filter').onchange = renderLog;
   $('#folder-btn').onclick = async () => api.openPath(await api.gameDirOf(S().selected));
@@ -896,7 +909,7 @@ async function main() {
     renderPlay();
     if (g.state === 'stopped') {
       if (g.crashed) {
-        toast(`The game closed with an error (${g.by}${g.code != null ? `, code ${g.code}` : ''}). See the log.`, true);
+        toast(`The game closed with an error (${g.by}${g.code != null ? `, code ${g.code}` : ''}). See the log, or "Export report" to send it.`, true);
         openLog();
       }
       refreshCheck();

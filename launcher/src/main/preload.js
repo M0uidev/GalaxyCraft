@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('launcher', {
   openMinecraftLauncher: call('official:open'),
   stop: call('game:stop'),
   log: call('game:log'),
+  exportReport: call('report:export'),
   gameSettings: call('gamesettings:get'),
   setGameSettings: call('gamesettings:set'),
   news: call('content:news'),

@@ -3,6 +3,7 @@
 // (src/renderer) talks to it only through the bridge in preload.js.
 const { app, BrowserWindow, ipcMain, dialog, shell, net, nativeTheme } = require('electron');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -12,6 +13,7 @@ const store = require('../core/store');
 const gamesettings = require('../core/gamesettings');
 const notes = require('../core/notes');
 const { platformPaths } = require('../core/paths');
+const report = require('../core/report');
 const { preflight } = require('../core/preflight');
 const { buildPlan } = require('../core/launchplan');
 const gamepack = require('../core/gamepack');
@@ -440,6 +442,53 @@ handle('game:play', (id) => play(id));
 handle('official:open', () => officialLauncher.open());
 handle('game:stop', () => runner.stop());
 handle('game:log', () => logBuffer);
+
+// The report to send when something fails: a zip of the logs and settings the player saves where
+// they like (see core/report.js). Never uploaded.
+const PCI_VENDORS = { 0x10de: 'NVIDIA', 0x1002: 'AMD', 0x8086: 'Intel', 0x106b: 'Apple' };
+
+handle('report:export', async (instId) => {
+  const inst = instOf(instId);
+  const gameDir = store.gameDirOf(inst, paths());
+  const stat = (p) => { try { return fs.statSync(p).mtimeMs; } catch { return 0; } };
+  const files = report.collect({ fs: { ...realFs, mtime: stat }, paths: paths(), gameDir, stateFile: stateFile() });
+  // the log in the window may hold lines the file has not been given yet
+  const live = logBuffer.map((e) => `${new Date(e.time).toISOString()} [${e.source}]${e.stream === 'stderr' ? ' !' : ''} ${e.line}`).join('\n');
+  if (live) files.push({ name: 'launcher/window-log.txt', data: report.redact(report.tail(live), { home: paths().home }) });
+  let gpu = '';
+  try {
+    const info = await app.getGPUInfo('complete');
+    const aux = info.auxAttributes || {};
+    gpu = [aux.glRenderer, aux.glVersion && `GL ${aux.glVersion}`, aux.driverVersion && `driver ${aux.driverVersion}`].filter(Boolean).join(', ');
+    if (!gpu) gpu = (info.gpuDevice || []).map((d) => `${d.vendorString || PCI_VENDORS[d.vendorId] || `vendor 0x${d.vendorId.toString(16)}`} ${d.deviceString || `device 0x${d.deviceId.toString(16)}`}`).join('; ');
+  } catch { /* unknown */ }
+  const when = new Date();
+  files.unshift({
+    name: 'system.txt',
+    data: report.systemText({
+      version: app.getVersion(), platform: process.platform, arch: process.arch, osRelease: os.release(), electron: process.versions.electron,
+      totalMem: os.totalmem(), cpus: `${os.cpus()[0]?.model || '?'} x${os.cpus().length}`, gpu,
+      game: runner.info.state ? runner.info : { state: 'idle' },
+      installation: { ...inst, gameDir: inst.gameDir || '(default)' }, settings: state.settings,
+      files: files.map((f) => f.name), when, home: paths().home,
+    }),
+  });
+  // $GXL_REPORT_FILE: the smoke test names the file instead of answering a dialog
+  const r = process.env.GXL_REPORT_FILE ? { filePath: process.env.GXL_REPORT_FILE } : await dialog.showSaveDialog(win, {
+    title: 'Save the report',
+    defaultPath: path.join(app.getPath('desktop'), report.defaultName(when)),
+    filters: [{ name: 'Zip', extensions: ['zip'] }],
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try {
+    fs.writeFileSync(r.filePath, report.buildZip(files, when));
+    runner.log('Launcher', `Report saved to ${r.filePath}`);
+    if (!process.env.GXL_REPORT_FILE) shell.showItemInFolder(r.filePath);
+    return { ok: true, file: r.filePath, files: files.length };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
 
 handle('gamesettings:get', (id) => {
   let text = '';
