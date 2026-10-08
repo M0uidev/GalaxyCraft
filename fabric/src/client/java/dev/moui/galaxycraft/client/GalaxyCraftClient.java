@@ -337,8 +337,12 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     /** Super Mario Galaxy 2 behind Minecraft's menus: booting, ready (in GalaxyCraftSpace), or no Dolphin. */
     static String smg2Status() {
         if (!bridge.linked()) return "Super Mario Galaxy 2: Dolphin is not running";
-        return bridge.spaceReady() || dev.moui.galaxycraft.proto.Layout.SPACE_STAGE.equals(bridge.stage()) ? "Super Mario Galaxy 2: ready"
-                : "Super Mario Galaxy 2: starting...";
+        return smg2Ready() ? "Super Mario Galaxy 2: ready" : "Super Mario Galaxy 2: starting...";
+    }
+
+    /** Super Mario Galaxy 2 is in GalaxyCraftSpace, ready for a world's planets. */
+    static boolean smg2Ready() {
+        return bridge.spaceReady() || dev.moui.galaxycraft.proto.Layout.SPACE_STAGE.equals(bridge.stage());
     }
 
     public static boolean linked() {

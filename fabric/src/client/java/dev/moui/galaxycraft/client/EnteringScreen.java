@@ -19,7 +19,7 @@ final class EnteringScreen extends Screen {
     private static final long MAX_MS = 60_000;
     /** Past this, ms, landed and linked but a planet still loading: the player goes in anyway. */
     private static final long LOAD_MS = 40_000;
-    private final long opened = System.currentTimeMillis();
+    private long opened = System.currentTimeMillis();
     private int settled;
     private long fadeFrom;
 
@@ -73,7 +73,11 @@ final class EnteringScreen extends Screen {
     @Override
     public void tick() {
         int[] loaded = PlanetClient.loadProgress();
-        boolean ready = !PlanetClient.waitingToLand() && GalaxyCraftClient.linkedToGalaxy()
+        // Joined before Super Mario Galaxy 2 is up (its status on the title screen): it is waited
+        // for as long as it takes, the clock of the limits below starting when it is ready.
+        boolean booting = GalaxyCraftClient.linked() && !GalaxyCraftClient.smg2Ready();
+        if (booting) opened = System.currentTimeMillis();
+        boolean ready = !booting && !PlanetClient.waitingToLand() && GalaxyCraftClient.linkedToGalaxy()
                 && (loaded[0] >= loaded[1] || System.currentTimeMillis() - opened > LOAD_MS);
         settled = ready ? settled + 1 : 0;
         if (fadeFrom == 0 && (settled >= SETTLE_TICKS || System.currentTimeMillis() - opened > MAX_MS)) {
@@ -95,7 +99,9 @@ final class EnteringScreen extends Screen {
             int dots = (int) (System.currentTimeMillis() / 400 % 4);
             g.centeredText(font, title.getString() + ".".repeat(dots), width / 2, height / 2 - 4, 0xFFFFFFFF);
             int[] loaded = PlanetClient.loadProgress();
-            if (!PlanetClient.waitingToLand() && loaded[1] > 0)
+            if (GalaxyCraftClient.linked() && !GalaxyCraftClient.smg2Ready())
+                g.centeredText(font, "Waiting for Super Mario Galaxy 2 to start", width / 2, height / 2 + 12, 0xFF9AA0B5);
+            else if (!PlanetClient.waitingToLand() && loaded[1] > 0)
                 g.centeredText(font, "Planets " + loaded[0] + " / " + loaded[1], width / 2, height / 2 + 12, 0xFF9AA0B5);
         }
     }
