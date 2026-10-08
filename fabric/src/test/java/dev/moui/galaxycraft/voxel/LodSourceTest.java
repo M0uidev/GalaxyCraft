@@ -64,4 +64,16 @@ class LodSourceTest {
             assertEquals(surface, top, 0.05, "the tops (skirts hang below)");
         }
     }
+
+    @Test void warmingWorksOutEveryColumnAFarViewAsksFor() {
+        PlanetBlueprint bp = PlanetBlueprint.standard("g", 96).withMode(PlanetBlueprint.Mode.GENERATED).withBiome(5, PlanetBlueprint.RANDOM,
+                PlanetBlueprint.AUTO);
+        for (int patches : new int[] {1, 2, 3, 6, 12}) {
+            SurfaceSampler s = new SurfaceSampler(bp);
+            s.warm(patches);
+            int warmed = s.cachedColumns();
+            PlanetLod.coarse(LodSource.sampled(s, GenFixtures.B, GenFixtures::id), patches, 80);
+            assertEquals(warmed, s.cachedColumns(), patches + " patches: nothing left to work out on the game's thread");
+        }
+    }
 }

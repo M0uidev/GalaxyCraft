@@ -19,12 +19,12 @@ class FarSightTest {
         assertEquals(Level.DOT, FarSight.level(0.19, Level.FAR));
     }
 
-    @Test void aStarOpensIntoItsPlanets() {
-        assertEquals(0, FarSight.opened(0.5));
-        assertEquals(0, FarSight.opened(1));
-        assertEquals(0.5, FarSight.opened(2), 1e-9);
-        assertEquals(1, FarSight.opened(3));
-        assertEquals(1, FarSight.opened(4));
+    @Test void aStarOpensIntoItsPlanetsAsYouNearIt() {
+        assertEquals(0, FarSight.opened(30_000));
+        assertEquals(0, FarSight.opened(20_000), "its planets just known");
+        assertEquals(0.5, FarSight.opened(17_000), 1e-9);
+        assertEquals(1, FarSight.opened(14_000));
+        assertEquals(1, FarSight.opened(100));
     }
 
     @Test void systemsLoadNearAndLeaveFarther() {

@@ -107,6 +107,11 @@ public final class PlanetClient {
     private static String madeFrom;
     /** The world's galaxy streamed from its catalog (null: no world, or game tests' fixed folder). */
     private static GalaxyStream stream;
+
+    /** The world's galaxy streaming, or null outside one. */
+    static GalaxyStream stream() {
+        return stream;
+    }
     private static PlanetSession replaceTarget; // REPLACE_HERE: the planet stood on, and the player's
     private static Vector3d replaceDir;         // direction from its center (galaxy axes)
     private static Vector3d aheadEye, aheadLook; // CREATE_AHEAD: the player's eye and look then (galaxy)
@@ -139,6 +144,19 @@ public final class PlanetClient {
         t.setPriority(Thread.MIN_PRIORITY);
         return t;
     });
+    /**
+     * The worker threads planets and far views are made on: all cores but two (Dolphin's), at low
+     * priority. A planet's own parallel work (its faces, its caves) runs here too, never on the
+     * common pool, so entering a world does not starve the game.
+     */
+    static final java.util.concurrent.ForkJoinPool workers = new java.util.concurrent.ForkJoinPool(
+            Math.max(1, Runtime.getRuntime().availableProcessors() - 2), pool -> {
+                java.util.concurrent.ForkJoinWorkerThread t = java.util.concurrent.ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
+                t.setName("GalaxyCraft worker " + t.getPoolIndex());
+                t.setDaemon(true);
+                t.setPriority(Thread.MIN_PRIORITY);
+                return t;
+            }, null, false);
     private static final ExecutorService saver = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "GalaxyCraft planet saver");
         t.setDaemon(true);
@@ -234,7 +252,8 @@ public final class PlanetClient {
                 n -> answer(Minecraft.getInstance().submit(() -> blocks.parse(n)), "block " + n));
         McBlocks b = blocks;
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-            PlanetGenerator.Cells cells = PlanetGenerator.cells(bp, gen.vegetation(), ids);
+            // Its parallel streams run on the workers they are started from.
+            PlanetGenerator.Cells cells = workers.submit(() -> PlanetGenerator.cells(bp, gen.vegetation(), ids)).join();
             // The planet reads every cell's block info as it is put together (millions of cells for a
             // big one): that is done here, not in a tick, once the game's thread has worked out the
             // info of each block it uses (McBlocks makes it from Minecraft's models, lazily).

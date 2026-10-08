@@ -20,6 +20,8 @@ public final class SurfaceSampler {
     private final Lattice lattice;
     /** Lattice columns worked out so far, by face and place: next patches share their corners. */
     private final java.util.Map<Integer, double[]> nodes = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Columns answered so far: a far view asked again (by the game's thread, after warm) costs nothing. */
+    private final java.util.Map<Integer, Column> columns = new java.util.concurrent.ConcurrentHashMap<>();
 
     public SurfaceSampler(PlanetBlueprint bp) {
         density = new Density(bp);
@@ -53,6 +55,27 @@ public final class SurfaceSampler {
      * ground and its biome. Safe from several threads.
      */
     public Column at(int f, int i, int j) {
+        return columns.computeIfAbsent((f * lattice.grid.n + i) * lattice.grid.n + j, key -> column(f, i, j));
+    }
+
+    /**
+     * Works out, ahead (off the game's thread), every column a far view of that many patches a
+     * face's edge asks for (PlanetLod.coarse: the middle of each patch).
+     */
+    public void warm(int patches) {
+        int n = lattice.grid.n, s = Math.max(1, (n + patches - 1) / patches);
+        for (int f = 0; f < 6; f++)
+            for (int i0 = 0; i0 < n; i0 += s)
+                for (int j0 = 0; j0 < n; j0 += s)
+                    at(f, Math.min((i0 + Math.min(n, i0 + s)) / 2, n - 1), Math.min((j0 + Math.min(n, j0 + s)) / 2, n - 1));
+    }
+
+    /** Columns worked out so far (tests). */
+    public int cachedColumns() {
+        return columns.size();
+    }
+
+    private Column column(int f, int i, int j) {
         double[] at = lattice.place(i, j);
         int a = (int) at[0], b = (int) at[1];
         double[] c00 = node(f, a, b), c10 = node(f, a + 1, b), c01 = node(f, a, b + 1), c11 = node(f, a + 1, b + 1);
