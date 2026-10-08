@@ -90,6 +90,33 @@ class BiomeLayoutTest {
         }
     }
 
+    @Test void riversLeaveSmallPlanetsTheirLand() {
+        for (int radius : new int[] {10, 16, 24, 48})
+            for (int seed = 1; seed <= 5; seed++)
+                for (String fixed : new String[] {null, "minecraft:plains"}) {
+                    BiomeLayout l = new BiomeLayout(seed, radius, fixed, fixed == null ? -1 : 0);
+                    int river = 0, land = 0, all = 0;
+                    for (Vector3d d : spread(4000)) {
+                        LegacyBiome b = l.at(d);
+                        all++;
+                        if (b == LegacyBiome.RIVER || b == LegacyBiome.FROZEN_RIVER) river++;
+                        else if (b.zone() != LegacyBiome.Zone.WATER) land++;
+                    }
+                    String what = "r " + radius + " seed " + seed + " " + fixed + ": river " + river + ", land " + land;
+                    assertTrue(river < all * (radius <= 16 ? 0.2 : 0.15), what); // a planet 60 blocks round is mostly shore
+                    assertTrue(land > all * (fixed == null ? 0.3 : 0.75), what);
+                }
+    }
+
+    @Test void biomes17DoesNotHaveGetTheNearestOne() {
+        assertEquals(LegacyBiome.FOREST, LegacyBiome.nearest("minecraft:cherry_grove"));
+        assertEquals(LegacyBiome.PLAINS, LegacyBiome.nearest("minecraft:meadow"));
+        assertEquals(LegacyBiome.SWAMP, LegacyBiome.nearest("minecraft:mangrove_swamp"));
+        assertEquals(LegacyBiome.OCEAN, LegacyBiome.nearest("minecraft:warm_ocean"));
+        assertEquals(LegacyBiome.PLAINS, LegacyBiome.nearest("minecraft:no_such_biome"));
+        new BiomeLayout(1, 32, "minecraft:cherry_grove", 0).at(new Vector3d(0, 1, 0));
+    }
+
     @Test void everyBiomeHasItsBlocks() {
         for (LegacyBiome b : LegacyBiome.values()) assertNotNull(BiomeSurface.of(b.id()));
         assertTrue(LegacyBiome.land().contains("minecraft:plains"));

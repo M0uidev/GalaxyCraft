@@ -17,11 +17,15 @@ public final class SurfaceSampler {
     private final Density density;
     private final int radius;
     private final boolean water;
+    private final Lattice lattice;
+    /** Lattice columns worked out so far, by face and place: next patches share their corners. */
+    private final java.util.Map<Integer, double[]> nodes = new java.util.concurrent.ConcurrentHashMap<>();
 
     public SurfaceSampler(PlanetBlueprint bp) {
         density = new Density(bp);
         radius = bp.radius();
         water = bp.water();
+        lattice = new Lattice(density, grid());
     }
 
     /** Blocks of ground under the base surface. */
@@ -44,8 +48,21 @@ public final class SurfaceSampler {
         return PlanetGenerator.dirAt(grid, f, i + 0.5, j + 0.5);
     }
 
-    /** The ground in that direction (unit length). Safe from several threads. */
-    public Column at(Vector3d dir) {
-        return new Column(density.top(dir), density.layout().at(dir).id());
+    /**
+     * The ground of column (i, j) of face f, as the planet will be built (caves aside): its highest
+     * ground and its biome. Safe from several threads.
+     */
+    public Column at(int f, int i, int j) {
+        double[] at = lattice.place(i, j);
+        int a = (int) at[0], b = (int) at[1];
+        double[] c00 = node(f, a, b), c10 = node(f, a + 1, b), c01 = node(f, a, b + 1), c11 = node(f, a + 1, b + 1);
+        CubeSphere g = lattice.grid;
+        int k = g.layers - 1;
+        while (k > 0 && !lattice.solid(c00, c10, c01, c11, at[2], at[3], k)) k--;
+        return new Column(k - (lattice.depth - 1), density.layout().at(columnDir(g, f, i, j)).id());
+    }
+
+    private double[] node(int f, int a, int b) {
+        return nodes.computeIfAbsent((f * (lattice.m + 1) + a) * (lattice.m + 1) + b, key -> lattice.column(f, a, b));
     }
 }

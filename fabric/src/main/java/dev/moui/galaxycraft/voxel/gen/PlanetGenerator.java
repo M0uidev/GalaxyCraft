@@ -84,32 +84,24 @@ public final class PlanetGenerator {
         char stone = id(ids, STONE), deepslate = id(ids, Underground.DEEPSLATE), waterId = id(ids, WATER), bedrock = id(ids, "minecraft:bedrock");
         int deepTop = (depth - 1) / 3;
 
-        // Ground and sky: the density on a lattice (m × m columns a face, every `ls` layers), between its points interpolated.
-        int m = Math.max(2, (int) Math.ceil(n / Math.max(2.0, 4 * scale.hs())));
-        int ls = Math.max(1, (int) Math.round(8 * scale.v()));
-        int levels = (layers + ls - 1) / ls + 1;
+        // Ground and sky: the density on a lattice, between its points interpolated (Lattice).
+        Lattice lattice = new Lattice(density, grid);
+        int m = lattice.m;
         IntStream.range(0, 6).parallel().forEach(f -> {
-            double[] lattice = new double[(m + 1) * (m + 1) * levels];
+            double[][] nodes = new double[(m + 1) * (m + 1)][];
             for (int a = 0; a <= m; a++)
-                for (int b = 0; b <= m; b++) {
-                    Vector3d d = dirAt(grid, f, (double) a * n / m, (double) b * n / m);
-                    Density.Column c = density.column(d);
-                    for (int l = 0; l < levels; l++)
-                        lattice[(a * (m + 1) + b) * levels + l] = density.at(d, c, l * ls + 0.5 - depth);
-                }
+                for (int b = 0; b <= m; b++) nodes[a * (m + 1) + b] = lattice.column(f, a, b);
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++) {
                     int col = (f * n + i) * n + j, base = col * layers;
                     biome[col] = density.layout().at(dirAt(grid, f, i + 0.5, j + 0.5));
-                    double x = (i + 0.5) * m / n, y = (j + 0.5) * m / n;
-                    int a = Math.min((int) x, m - 1), b = Math.min((int) y, m - 1);
-                    double fa = x - a, fb = y - b;
+                    double[] at = lattice.place(i, j);
+                    int a = (int) at[0], b = (int) at[1];
+                    double[] c00 = nodes[a * (m + 1) + b], c10 = nodes[(a + 1) * (m + 1) + b], c01 = nodes[a * (m + 1) + b + 1],
+                            c11 = nodes[(a + 1) * (m + 1) + b + 1];
                     cells[base] = bedrock;
                     for (int k = 1; k < layers; k++) {
-                        int l = Math.min(k / ls, levels - 2);
-                        double fl = (k - l * ls) / (double) ls;
-                        double v = lerp(fl, bilerp(lattice, levels, m, a, b, l, fa, fb), bilerp(lattice, levels, m, a, b, l + 1, fa, fb));
-                        if (k < 2 || v > 0) cells[base + k] = k <= deepTop ? deepslate : stone;
+                        if (lattice.solid(c00, c10, c01, c11, at[2], at[3], k)) cells[base + k] = k <= deepTop ? deepslate : stone;
                         else if (water && k < depth) cells[base + k] = waterId;
                     }
                 }
@@ -211,12 +203,4 @@ public final class PlanetGenerator {
         return (char) ids.applyAsInt(name);
     }
 
-    private static double lerp(double t, double a, double b) {
-        return a + t * (b - a);
-    }
-
-    private static double bilerp(double[] lattice, int levels, int m, int a, int b, int l, double fa, double fb) {
-        int o = (a * (m + 1) + b) * levels + l, right = (m + 1) * levels;
-        return lerp(fb, lerp(fa, lattice[o], lattice[o + right]), lerp(fa, lattice[o + levels], lattice[o + right + levels]));
-    }
 }

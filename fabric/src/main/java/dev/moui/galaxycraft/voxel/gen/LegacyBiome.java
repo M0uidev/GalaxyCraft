@@ -113,6 +113,28 @@ public enum LegacyBiome {
         return null;
     }
 
+    /** Today's biomes 1.7 did not have, as the 1.7 biome nearest to each. */
+    private static final java.util.Map<String, LegacyBiome> NEAREST = java.util.Map.ofEntries(
+            java.util.Map.entry("minecraft:cherry_grove", FOREST), java.util.Map.entry("minecraft:flower_forest", FOREST),
+            java.util.Map.entry("minecraft:meadow", PLAINS), java.util.Map.entry("minecraft:sunflower_plains", PLAINS),
+            java.util.Map.entry("minecraft:mushroom_fields", PLAINS), java.util.Map.entry("minecraft:mangrove_swamp", SWAMP),
+            java.util.Map.entry("minecraft:sparse_jungle", JUNGLE), java.util.Map.entry("minecraft:bamboo_jungle", JUNGLE),
+            java.util.Map.entry("minecraft:old_growth_birch_forest", BIRCH_FOREST),
+            java.util.Map.entry("minecraft:old_growth_spruce_taiga", OLD_GROWTH_PINE_TAIGA),
+            java.util.Map.entry("minecraft:windswept_gravelly_hills", WINDSWEPT_HILLS), java.util.Map.entry("minecraft:stony_peaks", WINDSWEPT_HILLS),
+            java.util.Map.entry("minecraft:windswept_savanna", SAVANNA), java.util.Map.entry("minecraft:eroded_badlands", BADLANDS),
+            java.util.Map.entry("minecraft:grove", SNOWY_TAIGA), java.util.Map.entry("minecraft:snowy_slopes", SNOWY_PLAINS),
+            java.util.Map.entry("minecraft:frozen_peaks", SNOWY_PLAINS), java.util.Map.entry("minecraft:jagged_peaks", SNOWY_PLAINS),
+            java.util.Map.entry("minecraft:ice_spikes", SNOWY_PLAINS), java.util.Map.entry("minecraft:warm_ocean", OCEAN),
+            java.util.Map.entry("minecraft:lukewarm_ocean", OCEAN), java.util.Map.entry("minecraft:cold_ocean", OCEAN),
+            java.util.Map.entry("minecraft:deep_lukewarm_ocean", DEEP_OCEAN), java.util.Map.entry("minecraft:deep_cold_ocean", DEEP_OCEAN));
+
+    /** The 1.7 biome for any id: its own, the nearest one for today's newer biomes, else plains (a planet is never refused). */
+    public static LegacyBiome nearest(String id) {
+        LegacyBiome b = of(id);
+        return b != null ? b : NEAREST.getOrDefault(id, PLAINS);
+    }
+
     /** The land biomes a planet can be all of: what "random" picks from. */
     public static List<String> land() {
         return PICKS.stream().flatMap(List::stream).map(LegacyBiome::id).distinct().sorted().toList();

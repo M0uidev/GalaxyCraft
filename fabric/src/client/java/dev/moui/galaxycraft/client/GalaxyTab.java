@@ -24,10 +24,9 @@ import net.minecraft.network.chat.Component;
  * {@link PendingGalaxy}; the galaxy is made on the world's first visit.
  */
 final class GalaxyTab extends GridLayoutTab {
-    /** Overworld land biomes the first planet can have (the world's own table needs its server). */
-    static final List<String> BIOMES = List.of("random", "minecraft:plains", "minecraft:forest", "minecraft:birch_forest",
-            "minecraft:dark_forest", "minecraft:taiga", "minecraft:snowy_plains", "minecraft:desert", "minecraft:savanna",
-            "minecraft:jungle", "minecraft:badlands", "minecraft:cherry_grove", "minecraft:meadow", "minecraft:swamp");
+    /** The biomes the first planet can be all of: Random (several, Auto), then 1.7's land biomes. */
+    static final List<String> BIOMES = java.util.stream.Stream.concat(java.util.stream.Stream.of("random"),
+            dev.moui.galaxycraft.voxel.gen.LegacyBiome.land().stream()).toList();
     /** Each screen's choice: init runs again on resize and must not lose it. */
     private static final Map<CreateWorldScreen, GalaxyCatalog.Options> CHOSEN = Collections.synchronizedMap(new WeakHashMap<>());
     private static final int W = 150;

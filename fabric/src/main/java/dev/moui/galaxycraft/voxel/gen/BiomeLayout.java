@@ -39,8 +39,7 @@ public final class BiomeLayout {
     /** fixed: a one-biome planet's biome id (null: several). biomeSize: -1 Auto (by the radius), else blocks across a region. */
     public BiomeLayout(long seed, int radius, String fixed, int biomeSize) {
         this.radius = radius;
-        this.fixed = fixed == null ? null : LegacyBiome.of(fixed);
-        if (fixed != null && this.fixed == null) throw new IllegalArgumentException("no biome " + fixed);
+        this.fixed = fixed == null ? null : LegacyBiome.nearest(fixed);
         Random rnd = new Random(seed * 0x9E3779B97F4A7C15L + 0x51);
         warpX = new Perlin.Octaves(rnd, 3);
         warpY = new Perlin.Octaves(rnd, 3);
@@ -188,12 +187,26 @@ public final class BiomeLayout {
             }
             base = biome[r];
         }
-        double river = noise(rivers, 4, d, size * 1.2);
-        if (Math.abs(river) < RIVER / (size * 0.35)) return base.zone() == Zone.SNOWY ? LegacyBiome.FROZEN_RIVER : LegacyBiome.RIVER;
+        if (river(d)) return base.zone() == Zone.SNOWY ? LegacyBiome.FROZEN_RIVER : LegacyBiome.RIVER;
         if (two != null && ocean[two[1]] && two[2] < BEACH)
             return base == LegacyBiome.WINDSWEPT_HILLS ? LegacyBiome.STONY_SHORE
                     : base.zone() == Zone.SNOWY ? LegacyBiome.SNOWY_BEACH : LegacyBiome.BEACH;
         return noise(hills, 3, d, size * 0.5) > 0.3 ? base.hills() : base;
+    }
+
+    /**
+     * Whether a river runs here: within RIVER blocks (fewer on small planets) of where the river
+     * noise crosses zero, the distance being the noise over its slope.
+     */
+    private boolean river(Vector3d d) {
+        double across = Math.max(size * 1.2, 64), n = noise(rivers, 4, d, across);
+        if (Math.abs(n) > 0.2) return false;
+        Vector3d e1 = Math.abs(d.y) < 0.9 ? new Vector3d(d).cross(0, 1, 0).normalize() : new Vector3d(d).cross(1, 0, 0).normalize();
+        Vector3d e2 = new Vector3d(d).cross(e1);
+        double a = noise(rivers, 4, new Vector3d(d).fma(1.0 / radius, e1).normalize(), across) - n,
+                b = noise(rivers, 4, new Vector3d(d).fma(1.0 / radius, e2).normalize(), across) - n;
+        // Narrower on small planets, where a full river would cut most of the land.
+        return Math.abs(n) < RIVER * Math.clamp(radius / 64.0, 0.4, 1) * Math.sqrt(a * a + b * b);
     }
 
     private static final double[][] RING;

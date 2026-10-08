@@ -20,7 +20,7 @@ class DensityTest {
         Density.Scale small = Density.scale(32, 8), big = Density.scale(256, 8);
         assertTrue(small.v() < big.v() && big.v() == 1);
         assertTrue(big.depth() > small.depth() && big.air() > small.air());
-        assertTrue(big.depth() <= 40 && big.air() <= 48);
+        assertTrue(big.depth() + big.air() <= 76, "layers at radius 256: " + (big.depth() + big.air()));
         assertEquals(40, Density.scale(64, 40).air(), "a blueprint's own air when it asks for more");
     }
 

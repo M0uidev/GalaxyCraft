@@ -31,8 +31,9 @@ public final class Density {
 
     public static Scale scale(int radius, int air) {
         double v = Math.clamp(radius / 256.0, 0.1, 1);
-        int depth = Math.min(radius - 2, Math.clamp((int) Math.ceil(30 * v) + Math.max(6, radius / 8), 3, 40));
-        return new Scale(v, Math.sqrt(v), depth, Math.max(air, Math.clamp((int) Math.ceil(60 * v) + 8, 8, 48)));
+        // At radius 256: 36 + 40 layers, the most a planet's cells hold (about 150 MB of them).
+        int depth = Math.min(radius - 2, Math.clamp((int) Math.ceil(30 * v) + Math.max(6, radius / 16), 3, 36));
+        return new Scale(v, Math.sqrt(v), depth, Math.max(air, Math.clamp((int) Math.ceil(56 * v) + 8, 8, 40)));
     }
 
     public Density(PlanetBlueprint bp) {
