@@ -66,7 +66,7 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
                     .withMode(PlanetBlueprint.Mode.GENERATED).withBiome(42, "minecraft:desert", 0))));
             ctx.waitTicks(2);
             ctx.takeScreenshot("galaxycraft-planet-editor-generated");
-            ctx.runOnClient(mc -> mc.gui.setScreen(PickerScreen.biomes(mc.gui.screen(), PlanetClient.worldgen().biomes().land(), "", v -> picked[0] = v)));
+            ctx.runOnClient(mc -> mc.gui.setScreen(PickerScreen.biomes(mc.gui.screen(), dev.moui.galaxycraft.voxel.gen.LegacyBiome.land(), "", v -> picked[0] = v)));
             ctx.waitTicks(2);
             ctx.getInput().typeChars("snow");
             ctx.waitTicks(2);
@@ -80,20 +80,20 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
                 McWorldgen wg = PlanetClient.worldgen();
                 if (wg == null) return "no worldgen";
                 int things = 0, empty = 0;
-                for (String b : wg.biomes().all()) {
+                for (String b : dev.moui.galaxycraft.voxel.gen.LegacyBiome.all()) {
                     int t = wg.vegetation().patches(b).stream().mapToInt(p -> p.things().size()).sum();
                     things += t;
                     if (t == 0) empty++;
                 }
-                return wg.biomes().all().size() + " biomes, " + things + " things, " + empty + " biomes with none";
+                return dev.moui.galaxycraft.voxel.gen.LegacyBiome.all().size() + " biomes, " + things + " things, " + empty + " biomes with none";
             });
             System.out.println("PlanetEditorProbe vegetation: " + grown);
             String gen = ctx.computeOnClient(mc -> {
                 McBlocks blocks = McBlocks.create(mc);
                 McWorldgen wg = PlanetClient.worldgen();
                 StringBuilder out = new StringBuilder();
-                for (Object[] c : new Object[][] {{"minecraft:desert", 32, 0, false}, {"minecraft:jagged_peaks", 64, 0, false},
-                        {"minecraft:plains", 96, 96, true}, {PlanetBlueprint.RANDOM, 48, 0, true}, {"minecraft:warm_ocean", 48, 0, true},
+                for (Object[] c : new Object[][] {{"minecraft:desert", 32, 0, false}, {"minecraft:windswept_hills", 64, 0, false},
+                        {"minecraft:plains", 96, 96, true}, {PlanetBlueprint.RANDOM, 48, -1, true}, {"minecraft:ocean", 48, 0, true},
                         {"minecraft:forest", 256, 0, true}}) {
                     PlanetBlueprint g = PlanetBlueprint.standard("gen", (int) c[1]).withAir(24)
                             .withMode(PlanetBlueprint.Mode.GENERATED).withBiome(7, (String) c[0], (int) c[2]).withWater((boolean) c[3]).withUnderground(50, true, 100).withPlants(100);

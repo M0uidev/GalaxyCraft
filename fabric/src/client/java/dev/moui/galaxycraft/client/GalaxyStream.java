@@ -161,7 +161,7 @@ final class GalaxyStream {
         if (star == null || star.home() || gen == null) return;
         Vector3d c = star.center().minus(UPos.ZERO);
         List<GalaxyCatalog.Entry> planets = new ArrayList<>();
-        for (GalaxyCatalog.Entry e : universe.system(star, gen.biomes().land()).entries())
+        for (GalaxyCatalog.Entry e : universe.system(star, dev.moui.galaxycraft.voxel.gen.LegacyBiome.land()).entries())
             planets.add(new GalaxyCatalog.Entry(SystemIndex.index(s, e.index()), c.x + e.x(), c.y + e.y(), c.z + e.z(), e.radius(),
                     e.kind(), e.biome(), e.blueprint(), e.seed()));
         systems.put(s, planets);
@@ -271,11 +271,18 @@ final class GalaxyStream {
         making.put(index, f);
     }
 
-    /** What a catalog planet is made from when it has no file (null: nothing to make it from). */
-    static PlanetBlueprint recipe(GalaxyCatalog.Entry e) {
-        if (e.kind() == GalaxyCatalog.Kind.GENERATED)
+    /**
+     * What a catalog planet is made from when it has no file (null: nothing to make it from). A
+     * generated one is several biomes (Auto), but the first planet when Create World named its biome.
+     */
+    PlanetBlueprint recipe(GalaxyCatalog.Entry e) {
+        if (e.kind() == GalaxyCatalog.Kind.GENERATED) {
+            GalaxyCatalog.First first = options == null ? null : options.first();
+            boolean named = e.index() == 0 && first != null && !first.isBlueprint() && first.biome() != null
+                    && !PlanetBlueprint.RANDOM.equals(first.biome());
             return PlanetBlueprint.standard("Planet " + e.index(), e.radius()).withMode(PlanetBlueprint.Mode.GENERATED)
-                    .withBiome(e.seed(), e.biome(), 0).withWater(true).withUnderground(50, true, 100).withPlants(100);
+                    .withBiome(e.seed(), named ? first.biome() : PlanetBlueprint.RANDOM, named ? 0 : PlanetBlueprint.AUTO).withWater(true).withUnderground(50, true, 100).withPlants(100);
+        }
         if (e.blueprint() == null) return null;
         try {
             return PlanetClient.blueprints.read(e.blueprint()).orElse(null);
@@ -376,9 +383,7 @@ final class GalaxyStream {
             }
             PlanetBlueprint bp = recipe(e);
             if (bp != null && bp.mode() == PlanetBlueprint.Mode.GENERATED) {
-                McWorldgen gen = PlanetClient.worldgen();
-                if (gen == null) return null;
-                SurfaceSampler sampler = new SurfaceSampler(bp, gen.noise(bp.seed()), gen.biomes());
+                SurfaceSampler sampler = new SurfaceSampler(bp);
                 return PlanetLod.coarse(LodSource.sampled(sampler, blocks, blocks::parse), patches, UNITS);
             }
             String top = bp != null && !bp.layers().isEmpty() ? bp.layers().getFirst().block() : "minecraft:grass_block";

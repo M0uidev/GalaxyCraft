@@ -17,16 +17,18 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
     public static final int MIN_AIR = 4, MAX_AIR = 64, MAX_THICKNESS = 64, MAX_LAYERS = 32, MAX_BIOME_SIZE = 512, MAX_CAVES = 100, MAX_ORES = 200, MAX_PLANTS = 200;
     /** The biome of a one-biome planet picked from its seed. */
     public static final String RANDOM = "random";
+    /** biomeSize of a planet of several biomes sized to it. */
+    public static final int AUTO = -1;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     /** A block (Minecraft's text for a block state, as in /setblock) this many blocks thick. */
     public record Layer(String block, int thickness) {}
 
     /**
-     * LAYERS: a smooth ball of the layers. GENERATED: terrain and blocks from Minecraft's noises and
-     * a biome (voxel.gen), the layers unused; biomeSize 0 makes it all one biome, more mixes biomes
-     * about that many blocks across; water fills what lies below the base surface (shallow seas,
-     * lakes; oceans and rivers among mixed biomes); caves 0 (none) to 100 (many), opening to the
+     * LAYERS: a smooth ball of the layers. GENERATED: Minecraft 1.7's terrain and biomes (voxel.gen),
+     * the layers unused; biomeSize AUTO (-1) mixes several biomes sized to the planet, 0 makes it all
+     * one biome, more mixes biomes about that many blocks across; water fills what lies below the
+     * base surface (seas, rivers, lakes); caves 0 (none) to 100 (many), opening to the
      * surface with entrances; ores and plants (trees, flowers, grass) percent of Minecraft's amount.
      */
     public enum Mode { LAYERS, GENERATED }
@@ -38,7 +40,7 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
     }
 
     public PlanetBlueprint(String name, int radius, int air, List<Layer> layers) {
-        this(name, radius, air, layers, Mode.LAYERS, 0, RANDOM, 0, false, 0, false, 0, 0);
+        this(name, radius, air, layers, Mode.LAYERS, 0, RANDOM, AUTO, true, 0, false, 0, 0);
     }
 
     /** What /galaxycraft planet spawn makes: grass, two of dirt, stone. */
@@ -79,7 +81,7 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
         if (radius < VoxelPlanet.MIN_RADIUS || radius > VoxelPlanet.MAX_RADIUS)
             return "radius not in " + VoxelPlanet.MIN_RADIUS + ".." + VoxelPlanet.MAX_RADIUS;
         if (air < MIN_AIR || air > MAX_AIR) return "air not in " + MIN_AIR + ".." + MAX_AIR;
-        if (biomeSize < 0 || biomeSize > MAX_BIOME_SIZE) return "biome size not in 0.." + MAX_BIOME_SIZE;
+        if (biomeSize < AUTO || biomeSize > MAX_BIOME_SIZE) return "biome size not in -1.." + MAX_BIOME_SIZE;
         if (biome.isBlank()) return "no biome";
         if (caves < 0 || caves > MAX_CAVES) return "caves not in 0.." + MAX_CAVES;
         if (ores < 0 || ores > MAX_ORES) return "ores not in 0.." + MAX_ORES;
@@ -97,8 +99,7 @@ public record PlanetBlueprint(String name, int radius, int air, List<Layer> laye
         String p = problem();
         if (p != null) throw new IllegalArgumentException(name + ": " + p);
         if (mode == Mode.GENERATED) {
-            if (gen == null) throw new IllegalArgumentException(name + ": generated, and no worldgen to make it");
-            return dev.moui.galaxycraft.voxel.gen.PlanetGenerator.build(this, gen.noise(seed), gen.biomes(), gen.vegetation(), blocks, blocks::parse);
+            return dev.moui.galaxycraft.voxel.gen.PlanetGenerator.build(this, gen == null ? null : gen.vegetation(), blocks, blocks::parse);
         }
         List<Integer> down = new ArrayList<>();
         for (Layer l : layers) {

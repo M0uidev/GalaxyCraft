@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.moui.galaxycraft.voxel.gen.GenFixtures;
 import dev.moui.galaxycraft.voxel.gen.PlanetGenerator;
 import dev.moui.galaxycraft.voxel.gen.SurfaceSampler;
-import dev.moui.galaxycraft.voxel.gen.TerrainNoise;
 import org.joml.Vector3d;
 import org.junit.jupiter.api.Test;
 
@@ -33,9 +32,8 @@ class LodSourceTest {
     @Test void aSampledPlanetLooksLikeTheBuiltOne() {
         PlanetBlueprint bp = PlanetBlueprint.standard("g", 48).withMode(PlanetBlueprint.Mode.GENERATED).withBiome(3, "minecraft:plains", 0)
                 .withUnderground(0, false, 0).withPlants(0);
-        TerrainNoise noise = GenFixtures.waves(bp.seed());
-        VoxelPlanet built = PlanetGenerator.build(bp, noise, GenFixtures.TABLE, null, GenFixtures.B, GenFixtures::id);
-        SurfaceSampler s = new SurfaceSampler(bp, noise, GenFixtures.TABLE);
+        VoxelPlanet built = PlanetGenerator.build(bp, null, GenFixtures.B, GenFixtures::id);
+        SurfaceSampler s = new SurfaceSampler(bp);
         PlanetLod.Part[] real = PlanetLod.coarse(LodSource.of(built), 6, 80);
         PlanetLod.Part[] sampled = PlanetLod.coarse(LodSource.sampled(s, GenFixtures.B, GenFixtures::id), 6, 80);
         for (int f = 0; f < 6; f++)

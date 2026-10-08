@@ -5,7 +5,6 @@ import dev.moui.galaxycraft.universe.SystemIndex;
 
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
 import dev.moui.galaxycraft.voxel.gen.PlanetGenerator;
-import dev.moui.galaxycraft.voxel.gen.TerrainNoise;
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.bridge.BridgeClient;
 import dev.moui.galaxycraft.gravity.GravityFrame;
@@ -233,10 +232,9 @@ public final class PlanetClient {
         // Trees bring states of their own: those are looked up on this thread too, as they come.
         java.util.function.ToIntFunction<String> ids = name -> known.computeIfAbsent(name,
                 n -> answer(Minecraft.getInstance().submit(() -> blocks.parse(n)), "block " + n));
-        TerrainNoise noise = gen.noise(bp.seed());
         McBlocks b = blocks;
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-            PlanetGenerator.Cells cells = PlanetGenerator.cells(bp, noise, gen.biomes(), gen.vegetation(), ids);
+            PlanetGenerator.Cells cells = PlanetGenerator.cells(bp, gen.vegetation(), ids);
             // The planet reads every cell's block info as it is put together (millions of cells for a
             // big one): that is done here, not in a tick, once the game's thread has worked out the
             // info of each block it uses (McBlocks makes it from Minecraft's models, lazily).
@@ -1219,7 +1217,7 @@ public final class PlanetClient {
                 firstRadius = 48;
             } else firstRadius = bp.radius();
         }
-        GalaxyCatalog.Result r = GalaxyCatalog.make(o, firstRadius, worldgen().biomes().land(), 1 / GravityFrame.SCALE);
+        GalaxyCatalog.Result r = GalaxyCatalog.make(o, firstRadius, dev.moui.galaxycraft.voxel.gen.LegacyBiome.land(), 1 / GravityFrame.SCALE);
         if (r.placed() < r.asked()) say(player, r.placed() + " of " + r.asked() + " planets fit in the galaxy");
         return new GalaxySave.Galaxy(1, o, r.entries());
     }
