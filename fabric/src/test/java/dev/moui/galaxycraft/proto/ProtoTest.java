@@ -91,7 +91,7 @@ class ProtoTest {
     @Test void writePlayerFlagsWalkingAndPlus() throws Exception {
         MemorySegment s = Shm.create(dir.resolve("shm")).seg();
         Seqlock.writePlayer(s, new Seqlock.PlayerOut(1, new Vector3d(), new Vector3d(0, 0, -1), new Vector3d(0, 1, 0), 70f,
-                162f, false, new Vector3d(), Layout.VIEW_FIRST, 3, false, false, false, false, true, true, false, false));
+                162f, false, new Vector3d(), Layout.VIEW_FIRST, 3, false, false, false, false, true, true, false));
         assertEquals(Layout.PLAYER_WALKING | Layout.PLAYER_PLUS, s.get(I, 128 + 4));
         assertEquals(32, Layout.PLAYER_WALKING);
         assertEquals(64, Layout.PLAYER_PLUS);
@@ -100,17 +100,9 @@ class ProtoTest {
     @Test void writePlayerFlagsMinecraftsFeel() throws Exception {
         MemorySegment s = Shm.create(dir.resolve("shm")).seg();
         Seqlock.writePlayer(s, new Seqlock.PlayerOut(1, new Vector3d(), new Vector3d(0, 0, -1), new Vector3d(0, 1, 0), 70f,
-                162f, false, new Vector3d(), Layout.VIEW_FIRST, 3, false, false, false, false, false, false, true, false));
+                162f, false, new Vector3d(), Layout.VIEW_FIRST, 3, false, false, false, false, false, false, true));
         assertEquals(Layout.PLAYER_MC_FEEL, s.get(I, 128 + 4));
         assertEquals(128, Layout.PLAYER_MC_FEEL); // GXC_PLAYER_MC_FEEL
-    }
-
-    @Test void writePlayerFlagsMarioModel() throws Exception {
-        MemorySegment s = Shm.create(dir.resolve("shm")).seg();
-        Seqlock.writePlayer(s, new Seqlock.PlayerOut(1, new Vector3d(), new Vector3d(0, 0, -1), new Vector3d(0, 1, 0), 70f,
-                162f, false, new Vector3d(), Layout.VIEW_BACK, 3, false, false, false, false, true, false, false, true));
-        assertEquals(Layout.PLAYER_WALKING | Layout.PLAYER_MARIO_MODEL, s.get(I, 128 + 4));
-        assertEquals(256, Layout.PLAYER_MARIO_MODEL); // GXC_PLAYER_MARIO_MODEL
     }
 
     @Test void readGameCameraSlot() throws Exception {

@@ -99,9 +99,6 @@ typedef struct { /* S -> M */
 /* Minecraft's feel on Mario: SMG2 moves him (its own collision), at Minecraft's walk, sprint
    (Ctrl) and sneak (Shift) speeds, with Minecraft's 1.25-block jump and none of Mario's moves. */
 #define GXC_PLAYER_MC_FEEL 128u
-/* With GXC_PLAYER_WALKING: the player is drawn as Mario's own model (GXC_MSG_SEAT riding 3 animates
-   him by how he moves), not as Steve, an entity. */
-#define GXC_PLAYER_MARIO_MODEL 256u
 
 typedef struct { /* M -> S */
   uint32_t seq;
