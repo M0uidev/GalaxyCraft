@@ -49,6 +49,10 @@ bool gSeatFlying = false;
 f32 gSeatLast[3];
 const f32 FLY_TURN_MIN = 2.f;  // units a frame: slower than this, he keeps facing as he was
 const char* const FLY_ANIM = "SpaceFlyLoop";
+// Carried by the mod (Minecraft's movement, the elytra, a cart), Mario is set where the player is
+// each frame: to the game he falls and flies, and it plays a long fall's wind and the Launch Star's
+// flight. Not his own fall or flight: silenced while he is carried.
+const char* const CARRIED_SILENT[] = {"SE_PM_LV_LONG_FALL", "SE_PM_LV_LONG_FALL_WIND", "SE_PM_LV_MARIO_LAUNCHER_FLY"};
 // Seated by the mod (a cart, a boat, the elytra) and a while after: carried out over the void, he
 // is not falling, and SMG2's fall-too-far kill must not count it (see EntityDrawSafeFromAbyss).
 u32 gSafeFrames = 0;
@@ -65,6 +69,7 @@ f32 ReadF32(const u8* p)
 
 extern "C" void decLife__10MarioActorFUs(void* self, unsigned short n);
 extern "C" bool isAnimationRun__11MarioModuleCFPCc(const void* self, const char* name);
+extern "C" void resetSleepTimer__5MarioFv(void* self);
 // MarioActor::mMario (Mario, a MarioModule).
 const u32 MARIO_OF_ACTOR = 0x584;
 
@@ -356,6 +361,15 @@ void EntityDrawAfterMario()
   }
   gSeatFrames--;
   gSafeFrames = SAFE_FRAMES;
+  for (u32 i = 0; i < sizeof(CARRIED_SILENT) / sizeof(CARRIED_SILENT[0]); i++)
+    MR::stopSoundPlayer(CARRIED_SILENT[i], 0);
+  // Standing still in Minecraft's movement must not put him to sleep: no snoring, no nodding off.
+  if (gMario)
+  {
+    void* sleeper = *reinterpret_cast<void**>(static_cast<u8*>(gMario) + MARIO_OF_ACTOR);
+    if (sleeper)
+      resetSleepTimer__5MarioFv(sleeper);
+  }
   MR::setPlayerPos(TVec3f(gSeat[0], gSeat[1], gSeat[2]));
   TVec3f* v = MR::getPlayerVelocity();
   if (v)

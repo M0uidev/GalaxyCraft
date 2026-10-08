@@ -828,12 +828,12 @@ public final class PlanetSession {
         List<int[]> sets = placer.place(planet, cell, face, hit, CellSpace.direction(g, cell, lookGal));
         if (sets == null || sets.isEmpty()) return false;
         Vector3d feet = local(marioFeetGal);
-        Vector3d up = up(feet);
+        List<Vector3d> body = body(feet, up(feet));
         for (int[] set : sets) {
             if (set[0] < 0 || (set[0] != cell && !planet.info(set[0]).replaceable())) return false;
             if (!planet.blocks.info(set[1]).collides()) continue;
-            for (double y : new double[] {0.1, 0.9, 1.7})
-                if (g.cellAt(new Vector3d(up).mul(y).add(feet)) == set[0]) return false;
+            for (Vector3d p : body)
+                if (g.cellAt(p) == set[0]) return false;
         }
         int[] changed = new int[sets.size()];
         for (int i = 0; i < sets.size(); i++) {
@@ -850,6 +850,26 @@ public final class PlanetSession {
     /** Every cell the last placeBlock set (a door's two halves, a bed's two). */
     public int[] lastPlacedCells() {
         return placedCells.clone();
+    }
+
+    /**
+     * Points through the player's body standing at feet (planet blocks): its middle and around its
+     * sides (a box 0.6 wide, as Minecraft's player), low, middle and high. No block goes where one
+     * of them is: hanging over an edge, the block above the one stood on is beside the middle.
+     */
+    static List<Vector3d> body(Vector3d feet, Vector3d up) {
+        Vector3d a = new Vector3d(up.y, up.z, up.x).orthogonalize(up), b = new Vector3d(up).cross(a);
+        List<Vector3d> out = new ArrayList<>();
+        for (double y : new double[] {0.1, 0.9, 1.7})
+            for (int k = -1; k < 8; k++) {
+                Vector3d p = new Vector3d(up).mul(y).add(feet);
+                if (k >= 0) {
+                    double t = k * Math.PI / 4, r = k % 2 == 0 ? 0.29 : 0.29 * Math.sqrt(2);
+                    p.fma(r * Math.cos(t), a).fma(r * Math.sin(t), b);
+                }
+                out.add(p);
+            }
+        return out;
     }
 
     /** The cell the last block placeBlock placed went into (-1 none yet): its sound and pieces. */

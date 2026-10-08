@@ -481,6 +481,8 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             GalaxyCraft.LOG.info("Linked to galaxy at {}", world.get().queryPos());
         } else {
             frame.startTick();
+            trace(player, "start");
+            updateSneakAnchor(player);
             Flight.beforeFrame(player, world.get(), frame, world.get().follow() && !flying && !ownPhysics());
             boolean space = ownPhysics() && Flight.space(player, world.get(), frame);
             // Look and velocity are left alone in Minecraft space, so they turn with the frame
@@ -509,6 +511,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 // that close one-wide shafts and tunnels.
                 Vector3d[] grid = planetGrid(player);
                 frame.update(grid != null ? new Vector3d(grid[2]).negate() : gravity, pos);
+                trace(player, "frame");
             }
         }
         following = world.get().follow() && !flying && !ownPhysics();
@@ -546,8 +549,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 player.zOld += dz;
             });
             if (ownPhysics() && !flying && !Flight.active()) alignToBlocks(player);
+            trace(player, "align");
         }
         fitWidth(player, ownPhysics() && !flying && !following);
+        trace(player, "width");
         GalaxyCraft.FIELD.setFrame(frame);
         if (ownPhysics() && !flying && !following) {
             // The galaxy's boxes turned and snapped with the frame; one overlapping the player
@@ -564,6 +569,9 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 player.yOld += out.y;
                 player.zOld += out.z;
             }
+            trace(player, "pushOut");
+            keepOnEdge(player);
+            trace(player, "edge");
         }
         PlanetClient.tick(player, bridge, frame, world.get());
         HeldClient.tick(player, bridge, world.get().sceneId());
@@ -649,13 +657,92 @@ public final class GalaxyCraftClient implements ClientModInitializer {
 
     /** The block grid of the planet the player is in (PlanetSession.gridAt), if any. */
     private static Vector3d[] planetGrid(LocalPlayer player) {
-        Vector3d feetGal = frame.toGal(vec(player.position().add(0, 0.5, 0)));
+        Vector3d feetGal = sneakAnchor != null ? sneakAnchor : frame.toGal(vec(player.position().add(0, 0.5, 0)));
         for (PlanetSession s : PlanetClient.planets()) {
             if (s == null || s.planet() == null) continue;
             Vector3d[] grid = s.gridAt(feetGal);
             if (grid != null) return grid;
         }
         return null;
+    }
+
+    /**
+     * Sneaking on the ground (Minecraft movement): the galaxy point the blocks' grid is taken at,
+     * the player's body over the last block it stood right above. Hanging over an edge, the column
+     * under the player's middle is the next one, leaning another way on a planet: the frame would
+     * turn and snap to it, lowering the player a little and, pushed on, carrying it off the edge.
+     */
+    private static Vector3d sneakAnchor;
+    /** Sneaking on the ground: where the player last had ground under its box (galaxy). */
+    private static Vector3d sneakHeld;
+
+    private static void updateSneakAnchor(LocalPlayer player) {
+        if (!ownPhysics() || flying || !player.isShiftKeyDown() || !player.onGround()) {
+            sneakAnchor = null;
+            sneakHeld = null;
+            return;
+        }
+        // The block holding the player up: under its middle, or (over an edge) the one under its
+        // box nearest its middle. Sliding along an edge onto the next block, the frame follows that
+        // block, as walking does: kept on the last one, the next one's top would sit lower in it
+        // (a planet's blocks lean apart) and the player would step down onto it.
+        Vec3 feet = player.position();
+        double best = Double.MAX_VALUE;
+        Vector3d anchor = null;
+        for (double[] o : new double[][] {{0, 0}, {0.29, 0.29}, {0.29, -0.29}, {-0.29, 0.29}, {-0.29, -0.29}}) {
+            Vector3d under = frame.toGal(vec(feet.add(o[0], -0.3, o[1])));
+            for (PlanetSession s : PlanetClient.planets()) {
+                if (s == null || s.planet() == null) continue;
+                int c = s.cellAt(under);
+                if (c < 0 || !s.planet().info(c).collides()) continue;
+                Vector3d middle = s.galOf(s.planet().grid.center(c));
+                double d = frame.toMc(middle).sub(feet.x, frame.toMc(middle).y, feet.z).length();
+                if (d < best) {
+                    best = d;
+                    anchor = frame.toGal(vec(feet.add(o[0], 0.5, o[1])));
+                }
+            }
+            if (o[0] == 0 && anchor != null) break; // right under its middle
+        }
+        if (anchor != null) sneakAnchor = anchor;
+        // None under it at all: the last anchor stays.
+    }
+
+    /**
+     * Sneaking on the ground, as in Minecraft, never off an edge: Minecraft keeps its own moves on
+     * the block, and a turn or snap of the frame (or a push out of a box) that leaves no ground
+     * under the player's box puts it back where it last had some.
+     */
+    private static void keepOnEdge(LocalPlayer player) {
+        if (sneakAnchor == null) return;
+        var b = player.getBoundingBox();
+        if (GalaxyCraft.FIELD.blocked(new double[] {b.minX, b.minY - player.maxUpStep(), b.minZ, b.maxX, b.minY, b.maxZ})) {
+            sneakHeld = frame.toGal(vec(player.position()));
+            return;
+        }
+        if (sneakHeld == null) return;
+        Vector3d back = frame.toMc(sneakHeld);
+        double dx = back.x - player.getX(), dy = back.y - player.getY(), dz = back.z - player.getZ();
+        player.setPos(back.x, back.y, back.z);
+        player.xo += dx;
+        player.xOld += dx;
+        player.yo += dy;
+        player.yOld += dy;
+        player.zo += dz;
+        player.zOld += dz;
+        player.setDeltaMovement(0, player.getDeltaMovement().y, 0);
+    }
+
+    /** Tests (-Dgalaxycraft.trace): the player's height over its planet's center at each step of a tick. */
+    private static final boolean TRACE = Boolean.getBoolean("galaxycraft.trace");
+    public static final java.util.List<String> traced = new java.util.ArrayList<>();
+
+    private static void trace(LocalPlayer player, String step) {
+        if (!TRACE || frame == null) return;
+        PlanetSession s = PlanetClient.focus();
+        if (s == null || !s.active() || s.center() == null) return;
+        double h = frame.toGal(vec(player.position())).distance(s.center()) * GravityFrame.SCALE;
+        traced.add(String.format("%s %.4f%s", step, h, sneakAnchor != null ? " anchored" : ""));
     }
 
     /** Creative flight while /fly is on (set every tick: the server may resend the abilities). */

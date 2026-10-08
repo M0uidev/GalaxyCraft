@@ -118,6 +118,14 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftSneak")) { // tools/gxvoxel.sh sneak: SneakProbe in the dev Dolphin
+				vmArg "-Dgalaxycraft.sneak=true"
+				vmArg "-Dgalaxycraft.trace=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftMemory")) { // tools/gxvoxel.sh memory: MemoryProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.memory=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"

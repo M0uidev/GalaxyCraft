@@ -897,4 +897,15 @@ class PlanetSessionTest {
         assertEquals(1, after.stationY(moved));
         assertEquals(0, after.stationZ(moved));
     }
+
+    @Test void noBlockGoesIntoAPlayerHangingOverTheEdge() {
+        Station st = StationTest.station("cafe0009");
+        PlanetSession s = station(st);
+        // On the slab's edge block (4, 0, 0), its middle 0.25 past the edge (x 4.5): sneaking.
+        Vector3d feet = s.galOf(new Vector3d(4.75, 0.5, 0));
+        Vector3d eye = s.galOf(new Vector3d(4, 3, 0));
+        assertFalse(s.placeBlock(eye, new Vector3d(0, -1, 0), Material.STONE, feet), "on top of the block stood on");
+        // Away from the player it still goes down.
+        assertTrue(s.placeBlock(s.galOf(new Vector3d(-3, 3, 0)), new Vector3d(0, -1, 0), Material.STONE, feet));
+    }
 }

@@ -1170,9 +1170,52 @@ public:
       DrawHitbox();
   }
 
-  // Where each body's gravity begins (a planet's pull, a station's box), as faint blue lines:
-  // seen from space, fading out once inside it (gone on the ground). Behind the planets (depth
-  // tested, none written).
+  // A body's shell: its matrix (view times its unit sphere's or cube's place) into m, and how far
+  // the camera is past its gravity's edge into outside. False: it has none (no gravity of ours).
+  static bool Shell(const Planet& p, const f32 view[12], const TVec3f& cam, f32 m[12], f32* outside)
+  {
+    if (p.flat)
+    {
+      // The box's matrix: its axes times its half sizes, then its middle.
+      const f32(*b)[4] = p.flat->mLocalMtx.mMtx;
+      const f32 d[3] = {cam.x - b[0][3], cam.y - b[1][3], cam.z - b[2][3]};
+      *outside = -1.0e30f;
+      for (int k = 0; k < 3; k++)
+      {
+        const f32 len2 = b[0][k] * b[0][k] + b[1][k] * b[1][k] + b[2][k] * b[2][k];
+        if (len2 <= 0.f)
+          continue;
+        const f32 along = (d[0] * b[0][k] + d[1] * b[1][k] + d[2] * b[2][k]) / len2;
+        const f32 past = ((along < 0.f ? -along : along) - 1.f) * gxc::Sqrt(len2);
+        if (past > *outside)
+          *outside = past;
+      }
+      f32 local[12];
+      for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 4; c++)
+          local[4 * r + c] = b[r][c];
+      gxc::Mul34(view, local, m);
+    }
+    else if (p.gravity && p.gravity->mRange > 1.f)
+    {
+      const f32 r = p.gravity->mRange;
+      const f32 d[3] = {cam.x - p.center[0], cam.y - p.center[1], cam.z - p.center[2]};
+      *outside = gxc::Sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) - r;
+      gxc::ViewTranslate(view, p.center, m);
+      for (int row = 0; row < 3; row++)
+        for (int c = 0; c < 3; c++)
+          m[4 * row + c] *= r;
+    }
+    else
+    {
+      return false;
+    }
+    return true;
+  }
+
+  // Where each body's gravity begins (a planet's pull, a station's box), as faint blue lines: all
+  // of them seen from space; inside a body's gravity only its own, fading out (gone on the
+  // ground). Behind the planets (depth tested, none written).
   void DrawShells(const f32 view[12]) const
   {
     static u8* sphere = 0;
@@ -1193,51 +1236,21 @@ public:
       DCFlushRange(box, gxc::SHELL_BOX_DL_BYTES);
     }
     const TVec3f cam = MR::getCamPos();
+    // Inside some body's gravity, only that one's shell shows (fading); out in space, all of them.
+    bool in_any = false;
+    for (u32 i = 0; i < MAX_PLANETS && !in_any; i++)
+    {
+      f32 m[12], outside;
+      in_any = gPlanets[i].id && Shell(gPlanets[i], view, cam, m, &outside) && outside < 0.f;
+    }
     bool set = false;
     for (u32 i = 0; i < MAX_PLANETS; i++)
     {
       const Planet& p = gPlanets[i];
-      if (!p.id)
+      f32 m[12], outside;
+      if (!p.id || !Shell(p, view, cam, m, &outside))
         continue;
-      f32 m[12];
-      f32 outside;
-      if (p.flat)
-      {
-        // The box's matrix: its axes times its half sizes, then its middle.
-        const f32(*b)[4] = p.flat->mLocalMtx.mMtx;
-        const f32 d[3] = {cam.x - b[0][3], cam.y - b[1][3], cam.z - b[2][3]};
-        outside = -1.0e30f;
-        for (int k = 0; k < 3; k++)
-        {
-          const f32 len2 = b[0][k] * b[0][k] + b[1][k] * b[1][k] + b[2][k] * b[2][k];
-          if (len2 <= 0.f)
-            continue;
-          const f32 along = (d[0] * b[0][k] + d[1] * b[1][k] + d[2] * b[2][k]) / len2;
-          const f32 past = ((along < 0.f ? -along : along) - 1.f) * gxc::Sqrt(len2);
-          if (past > outside)
-            outside = past;
-        }
-        f32 local[12];
-        for (int r = 0; r < 3; r++)
-          for (int c = 0; c < 4; c++)
-            local[4 * r + c] = b[r][c];
-        gxc::Mul34(view, local, m);
-      }
-      else if (p.gravity && p.gravity->mRange > 1.f)
-      {
-        const f32 r = p.gravity->mRange;
-        const f32 d[3] = {cam.x - p.center[0], cam.y - p.center[1], cam.z - p.center[2]};
-        outside = gxc::Sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) - r;
-        gxc::ViewTranslate(view, p.center, m);
-        for (int row = 0; row < 3; row++)
-          for (int c = 0; c < 3; c++)
-            m[4 * row + c] *= r;
-      }
-      else
-      {
-        continue;
-      }
-      const f32 a = SHELL_ALPHA * gxc::ShellAlpha(outside, SHELL_FADE);
+      const f32 a = SHELL_ALPHA * gxc::ShellShown(outside, SHELL_FADE, in_any);
       if (a < 1.f)
         continue;
       if (!set)
