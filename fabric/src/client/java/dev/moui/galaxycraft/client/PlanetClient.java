@@ -1072,6 +1072,22 @@ public final class PlanetClient {
         placement = Placement.REPLACE;
     }
 
+    /**
+     * Planets near Mario in the game, of those wanted (done, total): the planets made and with
+     * everything sent, including the one he lands on. Total 0 while none is known yet.
+     */
+    public static int[] loadProgress() {
+        int done = 0, total = 0;
+        if (stream != null) {
+            int[] n = stream.nearLoaded();
+            done = n[0];
+            total = n[1];
+        }
+        for (PlanetSession p : planets())
+            if (p.active() && p.queued() > 0) total = Math.max(total, done + 1);
+        return new int[] {done, total};
+    }
+
     /** Entering a world in GalaxyCraftSpace, Mario not on its planet yet: the player waits for him. */
     public static boolean waitingToLand() {
         return galaxy != null && landPending;

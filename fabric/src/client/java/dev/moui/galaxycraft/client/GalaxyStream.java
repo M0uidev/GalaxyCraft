@@ -203,6 +203,20 @@ final class GalaxyStream {
                 Math.round(c.length() / UNITS));
     }
 
+    /**
+     * The planets near Mario that are made and fully in the game, and how many are wanted: what
+     * entering a galaxy waits for, so their making and sending does not stall the first moments.
+     * One that could not be made counts as done.
+     */
+    int[] nearLoaded() {
+        int done = 0;
+        for (int index : wanted) {
+            PlanetSession s = PlanetClient.sessionOf(index);
+            if (failed.contains(index) || s != null && s.active() && s.queued() == 0) done++;
+        }
+        return new int[] {done, wanted.size()};
+    }
+
     /** That planet could not be made (it is not waited for). */
     boolean failed(int index) {
         return failed.contains(index);
