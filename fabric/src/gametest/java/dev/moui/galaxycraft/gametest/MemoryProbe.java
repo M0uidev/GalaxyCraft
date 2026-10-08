@@ -22,7 +22,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
  */
 public final class MemoryProbe implements FabricClientGameTest {
     private static final Pattern MBX = Pattern.compile("^at=([0-9a-f]+)", Pattern.MULTILINE);
-    private static final int DBG_VOXEL_STATS = 4048 + 56;
+    private static final int DBG_VOXEL_STATS = 4052 + 56;
     private boolean failed;
 
     @Override

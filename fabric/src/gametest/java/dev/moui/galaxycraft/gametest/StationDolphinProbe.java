@@ -30,6 +30,9 @@ public final class StationDolphinProbe implements FabricClientGameTest {
     private static final Pattern MBX = Pattern.compile("^at=([0-9a-f]+)", Pattern.MULTILINE);
     private static final Pattern IN_GAME = Pattern.compile("in_game=(\\w+)");
     private static final Pattern SPEED = Pattern.compile("max_speed=(\\S+)");
+    private static final Pattern SEQ = Pattern.compile("game_seq=(\\d+)");
+    /** game_flags/host_flags: game flag 2 is a cutscene (GXC_MBX_GAME_DEMO). */
+    private static final Pattern FLAGS = Pattern.compile("flags=([0-9a-f]+)/");
     private static final Pattern PARTS = Pattern.compile("parts=(\\d+)");
     /** GxcMailbox.anchor_pos: Mario's position. */
     private static final int MBX_MARIO = 36;
@@ -164,7 +167,12 @@ public final class StationDolphinProbe implements FabricClientGameTest {
             log("game parts: " + partsEmpty + " in empty space, " + partsOn + " with the station, " + partsPacked + " packed");
             check(ctx.computeOnClient(mc -> StationClient.sessions().isEmpty()), "packed: no station in space");
             check(partsOn > partsEmpty && partsPacked <= partsEmpty, "the game dropped the station");
-            check("true".equals(group(IN_GAME, gxdev("ctl", "status"))), "Mario is still in the game");
+            // Mario is in the void now (no gravity: not "in game" to the host): the game goes on,
+            // no cutscene (a death) took him.
+            String seq0 = group(SEQ, gxdev("ctl", "mbx"));
+            waitReal(ctx, 500);
+            String mbx = gxdev("ctl", "mbx");
+            check(!seq0.equals(group(SEQ, mbx)) && (Integer.parseInt(group(FLAGS, mbx), 16) & 2) == 0, "the game goes on, Mario alive in the void");
             shot(ctx, "station-packed");
 
             // Back to the stage, where the other tests expect Mario.

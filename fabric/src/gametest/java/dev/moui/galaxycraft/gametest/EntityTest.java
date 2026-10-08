@@ -22,8 +22,8 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
  */
 public final class EntityTest implements FabricClientGameTest {
     private static final Pattern MBX = Pattern.compile("^at=([0-9a-f]+)", Pattern.MULTILINE);
-    /** Debug.entities_drawn: right after the mailbox (4048 bytes), 103 words into the debug block. */
-    private static final int DBG_ENTITIES = 4048 + 4 * 103, DBG_LIFE = 4048 + 4 * 104;
+    /** Debug.entities_drawn: right after the mailbox (4052 bytes), 103 words into the debug block. */
+    private static final int DBG_ENTITIES = 4052 + 4 * 103, DBG_LIFE = 4052 + 4 * 104;
     /** GxcMailbox.anchor_pos: Mario's position, after magic, version, three words and gravity. */
     private static final int MBX_MARIO = 36;
 

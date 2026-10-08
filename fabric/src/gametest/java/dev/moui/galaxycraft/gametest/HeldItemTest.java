@@ -22,8 +22,8 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
  */
 public final class HeldItemTest implements FabricClientGameTest {
     private static final Pattern MBX = Pattern.compile("^at=([0-9a-f]+)", Pattern.MULTILINE);
-    /** Debug.held_kind: right after the mailbox (4048 bytes), 102 words into the debug block. */
-    private static final int DBG_HELD_KIND = 4048 + 4 * 102;
+    /** Debug.held_kind: right after the mailbox (4052 bytes), 102 words into the debug block. */
+    private static final int DBG_HELD_KIND = 4052 + 4 * 102;
     private static final String[] ITEMS = {"iron_pickaxe", "grass_block", "stone", "oak_planks", "poppy",
             "water_bucket", "apple", "diamond_sword"};
     private static final int[] KINDS = {HeldItem.TOOL, HeldItem.BLOCK, HeldItem.BLOCK, HeldItem.BLOCK, HeldItem.ITEM,

@@ -210,8 +210,8 @@ public final class LauncherProbe implements FabricClientGameTest {
         System.out.println("[GalaxyCraft launch] " + msg);
     }
 
-    /** Debug.music (syati GalaxyCraft.cpp, BootMusicFrames): right after the mailbox (4048 bytes), 112 words in. */
-    private static final int DBG_MUSIC = 4048 + 4 * 112;
+    /** Debug.music (syati GalaxyCraft.cpp, BootMusicFrames): right after the mailbox (4052 bytes), 112 words in. */
+    private static final int DBG_MUSIC = 4052 + 4 * 112;
 
     /** A word of the module's debug block, from the dev Dolphin (-1 if the mailbox is not found). */
     private static int debugWord(int offset) {
