@@ -17,6 +17,7 @@
 #   tools/gxvoxel.sh mining   MiningProbe instead: holding to break, cracks, the stairs' outline (mining-*.png)
 #   tools/gxvoxel.sh drawn    DrawnBlocksProbe instead: chests, beds, signs and the like on a planet (drawn-*.png)
 #   tools/gxvoxel.sh elytra   ElytraProbe instead: elytra from planet to planet, the void, the wind (elytra-*.png)
+#   tools/gxvoxel.sh sneak    SneakProbe instead: sneaking to an edge on a planet stays on top of the block
 #   tools/gxvoxel.sh station  StationDolphinProbe instead: a flat station in space, Mario on it, packed (station-*.png)
 #   tools/gxvoxel.sh boot     GalaxyCraft's own boot, no Minecraft: SMG2 reaches GalaxyCraftSpace by
 #                             itself and Mario waits there (tools/gxboot.py; --fresh-nand: no save file)
@@ -69,6 +70,7 @@ elif [ "${1:-}" = movement ]; then TEST=MovementProbe PROP=galaxycraftMovement T
 elif [ "${1:-}" = mining ]; then TEST=MiningProbe PROP=galaxycraftMining TAG=mining
 elif [ "${1:-}" = drawn ]; then TEST=DrawnBlocksProbe PROP=galaxycraftDrawn TAG=drawn
 elif [ "${1:-}" = elytra ]; then TEST=ElytraProbe PROP=galaxycraftElytra TAG=elytra
+elif [ "${1:-}" = sneak ]; then TEST=SneakProbe PROP=galaxycraftSneak TAG=sneak
 elif [ "${1:-}" = station ]; then TEST=StationDolphinProbe PROP=galaxycraftStationGame TAG=station
 elif [ "${1:-}" = memory ]; then TEST=MemoryProbe PROP=galaxycraftMemory TAG=memory
 elif [ "${1:-}" = lod ]; then TEST=LodProbe PROP=galaxycraftLod TAG=lod
