@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-07 (flat space stations, sneaking at edges and gravity shells done)
+Last updated: 2026-10-08 (sneaking like Minecraft, held placing, quiet carried Mario)
 
 ---
 
@@ -128,6 +128,8 @@ Last updated: 2026-10-07 (flat space stations, sneaking at edges and gravity she
 | 2026-10-07 | Flat space stations: craft a Station Core, place it in open space, and it grows as you build (up to 256×256, 128 high) with flat "down" gravity; farms, chests and animals work; the core's menu renames it or packs it into an item to unfold elsewhere. [Spec](docs/superpowers/specs/2026-10-07-galaxycraft-flat-stations-design.md), [guide](docs/ESTACIONES.md) | 44aca6b |
 | 2026-10-07 | Sneaking as in Minecraft: Shift in Minecraft's movement (and Mario at Minecraft's speeds) walks slowly and stops at block edges, on planets and stations | 44aca6b |
 | 2026-10-07 | Gravity shells: where each planet's and station's gravity begins, drawn as faint blue lines seen from space, fading out once inside | 44aca6b |
+| 2026-10-08 | Sneaking exactly like Minecraft on round planets: you stay on top of the block at its edge and corners, never stepping down or sliding off; holding right-click keeps placing; no block goes into the player | 9089508 |
+| 2026-10-08 | Gravity shells only out in space (inside a gravity, only its own, fading); no fall or flight wind sounds and no snoring while Minecraft's movement carries Mario | 9089508 |
 
 ---
 
