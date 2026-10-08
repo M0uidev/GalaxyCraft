@@ -64,8 +64,12 @@ stop_minecraft
 # the GPU on one thread and leaves no headroom on planets.
 # Background input / hotkeys without focus, for this run only (-C is not saved): on Hyprland,
 # Dolphin's window can hold the compositor's focus without Qt noticing.
+# The Player Model setting (Mario or Steve) picks which Mario the game loads, so it is read here, at
+# the start: change it in Super Minecraft Galaxy's settings and play again.
+MODEL=galaxycraft
+grep -qi '^playerModel=mario' "$GAME_DIR/config/galaxycraft.properties" 2> /dev/null && MODEL=galaxycraft-mario
 GALAXYCRAFT=1 GALAXYCRAFT_BOOT=space dolphin/build/Binaries/dolphin-emu -u "$DOLPHIN_DIR" \
-  -e syati/build/galaxycraft.json \
+  -e "syati/build/$MODEL.json" \
   -C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False \
   -C Dolphin.Core.RAMOverrideEnable=True -C Dolphin.Core.MEM2Size=268435456 -C Dolphin.Core.CPUThread=True \
   -C Dolphin.Interface.ConfirmStop=False &
