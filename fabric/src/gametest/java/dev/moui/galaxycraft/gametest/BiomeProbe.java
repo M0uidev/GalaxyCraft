@@ -91,7 +91,7 @@ public final class BiomeProbe implements FabricClientGameTest {
     private static void light(ClientGameTestContext ctx, TestSingleplayerContext sp, PlanetSession s) {
         int[] box = ctx.computeOnClient(mc -> {
             var p = s.planet();
-            var g = p.grid;
+            var g = p.sphere();
             int feet = s.cellAt(GalaxyCraftClient.galaxyPos().orElseThrow());
             if (feet < 0) return new int[0];
             int stone = p.blocks.parse("minecraft:stone"), torch = p.blocks.parse("minecraft:torch");
@@ -161,7 +161,7 @@ public final class BiomeProbe implements FabricClientGameTest {
     /** A land column (its direction, planet space) with water in a column 2 cells off; null if none. */
     private static Object[] shore(PlanetSession s) {
         var p = s.planet();
-        var g = p.grid;
+        var g = p.sphere();
         for (int col = 0; col < 6 * g.n * g.n; col += 7) {
             int top = top(p, col * g.layers);
             if (top < 0 || p.info(top).isFluid() || p.blocks.leaves(p.get(top))) continue;

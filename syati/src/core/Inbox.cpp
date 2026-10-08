@@ -52,9 +52,19 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   out->type = type;
   if (type == InboxRecord::PLANET)
   {
-    if (len != 36 && len != 40)
+    if (len != 36 && len != 40 && len != 88)
       return false;
-    out->planet.flags = len == 40 ? ReadBE32(p + 36) : 0;
+    out->planet.flags = len >= 40 ? ReadBE32(p + 36) : 0;
+    out->planet.flat = (out->planet.flags & PLANET_FLAT) != 0 && (out->planet.flags & PLANET_GONE) == 0;
+    if (out->planet.flat != (len == 88) && (out->planet.flags & PLANET_GONE) == 0)
+      return false;  // a station's record has its box, and only a station's
+    for (int k = 0; k < 3; k++)
+    {
+      out->planet.up[k] = out->planet.flat ? ReadF32(p + 40 + 4 * k) : 0.f;
+      out->planet.forward[k] = out->planet.flat ? ReadF32(p + 52 + 4 * k) : 0.f;
+      out->planet.half[k] = out->planet.flat ? ReadF32(p + 64 + 4 * k) : 0.f;
+      out->planet.box_center[k] = out->planet.flat ? ReadF32(p + 76 + 4 * k) : 0.f;
+    }
     out->planet.id = ReadBE32(p);
     for (int k = 0; k < 3; k++)
       out->planet.center[k] = ReadF32(p + 4 + 4 * k);
@@ -387,4 +397,18 @@ void ViewRelative(const f32 view[12], const f32 eye[3], const f32 t[3], f32 out[
     out[4 * r + 3] = static_cast<f32>(v[0] * d[0] + v[1] * d[1] + v[2] * d[2]);
   }
 }
+void FlatBoxMatrix(const InboxPlanet& p, f32 out[3][4])
+{
+  const f32* u = p.up;
+  const f32* f = p.forward;
+  const f32 r[3] = {u[1] * f[2] - u[2] * f[1], u[2] * f[0] - u[0] * f[2], u[0] * f[1] - u[1] * f[0]};
+  for (int k = 0; k < 3; k++)
+  {
+    out[k][0] = r[k] * p.half[0];
+    out[k][1] = u[k] * p.half[1];
+    out[k][2] = f[k] * p.half[2];
+    out[k][3] = p.center[k] + p.box_center[k];
+  }
+}
+
 }  // namespace gxc

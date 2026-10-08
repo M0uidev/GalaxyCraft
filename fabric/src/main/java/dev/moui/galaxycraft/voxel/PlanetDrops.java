@@ -59,7 +59,7 @@ public final class PlanetDrops<T> {
     }
 
     private static void step(VoxelPlanet p, Drop<?> d) {
-        Vector3d up = new Vector3d(d.pos).normalize();
+        Vector3d up = p.up(d.pos);
         if (blocked(p, d.pos)) { // a block put where it lay: out on top
             d.pos.fma(0.1, up);
             d.vel.zero();
@@ -86,7 +86,7 @@ public final class PlanetDrops<T> {
     /** Whether a point is inside something that collides (or the sealed core). */
     public static boolean blocked(VoxelPlanet p, Vector3d at) {
         int c = p.grid.cellAt(at);
-        if (c < 0) return at.length() < p.grid.core;
+        if (c < 0) return p.grid.inCore(at);
         BlockInfo b = p.info(c);
         if (!b.collides()) return false;
         if (b.fullCollision()) return true;

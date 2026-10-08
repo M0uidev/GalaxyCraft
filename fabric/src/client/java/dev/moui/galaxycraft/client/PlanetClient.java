@@ -328,6 +328,36 @@ public final class PlanetClient {
         return all;
     }
 
+    /** Every body of the stage: the planets, then the active stations. */
+    public static java.util.List<PlanetSession> bodies() {
+        java.util.List<PlanetSession> all = planets();
+        all.addAll(StationClient.sessions());
+        return all;
+    }
+
+    /** The stage Mario is in (null before the first tick). */
+    static String stage() {
+        return stage;
+    }
+
+    /** A body leaving the stage: the game is told, then it is forgotten. */
+    static void retire(PlanetSession s) {
+        s.remove();
+        leaving.add(s);
+        if (focus == s) focus = session;
+    }
+
+    /** Runs on the planets' saver thread (saves in order, off Minecraft's). */
+    static void save(Runnable r) {
+        saver.execute(r);
+    }
+
+    /** Whose strip of the shadow dimension a body runs in: a planet's by its file, a station's by its id (it travels with it). */
+    static String shadowKey(PlanetSession s) {
+        if (s.station() != null) return "station-" + s.station().id;
+        return stage == null ? "" : PlanetStore.key(stage, indexOf(s));
+    }
+
     private static int indexOf(PlanetSession s) {
         for (Extra e : extras) if (e.s() == s) return e.index();
         return 0;
@@ -471,7 +501,7 @@ public final class PlanetClient {
             return;
         }
         java.util.List<PlanetLayout.Sphere> others = new java.util.ArrayList<>();
-        for (PlanetSession s : all) if (s.active() && s != target) others.add(new PlanetLayout.Sphere(s.center(), s.gravityUnits()));
+        for (PlanetSession s : bodies()) if (s.active() && s != target) others.add(new PlanetLayout.Sphere(s.center(), s.gravityUnits()));
         if (stream != null) // the far ones too: a new planet keeps clear of every planet of the galaxy
             for (GalaxyCatalog.Entry e : stream.entries()) {
                 PlanetSession s = sessionOf(e.index());
@@ -523,7 +553,7 @@ public final class PlanetClient {
     private static PlanetSession nearest(Vector3d mario) {
         PlanetSession best = session;
         double bestD = Double.MAX_VALUE;
-        for (PlanetSession p : planets()) {
+        for (PlanetSession p : bodies()) {
             if (!p.active() || mario == null) continue;
             double d = p.center().distance(mario) - p.planet().surface() / GravityFrame.SCALE;
             if (d < bestD) {
@@ -537,6 +567,7 @@ public final class PlanetClient {
     /** Client tick, after the gravity frame is up to date. */
     public static void tick(LocalPlayer player, BridgeClient bridge, GravityFrame frame, Seqlock.WorldState world) {
         if (blocks == null) {
+            if (FIXED_DIR) StationClient.enterWorld(planetDir());
             blocks = McBlocks.create(Minecraft.getInstance());
             atlasLink = new AtlasLink(blocks.atlas, 1);
             session.setBlocks(blocks);
@@ -610,7 +641,7 @@ public final class PlanetClient {
             mining.stop();
         }
         frameNow = frame;
-        for (PlanetSession s : planets())
+        for (PlanetSession s : bodies())
             if (s.active() && world.queryPos() != null)
                 s.setDetail(PlanetLayout.detail(s.detail(), s == focus, s.center().distance(world.queryPos()), s.gravityUnits(),
                         1 / GravityFrame.SCALE));
@@ -666,8 +697,15 @@ public final class PlanetClient {
             }
             ShadowWorld.steer(new ShadowWorld.Steer(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),
                     key(in, SC_LSHIFT) || key(in, SC_RSHIFT)));
+            // A station's core: its menu on a right click, and it never breaks.
+            boolean core = aim != null && StationClient.isCore(session, aim.cell());
+            if (core && pressed(buttons, MOUSE_RIGHT) && target == null) {
+                StationScreen.open(session);
+                hit = true;
+            }
+            if (core && pressed(buttons, MOUSE_LEFT)) player.sendOverlayMessage(Component.translatable("message.galaxycraft.station.core"));
             // Held down on a block (not on a mob): Minecraft's breaking, a tick at a time.
-            if (item && target == null) mine(player, session, eye, look, aim, pressed(buttons, MOUSE_LEFT), (buttons & MOUSE_LEFT) != 0);
+            if (item && target == null && !core) mine(player, session, eye, look, aim, pressed(buttons, MOUSE_LEFT), (buttons & MOUSE_LEFT) != 0);
             else {
                 mining.stop();
                 session.setCrack(-1, -1, null);
@@ -680,7 +718,7 @@ public final class PlanetClient {
             mining.stop();
             focus.setCrack(-1, -1, null);
         }
-        shadow.tick(stage == null ? "" : PlanetStore.key(stage, indexOf(focus)), world.queryPos());
+        shadow.tick(shadowKey(focus), world.queryPos());
         drops.tick(Minecraft.getInstance(), frame, frame == null ? null : world.queryPos());
         entities.tick();
         // The player hurt by the shadow: Mario reels in the game too.
@@ -696,7 +734,8 @@ public final class PlanetClient {
         // The planet in focus first: its chunks before the others' when the ring is full. Mario's
         // collision goes whatever it costs; the rest only within this tick's budget, and while the
         // host keeps up with what it has been sent.
-        java.util.List<PlanetSession> order = planets();
+        StationClient.tick(stage, world.queryPos());
+        java.util.List<PlanetSession> order = bodies();
         order.remove(focus);
         order.addFirst(focus);
         long end = System.nanoTime() + MESH_BUDGET_NANOS;
@@ -880,6 +919,7 @@ public final class PlanetClient {
     /** A new stage: the old one's planet is saved and dropped, this one's loaded if it has one. */
     private static void enterStage(String next) {
         saveNow();
+        StationClient.unloadAll();
         session.unload();
         for (Extra e : extras) e.s().unload();
         extras.clear();
@@ -934,6 +974,7 @@ public final class PlanetClient {
         if (FIXED_DIR) return;
         galaxy = g;
         store = new PlanetStore(g.planets());
+        StationClient.enterWorld(g.planets());
         landOn = resolved(g.spot().orElse(null));
         landPending = true;
         homeAsked = false;
@@ -951,6 +992,7 @@ public final class PlanetClient {
         if (FIXED_DIR || galaxy == null) return;
         writeSpot(Minecraft.getInstance().player);
         saveNow();
+        StationClient.enterWorld(null); // saved, dropped with the galaxy
         if (stream != null) stream.clear();
         stream = null;
         session.unload();
@@ -1028,6 +1070,18 @@ public final class PlanetClient {
     }
 
     /** A catalog planet's session, if it has one (complete or not). */
+    /** The galaxy's planets not in the game yet (its catalog's far ones): their gravity, in blocks. */
+    static java.util.List<dev.moui.galaxycraft.gravity.GravityBody> farBodies() {
+        java.util.List<dev.moui.galaxycraft.gravity.GravityBody> out = new java.util.ArrayList<>();
+        if (stream == null) return out;
+        for (GalaxyCatalog.Entry e : stream.entries()) {
+            PlanetSession s = sessionOf(e.index());
+            if (s == null || !s.active()) out.add(new dev.moui.galaxycraft.gravity.GravityBody.Sphere(
+                    new Vector3d(e.center()).mul(GravityFrame.SCALE), PlanetSession.gravityRadius(e.radius())));
+        }
+        return out;
+    }
+
     static PlanetSession sessionOf(int index) {
         if (index == 0) return session;
         for (Extra e : extras) if (e.index() == index) return e.s();
@@ -1232,6 +1286,7 @@ public final class PlanetClient {
                     next.run();
                     return;
                 }
+                if (!StationClient.afterPlace(focus, focus.lastPlacedCells())) return; // past a station's limits: taken back
                 placed(focus);
                 int cell = focus.lastPlaced();
                 if (cell >= 0 && shadow.available()
@@ -1344,6 +1399,7 @@ public final class PlanetClient {
      * tool worn); otherwise the block just goes.
      */
     private static void breakBlock(LocalPlayer player, Vector3d eye, Vector3d look, PlanetSession.Aim aim) {
+        if (aim != null && StationClient.isCore(focus, aim.cell())) return;
         if (!shadow.available()) focus.breakBlock(eye, look, player.getAbilities().instabuild);
         else if (aim != null && focus.planet().info(aim.cell()).breakable())
             ShadowWorld.destroy(focus.planet(), aim.cell(), player.getUUID());

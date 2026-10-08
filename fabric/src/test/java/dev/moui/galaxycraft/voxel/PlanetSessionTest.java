@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import org.joml.Quaterniond;
 import org.joml.Vector3d;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -432,7 +433,7 @@ class PlanetSessionTest {
         s.update(3, 100, MARIO);
         VoxelPlanet p = s.planet();
         Vector3d mario = new Vector3d(MARIO).sub(s.center()).div(80);
-        int c0 = p.grid.cellAt(new Vector3d(mario).normalize(p.grid.core + 0.5));
+        int c0 = p.grid.cellAt(new Vector3d(mario).normalize(p.sphere().core + 0.5));
         for (int k = p.depth; k < p.depth + 5; k++) p.set(c0 + k, Material.STONE); // a tower where he lands
         s.teleport();
         PlanetSession.Msg tp = drain(s).stream().filter(m -> m.type() == Layout.MSG_PLANET_TP).findFirst().orElseThrow();
@@ -804,5 +805,96 @@ class PlanetSessionTest {
         assertTrue(store.read("BossGalaxy", CubeBlocks.INSTANCE).isEmpty());
         store.delete("SkyStationGalaxy");
         assertTrue(store.read("SkyStationGalaxy", CubeBlocks.INSTANCE).isEmpty());
+    }
+
+    static PlanetSession station(Station st) {
+        PlanetSession s = new PlanetSession(80);
+        s.setRenderDistance(Double.POSITIVE_INFINITY);
+        s.spawnStation(st);
+        return s;
+    }
+
+    @Test void aStationsRecordCarriesItsGravityBox() {
+        Station st = StationTest.station("cafe0003");
+        st.center = new Vector3d(800, 0, 0);
+        PlanetSession s = station(st);
+        s.update(1, 1, new Vector3d(800, 160, 0));
+        PlanetSession.Msg m = s.peek();
+        assertEquals(Layout.MSG_PLANET, m.type());
+        assertEquals(88, m.payload().length);
+        ByteBuffer b = ByteBuffer.wrap(m.payload()).order(ByteOrder.BIG_ENDIAN);
+        assertEquals(PlanetSession.PLANET_FLAT, b.getInt(36));
+        assertEquals(1, b.getFloat(44), 1e-6);           // up = +y
+        assertEquals(1, b.getFloat(60), 1e-6);           // forward = +z
+        assertEquals(6.5 * 80, b.getFloat(64), 1e-3);    // half x: 9 wide, / 2, + 2
+        assertEquals(12.5 * 80, b.getFloat(68), 1e-3);   // half y: from -0.5 to 24.5 above the slab's top
+        assertEquals(12 * 80, b.getFloat(80), 1e-3);     // the box's center is 12 above the core's
+        assertEquals(0, le(m).getFloat(28), 1e-6);       // no occluder
+        assertTrue(le(m).getFloat(20) > 6.5 * 80);       // its reach holds the box
+        assertSame(st, s.station());
+    }
+
+    @Test void landingOnAStationIsOnTopOfItsHighestBlock() {
+        Station st = StationTest.station("cafe0004");
+        PlanetSession s = station(st);
+        int c = st.grid().cellOf(2, 3, 1);
+        st.planet.set(c, StationTest.STONE);
+        Vector3d at = s.teleportToward(new Vector3d(0, 1, 0));
+        assertEquals(0, at.distance(new Vector3d(0, 0.5, 0)), 1e-9); // the core's top
+        Vector3d over = s.teleportToward(new Vector3d(2, 10, 1));
+        assertEquals(0, over.distance(new Vector3d(2, 3.5, 1)), 1e-9);
+    }
+
+    @Test void aStationsBodyIsItsBox() {
+        Station st = StationTest.station("cafe0005");
+        st.center = new Vector3d(800, 0, 0);
+        var body = station(st).body(1 / 80.0);
+        assertTrue(body.outside(new Vector3d(10, 1, 0)) <= 0);
+        assertTrue(body.outside(new Vector3d(10, -5, 0)) > 0);
+    }
+
+    @Test void swapKeepsTheIdAndSendsTheRecordAgain() {
+        Station st = StationTest.station("cafe0006");
+        PlanetSession s = station(st);
+        s.update(1, 1, new Vector3d(0, 80, 0));
+        drain(s);
+        int id = s.id();
+        int c = st.grid().cellOf(st.grid().ox + 1, 0, 0);
+        st.planet.set(c, StationTest.STONE);
+        st.changed(c);
+        st.regrow();
+        s.swap(st.planet);
+        s.update(1, 1, new Vector3d(0, 80, 0));
+        List<PlanetSession.Msg> got = drain(s);
+        assertEquals(id, s.id());
+        assertEquals(Layout.MSG_PLANET, got.getFirst().type());
+        assertEquals(st.planet.chunkCount(), le(got.getFirst()).getInt(24));
+        assertTrue(got.stream().noneMatch(m -> m.type() == Layout.MSG_PLANET && (ByteBuffer.wrap(m.payload()).order(ByteOrder.BIG_ENDIAN).getInt(36) & PlanetSession.PLANET_GONE) != 0));
+    }
+
+    @Test void standingOnTheCoreIsNotFallingThroughIt() {
+        Station st = StationTest.station("cafe0007");
+        PlanetSession s = station(st);
+        s.update(1, 1, new Vector3d(0, 0.6 * 80, 0)); // on the core's top
+        assertFalse(s.marioAtCore());
+        assertFalse(s.underground());
+    }
+
+    @Test void theLastPlacedCellFollowsARegrow() {
+        Station st = StationTest.station("cafe0008");
+        PlanetSession s = station(st);
+        assertTrue(s.placeBlock(s.galOf(new Vector3d(3, 3, 0)), new Vector3d(0, -1, 0), Material.STONE, s.galOf(new Vector3d(-3, 1, -3))));
+        FlatGrid before = st.grid();
+        int c = s.lastPlaced();
+        assertEquals(1, before.stationY(c));
+        st.bounds = st.bounds.with(40, 0, 0);
+        st.regrow();
+        s.swap(st.planet);
+        FlatGrid after = st.grid();
+        assertNotEquals(before.n, after.n);
+        int moved = s.lastPlaced();
+        assertEquals(3, after.stationX(moved));
+        assertEquals(1, after.stationY(moved));
+        assertEquals(0, after.stationZ(moved));
     }
 }

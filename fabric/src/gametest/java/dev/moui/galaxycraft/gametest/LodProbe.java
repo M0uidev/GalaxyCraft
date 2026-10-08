@@ -23,7 +23,7 @@ import org.joml.Vector3d;
 public final class LodProbe implements FabricClientGameTest {
     private static final Pattern MBX = Pattern.compile("^at=([0-9a-f]+)", Pattern.MULTILINE);
     private static final Pattern MAX_SPEED = Pattern.compile("max_speed=(\\S+)");
-    private static final int DBG_VOXEL_STATS = 4048 + 56;
+    private static final int DBG_VOXEL_STATS = 4052 + 56;
     private static final double UNITS = 80;
 
     @Override

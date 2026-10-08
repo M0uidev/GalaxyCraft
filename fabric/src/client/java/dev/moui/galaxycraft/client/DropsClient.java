@@ -53,7 +53,7 @@ public final class DropsClient {
             if (++ticks % 10 == 0) merge();
             if (marioFeetGal != null && mc.player != null && mc.player.isAlive() && !mc.player.isSpectator()) {
                 Vector3d feet = session().localOf(marioFeetGal);
-                for (PlanetDrops.Drop<ItemStack> d : drops.pickUp(feet, new Vector3d(feet).normalize())) {
+                for (PlanetDrops.Drop<ItemStack> d : drops.pickUp(feet, p.up(feet))) {
                     Vector3d at = new Vector3d(d.pos);
                     ShadowWorld.give(mc.player.getUUID(), d.item, left -> drops.add(at, new Vector3d(), left, RETRY_DELAY));
                 }

@@ -16,7 +16,7 @@ public interface LodSource {
     /** A patch's ground: its top (layers from the grid's bottom), its block, and a cell of it (tints). */
     record Patch(int height, int block, int cell) {}
 
-    CubeSphere grid();
+    CellGrid grid();
 
     Blocks blocks();
 
@@ -25,7 +25,7 @@ public interface LodSource {
     /** The color a tint of the patch's block takes there, 0xRRGGBB. */
     int tint(Patch p, int tint);
 
-    /** A built planet: the mean of its columns' tops and the block most of them have. */
+    /** A built planet: the mean of its columns' tops and the block most of them have (air: no ground at all). */
     static LodSource of(VoxelPlanet p) {
         return of(p, 1);
     }
@@ -33,7 +33,7 @@ public interface LodSource {
     /** As {@link #of(VoxelPlanet)}, looking at every stride-th column each way only (faster on big planets). */
     static LodSource of(VoxelPlanet p, int stride) {
         return new LodSource() {
-            @Override public CubeSphere grid() {
+            @Override public CellGrid grid() {
                 return p.grid;
             }
 
@@ -42,7 +42,7 @@ public interface LodSource {
             }
 
             @Override public Patch patch(int face, int i0, int i1, int j0, int j1) {
-                CubeSphere g = p.grid;
+                CellGrid g = p.grid;
                 Map<Integer, Integer> count = new HashMap<>();
                 long sum = 0;
                 int cols = 0, best = Blocks.AIR, bestCount = 0;
@@ -60,6 +60,9 @@ public interface LodSource {
                                 break;
                             }
                         }
+                        // Columns of empty space (around a station's slab) neither pick the block
+                        // nor lower the height: the patch is the ground it has, or nothing.
+                        if (block == Blocks.AIR) continue;
                         sum += top;
                         cols++;
                         int c = count.merge(block, 1, Integer::sum);
@@ -68,7 +71,7 @@ public interface LodSource {
                             best = block;
                         }
                     }
-                return new Patch((int) Math.round((double) sum / cols), best, g.index(face, (i0 + i1) / 2, (j0 + j1) / 2, 0));
+                return new Patch(cols == 0 ? 0 : (int) Math.round((double) sum / cols), best, g.index(face, (i0 + i1) / 2, (j0 + j1) / 2, 0));
             }
 
             @Override public int tint(Patch t, int tint) {
@@ -85,7 +88,7 @@ public interface LodSource {
         CubeSphere g = s.grid();
         Map<Integer, String> biomeAt = new HashMap<>();
         return new LodSource() {
-            @Override public CubeSphere grid() {
+            @Override public CellGrid grid() {
                 return g;
             }
 
@@ -120,7 +123,7 @@ public interface LodSource {
         int depth = VoxelPlanet.groundDepth(radius);
         CubeSphere g = new CubeSphere(VoxelPlanet.gridSize(radius), radius - depth, depth + VoxelPlanet.defaultAir(radius));
         return new LodSource() {
-            @Override public CubeSphere grid() {
+            @Override public CellGrid grid() {
                 return g;
             }
 

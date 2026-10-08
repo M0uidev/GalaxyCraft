@@ -59,7 +59,7 @@ class LodSourceTest {
         int grass = CubeBlocks.INSTANCE.id(Material.GRASS);
         LodSource flat = LodSource.flat(48, CubeBlocks.INSTANCE, grass);
         PlanetLod.Part[] parts = PlanetLod.coarse(flat, 6, 80);
-        double surface = flat.grid().radius(VoxelPlanet.groundDepth(48));
+        double surface = flat.grid().radiusAt(VoxelPlanet.groundDepth(48));
         for (PlanetLod.Part part : parts) {
             double top = 0;
             for (Vector3d v : PlanetLodTest.vertices(part)) top = Math.max(top, v.length());

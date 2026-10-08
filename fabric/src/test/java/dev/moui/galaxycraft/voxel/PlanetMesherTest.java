@@ -28,7 +28,7 @@ class PlanetMesherTest {
         for (PlanetMesher.Quad q : all(p))
             for (int k = 0; k < 4; k++) {
                 Vector3d a = q.corners()[k], b = q.corners()[(k + 1) % 4];
-                if (a.length() < p.grid.core + 0.5 && b.length() < p.grid.core + 0.5) continue;
+                if (a.length() < p.sphere().core + 0.5 && b.length() < p.sphere().core + 0.5) continue;
                 edges.merge(key(a) + ">" + key(b), 1, Integer::sum);
             }
         for (var e : edges.entrySet()) {
@@ -74,7 +74,7 @@ class PlanetMesherTest {
 
     @Test void sunlitSideIsBrighterAndHolesAreShaded() {
         VoxelPlanet p = VoxelPlanet.standard();
-        CubeSphere g = p.grid;
+        CubeSphere g = p.sphere();
         // The grass facing the sun and the grass on the far side.
         int day = g.cellAt(new Vector3d(PlanetMesher.SUN).mul(15.5)), night = g.cellAt(new Vector3d(PlanetMesher.SUN).mul(-15.5));
         double dayLight = PlanetMesher.quads(p, p.chunkOf(day)).stream().filter(q -> q.side() == CubeSphere.TOP)

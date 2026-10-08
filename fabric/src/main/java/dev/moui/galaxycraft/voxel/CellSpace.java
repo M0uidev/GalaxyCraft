@@ -23,7 +23,7 @@ public final class CellSpace {
     private CellSpace() {}
 
     /** Where model point (x, y, z) of cell lies, planet blocks (values outside 0..1 extrapolate). */
-    public static Vector3d point(CubeSphere g, int cell, double x, double y, double z) {
+    public static Vector3d point(CellGrid g, int cell, double x, double y, double z) {
         Vector3d out = new Vector3d();
         for (int m = 0; m < 8; m++) {
             int di = m & 1, dj = m >> 1 & 1, dk = m >> 2;
@@ -34,7 +34,9 @@ public final class CellSpace {
     }
 
     /** The model point of cell at planet point p (Newton's method on the trilinear map). */
-    public static Vector3d local(CubeSphere g, int cell, Vector3d p) {
+    public static Vector3d local(CellGrid g, int cell, Vector3d p) {
+        if (g instanceof FlatGrid f) // a unit cube: exact, no Newton
+            return f.toStation(p).sub(f.stationX(cell) - 0.5, f.stationY(cell) - 0.5, f.stationZ(cell) - 0.5);
         Vector3d m = new Vector3d(0.5, 0.5, 0.5);
         double h = 1e-4;
         for (int it = 0; it < 8; it++) {
@@ -52,11 +54,10 @@ public final class CellSpace {
 
     /**
      * A planet direction in cell's model axes (x, y, z), unit: the axes at the cell's center made
-     * orthonormal around its outward direction.
+     * orthonormal around its outward direction (a station's own up; away from a planet's center).
      */
-    public static Vector3d direction(CubeSphere g, int cell, Vector3d dir) {
-        Vector3d c = point(g, cell, 0.5, 0.5, 0.5);
-        Vector3d y = new Vector3d(c).normalize();
+    public static Vector3d direction(CellGrid g, int cell, Vector3d dir) {
+        Vector3d y = g instanceof FlatGrid f ? f.up() : point(g, cell, 0.5, 0.5, 0.5).normalize();
         Vector3d x = point(g, cell, 1, 0.5, 0.5).sub(point(g, cell, 0, 0.5, 0.5));
         x.fma(-x.dot(y), y).normalize();
         Vector3d z = new Vector3d(x).cross(y);

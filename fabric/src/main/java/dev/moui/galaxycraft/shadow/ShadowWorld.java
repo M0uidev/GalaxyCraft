@@ -312,7 +312,9 @@ public final class ShadowWorld {
             BlockPos pos = new BlockPos(map.x(cell), map.y(cell), map.z(cell));
             mirrorNow(level, pos);
             BlockState state = level.getBlockState(pos);
-            if (state.isAir() || !sp.getMainHandItem().canDestroyBlock(state, level, pos, sp)) return;
+            // A station's core stays, whoever asks (it holds the station together).
+            if (state.isAir() || state.is(dev.moui.galaxycraft.station.StationBlocks.CORE)
+                    || !sp.getMainHandItem().canDestroyBlock(state, level, pos, sp)) return;
             var blockEntity = level.getBlockEntity(pos);
             Block block = state.getBlock();
             BlockState adjusted = block.playerWillDestroy(level, pos, state, sp);

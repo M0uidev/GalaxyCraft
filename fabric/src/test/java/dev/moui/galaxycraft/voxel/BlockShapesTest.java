@@ -18,7 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 /** Blocks other than cubes: model space in a cell, their faces and collision, placing, saving, the atlas. */
 class BlockShapesTest {
     private final VoxelPlanet p = VoxelPlanet.standard(); // grass at layer 8, air from 9
-    private final CubeSphere g = p.grid;
+    private final CubeSphere g = p.sphere();
 
     private int at(int i, int j, int k) {
         return g.index(0, i, j, k);
@@ -223,7 +223,7 @@ class BlockShapesTest {
         int c = at(12, 12, 9);
         p.set(c, CubeBlocks.FLOWER);
         p.set(at(13, 12, 9), Material.WATER, 3);
-        CubeSphere grid = p.grid;
+        CubeSphere grid = p.sphere();
         store.write("G", new PlanetStore.Saved(grid.n, grid.core, grid.layers, p.depth, new Vector3d(1, 2, 3), p.cells()),
                 CubeBlocks.INSTANCE);
         PlanetStore.Saved back = store.read("G", CubeBlocks.INSTANCE).orElseThrow();

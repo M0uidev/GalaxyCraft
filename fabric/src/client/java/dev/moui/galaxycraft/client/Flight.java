@@ -219,13 +219,12 @@ public final class Flight {
                 .orElse(List.of());
     }
 
-    /** Every planet's gravity, blocks. */
+    /** Every planet's and station's gravity, blocks. */
     static List<GravityBody> bodies() {
         List<GravityBody> out = new ArrayList<>();
-        for (PlanetSession s : PlanetClient.planets()) {
+        for (PlanetSession s : PlanetClient.bodies()) {
             if (s == null || !s.active() || s.planet() == null) continue;
-            out.add(new GravityBody.Sphere(new Vector3d(s.center()).mul(GravityFrame.SCALE),
-                    s.gravityUnits() * GravityFrame.SCALE));
+            out.add(s.body(GravityFrame.SCALE));
         }
         return out;
     }

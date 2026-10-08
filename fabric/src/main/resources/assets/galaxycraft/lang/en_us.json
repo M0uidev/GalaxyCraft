@@ -1,3 +1,20 @@
 {
-  "generator.galaxycraft.galaxy": "Super Minecraft Galaxy"
+  "generator.galaxycraft.galaxy": "Super Minecraft Galaxy",
+  "block.galaxycraft.station_core": "Station Core",
+  "item.galaxycraft.station_core": "Station Core",
+  "item.galaxycraft.packed_station": "Packed Station",
+  "item.galaxycraft.packed_station.size": "%s × %s × %s",
+  "item.galaxycraft.packed_station.blocks": "%s blocks",
+  "screen.galaxycraft.station.title": "Station",
+  "screen.galaxycraft.station.name": "Name",
+  "screen.galaxycraft.station.info": "%s × %s × %s, %s blocks",
+  "screen.galaxycraft.station.rename": "Rename",
+  "screen.galaxycraft.station.pack": "Pack up",
+  "screen.galaxycraft.station.done": "Done",
+  "message.galaxycraft.station.open_space": "Stations go in open space, away from planets",
+  "message.galaxycraft.station.too_many": "Too many stations here",
+  "message.galaxycraft.station.too_big": "The station can't grow further",
+  "message.galaxycraft.station.core": "The core holds the station together: pack it up from its menu",
+  "message.galaxycraft.station.lost": "That station's file is missing",
+  "message.galaxycraft.station.packed": "Packed %s"
 }

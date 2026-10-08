@@ -1,6 +1,7 @@
 package dev.moui.galaxycraft.shadow;
 
 import dev.moui.galaxycraft.voxel.CellSpace;
+import dev.moui.galaxycraft.voxel.CellGrid;
 import dev.moui.galaxycraft.voxel.CubeSphere;
 import org.joml.Matrix3d;
 import org.joml.Vector3d;
@@ -23,12 +24,18 @@ public final class ShadowMap {
     /** The overworld's surface: where a planet's ground goes in the shadow (SURFACE_Y - depth is its layer 0). */
     public static final int SURFACE_Y = 64;
 
-    public final CubeSphere grid;
+    public final CellGrid grid;
     public final int z0;
     /** The shadow's y of the planet's layer 0. */
     public final int y0;
+    /** Added to x and z: a station's cells go by their station coordinate (0 for a planet). */
+    private final int xOff, zOff;
+    /** A station's core is at this y in the shadow (its cells reach 48 below and 79 above: 0 to 127). */
+    public static final int STATION_Y = 48;
+    /** A station's core is this far into its strip along x and z (it reaches 255 either way). */
+    static final int STATION_MIDDLE = 256;
 
-    public ShadowMap(CubeSphere grid, String stage) {
+    public ShadowMap(CellGrid grid, String stage) {
         this(grid, stage, 0);
     }
 
@@ -37,19 +44,27 @@ public final class ShadowMap {
      * Minecraft's rules that go by height work as on its surface (no slimes of slime chunks,
      * which need y under 40; swamp slimes at night, which need 51 to 69).
      */
-    public ShadowMap(CubeSphere grid, String stage, int y0) {
+    public ShadowMap(CellGrid grid, String stage, int y0) {
+        this(grid, stage, y0, 0, 0);
+    }
+
+    private ShadowMap(CellGrid grid, String stage, int y0, int xOff, int zOff) {
         this.grid = grid;
         this.z0 = Z_BASE + Math.floorMod(stage.hashCode(), SLOTS) * STRIDE;
         this.y0 = y0;
+        this.xOff = xOff;
+        this.zOff = zOff;
     }
 
     /** The shadow map of a planet: its ground at the overworld's surface height. */
     public static ShadowMap of(dev.moui.galaxycraft.voxel.VoxelPlanet p, String stage) {
+        if (p.grid instanceof dev.moui.galaxycraft.voxel.FlatGrid g) // a station: by station coordinate, so a regrow moves nothing
+            return new ShadowMap(g, stage, STATION_Y + g.oy, STATION_MIDDLE + g.ox, STATION_MIDDLE + g.oz);
         return new ShadowMap(p.grid, stage, Math.max(0, SURFACE_Y - p.depth));
     }
 
     public int x(int cell) {
-        return grid.face(cell) * STRIDE + 1 + grid.j(cell);
+        return grid.face(cell) * STRIDE + 1 + xOff + grid.j(cell);
     }
 
     public int y(int cell) {
@@ -57,22 +72,22 @@ public final class ShadowMap {
     }
 
     public int z(int cell) {
-        return z0 + 1 + grid.i(cell);
+        return z0 + 1 + zOff + grid.i(cell);
     }
 
     /** The cell at a position inside a face's box; -1 elsewhere (halo, gaps, above or below). */
     public int cell(int x, int y, int z) {
         y -= y0;
-        int f = Math.floorDiv(x, STRIDE), j = x - f * STRIDE - 1, i = z - z0 - 1;
-        if (f < 0 || f >= 6 || y < 0 || y >= grid.layers || i < 0 || i >= grid.n || j < 0 || j >= grid.n) return -1;
+        int f = Math.floorDiv(x, STRIDE), j = x - f * STRIDE - 1 - xOff, i = z - z0 - 1 - zOff;
+        if (f < 0 || f >= grid.faces() || y < 0 || y >= grid.layers || i < 0 || i >= grid.n || j < 0 || j >= grid.n) return -1;
         return grid.index(f, i, j, y);
     }
 
     /** The cell a halo position copies (the one across the face's edge); -1 if it is no halo. */
     public int haloSource(int x, int y, int z) {
         y -= y0;
-        int f = Math.floorDiv(x, STRIDE), j = x - f * STRIDE - 1, i = z - z0 - 1, n = grid.n;
-        if (f < 0 || f >= 6 || y < 0 || y >= grid.layers) return -1;
+        int f = Math.floorDiv(x, STRIDE), j = x - f * STRIDE - 1 - xOff, i = z - z0 - 1 - zOff, n = grid.n;
+        if (f < 0 || f >= grid.faces() || y < 0 || y >= grid.layers) return -1;
         boolean iOut = i == -1 || i == n, jOut = j == -1 || j == n;
         if (iOut == jOut || i < -1 || i > n || j < -1 || j > n) return -1; // inside, a corner or beyond
         int side = i == -1 ? CubeSphere.I_MINUS : i == n ? CubeSphere.I_PLUS : j == -1 ? CubeSphere.J_MINUS : CubeSphere.J_PLUS;
@@ -115,8 +130,8 @@ public final class ShadowMap {
      */
     public double[] frame(double x, double y, double z) {
         int bx = (int) Math.floor(x), bz = (int) Math.floor(z), f = Math.floorDiv(bx, STRIDE), n = grid.n;
-        int j = bx - f * STRIDE - 1, i = bz - z0 - 1;
-        if (f < 0 || f >= 6 || j < -2 || j > n + 1 || i < -2 || i > n + 1) return null;
+        int j = bx - f * STRIDE - 1 - xOff, i = bz - z0 - 1 - zOff;
+        if (f < 0 || f >= grid.faces() || j < -2 || j > n + 1 || i < -2 || i > n + 1) return null;
         int cell = grid.index(f, Math.clamp(i, 0, n - 1), Math.clamp(j, 0, n - 1), Math.clamp((int) Math.floor(y) - y0, 0, grid.layers - 1));
         double fx = x - x(cell), fy = y - y(cell), fz = z - z(cell);
         Vector3d o = CellSpace.point(grid, cell, fx, fy, fz);
@@ -136,7 +151,7 @@ public final class ShadowMap {
      */
     public Wrap wrap(double x, double y, double z) {
         int bx = (int) Math.floor(x), bz = (int) Math.floor(z), f = Math.floorDiv(bx, STRIDE), n = grid.n;
-        int j = bx - f * STRIDE - 1, i = bz - z0 - 1;
+        int j = bx - f * STRIDE - 1 - xOff, i = bz - z0 - 1 - zOff;
         if (j >= 0 && j < n && i >= 0 && i < n) return null;
         double[] a = frame(x, y, z);
         if (a == null || y < y0 || y >= y0 + grid.layers) return null;

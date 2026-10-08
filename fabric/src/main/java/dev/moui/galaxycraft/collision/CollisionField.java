@@ -138,6 +138,11 @@ public final class CollisionField {
 
     private static final double TOUCH = 1e-7;
 
+    /** Whether a box (Minecraft space) overlaps the galaxy's collision: Level.noCollision's view of it. */
+    public boolean blocked(double[] box) {
+        return !overlapping(box).isEmpty();
+    }
+
     private List<double[]> overlapping(double[] p) {
         List<double[]> out = new ArrayList<>();
         for (double[] b : boxesFor(p))

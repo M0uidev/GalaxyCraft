@@ -109,3 +109,71 @@ float JumpCeiling(float rose, float height, float gravity)
   return v < left ? v : left;
 }
 }  // namespace gxc
+
+namespace gxc
+{
+namespace
+{
+// Ground under any of the box's middle and corners at p.
+bool Supported(const float p[3], const float f[3], const float s[3], float half, GroundAt ground, void* ctx)
+{
+  static const int CORNERS[5][2] = {{0, 0}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+  for (int c = 0; c < 5; c++)
+  {
+    float q[3];
+    for (int k = 0; k < 3; k++)
+      q[k] = p[k] + CORNERS[c][0] * half * f[k] + CORNERS[c][1] * half * s[k];
+    if (ground(q, ctx))
+      return true;
+  }
+  return false;
+}
+}  // namespace
+
+bool SneakStep(const float from[3], float to[3], const float up[3], const float front[3], float half, GroundAt ground,
+               void* ctx)
+{
+  // Front and side flat on the ground (orthonormal, ⟂ up).
+  float u[3] = {up[0], up[1], up[2]};
+  const float ul = Sqrt(Dot(u, u));
+  if (ul <= 0.f)
+    return false;
+  for (int k = 0; k < 3; k++)
+    u[k] /= ul;
+  float f[3], s[3];
+  const float fu = Dot(front, u);
+  for (int k = 0; k < 3; k++)
+    f[k] = front[k] - fu * u[k];
+  float fl = Sqrt(Dot(f, f));
+  if (fl < 1e-4f)  // facing straight up or down: any axis on the ground
+  {
+    const float a[3] = {u[1], u[2], u[0]};
+    const float au = Dot(a, u);
+    for (int k = 0; k < 3; k++)
+      f[k] = a[k] - au * u[k];
+    fl = Sqrt(Dot(f, f));
+  }
+  for (int k = 0; k < 3; k++)
+    f[k] /= fl;
+  s[0] = u[1] * f[2] - u[2] * f[1], s[1] = u[2] * f[0] - u[0] * f[2], s[2] = u[0] * f[1] - u[1] * f[0];
+
+  float move[3] = {to[0] - from[0], to[1] - from[1], to[2] - from[2]};
+  const float mu = Dot(move, u), mf = Dot(move, f), ms = Dot(move, s);
+  const float shares[3][2] = {{mf, ms}, {mf, 0.f}, {0.f, ms}};
+  for (int c = 0; c < 3; c++)
+  {
+    float p[3];
+    for (int k = 0; k < 3; k++)
+      p[k] = from[k] + mu * u[k] + shares[c][0] * f[k] + shares[c][1] * s[k];
+    if (!Supported(p, f, s, half, ground, ctx))
+      continue;
+    if (c == 0)
+      return false;
+    to[0] = p[0], to[1] = p[1], to[2] = p[2];
+    return true;
+  }
+  for (int k = 0; k < 3; k++)
+    to[k] = from[k] + mu * u[k];
+  return true;
+}
+}  // namespace gxc

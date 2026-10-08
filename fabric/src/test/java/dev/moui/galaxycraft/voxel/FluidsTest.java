@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 class FluidsTest {
     // standard(): grass at layer 8, air from 9.
     private final VoxelPlanet p = VoxelPlanet.standard();
-    private final CubeSphere g = p.grid;
+    private final CubeSphere g = p.sphere();
 
     private int at(int i, int j, int k) {
         return g.index(0, i, j, k);

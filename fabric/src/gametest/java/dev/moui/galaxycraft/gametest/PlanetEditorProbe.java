@@ -102,7 +102,7 @@ public final class PlanetEditorProbe implements FabricClientGameTest {
                     long ms = (System.nanoTime() - t0) / 1_000_000;
                     Map<String, Integer> tops = new TreeMap<>();
                     int lowest = Integer.MAX_VALUE, highest = 0;
-                    CubeSphere grid = p.grid;
+                    CubeSphere grid = p.sphere();
                     int n = grid.n;
                     BufferedImage img = new BufferedImage(4 * n, 3 * n, BufferedImage.TYPE_INT_RGB);
                     int[][] at = {{2, 1}, {0, 1}, {1, 0}, {1, 2}, {1, 1}, {3, 1}}; // where each face goes (columns, rows of n)

@@ -13,6 +13,7 @@
 #include "Inbox.h"
 #include "Kcl.h"
 #include "Parts.h"
+#include "Shell.h"
 #include "ViewMath.h"
 
 using namespace gxc;
@@ -356,6 +357,37 @@ static void TestAtlasAnim()
 
 // Several planets: a chunk's slot carries its planet's id in the top byte, a far view's part has
 // bit 23 set (its tile below, bit 22 if covered); a planet may come with flags (GONE); a teleport may name its planet.
+static void TestInboxFlatPlanet()
+{
+  std::vector<u8> b;  // a station: the flags, then its gravity box
+  Put32(b, 102u << 16), Put32(b, 88), Put32(b, 7), PutF(b, 100.f), PutF(b, 0.f), PutF(b, 0.f), PutF(b, 400.f),
+      PutF(b, 900.f), Put32(b, 12), PutF(b, 0.f), PutF(b, 24.f), Put32(b, PLANET_FLAT);
+  PutF(b, 0.f), PutF(b, 1.f), PutF(b, 0.f);      // up
+  PutF(b, 0.f), PutF(b, 0.f), PutF(b, 1.f);      // forward
+  PutF(b, 520.f), PutF(b, 1000.f), PutF(b, 520.f);  // half extents
+  PutF(b, 0.f), PutF(b, 960.f), PutF(b, 0.f);    // the box's center from the station's
+  InboxRecord r;
+  u32 off = 0;
+  CHECK(NextInboxRecord(b.data(), b.size(), &off, 512, &r) && r.type == InboxRecord::PLANET);
+  CHECK(r.planet.flat && r.planet.flags == PLANET_FLAT && r.planet.chunk_count == 12);
+  CHECK(r.planet.up[1] == 1.f && r.planet.forward[2] == 1.f && r.planet.half[0] == 520.f && r.planet.box_center[1] == 960.f);
+  f32 m[3][4];
+  FlatBoxMatrix(r.planet, m);
+  // Columns: right (up x forward) * half x, up * half y, forward * half z; translation: the box's center.
+  CHECK(m[0][0] == 520.f && m[1][1] == 1000.f && m[2][2] == 520.f && m[0][1] == 0.f);
+  CHECK(m[0][3] == 100.f && m[1][3] == 960.f && m[2][3] == 0.f);
+  std::vector<u8> planet;  // a planet's record never reads past its flags
+  Put32(planet, 102u << 16), Put32(planet, 40), Put32(planet, 8), PutF(planet, 0.f), PutF(planet, 0.f), PutF(planet, 0.f),
+      PutF(planet, 1.f), PutF(planet, 2.f), Put32(planet, 0), PutF(planet, 0.f), PutF(planet, 0.f), Put32(planet, 0);
+  off = 0;
+  CHECK(NextInboxRecord(planet.data(), planet.size(), &off, 512, &r) && !r.planet.flat);
+  std::vector<u8> bad;  // FLAT without its box
+  Put32(bad, 102u << 16), Put32(bad, 40), Put32(bad, 8), PutF(bad, 0.f), PutF(bad, 0.f), PutF(bad, 0.f),
+      PutF(bad, 1.f), PutF(bad, 2.f), Put32(bad, 0), PutF(bad, 0.f), PutF(bad, 0.f), Put32(bad, PLANET_FLAT);
+  off = 0;
+  CHECK(!NextInboxRecord(bad.data(), bad.size(), &off, 512, &r));
+}
+
 static void TestInboxPlanetIdsAndFarView()
 {
   std::vector<u8> b;
@@ -872,13 +904,86 @@ static void TestCodePatch()
   CHECK(stub[2] == EncodeBranch(0x80700008u, 0x80390e00u));
 }
 
+// A platform 2 x 2 around the origin (x, z in [-1, 1]), up +y: ground under p.
+static bool OnPlatform(const float p[3], void*)
+{
+  return p[0] >= -1.f && p[0] <= 1.f && p[2] >= -1.f && p[2] <= 1.f;
+}
+
+static void TestSneakStep()
+{
+  const float up[3] = {0, 1, 0}, front[3] = {0, 0, 1}, from[3] = {0.5f, 0, 0};
+  // Inside: the move stands.
+  float in[3] = {0.6f, 0, 0.1f};
+  CHECK(!SneakStep(from, in, up, front, 0.3f, OnPlatform, 0));
+  CHECK(in[0] == 0.6f && in[2] == 0.1f);
+  // Overhanging while the box still touches: allowed, as in Minecraft.
+  float hang[3] = {1.2f, 0, 0};
+  CHECK(!SneakStep(from, hang, up, front, 0.3f, OnPlatform, 0));
+  // Off the edge diagonally: the part along the edge stays (sliding along it).
+  float off[3] = {1.6f, 0, 0.2f};
+  CHECK(SneakStep(from, off, up, front, 0.3f, OnPlatform, 0));
+  CHECK(std::fabs(off[0] - 0.5f) < 1e-6f && std::fabs(off[2] - 0.2f) < 1e-6f);
+  // Straight off a corner: nothing of it.
+  const float corner[3] = {1.2f, 0, 1.2f};
+  float out[3] = {1.6f, 0.05f, 1.6f};
+  CHECK(SneakStep(corner, out, up, front, 0.3f, OnPlatform, 0));
+  CHECK(out[0] == corner[0] && out[2] == corner[2]);
+  CHECK(std::fabs(out[1] - 0.05f) < 1e-6f);  // up and down are his own (a step, a slope)
+}
+
+static float BeF32(const u8* p)
+{
+  const u32 u = (u32(p[0]) << 24) | (u32(p[1]) << 16) | (u32(p[2]) << 8) | p[3];
+  float f;
+  std::memcpy(&f, &u, 4);
+  return f;
+}
+
+static void TestShell()
+{
+  static u8 sphere[SHELL_SPHERE_DL_BYTES], box[SHELL_BOX_DL_BYTES];
+  ShellSphereList(6, sphere);
+  CHECK(sphere[0] == (0xA8 | 6));
+  CHECK(((sphere[1] << 8) | sphere[2]) == int(SHELL_SPHERE_VERTS));
+  bool unit = true, top = false, bottom = false;
+  for (u32 v = 0; v < SHELL_SPHERE_VERTS; v++)
+  {
+    const u8* p = sphere + 3 + 12 * v;
+    const float x = BeF32(p), y = BeF32(p + 4), z = BeF32(p + 8);
+    unit = unit && std::fabs(x * x + y * y + z * z - 1.f) < 1e-4f;
+    top = top || y > 0.9999f;
+    bottom = bottom || y < -0.9999f;
+  }
+  CHECK(unit && top && bottom);
+  CHECK(sphere[SHELL_SPHERE_DL_BYTES - 1] == 0);
+  ShellBoxList(6, box);
+  CHECK(((box[1] << 8) | box[2]) == int(SHELL_BOX_VERTS));
+  bool onSides = true;
+  for (u32 v = 0; v < SHELL_BOX_VERTS; v++)
+  {
+    const u8* p = box + 3 + 12 * v;
+    float m = 0;
+    for (int k = 0; k < 3; k++)
+      m = std::fmax(m, std::fabs(BeF32(p + 4 * k)));
+    onSides = onSides && std::fabs(m - 1.f) < 1e-6f;  // every line lies on the cube's sides
+  }
+  CHECK(onSides);
+  CHECK(ShellAlpha(10.f, 100.f) == 1.f);
+  CHECK(std::fabs(ShellAlpha(-25.f, 100.f) - 0.75f) < 1e-6f);
+  CHECK(ShellAlpha(-100.f, 100.f) == 0.f && ShellAlpha(-500.f, 100.f) == 0.f);
+}
+
 int main()
 {
+  TestShell();
+  TestSneakStep();
   TestInboxRecords();
   TestInboxRejectsBadChunks();
   TestInboxTranslucentChunks();
   TestAtlasAnim();
   TestInboxPlanetIdsAndFarView();
+  TestInboxFlatPlanet();
   TestPlanetDropAndViewTranslate();
   TestCodePatch();
   TestInboxOutline();

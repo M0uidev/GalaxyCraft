@@ -3,6 +3,7 @@ package dev.moui.galaxycraft.gravity;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
+import org.joml.Quaterniond;
 import org.joml.Vector3d;
 import org.junit.jupiter.api.Test;
 
@@ -79,5 +80,25 @@ class CosmicWindTest {
         Vector3d far = v(0, 100 + CosmicWind.FREE + CosmicWind.RAMP, 0);
         assertEquals(0, CosmicWind.push(false, far, v(0, -CosmicWind.MAX_IN, 0), PLANETS).length(), 1e-12);
         assertEquals(-0.01, CosmicWind.push(false, far, v(0, -(CosmicWind.MAX_IN - 0.01), 0), PLANETS).y, 1e-9);
+    }
+
+    static final GravityBody.Box BOX = new GravityBody.Box(v(0, 0, 0), new Quaterniond(), v(-5, -1, -5), v(5, 25, 5));
+
+    @Test void aBoxPullsOverItsTopAndNotBelow() {
+        assertTrue(BOX.outside(v(0, 10, 0)) <= 0);
+        assertEquals(3, BOX.outside(v(0, -4, 0)), 1e-9);
+        assertEquals(5, BOX.outside(v(10, 10, 0)), 1e-9);
+        assertEquals(Math.sqrt(9 + 25), BOX.outside(v(10, -4, 0)), 1e-9);
+    }
+
+    @Test void aTurnedBoxIsMeasuredInItsOwnAxes() {
+        GravityBody.Box b = new GravityBody.Box(v(100, 0, 0), new Quaterniond().rotateZ(Math.PI / 2), v(-5, -1, -5), v(5, 25, 5));
+        assertTrue(b.outside(v(90, 0, 0)) <= 0); // its up is -x now
+        assertEquals(3, b.outside(v(104, 0, 0)), 1e-9);
+    }
+
+    @Test void theWindPullsTowardABox() {
+        Vector3d dv = CosmicWind.push(true, v(500, 0, 0), new Vector3d(), List.of(BOX));
+        assertTrue(dv.x < 0);
     }
 }

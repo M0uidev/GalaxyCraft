@@ -6,6 +6,7 @@
 #include "syati.h"
 
 #include "Game/Gravity/PointGravity.h"
+#include "Game/Gravity/ParallelGravity.h"
 #include "Game/Map/CollisionParts.h"
 #include "EntityDraw.h"
 #include "AtlasAnim.h"
@@ -13,6 +14,7 @@
 #include "Graves.h"
 #include "HeldItem.h"
 #include "Inbox.h"
+#include "Shell.h"
 #include "VoxelPlanet.h"
 
 #include "Boot.h"
@@ -42,6 +44,10 @@ namespace
 const u32 INBOX_BYTES = 256 * 1024;
 // Mario is put this far above the surface by a teleport (half a block).
 const f32 DROP_ABOVE = 40.f;
+// A gravity's edge (DrawShells): its lines' color and their most alpha (of 255), and how deep
+// inside it they fade out (32 blocks: under a planet's surface, so none show on the ground).
+const u8 SHELL_RGB[3] = {130, 200, 255};
+const f32 SHELL_ALPHA = 110.f, SHELL_FADE = 32.f * 80.f;
 
 struct Slot
 {
@@ -86,6 +92,7 @@ struct Planet
   f32 center[3];
   f32 surface, occluder, mario_radius;
   PointGravity* gravity;
+  ParallelGravity* flat;  // a station's box gravity (GXC_PLANET_FLAT), from gFlat; 0 for a planet
   Slot* slots;
   u32 slot_count;
   u32* drawn;
@@ -95,6 +102,48 @@ struct Planet
   u32 far_count;  // 6 for a planet drawn only (its whole faces), FAR_VIEW_PARTS once it has tiles
 };
 Planet gPlanets[MAX_PLANETS];
+// Stations' box gravities: an entry past the point gravities' borrows one while it is a station.
+const u32 FLAT_SLOTS = 8;
+ParallelGravity* gFlat[FLAT_SLOTS];
+bool gFlatUsed[FLAT_SLOTS];
+
+// A box gravity pulling nowhere: switched off (mActivated), its box empty and far off. Off is
+// needed: with axes of length 0 the game finds every point inside the box (0 is never past an
+// extent of 0), and an unused station's gravity pulled everywhere, fighting the planets'. (A real
+// box far off instead kept planets from loading: not that.)
+void FlatOff(ParallelGravity* g)
+{
+  g->mActivated = false;
+  for (int r = 0; r < 3; r++)
+    for (int c = 0; c < 4; c++)
+      g->mLocalMtx.mMtx[r][c] = c == 3 ? 1.0e9f : 0.f;
+  g->updateIdentityMtx();
+}
+
+// A station's box gravity as its record says: down is -up inside the box. Fields set as
+// setPlane and setRangeBox do (the header's setRangeBox does not match the game's symbol).
+void FlatOn(ParallelGravity* g, const gxc::InboxPlanet& in)
+{
+  f32 m[3][4];
+  gxc::FlatBoxMatrix(in, m);
+  for (int r = 0; r < 3; r++)
+    for (int c = 0; c < 4; c++)
+      g->mLocalMtx.mMtx[r][c] = m[r][c];
+  g->mLocalPlaneUpVec = TVec3f(in.up[0], in.up[1], in.up[2]);
+  g->mLocalPlanePosition = TVec3f(m[0][3], m[1][3], m[2][3]);
+  g->mRangeType = ParallelGravity::RangeType_Box;
+  g->updateIdentityMtx();
+  g->mActivated = true;
+}
+
+// Moves a station's box gravity with the floating origin.
+void FlatMove(ParallelGravity* g, const f32 d[3])
+{
+  for (int k = 0; k < 3; k++)
+    g->mLocalMtx.mMtx[k][3] += d[k];
+  g->mLocalPlanePosition.x += d[0], g->mLocalPlanePosition.y += d[1], g->mLocalPlanePosition.z += d[2];
+  g->updateIdentityMtx();
+}
 // The camera is this far above a planet's surface (or its radius, if more), galaxy units, or
 // farther: its far view alone is drawn, covered parts and all, not its chunks.
 const f32 FAR_VIEW_ABOVE = 96.f * 80.f;
@@ -379,6 +428,16 @@ public:
       MR::registerGravity(g);
       gPlanets[i].gravity = g;
     }
+    for (u32 i = 0; i < FLAT_SLOTS; i++)
+    {
+      ParallelGravity* g = new ParallelGravity();
+      g->mPriority = 100;
+      g->mRangeType = ParallelGravity::RangeType_Box;
+      FlatOff(g);
+      MR::registerGravity(g);
+      gFlat[i] = g;
+      gFlatUsed[i] = false;
+    }
     makeActorAppeared();
   }
 
@@ -493,6 +552,8 @@ public:
         p.gravity->mLocalPos = TVec3f(p.center[0], p.center[1], p.center[2]);
         p.gravity->updateIdentityMtx();
       }
+      if (p.flat)
+        FlatMove(p.flat, d);
       // Its collision: the base matrix and the previous one both (resetAllMtx), so the game takes it
       // for a floor put there, not one that moved 400 blocks in a frame carrying Mario along.
       TPos3f m;
@@ -597,11 +658,25 @@ public:
       for (int k = 0; k < 3; k++)
         m[k] = p.center[k] + 100.f * tp.dir[k];
     f32 to[3];
-    // Onto the ground under him (a hill, something built), not into it.
-    gxc::PlanetDrop(p.center, tp.ground > 0.f ? tp.ground : p.surface, DROP_ABOVE, m, to);
+    f32 up[3];
+    if (p.flat && tp.aimed)
+    {
+      // A station: dir × ground is the landing point; down onto it along the station's own up
+      // (the line from its center would come in slanted off the core).
+      const TVec3f& u = p.flat->mLocalPlaneUpVec;
+      up[0] = u.x, up[1] = u.y, up[2] = u.z;
+      for (int k = 0; k < 3; k++)
+        to[k] = p.center[k] + tp.dir[k] * tp.ground + up[k] * DROP_ABOVE;
+    }
+    else
+    {
+      // Onto the ground under him (a hill, something built), not into it.
+      gxc::PlanetDrop(p.center, tp.ground > 0.f ? tp.ground : p.surface, DROP_ABOVE, m, to);
+      for (int k = 0; k < 3; k++)
+        up[k] = to[k] - p.center[k];
+    }
     MR::setPlayerPos(TVec3f(to[0], to[1], to[2]));
     BootTeleported();
-    f32 up[3] = {to[0] - p.center[0], to[1] - p.center[1], to[2] - p.center[2]};
     const f32 len = gxc::Sqrt(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
     gLanding.active = len > 0.f;
     gLanding.frames = 0;
@@ -622,8 +697,18 @@ public:
           Drop(gPlanets[i]);
       return;
     }
+    if (in.flat)
+    {
+      ApplyStation(in);
+      return;
+    }
     const bool pulls = in.gravity_range > 1.f;
     Planet* p = Find(in.id);
+    if (p && p->flat)  // a station no more: it goes, and comes back as a planet
+    {
+      Drop(*p);
+      p = 0;
+    }
     if (p && pulls && !p->gravity)  // drawn only until now, and it pulls from now on: into a slot that can
     {
       Drop(*p);
@@ -662,6 +747,46 @@ public:
       Teleport(*p, gPendingTeleport);
   }
 
+  // A station's record: an entry past the point gravities (where planets that only draw go), a
+  // box gravity of gFlat's, then the same as a planet's (slots, center, a pending teleport).
+  void ApplyStation(const gxc::InboxPlanet& in)
+  {
+    Planet* p = Find(in.id);
+    if (p && !p->flat && p->gravity)  // was a planet with a point gravity: not the entry for it
+    {
+      Drop(*p);
+      p = 0;
+    }
+    for (u32 i = GRAVITY_SLOTS; !p && i < MAX_PLANETS; i++)
+      if (!gPlanets[i].id)
+        p = &gPlanets[i];
+    if (p && !p->flat)
+      for (u32 f = 0; f < FLAT_SLOTS; f++)
+        if (!gFlatUsed[f])
+        {
+          gFlatUsed[f] = true;
+          p->flat = gFlat[f];
+          break;
+        }
+    if (!p || !p->flat)
+    {
+      gVoxelStats.alloc_failed++;
+      return;
+    }
+    p->id = in.id;
+    if (in.chunk_count != p->slot_count)
+      NewSlots(*p, in.chunk_count);
+    for (int k = 0; k < 3; k++)
+      p->center[k] = in.center[k];
+    p->surface = in.surface;
+    p->occluder = 0.f;
+    p->mario_radius = in.mario_radius;
+    FlatOn(p->flat, in);
+    mTranslation = TVec3f(p->center[0], p->center[1], p->center[2]);
+    if (gTeleportPending && (gPendingTeleport.planet == 0 || gPendingTeleport.planet == p->id))
+      Teleport(*p, gPendingTeleport);
+  }
+
   void Drop(Planet& p)
   {
     NewSlots(p, 0);
@@ -678,6 +803,14 @@ public:
       p.gravity->mRange = 1.f;
       p.gravity->updateIdentityMtx();
     }
+    if (p.flat)
+    {
+      FlatOff(p.flat);
+      for (u32 f = 0; f < FLAT_SLOTS; f++)
+        if (gFlat[f] == p.flat)
+          gFlatUsed[f] = false;
+      p.flat = 0;
+    }
     if (mOutlinePlanet == p.id)
       mOutlineOn = false;
     if (mCrackPlanet == p.id)
@@ -690,6 +823,16 @@ public:
     for (u32 i = 0; i < MAX_PLANETS; i++)
     {
       const Planet& p = gPlanets[i];
+      if (p.id && p.flat && p.mario_radius > 0.f)
+      {
+        f32 scalar;
+        if (p.flat->isInRange(TVec3f(pos[0], pos[1], pos[2]), &scalar))
+        {
+          *radius = p.mario_radius;  // a station's cells are all the same size
+          return true;
+        }
+        continue;
+      }
       if (!p.id || p.mario_radius <= 0.f || !p.gravity || p.gravity->mRange <= 1.f)
         continue;
       const f32 d[3] = {pos[0] - p.center[0], pos[1] - p.center[1], pos[2] - p.center[2]};
@@ -1022,8 +1165,113 @@ public:
     const Planet* outlined = mOutlineOn ? Find(mOutlinePlanet) : 0;
     if (outlined)
       DrawOutline(view, outlined->center);
+    DrawShells(view);
     if (gHitboxOn)
       DrawHitbox();
+  }
+
+  // Where each body's gravity begins (a planet's pull, a station's box), as faint blue lines:
+  // seen from space, fading out once inside it (gone on the ground). Behind the planets (depth
+  // tested, none written).
+  void DrawShells(const f32 view[12]) const
+  {
+    static u8* sphere = 0;
+    static u8* box = 0;
+    if (!sphere)
+    {
+      sphere = Alloc32(gxc::SHELL_SPHERE_DL_BYTES);
+      box = Alloc32(gxc::SHELL_BOX_DL_BYTES);
+      if (!sphere || !box)
+      {
+        gVoxelStats.alloc_failed++;
+        sphere = 0;
+        return;
+      }
+      gxc::ShellSphereList(GX_VTXFMT6, sphere);
+      gxc::ShellBoxList(GX_VTXFMT6, box);
+      DCFlushRange(sphere, gxc::SHELL_SPHERE_DL_BYTES);
+      DCFlushRange(box, gxc::SHELL_BOX_DL_BYTES);
+    }
+    const TVec3f cam = MR::getCamPos();
+    bool set = false;
+    for (u32 i = 0; i < MAX_PLANETS; i++)
+    {
+      const Planet& p = gPlanets[i];
+      if (!p.id)
+        continue;
+      f32 m[12];
+      f32 outside;
+      if (p.flat)
+      {
+        // The box's matrix: its axes times its half sizes, then its middle.
+        const f32(*b)[4] = p.flat->mLocalMtx.mMtx;
+        const f32 d[3] = {cam.x - b[0][3], cam.y - b[1][3], cam.z - b[2][3]};
+        outside = -1.0e30f;
+        for (int k = 0; k < 3; k++)
+        {
+          const f32 len2 = b[0][k] * b[0][k] + b[1][k] * b[1][k] + b[2][k] * b[2][k];
+          if (len2 <= 0.f)
+            continue;
+          const f32 along = (d[0] * b[0][k] + d[1] * b[1][k] + d[2] * b[2][k]) / len2;
+          const f32 past = ((along < 0.f ? -along : along) - 1.f) * gxc::Sqrt(len2);
+          if (past > outside)
+            outside = past;
+        }
+        f32 local[12];
+        for (int r = 0; r < 3; r++)
+          for (int c = 0; c < 4; c++)
+            local[4 * r + c] = b[r][c];
+        gxc::Mul34(view, local, m);
+      }
+      else if (p.gravity && p.gravity->mRange > 1.f)
+      {
+        const f32 r = p.gravity->mRange;
+        const f32 d[3] = {cam.x - p.center[0], cam.y - p.center[1], cam.z - p.center[2]};
+        outside = gxc::Sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) - r;
+        gxc::ViewTranslate(view, p.center, m);
+        for (int row = 0; row < 3; row++)
+          for (int c = 0; c < 3; c++)
+            m[4 * row + c] *= r;
+      }
+      else
+      {
+        continue;
+      }
+      const f32 a = SHELL_ALPHA * gxc::ShellAlpha(outside, SHELL_FADE);
+      if (a < 1.f)
+        continue;
+      if (!set)
+      {
+        GXClearVtxDesc();
+        GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
+        GXSetVtxAttrFmt(GX_VTXFMT6, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
+        GXSetNumChans(1);
+        GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_REG, 0, GX_DF_NONE, GX_AF_NONE);
+        GXSetNumTexGens(0);
+        GXSetNumTevStages(1);
+        GXSetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD_NULL, GX_TEXMAP_NULL, GX_COLOR0A0);
+        GXSetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
+        GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
+        GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+        GXSetZMode(GX_TRUE, GX_LEQUAL, GX_FALSE);
+        GXSetCullMode(GX_CULL_NONE);
+        GXSetLineWidth(9, GX_TO_ZERO);  // sixths of a pixel
+        set = true;
+      }
+      const GXColor color = {SHELL_RGB[0], SHELL_RGB[1], SHELL_RGB[2], static_cast<u8>(a)};
+      GXSetChanMatColor(GX_COLOR0A0, color);
+      GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(m), GX_PNMTX0);
+      if (p.flat)
+        GXCallDisplayList(box, gxc::SHELL_BOX_DL_BYTES);
+      else
+        GXCallDisplayList(sphere, gxc::SHELL_SPHERE_DL_BYTES);
+    }
+    if (set)  // as the outline leaves it for what draws next
+    {
+      GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_NOOP);
+      GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
+      GXSetCullMode(GX_CULL_FRONT);
+    }
   }
 
   // Its far view's tiles and its chunks: the mod sends each tile as one or the other (chunks within

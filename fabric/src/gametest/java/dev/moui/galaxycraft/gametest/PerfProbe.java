@@ -25,8 +25,8 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
 public final class PerfProbe implements FabricClientGameTest {
     private static final Pattern MBX = Pattern.compile("^at=([0-9a-f]+)", Pattern.MULTILINE);
     private static final Pattern MAX_SPEED = Pattern.compile("max_speed=(\\S+)");
-    /** Debug.voxel_stats: after the mailbox (4048 bytes), 14 words into the debug block. */
-    private static final int DBG_VOXEL_STATS = 4048 + 56;
+    /** Debug.voxel_stats: after the mailbox (4052 bytes), 14 words into the debug block. */
+    private static final int DBG_VOXEL_STATS = 4052 + 56;
 
     @Override
     public void runTest(ClientGameTestContext ctx) {

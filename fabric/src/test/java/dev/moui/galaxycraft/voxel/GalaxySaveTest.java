@@ -71,7 +71,7 @@ class GalaxySaveTest {
         VoxelPlanet p = VoxelPlanet.standard();
         int[] indices = {0, 2, 5};
         for (int i : indices) {
-            var saved = new PlanetStore.Saved(p.grid.n, p.grid.core, p.grid.layers, p.depth, new org.joml.Vector3d(i * 1000, 0, -i), p.cells());
+            var saved = new PlanetStore.Saved(p.grid.n, p.sphere().core, p.grid.layers, p.depth, new org.joml.Vector3d(i * 1000, 0, -i), p.cells());
             store.write(PlanetStore.key("S", i), saved, CubeBlocks.INSTANCE);
         }
         GalaxySave.Galaxy made = g.fromFiles(store, "S");

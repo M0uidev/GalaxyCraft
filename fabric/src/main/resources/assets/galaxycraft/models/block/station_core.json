@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "end": "galaxycraft:block/station_core_top",
+    "side": "galaxycraft:block/station_core_side"
+  }
+}

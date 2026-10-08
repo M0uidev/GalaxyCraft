@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class VoxelPlanetTest {
     @Test void standardLayers() {
         VoxelPlanet p = VoxelPlanet.standard();
-        CubeSphere g = p.grid;
+        CubeSphere g = p.sphere();
         assertEquals(Material.BEDROCK, p.material(g.index(0, 3, 3, 0)));
         assertEquals(Material.STONE, p.material(g.index(0, 3, 3, 5)));
         assertEquals(Material.DIRT, p.material(g.index(0, 3, 3, 7)));

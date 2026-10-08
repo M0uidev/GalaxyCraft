@@ -83,25 +83,7 @@ public final class PlanetStore {
             out.writeDouble(s.center().x);
             out.writeDouble(s.center().y);
             out.writeDouble(s.center().z);
-            // The palette: each id used, in order of first appearance.
-            java.util.Map<Character, Character> index = new java.util.HashMap<>();
-            java.util.List<String> names = new java.util.ArrayList<>();
-            char[] cells = s.cells();
-            byte[] packed = new byte[2 * cells.length];
-            for (int c = 0; c < cells.length; c++) {
-                Character i = index.get(cells[c]);
-                if (i == null) {
-                    i = (char) names.size();
-                    index.put(cells[c], i);
-                    names.add(blocks.name(cells[c]));
-                }
-                packed[2 * c] = (byte) (i >> 8);
-                packed[2 * c + 1] = (byte) (char) i;
-            }
-            out.writeInt(names.size());
-            for (String name : names) out.writeUTF(name);
-            out.writeInt(cells.length);
-            out.write(packed);
+            writeCells(out, s.cells(), blocks);
             if (s.biomes() != null) {
                 out.writeInt(BIOMES);
                 out.writeInt(s.biomes().names().size());
@@ -149,17 +131,8 @@ public final class PlanetStore {
             double core = in.readDouble();
             int layers = in.readInt(), depth = in.readInt();
             Vector3d center = new Vector3d(in.readDouble(), in.readDouble(), in.readDouble());
-            int[] palette = magic == MAGIC ? palette(in, parse) : v1Palette(blocks);
-            int len = in.readInt();
-            if (n <= 0 || layers <= 0 || len != 6L * n * n * layers) throw new IOException(f + ": bad size");
-            byte[] raw = in.readNBytes(magic == MAGIC ? 2 * len : len);
-            if (raw.length != (magic == MAGIC ? 2 * len : len)) throw new IOException(f + ": truncated");
-            char[] cells = new char[len];
-            for (int c = 0; c < len; c++) {
-                int i = magic == MAGIC ? (raw[2 * c] & 0xFF) << 8 | raw[2 * c + 1] & 0xFF : raw[c] & 0xFF;
-                if (i >= palette.length) throw new IOException(f + ": bad cell");
-                cells[c] = (char) palette[i];
-            }
+            if (n <= 0 || layers <= 0) throw new IOException(f + ": bad size");
+            char[] cells = magic == MAGIC ? readCells(in, 6L * n * n * layers, parse) : readV1Cells(in, 6L * n * n * layers, blocks);
             return Optional.of(new Saved(n, core, layers, depth, center, cells, biomes(in, 6 * n * n)));
         }
     }
@@ -184,6 +157,54 @@ public final class PlanetStore {
         } catch (IllegalArgumentException e) {
             throw new IOException(e.getMessage());
         }
+    }
+
+    /** The cells as a palette of the block states used (Minecraft's text for them), each id used in order of first appearance, then the indexes. */
+    static void writeCells(DataOutputStream out, char[] cells, Blocks blocks) throws IOException {
+        java.util.Map<Character, Character> index = new java.util.HashMap<>();
+        java.util.List<String> names = new java.util.ArrayList<>();
+        byte[] packed = new byte[2 * cells.length];
+        for (int c = 0; c < cells.length; c++) {
+            Character i = index.get(cells[c]);
+            if (i == null) {
+                i = (char) names.size();
+                index.put(cells[c], i);
+                names.add(blocks.name(cells[c]));
+            }
+            packed[2 * c] = (byte) (i >> 8);
+            packed[2 * c + 1] = (byte) (char) i;
+        }
+        out.writeInt(names.size());
+        for (String name : names) out.writeUTF(name);
+        out.writeInt(cells.length);
+        out.write(packed);
+    }
+
+    /** What {@link #writeCells} wrote, expected cells long. */
+    static char[] readCells(DataInputStream in, long expected, java.util.function.ToIntFunction<String> parse) throws IOException {
+        int[] palette = palette(in, parse);
+        int len = in.readInt();
+        if (len != expected) throw new IOException("bad size");
+        byte[] raw = in.readNBytes(2 * len);
+        if (raw.length != 2 * len) throw new IOException("truncated");
+        char[] cells = new char[len];
+        for (int c = 0; c < len; c++) {
+            int i = (raw[2 * c] & 0xFF) << 8 | raw[2 * c + 1] & 0xFF;
+            if (i >= palette.length) throw new IOException("bad cell");
+            cells[c] = (char) palette[i];
+        }
+        return cells;
+    }
+
+    private static char[] readV1Cells(DataInputStream in, long expected, Blocks blocks) throws IOException {
+        int[] palette = v1Palette(blocks);
+        int len = in.readInt();
+        if (len != expected) throw new IOException("bad size");
+        byte[] raw = in.readNBytes(len);
+        if (raw.length != len) throw new IOException("truncated");
+        char[] cells = new char[len];
+        for (int c = 0; c < len; c++) cells[c] = (char) palette[raw[c] & 0xFF];
+        return cells;
     }
 
     private static int[] palette(DataInputStream in, java.util.function.ToIntFunction<String> parse) throws IOException {
