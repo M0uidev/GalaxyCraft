@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-08 (inbox: planets farther apart and seen from afar)
+Last updated: 2026-10-08 (swimming and water look built, awaiting playtest)
 
 ---
 
@@ -24,14 +24,15 @@ Last updated: 2026-10-08 (inbox: planets farther apart and seen from afar)
 | Feature | Status | Notes |
 |---|---|---|
 | Planets with Minecraft 1.7 terrain | now | User 2026-10-08: today's terrain "not that good", old terrain fits small worlds. 3D density with overhangs, several biomes per planet scaled to its size, oceans, rivers, beaches, cave labyrinths, heights scaled to the radius. Then check whether trees still come out broken (one block above the grass, a trunk missing a log). [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-legacy-terrain-design.md) |
-| First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
+| Swimming and water look | now | User 2026-10-08: swim like Minecraft, characters in water drawn over it, Minecraft's underwater view. Built on `feat/swimming` (water draw order, underwater fog, Minecraft's swimming in F6), awaiting playtest. [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-swimming-water-design.md) |
+| Player Model setting | now | Walk with Minecraft's movement drawn as Mario's own model (setting Player Model: Steve or Mario), built by another session (flag, host and settings committed; check it in the game). |
+| First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells; v0.1.3 pushed 2026-10-08 (fe6276a) with Export report and no empty Dolphin window, tested on Windows (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
 
 ## Next
 
 | Feature | Status | Notes |
 |---|---|---|
 | Far view bugs | next | User 2026-10-08: chunks right by the player draw their blocks and a far view copy that should be gone; caves look wrong from outside and only draw right once inside. After the terrain rework. |
-| Swimming | next | After the far view bugs: the 1.7 terrain brings real ocean depths. |
 
 ---
 
@@ -53,7 +54,8 @@ Last updated: 2026-10-08 (inbox: planets farther apart and seen from afar)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Swimming | next | Its own stage. Water is already translucent and smooth. |
+| Swimming | now | Minecraft's own swimming in F6 (float, sink, swim up, air), built on `feat/swimming`, awaiting playtest. Mario mode swimming and Steve's swim pose: later. [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-swimming-water-design.md) |
+| Water look | now | Water blends over what is in it (Steve, mobs); under water Minecraft's fog (biome color, opens up over 30 s). On `feat/swimming`, awaiting playtest. |
 | Deeper seas | now | Part of the 1.7 terrain: real depths scaled to the planet. |
 | Lava damage | planned | Lava doesn't hurt yet. |
 
@@ -94,6 +96,7 @@ Last updated: 2026-10-08 (inbox: planets farther apart and seen from afar)
 
 | When | Feature | Commit |
 |---|---|---|
+| 2026-10-08 | Launcher: Export report button and no empty Dolphin window (v0.1.3) | fe6276a |
 | 2026-10-02 | Mario mode: first person, keyboard and mouse, perspectives, Steve model | |
 | 2026-10-02 | Voxel planets: cube-sphere, break/place, saved per galaxy, radius up to 256 | |
 | 2026-10-03 | Every Minecraft block, real shapes and placement rules; creative inventory | |
@@ -139,6 +142,12 @@ Last updated: 2026-10-08 (inbox: planets farther apart and seen from afar)
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-08: Swimming matters (user): Minecraft's swimming, or Mario's body swimming, undecided. Water look: a
+  character standing with legs in water is drawn over the water as if above it (screenshot coming; check
+  mobs too); under water everything should be tinted like Minecraft's underwater view, faithful to it.
+  Asked Claude to propose a design (links to Swimming in Water and fluids).
+- 2026-10-08: Joining a galaxy should wait until the planet you land on and the other planets are
+  loaded, to avoid lag spikes right after entering (user, after playtesting the far view fix).
 - 2026-10-08: Planets farther apart, and seen from much farther (user): too close "doesn't feel the
   same"; far planets should be drawn from a long way off and grow as you approach, not appear out of
   nowhere in front of you. Rethink how far planets are drawn. Designed:
