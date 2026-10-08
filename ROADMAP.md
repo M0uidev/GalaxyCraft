@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-07 (flat space stations designed)
+Last updated: 2026-10-07 (flat space stations, sneaking at edges and gravity shells done)
 
 ---
 
@@ -29,7 +29,7 @@ Last updated: 2026-10-07 (flat space stations designed)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Flat space stations | next | Player-built **flat** platforms floating in space, to play flat Minecraft (farms, builds) without the sphere's distortion. 2026-10-07: designed ([spec](docs/superpowers/specs/2026-10-07-galaxycraft-flat-stations-design.md)): craft a Station Core, place it in space, the station grows as you build (up to 256×256×128), flat "down" gravity, core menu packs it into an item to unfold elsewhere. |
+| Nothing agreed yet | next | Pick from the themes below. |
 
 ---
 
@@ -125,6 +125,9 @@ Last updated: 2026-10-07 (flat space stations designed)
 | 2026-10-07 | Credits and community links: "by @M0uiDev" on the title screen and in the launcher (it opens the YouTube channel), a "Join the Discord" button on the title screen, Discord and YouTube in the launcher's sidebar and About | a1c1501 |
 | 2026-10-07 | The real Power Star from Super Mario Galaxy 2 in the launcher: its icon, the Home Planet background and the star installation icon; a bolder app icon that reads at small sizes | 95333b8 |
 | 2026-10-07 | The launcher's PLAY without signing in to it: it opens the Minecraft Launcher with Super Minecraft Galaxy selected, shows the game running, and closes the Minecraft Launcher when the game ends (a setting keeps it open); INSTALL no longer downloads Minecraft then | 535e352 |
+| 2026-10-07 | Flat space stations: craft a Station Core, place it in open space, and it grows as you build (up to 256×256, 128 high) with flat "down" gravity; farms, chests and animals work; the core's menu renames it or packs it into an item to unfold elsewhere. [Spec](docs/superpowers/specs/2026-10-07-galaxycraft-flat-stations-design.md), [guide](docs/ESTACIONES.md) | 44aca6b |
+| 2026-10-07 | Sneaking as in Minecraft: Shift in Minecraft's movement (and Mario at Minecraft's speeds) walks slowly and stops at block edges, on planets and stations | 44aca6b |
+| 2026-10-07 | Gravity shells: where each planet's and station's gravity begins, drawn as faint blue lines seen from space, fading out once inside | 44aca6b |
 
 ---
 
@@ -132,6 +135,9 @@ Last updated: 2026-10-07 (flat space stations designed)
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-07: Follow-ups of flat stations (Claude, review): a station's bounds grow only from what
+  the player places, not from what Minecraft adds by itself (flowing water, growing trees, pistons);
+  Mario's own movement keeps SMG2's crouch (user: "not made for that").
 - 2026-10-07: After the Minecraft Launcher MVP (user): Prism Launcher too (one-click PLAY through
   `prismlauncher --launch`), a "Start Minecraft with…" setting per installation, our PLAY opening
   the other launcher, and our launcher showing/stopping a Minecraft it did not start.
