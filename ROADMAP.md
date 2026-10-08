@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-08 (sneaking like Minecraft, held placing, quiet carried Mario)
+Last updated: 2026-10-08 (Now: 1.7 terrain rework; Next: far view bugs, swimming)
 
 ---
 
@@ -23,13 +23,15 @@ Last updated: 2026-10-08 (sneaking like Minecraft, held placing, quiet carried M
 
 | Feature | Status | Notes |
 |---|---|---|
+| Planets with Minecraft 1.7 terrain | now | User 2026-10-08: today's terrain "not that good", old terrain fits small worlds. 3D density with overhangs, several biomes per planet scaled to its size, oceans, rivers, beaches, cave labyrinths, heights scaled to the radius. Then check whether trees still come out broken (one block above the grass, a trunk missing a log). [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-legacy-terrain-design.md) |
 | First release (Linux and Windows) | now | v0.1.1 published 2026-10-07 (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
 
 ## Next
 
 | Feature | Status | Notes |
 |---|---|---|
-| Nothing agreed yet | next | Pick from the themes below. |
+| Far view bugs | next | User 2026-10-08: chunks right by the player draw their blocks and a far view copy that should be gone; caves look wrong from outside and only draw right once inside. After the terrain rework. |
+| Swimming | next | After the far view bugs: the 1.7 terrain brings real ocean depths. |
 
 ---
 
@@ -51,8 +53,8 @@ Last updated: 2026-10-08 (sneaking like Minecraft, held placing, quiet carried M
 
 | Feature | Status | Notes |
 |---|---|---|
-| Swimming | planned | Its own stage. Water is already translucent and smooth. |
-| Deeper seas | planned | Generated water is at most 2 blocks deep, chosen so Mario can't drown before swimming exists. |
+| Swimming | next | Its own stage. Water is already translucent and smooth. |
+| Deeper seas | now | Part of the 1.7 terrain: real depths scaled to the planet. |
 | Lava damage | planned | Lava doesn't hurt yet. |
 
 ## Movement and player
