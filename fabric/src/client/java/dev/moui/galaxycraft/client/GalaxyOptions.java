@@ -2,6 +2,7 @@ package dev.moui.galaxycraft.client;
 
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.settings.Movement;
+import dev.moui.galaxycraft.settings.PlayerModel;
 import dev.moui.galaxycraft.settings.Setting;
 import dev.moui.galaxycraft.settings.Settings;
 import dev.moui.galaxycraft.voxel.PlanetSession;
@@ -36,6 +37,11 @@ public final class GalaxyOptions {
                     + "Mario at Minecraft's speeds: Mario moves at Minecraft's speeds (Ctrl sprints, Shift sneaks) and jumps 1.25 blocks.\n"
                     + "F6 switches them while playing.",
             Movement.class, Movement.MARIO, Movement::label));
+    public static final Setting.Choice<PlayerModel> PLAYER_MODEL = SETTINGS.add(new Setting.Choice<>("playerModel",
+            "Player Model",
+            "Who you look like with Minecraft movement (third person): Steve, or Mario with his own animations.\n"
+                    + "Mario movement is always Mario; F6 still switches the movement.",
+            PlayerModel.class, PlayerModel.STEVE, PlayerModel::label));
     public static final Setting.Text SKIN = SETTINGS.add(new Setting.Text("skin", "Skin",
             "A Minecraft account's name: its skin goes on your character (also /skin <name>). Empty: Steve.", "", 16));
     public static final Setting.Range ENTITY_RANGE = SETTINGS.add(new Setting.Range("entityRange", "Entity Distance",

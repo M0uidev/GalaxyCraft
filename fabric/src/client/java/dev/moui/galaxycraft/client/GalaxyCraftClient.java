@@ -15,6 +15,7 @@ import dev.moui.galaxycraft.gravity.LookMath;
 import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Seqlock;
 import dev.moui.galaxycraft.settings.Movement;
+import dev.moui.galaxycraft.settings.PlayerModel;
 import dev.moui.galaxycraft.view.CameraDistance;
 import dev.moui.galaxycraft.view.CameraMath;
 import dev.moui.galaxycraft.view.IntroCamera;
@@ -261,8 +262,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         boolean walker = ownPhysics() && frame != null && mc.player != null && bridge.gameLinked();
         // The elytra in Mario's modes: Mario himself flies there (in his Launch Star pose), not Steve.
         boolean marioFlies = walker && !walking() && mc.player.isFallFlying() && view() != View.FIRST;
+        // Walking as Mario: his own model is the one drawn, so Steve is not (SEAT riding 3 animates him).
+        boolean marioWalks = walker && marioModel();
         PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt)), pt) : null,
-                walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
+                walker && view() != View.FIRST && !marioFlies && !marioWalks ? frame : null, marioFlies, marioWalks);
         SkinClient.frame(bridge);
         bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
         bridge.pointer().ifPresentOrElse(p -> {
@@ -395,6 +398,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     /** Minecraft's feel chosen: SMG2 moves Mario at Minecraft's speeds, with its jump. */
     public static boolean mcFeel() {
         return GalaxyOptions.MOVEMENT.get() == Movement.MARIO_MC;
+    }
+
+    /** Minecraft's movement is drawn as Mario's model (the Player model setting), not as Steve. */
+    public static boolean marioModel() {
+        return walking() && GalaxyOptions.PLAYER_MODEL.get() == PlayerModel.MARIO;
     }
 
     /** F6: Mario's movement or Minecraft's. */
@@ -871,7 +879,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
                 client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene,
                 PlanetClient.itemActive(player), client.gui.screen() != null, flying,
-                client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES), ownPhysics(), System.nanoTime() - plusUntil < 0, mcFeel()));
+                client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES), ownPhysics(), System.nanoTime() - plusUntil < 0, mcFeel(), marioModel()));
     }
 
     public static void camLog(Vector3d eyeMc, Vector3d backMc, double dist, double hit) {

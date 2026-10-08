@@ -568,9 +568,11 @@ void HostBridge::WriteFollow(GuestMemory& mem, const PlayerState* player)
   constexpr size_t LAST = offsetof(GxcMailbox, cam_offset) + 12;
   std::array<u8, LAST - FIRST> b{};
   const bool galaxy = player && player->view == GXC_VIEW_GALAXY;
-  // Mario is drawn outside first person, and while the player flies off on its own (/fly); never
-  // with Minecraft movement, where Steve is drawn as one of the planet's entities instead.
-  const bool third = player && !(player->flags & GXC_PLAYER_WALKING) &&
+  // Mario is drawn outside first person, and while the player flies off on its own (/fly); with
+  // Minecraft movement only when the player is Mario (otherwise Steve is drawn as one of the
+  // planet's entities instead).
+  const bool third = player &&
+                     (!(player->flags & GXC_PLAYER_WALKING) || (player->flags & GXC_PLAYER_MARIO_MODEL)) &&
                      (player->view != GXC_VIEW_FIRST || (player->flags & GXC_PLAYER_FLYING));
   // Playing in Minecraft's view the IR sits under its crosshair, which stands in for the pointer.
   const bool hide_pointer = player && !galaxy && m_playing;

@@ -1051,6 +1051,20 @@ TEST(walking_hides_mario_and_takes_his_keys)
   CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_THIRD_PERSON) != 0);
 }
 
+TEST(walking_as_mario_draws_his_model_outside_first_person)
+{
+  Fixture f;
+  f.Tick();
+  f.shm->SetU64(offsetof(GxcHeader, mod_heartbeat_ms), f.now);
+  WritePlayer(*f.shm, {GXC_PLAYER_WALKING | GXC_PLAYER_MARIO_MODEL, 1, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {}, GXC_VIEW_BACK, 3});
+  f.Tick();
+  CHECK(f.bridge.Walking());
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_THIRD_PERSON) != 0);
+  WritePlayer(*f.shm, {GXC_PLAYER_WALKING | GXC_PLAYER_MARIO_MODEL, 2, {10, 20, 30}, {0, 0, 1}, {0, 1, 0}, 70.f, 162.f, {}, GXC_VIEW_FIRST, 3});
+  f.Tick();
+  CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_THIRD_PERSON) == 0);
+}
+
 TEST(mario_skin_goes_onto_his_texture_and_again_in_a_new_scene)
 {
   Fixture f;

@@ -980,10 +980,11 @@ public final class PlanetClient {
      * Render thread, once per emulated frame: the planet's entities to the game, and Mario's seat
      * if he rides. Minecraft movement: walker is where the player's feet are (galaxy), Mario's seat
      * every frame; drawSelf, if set, the frame the player is drawn in as one of the entities;
-     * marioFlies: Mario is shown in his flight pose there (the elytra, in Mario's modes).
+     * marioFlies: Mario is shown in his flight pose there (the elytra, in Mario's modes);
+     * marioWalks: Mario is shown walking, running and jumping as the player does (the Mario player model).
      */
     public static void frame(BridgeClient bridge, float partialTick, Vector3d walker, GravityFrame drawSelf,
-            boolean marioFlies) {
+            boolean marioFlies, boolean marioWalks) {
         bridge.world().ifPresent(w -> entities.frame(bridge, w.sceneId(), w.queryPos(), partialTick, drawSelf));
         ShadowWorld.Seat s = ShadowWorld.seat();
         PlanetSession f = focus;
@@ -992,7 +993,7 @@ public final class PlanetClient {
         if (on || riding) {
             Vector3d at = GameOrigin.toGame(walker != null ? walker : onSeat ? f.galOf(s.pos()) : GameOrigin.offset());
             if (bridge.send(Layout.MSG_SEAT, java.nio.ByteBuffer.allocate(16).putFloat((float) at.x).putFloat((float) at.y)
-                    .putFloat((float) at.z).putInt(!on ? 0 : walker != null && marioFlies ? 2 : 1).array()))
+                    .putFloat((float) at.z).putInt(!on ? 0 : walker != null && marioFlies ? 2 : walker != null && marioWalks ? 3 : 1).array()))
                 riding = on;
         }
     }
