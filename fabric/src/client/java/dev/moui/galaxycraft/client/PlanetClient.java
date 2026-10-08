@@ -287,7 +287,7 @@ public final class PlanetClient {
      * and its lift at the default brightness). Sent when it changes, and now and then anyway (a
      * restarted game has forgotten it).
      */
-    private static void sendSky(Minecraft mc, BridgeClient bridge) {
+    private static void sendSky(Minecraft mc, BridgeClient bridge, float[] fog) {
         if (mc.level == null || mc.player == null) return;
         var attrs = mc.level.environmentAttributes();
         var pos = mc.player.position();
@@ -300,12 +300,47 @@ public final class PlanetClient {
             for (int i = 0; i < 3; i++) c[i] = (c[i] + c[i] * lift) / 2;
         }
         int packed = (int) Math.round(c[0] * 255) << 16 | (int) Math.round(c[1] * 255) << 8 | (int) Math.round(c[2] * 255);
-        if (packed == skySent && ++skyAge < 100) return;
-        if (bridge.send(Layout.MSG_SKY, java.nio.ByteBuffer.allocate(12).putFloat((float) c[0]).putFloat((float) c[1])
-                .putFloat((float) c[2]).array())) {
+        int fogKey = java.util.Arrays.hashCode(fog);
+        if (packed == skySent && fogKey == fogSent && ++skyAge < 100) return;
+        // After the light: under water, Minecraft's fog (r, g, b, start and end in blocks), else zeros.
+        float[] f = fog != null ? fog : new float[5];
+        java.nio.ByteBuffer msg = java.nio.ByteBuffer.allocate(32).putFloat((float) c[0]).putFloat((float) c[1])
+                .putFloat((float) c[2]);
+        for (float v : f) msg.putFloat(v);
+        if (bridge.send(Layout.MSG_SKY, msg.array())) {
             skySent = packed;
+            fogSent = fogKey;
             skyAge = 0;
         }
+    }
+
+    private static int fogSent;
+    /** Ticks the camera has been in water (Minecraft's water vision: the fog opens up over 30 s). */
+    private static int waterVisionTime;
+
+    /**
+     * Minecraft's underwater fog for the camera, or null out of water: the biome's water fog color
+     * brightened by the water vision, and its start and end (the end scaled by the vision, at least
+     * a quarter), as FogRenderer and WaterFogEnvironment work them out.
+     */
+    private static float[] waterFog(Minecraft mc, PlanetSession session, GravityFrame frame, LocalPlayer player) {
+        int cell = -1;
+        if (blocks != null && session.active() && frame != null && player != null) {
+            Vector3d cam = mc.options.getCameraType().isFirstPerson() ? vec(player.getEyePosition())
+                    : vec(mc.gameRenderer.mainCamera().position());
+            int c = session.cellAt(frame.toGal(cam));
+            if (c >= 0 && session.planet().fluid(c) == dev.moui.galaxycraft.voxel.Blocks.WATER) cell = c;
+        }
+        waterVisionTime = cell >= 0 ? Math.min(600, waterVisionTime + 1) : Math.max(0, waterVisionTime - 10);
+        if (cell < 0) return null;
+        float vision = waterVisionTime >= 600 ? 1f
+                : Math.min(1f, waterVisionTime / 100f) * 0.6f + (waterVisionTime < 100 ? 0f : Math.min(1f, (waterVisionTime - 100) / 500f)) * 0.39999998f;
+        float[] f = blocks.waterFog(session.planet().biome(cell));
+        float peak = Math.max(f[0], Math.max(f[1], f[2]));
+        if (f[0] != 0 && f[1] != 0 && f[2] != 0)
+            for (int i = 0; i < 3; i++) f[i] += (f[i] / peak - f[i]) * vision;
+        f[4] *= Math.max(0.25f, vision);
+        return f;
     }
 
     private static void say(LocalPlayer player, String text) {
@@ -756,7 +791,7 @@ public final class PlanetClient {
                 bridge.send(Layout.MSG_HURT, java.nio.ByteBuffer.allocate(16).putFloat((float) from.x).putFloat((float) from.y)
                         .putFloat((float) from.z).putInt(h.kind()).array());
             }
-        sendSky(Minecraft.getInstance(), bridge);
+        sendSky(Minecraft.getInstance(), bridge, waterFog(Minecraft.getInstance(), session, frame, player));
         lastButtons = buttons;
         lastP = p;
         // The planet in focus first: its chunks before the others' when the ring is full. Mario's

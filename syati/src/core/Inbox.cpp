@@ -203,10 +203,12 @@ bool NextInboxRecord(const u8* records, u32 bytes, u32* offset, u32 max_slots, I
   }
   else if (type == InboxRecord::SKY)
   {
-    if (len != 12)
+    if (len != 12 && len != 32)
       return false;
     for (int k = 0; k < 3; k++)
       out->sky[k] = ReadF32(p + 4 * k);
+    for (int k = 0; k < 5; k++)
+      out->water[k] = len == 32 ? ReadF32(p + 12 + 4 * k) : 0.f;
   }
   else if (type == InboxRecord::HURT)
   {

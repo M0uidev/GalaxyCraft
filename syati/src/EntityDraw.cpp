@@ -154,6 +154,8 @@ public:
       return;
     }
     DrawAll();
+    GXColor black = {0, 0, 0, 0};
+    GXSetFog(GX_FOG_NONE, 0.f, 0.f, 0.f, 0.f, black);  // the water's fog is not for what the game draws next
   }
 
   static void DrawAll()
@@ -204,8 +206,7 @@ public:
     GXSetTevColorOp(GX_TEVSTAGE2, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
     GXSetTevAlphaIn(GX_TEVSTAGE2, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_APREV);
     GXSetTevAlphaOp(GX_TEVSTAGE2, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-    GXColor black = {0, 0, 0, 0};
-    GXSetFog(GX_FOG_NONE, 0.f, 0.f, 0.f, 0.f, black);
+    VoxelPlanetApplyFog();
     // Skins cut their holes out (Minecraft's cutout), which must not hide what is behind.
     GXSetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
     GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
