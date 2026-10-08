@@ -791,6 +791,7 @@ public final class PlanetClient {
                 bridge.send(Layout.MSG_HURT, java.nio.ByteBuffer.allocate(16).putFloat((float) from.x).putFloat((float) from.y)
                         .putFloat((float) from.z).putInt(h.kind()).array());
             }
+        SwimClient.tick(session, frame);
         sendSky(Minecraft.getInstance(), bridge, waterFog(Minecraft.getInstance(), session, frame, player));
         lastButtons = buttons;
         lastP = p;

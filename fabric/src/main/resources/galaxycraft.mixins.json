@@ -10,6 +10,8 @@
     "ShadowChunkReadMixin",
     "ShadowFluidMixin",
     "LivingEntityAccessor",
+    "PlanetWaterLoadedMixin",
+    "PlanetWaterMixin",
     "PlayerEdgeMixin",
     "ShadowLevelMixin",
 		"ShadowOpenersMixin",

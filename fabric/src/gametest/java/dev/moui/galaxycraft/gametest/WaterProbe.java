@@ -1,7 +1,9 @@
 package dev.moui.galaxycraft.gametest;
 
 import dev.moui.galaxycraft.client.GalaxyCraftClient;
+import dev.moui.galaxycraft.client.GalaxyOptions;
 import dev.moui.galaxycraft.client.PlanetClient;
+import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.shadow.ShadowMap;
 import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.voxel.Blocks;
@@ -41,6 +43,7 @@ public final class WaterProbe implements FabricClientGameTest {
             ctx.waitTicks(120);
             ctx.waitFor(mc -> ShadowWorld.entities() != null, 200);
             ShadowMap map = ShadowWorld.entities().map();
+            ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MINECRAFT));
 
             // The grass cell under Mario's feet; the pool is it and two below, 3 wide.
             int[] pool = ctx.computeOnClient(mc -> {
@@ -110,11 +113,54 @@ public final class WaterProbe implements FabricClientGameTest {
             ctx.getInput().pressKey(o -> o.keyTogglePerspective);
             ctx.getInput().pressKey(o -> o.keyTogglePerspective);
             ctx.waitTicks(10);
+            swim(ctx, s);
             sp.getServer().runCommand("execute in galaxycraft:shadow run kill @e[type=!player]");
             ctx.runOnClient(mc -> PlanetClient.remove());
             ctx.waitTicks(10);
             log("PASS");
         }
+    }
+
+    /** Minecraft's swimming in the planet's water: wet, floating up, the air running out, drowning. */
+    private static void swim(ClientGameTestContext ctx, PlanetSession s) {
+        ctx.runOnClient(mc -> mc.player.setXRot(0));
+        boolean[] wet = ctx.computeOnClient(mc -> new boolean[] {mc.player.isInWater(), mc.player.isUnderWater()});
+        log("at the bottom: in water " + wet[0] + ", under water " + wet[1]);
+        check(wet[0] && wet[1], "Minecraft knows the player is under the planet's water");
+        double r0 = radius(ctx, s);
+        int air0 = ctx.computeOnClient(mc -> mc.player.getAirSupply());
+        ctx.waitTicks(100);
+        int air1 = ctx.computeOnClient(mc -> mc.player.getAirSupply());
+        log("air " + air0 + " -> " + air1);
+        check(air1 < air0, "the air runs out under water");
+        gxdev("ctl", "shot water-3-bottom");
+        ctx.getInput().holdKey(o -> o.keyJump);
+        ctx.waitTicks(80);
+        double r1 = radius(ctx, s);
+        boolean[] up = ctx.computeOnClient(mc -> new boolean[] {mc.player.isInWater(), mc.player.isUnderWater()});
+        log("swimming up: " + r0 + " -> " + r1 + " blocks from the core; in water " + up[0] + ", under " + up[1]);
+        check(r1 - r0 > 1.5, "holding jump swims up (" + (r1 - r0) + " blocks)");
+        check(!up[1], "the head comes out at the surface");
+        gxdev("ctl", "shot water-4-surface");
+        ctx.getInput().releaseKey(o -> o.keyJump);
+        ctx.waitTicks(20);
+        double passive = r1 - radius(ctx, s);
+        log("letting go: sinks " + passive + " blocks in 20 ticks");
+        check(passive > 0.1 && passive < 3, "without jumping the player sinks slowly, not falling (" + passive + " blocks)");
+        ctx.getInput().holdKey(o -> o.keyJump);
+        ctx.waitTicks(60);
+        ctx.getInput().releaseKey(o -> o.keyJump);
+        double top = radius(ctx, s);
+        ctx.getInput().holdKey(o -> o.keyShift);
+        ctx.waitTicks(20);
+        double sneak = top - radius(ctx, s);
+        ctx.getInput().releaseKey(o -> o.keyShift);
+        log("sneaking: sinks " + sneak + " blocks in 20 ticks");
+        check(sneak > passive * 1.3, "sneaking sinks faster (" + sneak + " against " + passive + ")");
+    }
+
+    private static double radius(ClientGameTestContext ctx, PlanetSession s) {
+        return ctx.computeOnClient(mc -> GalaxyCraftClient.galaxyPos().get().distance(s.center()) / 80);
     }
 
     /** The cell this many blocks above Mario's feet, along the planet's up. */
