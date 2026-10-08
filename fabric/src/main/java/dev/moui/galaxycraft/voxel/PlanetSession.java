@@ -136,6 +136,13 @@ public final class PlanetSession {
     private boolean detail = true;
     private final Deque<Integer> farPending = new ArrayDeque<>(); // tiles whose far view is to send (or hide)
     private final BitSet farPendingSet = new BitSet();
+    /**
+     * Tiles in farPending whose chunks are going out: their far view must reach the game before the
+     * chunks go, or a hole shows. The other far views wait for the chunks to send (what stands near
+     * Mario, and the covering of its far view, come first): else the far view keeps drawing over
+     * chunks the game has already.
+     */
+    private final BitSet farBlocking = new BitSet();
     private int[] farVersion = new int[0];
     private final BitSet farDirty = new BitSet(); // tiles edited since their far view was sent
     /** The player's settings, which every session follows (setRenderDistance pins one's own: tests). */
@@ -581,7 +588,9 @@ public final class PlanetSession {
             build(c);
         }
         while (built == null && !farPending.isEmpty() && planet != null && bulk.getAsBoolean()) {
-            int t = farPending.peek();
+            int t = nextFar();
+            if (t < 0) break;
+            builtTile = t;
             // A tile of chunks gets it too, covered: the game draws it only from afar.
             builtFarShows = !shown.get(t);
             // A tile of chunks is drawn only from afar: coarse. Else as fine as its level.
@@ -604,6 +613,9 @@ public final class PlanetSession {
             if (!pendingSet.get(c)) continue; // went in the urgent lane since
             pendingSet.clear(c);
             build(c);
+        }
+        if (built == null && pending.isEmpty() && !farPending.isEmpty() && planet != null && bulk.getAsBoolean()) {
+            return peek(bulk); // the chunks were all out (or nothing): the far views that waited for them
         }
         if (built == null && pending.isEmpty() && farPending.isEmpty() && !farLater.isEmpty() && bulk.getAsBoolean()) {
             for (int t : farLater) queueFar(t);
@@ -707,8 +719,10 @@ public final class PlanetSession {
         if (builtFar) {
             builtFar = false;
             built = null;
-            int t = farPending.poll();
+            int t = builtTile;
+            farPending.removeFirstOccurrence(t);
             farPendingSet.clear(t);
+            farBlocking.clear(t);
             farOnGuest.set(t, builtFarShows); // what it carried, whatever the tile is by now
             farHeld.set(t);
             if (t < farCols.length) farCols[t] = builtCols;
@@ -1120,6 +1134,7 @@ public final class PlanetSession {
         control.clear();
         farPending.clear();
         farPendingSet.clear();
+        farBlocking.clear();
         farLater.clear();
         farDirty.clear();
         builtFar = false;
@@ -1227,6 +1242,7 @@ public final class PlanetSession {
         }
         out.stream().forEach(t -> {
             queueFar(t);
+            farBlocking.set(t);
             for (int c : PlanetLod.chunksOfTile(planet, t)) if (onGuest.get(c)) queue(c);
         });
     }
@@ -1271,6 +1287,15 @@ public final class PlanetSession {
     /** Patch columns of the far view the game has for a tile (0: none yet; tests). */
     public int farColumns(int t) {
         return farCols[t];
+    }
+
+    /**
+     * The next far view to send: one whose chunks are going out first, then (once no chunks wait)
+     * the first queued; -1 while chunks wait.
+     */
+    private int nextFar() {
+        if (!farBlocking.isEmpty()) for (int t : farPending) if (farBlocking.get(t)) return t;
+        return pending.isEmpty() && urgent.isEmpty() ? farPending.peek() : -1;
     }
 
     /** A tile's far view to send (or hide, if it is chunks by then). */

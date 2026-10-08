@@ -252,6 +252,20 @@ class PlanetSessionTest {
         assertTrue(bytes < 8_000_000, bytes + " bytes");
     }
 
+    @Test void arrivingTheChunksAroundMarioComeBeforeTheFarViewOfTheRest() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(128, MARIO, new Vector3d(0, 1, 0));
+        s.update(3, 100, onTop(s, 128));
+        List<PlanetSession.Msg> msgs = drain(s);
+        int lastChunk = -1, firstFar = -1;
+        for (int i = 0; i < msgs.size(); i++) {
+            if (far(msgs.get(i))) {
+                if (firstFar < 0 && !covered(msgs.get(i))) firstFar = i;
+            } else if (msgs.get(i).type() == Layout.MSG_CHUNK) lastChunk = i;
+        }
+        assertTrue(firstFar > lastChunk, "the far view that stays drawn near waits for the chunks: " + firstFar + " vs " + lastChunk);
+    }
+
     @Test void walkingAwayTheFarViewTakesOverBeforeTheChunksGo() {
         PlanetSession s = new PlanetSession(80);
         s.spawn(64, MARIO, new Vector3d(0, 1, 0));
