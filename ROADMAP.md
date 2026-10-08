@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-08 (v0.1.2 released; Now: 1.7 terrain rework; Next: far view bugs, swimming)
+Last updated: 2026-10-08 (inbox: planets farther apart and seen from afar)
 
 ---
 
@@ -139,6 +139,10 @@ Last updated: 2026-10-08 (v0.1.2 released; Now: 1.7 terrain rework; Next: far vi
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-08: Planets farther apart, and seen from much farther (user): too close "doesn't feel the
+  same"; far planets should be drawn from a long way off and grow as you approach, not appear out of
+  nowhere in front of you. Rethink how far planets are drawn. Designed:
+  [spec](docs/superpowers/specs/2026-10-08-galaxycraft-far-planets-design.md).
 - 2026-10-07: Follow-ups of flat stations (Claude, review): a station's bounds grow only from what
   the player places, not from what Minecraft adds by itself (flowing water, growing trees, pistons);
   Mario's own movement keeps SMG2's crouch (user: "not made for that").
