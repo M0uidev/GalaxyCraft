@@ -69,6 +69,7 @@ f32 ReadF32(const u8* p)
 
 extern "C" void decLife__10MarioActorFUs(void* self, unsigned short n);
 extern "C" bool isAnimationRun__11MarioModuleCFPCc(const void* self, const char* name);
+extern "C" void resetSleepTimer__5MarioFv(void* self);
 // MarioActor::mMario (Mario, a MarioModule).
 const u32 MARIO_OF_ACTOR = 0x584;
 
@@ -362,6 +363,13 @@ void EntityDrawAfterMario()
   gSafeFrames = SAFE_FRAMES;
   for (u32 i = 0; i < sizeof(CARRIED_SILENT) / sizeof(CARRIED_SILENT[0]); i++)
     MR::stopSoundPlayer(CARRIED_SILENT[i], 0);
+  // Standing still in Minecraft's movement must not put him to sleep: no snoring, no nodding off.
+  if (gMario)
+  {
+    void* sleeper = *reinterpret_cast<void**>(static_cast<u8*>(gMario) + MARIO_OF_ACTOR);
+    if (sleeper)
+      resetSleepTimer__5MarioFv(sleeper);
+  }
   MR::setPlayerPos(TVec3f(gSeat[0], gSeat[1], gSeat[2]));
   TVec3f* v = MR::getPlayerVelocity();
   if (v)
