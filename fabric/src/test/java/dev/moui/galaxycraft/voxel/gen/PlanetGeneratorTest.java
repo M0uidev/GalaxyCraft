@@ -112,6 +112,16 @@ class PlanetGeneratorTest {
         assertTrue(count(c, "minecraft:ice") > 0, "frozen rivers");
     }
 
+    @Test @org.junit.jupiter.api.Tag("timing") void theBiggestPlanetBuildsInSeconds() {
+        PlanetBlueprint b = bp(256, 8, 11, PlanetBlueprint.RANDOM, PlanetBlueprint.AUTO).withUnderground(50, true, 100);
+        cells(bp(64, 8, 11, PlanetBlueprint.RANDOM, PlanetBlueprint.AUTO)); // warm up
+        long t0 = System.nanoTime();
+        cells(b);
+        long ms = (System.nanoTime() - t0) / 1_000_000;
+        System.out.println("radius 256 built in " + ms + " ms");
+        assertTrue(ms < 4000, ms + " ms");
+    }
+
     @Test void cavesDigTheGroundNeverTheBedrock() {
         PlanetBlueprint b = bp(64, 8, 10, PlanetBlueprint.RANDOM, PlanetBlueprint.AUTO);
         PlanetGenerator.Cells solid = cells(b), dug = cells(b.withUnderground(60, true, 0));

@@ -54,31 +54,37 @@ public final class Caves {
     public static void carve(CubeSphere grid, int depth, char[] cells, int[] top, long seed, int caves, boolean entrances,
             int lava, char water, char lavaId) {
         if (caves <= 0) return;
-        Caves c = new Caves(grid, depth, cells, top, entrances, lava, water, lavaId);
         double surface = grid.core + depth, inner = grid.core + 1, outer = grid.core + grid.layers;
         int reach = (int) Math.ceil(outer / CUBE);
         double systems = 0.35 * caves / 50, ravines = 0.02 * caves / 50;
+        java.util.List<int[]> cubes = new java.util.ArrayList<>();
         for (int x = -reach; x < reach; x++)
             for (int y = -reach; y < reach; y++)
                 for (int z = -reach; z < reach; z++) {
                     double mid = new Vector3d((x + 0.5) * CUBE, (y + 0.5) * CUBE, (z + 0.5) * CUBE).length();
-                    if (mid < inner - CUBE || mid > surface + CUBE) continue;
-                    Random rnd = new Random(seed ^ (x * 341873128712L + y * 132897987541L + z * 42317861L));
-                    if (rnd.nextDouble() < systems) {
-                        Vector3d start = c.start(rnd, x, y, z, inner, surface);
-                        if (start == null) continue;
-                        int tunnels = 2 + rnd.nextInt(4);
-                        if (rnd.nextInt(6) == 0) c.room(start, ROOM_RADIUS - rnd.nextDouble());
-                        for (int t = 0; t < tunnels; t++)
-                            c.tunnel(rnd.nextLong(), start, rnd.nextDouble() * Math.PI * 2, (rnd.nextDouble() - 0.5) / 4,
-                                    0.2 + rnd.nextDouble() * (TUNNEL_RADIUS - 1.2), 40 + rnd.nextInt(80), 2, false);
-                    }
-                    if (rnd.nextDouble() < ravines) {
-                        Vector3d start = c.start(rnd, x, y, z, inner + 4, surface);
-                        if (start != null)
-                            c.tunnel(rnd.nextLong(), start, rnd.nextDouble() * Math.PI * 2, 0, 0.5, 60 + rnd.nextInt(50), 0, true);
-                    }
+                    if (mid >= inner - CUBE && mid <= surface + CUBE) cubes.add(new int[] {x, y, z});
                 }
+        // A cell is dug or not by what caves never change (its layer, the water, the ground's top),
+        // so cubes can dig at once, in any order, and the same seed digs the same caves.
+        cubes.parallelStream().forEach(q -> {
+            int x = q[0], y = q[1], z = q[2];
+            Caves c = new Caves(grid, depth, cells, top, entrances, lava, water, lavaId);
+            Random rnd = new Random(seed ^ (x * 341873128712L + y * 132897987541L + z * 42317861L));
+            if (rnd.nextDouble() < systems) {
+                Vector3d start = c.start(rnd, x, y, z, inner, surface);
+                if (start != null) {
+                    int tunnels = 2 + rnd.nextInt(4);
+                    if (rnd.nextInt(6) == 0) c.room(start, ROOM_RADIUS - rnd.nextDouble());
+                    for (int t = 0; t < tunnels; t++)
+                        c.tunnel(rnd.nextLong(), start, rnd.nextDouble() * Math.PI * 2, (rnd.nextDouble() - 0.5) / 4,
+                                0.2 + rnd.nextDouble() * (TUNNEL_RADIUS - 1.2), 40 + rnd.nextInt(80), 2, false);
+                }
+            }
+            if (rnd.nextDouble() < ravines) {
+                Vector3d start = c.start(rnd, x, y, z, inner + 4, surface);
+                if (start != null) c.tunnel(rnd.nextLong(), start, rnd.nextDouble() * Math.PI * 2, 0, 0.5, 60 + rnd.nextInt(50), 0, true);
+            }
+        });
     }
 
     /** A point in the cube, in the ground (biased deep as 1.7's), or null. */
