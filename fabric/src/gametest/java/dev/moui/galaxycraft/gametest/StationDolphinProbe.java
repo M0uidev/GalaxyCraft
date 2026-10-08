@@ -114,6 +114,8 @@ public final class StationDolphinProbe implements FabricClientGameTest {
             String speedOn = group(SPEED, gxdev("ctl", "status"));
             log("max_speed: " + speedBefore + " at the start, " + speedOn + " on the station");
 
+            Vector3d past = ctx.computeOnClient(mc -> s.galOf(st.rotation.transform(new Vector3d(0, 1.6, -60))));
+
             // 4. Off the edge: the void. Above it: down onto it.
             ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MINECRAFT));
             ctx.waitTicks(20);
@@ -127,6 +129,17 @@ public final class StationDolphinProbe implements FabricClientGameTest {
             double h = height(ctx, s, ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow())));
             log(String.format("from 6 above: on ground %s, %.2f blocks above the slab", down, h));
             check(down && h > -0.3 && h < 2, "above the station falls down onto it");
+            // Minecraft's movement, sneaking toward the slab's -z edge: slow, and the player stops there.
+            aimAt(ctx, past);
+            ctx.getInput().holdKey(o -> o.keyShift);
+            ctx.getInput().holdKey(o -> o.keyUp);
+            ctx.waitTicks(140);
+            // Where Shift still holds the player: let go at the edge, Minecraft lets them fall.
+            Vector3d mcSneaked = stationPos(ctx, s, ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow())));
+            ctx.getInput().releaseKey(o -> o.keyUp);
+            ctx.getInput().releaseKey(o -> o.keyShift);
+            log(String.format("the player sneaked to station (%.2f, %.2f, %.2f)", mcSneaked.x, mcSneaked.y, mcSneaked.z));
+            check(mcSneaked.y > -0.3 && mcSneaked.z > -4.5 - 0.31 && mcSneaked.z < -4.2, "the player sneaks to the edge and stays on it");
 
             // 5. From 300 blocks off: its far view.
             Vector3d far = ctx.computeOnClient(mc -> s.galOf(st.rotation.transform(new Vector3d(0, 120, -300))));
@@ -173,6 +186,17 @@ public final class StationDolphinProbe implements FabricClientGameTest {
             Vector3d base = s.galOf(st.rotation.transform(new Vector3d(0, 0.5, 0)));
             Vector3d up = s.galOf(st.rotation.transform(new Vector3d(0, 1.5, 0))).sub(base);
             return new Vector3d(gal).sub(base).dot(up) / up.lengthSquared();
+        });
+    }
+
+    /** A galaxy point in station coordinates (blocks; y from the slab's top). */
+    private static Vector3d stationPos(ClientGameTestContext ctx, PlanetSession s, Vector3d gal) {
+        return ctx.computeOnClient(mc -> {
+            Station st = StationClient.of(s).orElseThrow();
+            Vector3d o = s.galOf(new Vector3d());
+            double block = s.galOf(new Vector3d(1, 0, 0)).distance(o);
+            Vector3d p = st.rotation.transformInverse(new Vector3d(gal).sub(o).div(block));
+            return p.sub(0, 0.5, 0);
         });
     }
 

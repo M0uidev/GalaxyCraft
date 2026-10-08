@@ -903,8 +903,37 @@ static void TestCodePatch()
   CHECK(stub[2] == EncodeBranch(0x80700008u, 0x80390e00u));
 }
 
+// A platform 2 x 2 around the origin (x, z in [-1, 1]), up +y: ground under p.
+static bool OnPlatform(const float p[3], void*)
+{
+  return p[0] >= -1.f && p[0] <= 1.f && p[2] >= -1.f && p[2] <= 1.f;
+}
+
+static void TestSneakStep()
+{
+  const float up[3] = {0, 1, 0}, front[3] = {0, 0, 1}, from[3] = {0.5f, 0, 0};
+  // Inside: the move stands.
+  float in[3] = {0.6f, 0, 0.1f};
+  CHECK(!SneakStep(from, in, up, front, 0.3f, OnPlatform, 0));
+  CHECK(in[0] == 0.6f && in[2] == 0.1f);
+  // Overhanging while the box still touches: allowed, as in Minecraft.
+  float hang[3] = {1.2f, 0, 0};
+  CHECK(!SneakStep(from, hang, up, front, 0.3f, OnPlatform, 0));
+  // Off the edge diagonally: the part along the edge stays (sliding along it).
+  float off[3] = {1.6f, 0, 0.2f};
+  CHECK(SneakStep(from, off, up, front, 0.3f, OnPlatform, 0));
+  CHECK(std::fabs(off[0] - 0.5f) < 1e-6f && std::fabs(off[2] - 0.2f) < 1e-6f);
+  // Straight off a corner: nothing of it.
+  const float corner[3] = {1.2f, 0, 1.2f};
+  float out[3] = {1.6f, 0.05f, 1.6f};
+  CHECK(SneakStep(corner, out, up, front, 0.3f, OnPlatform, 0));
+  CHECK(out[0] == corner[0] && out[2] == corner[2]);
+  CHECK(std::fabs(out[1] - 0.05f) < 1e-6f);  // up and down are his own (a step, a slope)
+}
+
 int main()
 {
+  TestSneakStep();
   TestInboxRecords();
   TestInboxRejectsBadChunks();
   TestInboxTranslucentChunks();

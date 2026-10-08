@@ -428,6 +428,36 @@ void McFeelSpeed(void* self)
   *share = (flags & GXC_MBX_MC_SNEAK) ? MC_SNEAK_SHARE : (flags & GXC_MBX_MC_SPRINT) ? MC_SPRINT_SHARE : MC_WALK_SHARE;
 }
 
+// Minecraft's feel, sneaking (Shift): Mario, on the ground before this frame's movement, keeps ground
+// under his feet (a box 0.6 blocks wide, as Minecraft's player's), not falling more than a step.
+const f32 SNEAK_HALF = 0.3f * 80.f, SNEAK_STEP = 0.6f * 80.f, SNEAK_ABOVE = 20.f;
+
+bool SneakGround(const f32 p[3], void* ctx)
+{
+  const f32* up = static_cast<const f32*>(ctx);
+  TVec3f from(p[0] + SNEAK_ABOVE * up[0], p[1] + SNEAK_ABOVE * up[1], p[2] + SNEAK_ABOVE * up[2]);
+  const f32 reach = -(SNEAK_ABOVE + SNEAK_STEP);
+  TVec3f down(reach * up[0], reach * up[1], reach * up[2]);
+  TVec3f hit;
+  Triangle tri;
+  return MR::getFirstPolyOnLineToMap(&hit, &tri, from, down);
+}
+
+void McSneakEdge(const f32 before[3], bool was_on_ground)
+{
+  const f32 up[3] = {-gOut.mbx.gravity[0], -gOut.mbx.gravity[1], -gOut.mbx.gravity[2]};
+  const u32 sneak = GXC_MBX_MC_FEEL | GXC_MBX_MC_SNEAK;
+  if ((gOut.mbx.host_flags & sneak) != sneak || !was_on_ground || !gFollowing || gDemo || Dot3(up, up) < 0.25f)
+    return;
+  const TVec3f* at = MR::getPlayerPos();
+  f32 to[3] = {at->x, at->y, at->z};
+  TVec3f front(0.f, 0.f, 0.f);
+  MR::getPlayerFrontVec(&front);
+  const f32 f[3] = {front.x, front.y, front.z};
+  if (gxc::SneakStep(before, to, up, f, SNEAK_HALF, SneakGround, const_cast<f32*>(up)))
+    MR::setPlayerPos(TVec3f(to[0], to[1], to[2]));
+}
+
 void McFeelJump(void* self, const f32 before[3])
 {
   u8* mb = reinterpret_cast<u8*>(reinterpret_cast<MarioActor*>(self)->mMario);
@@ -479,8 +509,10 @@ void MarioMovement(void* self)
   *WPAD_SLEEP_MINUTES = 0;
   const TVec3f* at = MR::getPlayerPos();
   const f32 before[3] = {at->x, at->y, at->z};
+  const bool was_on_ground = MR::isOnGroundPlayer();
   McFeelSpeed(self);
   movement__10MarioActorFv(self);
+  McSneakEdge(before, was_on_ground);
   {
     const f32 dx = at->x - before[0], dy = at->y - before[1], dz = at->z - before[2];
     if (dx * dx + dy * dy + dz * dz > 0.01f)
