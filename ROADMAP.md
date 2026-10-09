@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-08 (Export report done, no Dolphin main window; v0.1.2 released; Now: 1.7 terrain rework; Next: far view bugs, swimming)
+Last updated: 2026-10-08 (panorama screenshots + F2 fix on feat/panorama, awaiting playtest; Now: 1.7 terrain rework)
 
 ---
 
@@ -24,6 +24,7 @@ Last updated: 2026-10-08 (Export report done, no Dolphin main window; v0.1.2 rel
 | Feature | Status | Notes |
 |---|---|---|
 | Planets with Minecraft 1.7 terrain | now | User 2026-10-08: today's terrain "not that good", old terrain fits small worlds. 3D density with overhangs, several biomes per planet scaled to its size, oceans, rivers, beaches, cave labyrinths, heights scaled to the radius. Then check whether trees still come out broken (one block above the grass, a trunk missing a log). [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-legacy-terrain-design.md) |
+| Panorama screenshots, and F2 that works | now | User 2026-10-08: F2 saved a blank blue picture (Dolphin draws the game): now Dolphin takes it. Ctrl+F2 or /panorama takes six 90° shots from the eyes (panorama_0..5 + one equirectangular picture); tools/set_panorama.py makes a capture the title screen's background. Branch feat/panorama, awaiting playtest. |
 | First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
 
 ## Next

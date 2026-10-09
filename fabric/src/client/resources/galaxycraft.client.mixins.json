@@ -14,7 +14,8 @@
 		"LocalPlayerMixin",
 		"MinecraftMixin",
 		"ModelPartAccessor",
-		"OptionsMixin"
+		"OptionsMixin",
+		"ScreenshotMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
