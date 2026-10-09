@@ -902,3 +902,8 @@ kmWrite32(0x80115540, 0x60000000);
 kmWrite32(0x8011559C, 0x60000000);
 kmWrite32(0x801155E4, 0x60000000);
 kmWrite32(0x8038976C, 0x60000000);
+// And the first-person look itself: MR::isPossibleToShiftToFirstPersonCamera says no (Mario never
+// enters MarioFpView, whose animation sounds too), and the sound it plays leaving it is a nop.
+kmWrite32(0x8001E570, 0x38600000);  // li r3, 0
+kmWrite32(0x8001E574, PPC_BLR);
+kmWrite32(0x803EBF6C, 0x60000000);
