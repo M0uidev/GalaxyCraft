@@ -19,7 +19,7 @@ test('Linux: the same processes as tools/gxplay.sh', () => {
   const [dolphin, mc] = plan.processes;
   assert.equal(dolphin.cmd, '/g/dolphin/build/Binaries/dolphin-emu');
   assert.deepEqual(dolphin.args, [
-    '-u', '/h/.local/share/galaxycraft/dolphin', '-e', '/g/syati/build/galaxycraft.json',
+    '-u', '/h/.local/share/galaxycraft/dolphin', '-b', '-e', '/g/syati/build/galaxycraft.json',
     '-C', 'Dolphin.Input.BackgroundInput=True', '-C', 'Dolphin.General.HotkeysRequireFocus=False',
     '-C', 'Dolphin.Core.RAMOverrideEnable=True', '-C', 'Dolphin.Core.MEM2Size=268435456',
     '-C', 'Dolphin.Core.CPUThread=True', '-C', 'Dolphin.Interface.ConfirmStop=False',
@@ -57,9 +57,23 @@ test('Windows: java.exe, backslashes, the installation\'s options', () => {
 test('the chosen disc\'s descriptor, and no token in the log', () => {
   const paths = platformPaths({ platform: 'linux', env: {}, home: '/h' });
   const plan = buildPlan({ root: '/g', paths, inst: store.defaultInstallation(), javaHome: '/j', dolphinBin: '/d', descriptor: '/h/dev.json', env: {} });
-  assert.equal(plan.processes[0].args[3], '/h/dev.json');
+  assert.equal(plan.processes[0].args[4], '/h/dev.json');
   plan.processes[1].args.push('--accessToken', 'secret-token');
   const lines = describePlan(plan, 'linux').join('\n');
   assert.doesNotMatch(lines, /secret-token/);
   assert.match(lines, /--accessToken \*{8}/);
+});
+
+test('Dolphin runs in batch mode (no main window) in the dev plan and the player plan, on both systems', () => {
+  const gamepack = require('../src/core/gamepack');
+  for (const platform of ['linux', 'win32']) {
+    const paths = platformPaths({ platform, env: {}, home: platform === 'win32' ? 'C:\\Users\\Mo' : '/h' });
+    const inst = { id: 'default', dualCore: true, dolphinArgs: '' };
+    const dev = buildPlan({ root: '/g', paths, inst, javaHome: '/jdk', dolphinBin: '/d', env: {} }).processes[0].args;
+    const player = gamepack.playerPlan({ paths, inst, lay: gamepack.layout(paths, '0.2.0'), dolphinExe: '/d', mcCommand: { cmd: 'java', args: [] }, env: {} }).processes[0].args;
+    for (const args of [dev, player]) {
+      assert.equal(args.filter((a) => a === '-b').length, 1, platform);
+      assert.ok(args.indexOf('-b') < args.indexOf('-e'), 'before the game is named');
+    }
+  }
 });

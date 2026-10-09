@@ -95,7 +95,6 @@ Last updated: 2026-10-08 (swimming and water look built, awaiting playtest)
 
 | When | Feature | Commit |
 |---|---|---|
-| 2026-10-08 | Launcher: Export report button and no empty Dolphin window (v0.1.3) | fe6276a |
 | 2026-10-02 | Mario mode: first person, keyboard and mouse, perspectives, Steve model | |
 | 2026-10-02 | Voxel planets: cube-sphere, break/place, saved per galaxy, radius up to 256 | |
 | 2026-10-03 | Every Minecraft block, real shapes and placement rules; creative inventory | |
@@ -134,6 +133,8 @@ Last updated: 2026-10-08 (swimming and water look built, awaiting playtest)
 | 2026-10-07 | Gravity shells: where each planet's and station's gravity begins, drawn as faint blue lines seen from space, fading out once inside | 44aca6b |
 | 2026-10-08 | Sneaking exactly like Minecraft on round planets: you stay on top of the block at its edge and corners, never stepping down or sliding off; holding right-click keeps placing; no block goes into the player | 9089508 |
 | 2026-10-08 | Gravity shells only out in space (inside a gravity, only its own, fading); no fall or flight wind sounds and no snoring while Minecraft's movement carries Mario | 9089508 |
+| 2026-10-08 | Export report in the launcher: one button saves a zip with the logs, crash reports, settings and a system summary (home folders and tokens blanked, nothing uploaded) to send when something fails | c77618e |
+| 2026-10-08 | The game starts with only its own window: Dolphin's empty main window no longer opens behind it (Linux and Windows) | 1e18b8d |
 
 ---
 

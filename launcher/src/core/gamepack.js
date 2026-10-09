@@ -6,7 +6,7 @@
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { pathFor } = require('./paths');
-const { HIDDEN_MATCH, SMG2_SAVE, MEM2_BYTES, splitArgs } = require('./launchplan');
+const { DOLPHIN_BATCH, HIDDEN_MATCH, SMG2_SAVE, MEM2_BYTES, splitArgs } = require('./launchplan');
 const { gameDirOf } = require('./store');
 
 const FORMAT = 1;
@@ -147,7 +147,7 @@ function playerPlan({ paths, inst, lay, dolphinExe, mcCommand, env = process.env
     // X11 (XWayland on Wayland desktops): the GalaxyCraft input hooks XInput2.
     env: { ...env, GALAXYCRAFT: '1', GALAXYCRAFT_BOOT: 'space', ...(paths.platform === 'linux' ? { QT_QPA_PLATFORM: 'xcb' } : {}) },
     args: [
-      '-u', dolphinDir, '-e', lay.descriptor,
+      '-u', dolphinDir, DOLPHIN_BATCH, '-e', lay.descriptor,
       '-C', 'Dolphin.Input.BackgroundInput=True', '-C', 'Dolphin.General.HotkeysRequireFocus=False',
       '-C', 'Dolphin.Core.RAMOverrideEnable=True', '-C', `Dolphin.Core.MEM2Size=${MEM2_BYTES}`,
       '-C', `Dolphin.Core.CPUThread=${inst.dualCore ? 'True' : 'False'}`, '-C', 'Dolphin.Interface.ConfirmStop=False',
