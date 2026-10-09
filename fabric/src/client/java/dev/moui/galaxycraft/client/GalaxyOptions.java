@@ -91,7 +91,9 @@ public final class GalaxyOptions {
                         PlanetClient.teleport();
                     }),
             new Action("Planets...", "Design planets and put them in this galaxy (/galaxycraft)",
-                    () -> PlanetEditorScreen.open(Minecraft.getInstance())));
+                    () -> PlanetEditorScreen.open(Minecraft.getInstance())),
+            new Action("Music Player...", "The soundtrack: pick songs, sort them into space and planet music (M)",
+                    () -> dev.moui.galaxycraft.client.music.SoundtrackScreen.open()));
 
     private GalaxyOptions() {}
 

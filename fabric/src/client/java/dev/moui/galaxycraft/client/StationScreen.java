@@ -49,6 +49,8 @@ public final class StationScreen extends Screen {
             rename();
             onClose();
         }).bounds(x + 2 * (bw + 4), y + 60, bw, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("screen.galaxycraft.station.music"),
+                b -> dev.moui.galaxycraft.client.music.StationMusicScreen.open(station)).bounds(x, y + 84, w, 20).build());
     }
 
     private void rename() {
