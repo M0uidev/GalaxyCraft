@@ -978,7 +978,7 @@ static void TestShell()
   // A panorama capture hides the shells: the sky message's red is sent 2 or more over the 0..1 it means.
   CHECK(ShellsHidden(2.f) && ShellsHidden(2.8f) && ShellsHidden(3.f));
   CHECK(!ShellsHidden(1.f) && !ShellsHidden(0.f) && !ShellsHidden(0.5f) && !ShellsHidden(-1.f) && !ShellsHidden(1.99f));
-  CHECK(SkyChannel(2.5f) == 1.f && SkyChannel(0.25f) == 0.25f && SkyChannel(-3.f) == 0.f && SkyChannel(7.f) == 1.f);
+  CHECK(SkyChannel(2.5f) == 0.5f && SkyChannel(2.f) == 0.f && SkyChannel(0.25f) == 0.25f && SkyChannel(-3.f) == 0.f && SkyChannel(7.f) == 1.f);
   CHECK(std::fabs(ShellShown(-25.f, 100.f, true) - 0.75f) < 1e-6f);
 }
 

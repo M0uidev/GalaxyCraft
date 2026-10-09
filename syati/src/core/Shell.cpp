@@ -126,6 +126,8 @@ bool ShellsHidden(f32 sky_red)
 
 f32 SkyChannel(f32 v)
 {
+  if (v >= 2.f)  // the hide-shells flag: the channel is what is over 2
+    v -= 2.f;
   return v < 0.f ? 0.f : v > 1.f ? 1.f : v;
 }
 
