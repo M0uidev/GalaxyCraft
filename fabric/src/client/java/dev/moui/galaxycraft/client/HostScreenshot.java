@@ -63,7 +63,15 @@ public final class HostScreenshot {
             for (Path d : dolphinDirs) {
                 Path found = find(d.resolve("ScreenShots"), name + ".png");
                 if (found == null) continue;
-                Thread.sleep(150); // Dolphin has closed the file by then
+                // Dolphin is still writing it while it grows (a big picture at a high internal
+                // resolution takes a while): wait until its size has held still for a moment.
+                long size = -1;
+                for (int i = 0; i < 50; i++) {
+                    Thread.sleep(200);
+                    long now = Files.size(found);
+                    if (now > 0 && now == size) break;
+                    size = now;
+                }
                 return found;
             }
             Thread.sleep(100);
