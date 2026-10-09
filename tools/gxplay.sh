@@ -68,11 +68,19 @@ stop_minecraft
 # is read here, at the start: change it in Super Minecraft Galaxy's settings and play again.
 MODEL=galaxycraft
 grep -qi '^marioModel=original' "$GAME_DIR/config/galaxycraft.properties" 2> /dev/null && MODEL=galaxycraft-mario
+# Smoother video than Dolphin's defaults (same as the launcher's VIDEO_DEFAULTS), each only if
+# this folder's GFX.ini does not set its own.
+VIDEO=()
+for kv in Settings:InternalResolution=3 Settings:MSAA=4 Enhancements:MaxAnisotropy=3; do
+  key=${kv#*:}; key=${key%%=*}
+  grep -qE "^[[:space:]]*$key[[:space:]]*=" "$DOLPHIN_DIR/Config/GFX.ini" 2>/dev/null \
+    || VIDEO+=(-C "GFX.${kv%%:*}.${kv#*:}")
+done
 GALAXYCRAFT=1 GALAXYCRAFT_BOOT=space dolphin/build/Binaries/dolphin-emu -u "$DOLPHIN_DIR" \
   -e "syati/build/$MODEL.json" \
   -C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False \
   -C Dolphin.Core.RAMOverrideEnable=True -C Dolphin.Core.MEM2Size=268435456 -C Dolphin.Core.CPUThread=True \
-  -C Dolphin.Interface.ConfirmStop=False &
+  -C Dolphin.Interface.ConfirmStop=False "${VIDEO[@]}" &
 DOLPHIN=$!
 # Minecraft itself (not a game test): its title screen, its worlds, its options, kept between runs.
 (cd fabric && exec ./gradlew runClient -PgalaxycraftHidden -PgalaxycraftGameDir="$GAME_DIR" ${GXC_TRACE_BODIES:+-PgalaxycraftTraceBodies} \
