@@ -16,5 +16,6 @@
   "message.galaxycraft.station.too_big": "The station can't grow further",
   "message.galaxycraft.station.core": "The core holds the station together: pack it up from its menu",
   "message.galaxycraft.station.lost": "That station's file is missing",
-  "message.galaxycraft.station.packed": "Packed %s"
+  "message.galaxycraft.station.packed": "Packed %s",
+  "music.galaxycraft.now_playing": "♪ %s"
 }

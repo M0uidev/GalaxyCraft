@@ -158,8 +158,13 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
             PlanetClient.leaveWorld(bridge);
             resetFrame();
+            dev.moui.galaxycraft.client.music.MusicService.shutdown();
         }));
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> DolphinStarter.stop());
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> dev.moui.galaxycraft.client.music.MusicService.shutdown());
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (client.player != null && client.level != null) dev.moui.galaxycraft.client.music.MusicService.tick();
+        });
         ClientTickEvents.END_CLIENT_TICK.register(DolphinStarter::keepScreen);
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             client.options.cloudStatus().set(CloudStatus.OFF); // see OptionsMixin
