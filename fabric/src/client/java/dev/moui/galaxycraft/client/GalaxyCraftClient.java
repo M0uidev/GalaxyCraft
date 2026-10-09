@@ -182,6 +182,11 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         PauseMenu.register();
         TitleMenu.register();
         CreateWorldDefaults.register();
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("panorama").executes(c -> {
+            if (!PanoramaCapture.start(Minecraft.getInstance()))
+                c.getSource().sendFeedback(Component.literal("Super Minecraft Galaxy: a panorama needs the game running in a world"));
+            return 1;
+        })));
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("fly").executes(c -> {
             toggleFlying();
             return 1;
@@ -272,7 +277,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt)), pt) : null,
                 walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
         SkinClient.frame(bridge);
-        bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
+        bridge.input().ifPresentOrElse(in -> {
+            if (PanoramaCapture.active()) input.reset(); // standing still for the six shots
+            else input.apply(Minecraft.getInstance(), in);
+        }, input::reset);
         bridge.pointer().ifPresentOrElse(p -> {
             hostFocused(mc, !p.background());
             input.applyPointer(mc, p);
@@ -876,8 +884,18 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 : frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
         Vector3d up = camUpGal != null ? camUpGal : frame.upGal();
         Vector3d offset = camOffsetGal != null ? camOffsetGal : frame.upGal().mul(eye);
+        float fov = client.options.fov().get().floatValue();
+        int viewId = view().protocolId();
+        if (PanoramaCapture.active()) { // one face of a panorama: from the eyes, 90 degrees
+            Vector3d[] cam = PanoramaCapture.camera();
+            look = frame.dirToGal(cam[0]);
+            up = frame.dirToGal(cam[1]);
+            fov = 90f;
+            viewId = View.FIRST.protocolId();
+            if (view() != View.FIRST) offset = frame.upGal().mul(eye); // not behind or in front of the player
+        }
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
-                client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene,
+                fov, eye, player.onGround(), offset, viewId, frameScene,
                 PlanetClient.itemActive(player), client.gui.screen() != null, flying,
                 client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES), ownPhysics(), System.nanoTime() - plusUntil < 0, mcFeel()));
     }
