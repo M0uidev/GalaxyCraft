@@ -43,7 +43,7 @@ def run(cmd, env=None):
 def riivolution_xml(steve=True):
     with open(os.path.join(HERE, "build/loader_patches.xml")) as f:
         patches = f.read().strip()
-    # Without the Steve arcs the game loads its own Mario (Player Model: Mario).
+    # Without the Steve arcs the game loads its own Mario (Mario Model: Original Mario).
     for arc in sorted(os.listdir(os.path.join(HERE, "build/ObjectData"))) if steve else []:
         if arc.endswith(".arc"):
             patches += f'\n\t\t<file disc="/ObjectData/{arc}" external="/ObjectData/{arc}" />'
@@ -103,7 +103,7 @@ def main():
         f.write(riivolution_xml())
     with open(os.path.join(HERE, "build/galaxycraft.json"), "w", newline="\n") as f:
         json.dump(descriptor(game), f, indent=2)
-    # The same with the game's own Mario instead of Steve's body (Player Model: Mario).
+    # The same with the game's own Mario instead of Steve's body (Mario Model: Original Mario).
     with open(os.path.join(HERE, "build/galaxycraft-mario.xml"), "w", newline="\n") as f:
         f.write(riivolution_xml(steve=False))
     with open(os.path.join(HERE, "build/galaxycraft-mario.json"), "w", newline="\n") as f:
