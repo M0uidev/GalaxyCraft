@@ -4,6 +4,7 @@ import dev.moui.galaxycraft.client.GalaxyOptions;
 import dev.moui.galaxycraft.music.Mixer;
 import dev.moui.galaxycraft.music.Mood;
 import dev.moui.galaxycraft.music.PcmSource;
+import dev.moui.galaxycraft.music.Playlist;
 import dev.moui.galaxycraft.music.ShuffleBag;
 import dev.moui.galaxycraft.music.StationMusic;
 import dev.moui.galaxycraft.music.SwitchGate;
@@ -31,6 +32,11 @@ public final class MusicService {
     private static StationMusic stations;
     private static boolean started, pinned, paused, queuedNext;
     private static Track playing;
+    /** The id of the song last started: where Next and Previous go from, even after it ended. */
+    private static String lastId;
+    /** Songs asked of the mixer so far; the mixer's positions describe the new one only once it has applied that many. */
+    private static int requested;
+    private static float volumeSet = -1;
     private static double clock;
     private static long lastNanos;
 
@@ -62,11 +68,16 @@ public final class MusicService {
     public static void shutdown() {
         if (!started) return;
         mixer.stop(0);
+        mixer.setPaused(false); // a pause must not outlive the world it was made in
         sink.stop();
         started = false;
         pinned = false;
         paused = false;
+        queuedNext = false;
+        ended.set(false);
         playing = null;
+        lastId = null;
+        volumeSet = -1;
         lastNanos = 0;
         gate.reset();
     }
@@ -79,7 +90,11 @@ public final class MusicService {
         lastNanos = now;
         Minecraft mc = Minecraft.getInstance();
         // getFinalSoundSourceVolume already multiplies the Music slider by the Master slider
-        mixer.setVolume(GalaxyOptions.MUSIC_VOLUME.get() / 100f * mc.options.getFinalSoundSourceVolume(SoundSource.MUSIC));
+        float volume = GalaxyOptions.MUSIC_VOLUME.get() / 100f * mc.options.getFinalSoundSourceVolume(SoundSource.MUSIC);
+        if (volume != volumeSet) { // only a change is queued: with no audio line nothing would ever drain them
+            volumeSet = volume;
+            mixer.setVolume(volume);
+        }
         if (paused) return;
 
         if (ended.getAndSet(false)) { // a non-looping song ended with nothing queued after it
@@ -90,7 +105,8 @@ public final class MusicService {
         }
         // start the next song early so a song without a loop point crossfades into the next
         double left = mixer.remainingSeconds();
-        if (!queuedNext && playing != null && left != Double.POSITIVE_INFINITY && left <= GalaxyOptions.MUSIC_CROSSFADE.get()) {
+        boolean settled = mixer.playsApplied() == requested; // `left` is the new song's once the mixer has it
+        if (!queuedNext && settled && playing != null && left != Double.POSITIVE_INFINITY && left <= GalaxyOptions.MUSIC_CROSSFADE.get()) {
             queuedNext = true;
             if (pinned) advance(1);
             else playFor(gate.current());
@@ -129,7 +145,9 @@ public final class MusicService {
         PcmSource src = library.open(t);
         if (src == null) return false;
         mixer.play(src, GalaxyOptions.MUSIC_CROSSFADE.get());
+        requested++;
         playing = t;
+        lastId = t.id();
         queuedNext = false;
         var player = Minecraft.getInstance().player;
         if (player != null) player.sendOverlayMessage(Component.translatable("music.galaxycraft.now_playing", t.title()));
@@ -160,15 +178,11 @@ public final class MusicService {
     public static void next() { advance(1); }
     public static void previous() { advance(-1); }
 
-    /** The next/previous enabled song of the library (by order); pins. */
+    /** The next/previous enabled song of the library (by order), stepping over any that will not open; pins. */
     private static void advance(int dir) {
         ensureStarted();
-        List<Track> all = library.tracks().stream().filter(Track::enabled).toList();
-        if (all.isEmpty()) return;
-        int i = playing == null ? -1 : all.indexOf(playing);
-        Track t = all.get(Math.floorMod(i + dir, all.size()));
         pinned = true;
-        start(t);
+        for (Track t : Playlist.candidates(library.tracks(), lastId, dir)) if (start(t)) return;
     }
 
     public static void setMood(Track t, Mood m) { library.replace(t, t.withMood(m)); }

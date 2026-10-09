@@ -153,4 +153,55 @@ class MixerTest {
         assertTrue(a.closed && b.closed);
         for (float v : out) assertTrue(v <= 2.0f && !Float.isNaN(v));
     }
+
+    /** A source that fails (a file removed under it) after some frames. */
+    static final class Failing implements PcmSource {
+        int left;
+        boolean closed;
+
+        Failing(int left) { this.left = left; }
+
+        @Override public int rate() { return 44100; }
+        @Override public int read(float[] out, int offset, int frames) {
+            if (left <= 0) throw new java.io.UncheckedIOException(new java.io.IOException("gone"));
+            int n = Math.min(frames, left);
+            for (int i = 0; i < n; i++) { out[(offset + i) * 2] = 0.5f; out[(offset + i) * 2 + 1] = 0.5f; }
+            left -= n;
+            return n;
+        }
+        @Override public long positionFrames() { return 0; }
+        @Override public void close() { closed = true; }
+    }
+
+    @Test void aSourceThatFailsMidStreamIsDroppedAndTheMixerGoesOn() {
+        Mixer m = new Mixer();
+        AtomicInteger ends = new AtomicInteger();
+        m.onEnd(ends::incrementAndGet);
+        Failing f = new Failing(5000);
+        m.play(f, 0);
+        for (int i = 0; i < 20; i++) render(m, 1024); // must not throw
+        assertEquals(1, ends.get(), "a failed current song counts as ended");
+        assertTrue(f.closed);
+        assertFalse(m.playing());
+        m.play(new Const(44100, 0.5f, -1), 0);
+        assertEquals(0.5f, render(m, 8)[0], 1e-5f);
+    }
+
+    @Test void aFailingOldDeckDuringACrossfadeDoesNotStopTheNewOne() {
+        Mixer m = new Mixer();
+        m.play(new Failing(100), 0);
+        render(m, 10);
+        m.play(new Const(44100, 1f, -1), 1);
+        float[] out = render(m, 50000);
+        assertEquals(1f, out[out.length - 2], 1e-3f);
+    }
+
+    @Test void countsThePlaysItHasApplied() {
+        Mixer m = new Mixer();
+        assertEquals(0, m.playsApplied());
+        m.play(new Const(44100, 1f, -1), 0);
+        assertEquals(0, m.playsApplied(), "queued, not applied until the next render");
+        render(m, 8);
+        assertEquals(1, m.playsApplied());
+    }
 }

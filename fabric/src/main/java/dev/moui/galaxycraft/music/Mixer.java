@@ -25,6 +25,12 @@ public final class Mixer {
     private volatile Runnable onEnd = () -> {};
     private volatile double position, remaining = Double.POSITIVE_INFINITY;
     private volatile boolean playing;
+    private volatile int applied;
+
+    /** How many play calls the audio side has applied: playing() and the position follow once it catches up with the calls made. */
+    public int playsApplied() {
+        return applied;
+    }
 
     public void play(PcmSource source, double fadeSeconds) {
         commands.add(() -> {
@@ -32,6 +38,7 @@ public final class Mixer {
             current = new Deck(source, fadeSeconds);
             decks.add(current);
             endSent = false;
+            applied++;
         });
     }
 
@@ -74,17 +81,24 @@ public final class Mixer {
         for (Runnable c; (c = commands.poll()) != null; ) c.run();
         Arrays.fill(out, 0, frames * 2, 0f);
         if (!paused) {
-            for (Deck d : decks) d.mixInto(out, frames, volume);
+            for (Deck d : decks) {
+                try {
+                    d.mixInto(out, frames, volume);
+                } catch (RuntimeException e) { // a file gone under a song, a corrupt ogg: drop that song, play on
+                    if (!d.failed) System.err.println("GalaxyCraft: a song stopped: " + e);
+                    d.failed = true;
+                }
+            }
             for (int i = decks.size() - 1; i >= 0; i--) {
                 Deck d = decks.get(i);
                 if (d.finished() && d != current) {
-                    d.src.close();
+                    d.close();
                     decks.remove(i);
                 }
             }
             if (current != null && current.ended() && !endSent) {
                 endSent = true;
-                current.src.close();
+                current.close();
                 decks.remove(current);
                 current = null;
                 onEnd.run();
@@ -109,6 +123,7 @@ public final class Mixer {
         private int len;
         private double pos, u, du;
         private boolean srcDone;
+        boolean failed;
 
         Deck(PcmSource src, double fadeInSeconds) {
             this.src = src;
@@ -131,11 +146,18 @@ public final class Mixer {
         }
 
         boolean ended() {
-            return srcDone && pos >= len;
+            return failed || srcDone && pos >= len;
         }
 
         boolean finished() {
             return (du < 0 && u <= 0) || ended();
+        }
+
+        void close() {
+            try {
+                src.close();
+            } catch (RuntimeException ignored) {
+            }
         }
 
         void mixInto(float[] out, int frames, float vol) {

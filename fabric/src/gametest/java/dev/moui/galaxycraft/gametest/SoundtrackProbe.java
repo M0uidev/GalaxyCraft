@@ -40,7 +40,7 @@ public final class SoundtrackProbe implements FabricClientGameTest {
             writeTone(dir.resolve("space.ast"), 440);
             writeTone(dir.resolve("planet.ast"), 660);
             Files.writeString(dir.resolve("tracks.tsv"),
-                    "s1\tSynthetic Space\tspace.ast\tsmg2\tspace\t\ttrue\np1\tSynthetic Planet\tplanet.ast\tsmg2\tplanet\t\ttrue\n");
+                    "s1\tSynthetic Space\tspace.ast\tsmg2\tspace\t\ttrue\nb0\tBroken\tmissing.ast\tsmg2\tspace\t\ttrue\np1\tSynthetic Planet\tplanet.ast\tsmg2\tplanet\t\ttrue\n");
             Files.deleteIfExists(dir.resolve("minecraft.tsv"));
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -97,6 +97,18 @@ public final class SoundtrackProbe implements FabricClientGameTest {
             ctx.runOnClient(mc2 -> MusicService.auto());
             ctx.waitTicks(5);
             check(name(ctx).equals("s1"), "SMG2 only in space plays the space song (" + name(ctx) + ")");
+
+            // 6. Next steps over a song that is not on disk.
+            ctx.runOnClient(mc2 -> MusicService.playNow(MusicService.tracks().get(0)));
+            ctx.runOnClient(mc2 -> MusicService.next());
+            check(name(ctx).equals("p1"), "Next skips a broken song (" + name(ctx) + ")");
+
+            // 7. Pause, leave the world, come back: the music is not left paused.
+            ctx.runOnClient(mc2 -> MusicService.pause(true));
+            ctx.runOnClient(mc2 -> MusicService.shutdown());
+            ctx.waitTicks(5);
+            check(name(ctx).equals("s1"), "after leaving and joining, automatic music plays again (" + name(ctx) + ")");
+            check(freq(ctx) == 440, "and is not left paused (" + freq(ctx) + ")");
         } catch (RuntimeException e) {
             fails.add("exception " + e);
             e.printStackTrace();
