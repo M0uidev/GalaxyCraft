@@ -101,7 +101,7 @@ what `gxplay.sh` does, on Linux and Windows. See [launcher/README.md](launcher/R
 Minecraft's menu opens in Dolphin's window while SMG2 boots behind it by itself, skipping its
 title and file select. Each Minecraft world is a galaxy: entering one puts you in
 **GalaxyCraftSpace** (an empty galaxy under SMG2's starry sky) on that world's planets, where you
-left off. A new world gets its home planet and a starter kit. Worlds, planets and settings are
+left off. A new world gets its home planet. Worlds, planets and settings are
 kept in `~/.local/share/galaxycraft/` (`%APPDATA%\galaxycraft\` on Windows). See
 [docs/LANZADOR.md](docs/LANZADOR.md); Windows: [docs/WINDOWS.md](docs/WINDOWS.md).
 
