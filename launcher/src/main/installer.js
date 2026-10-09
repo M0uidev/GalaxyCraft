@@ -15,6 +15,7 @@ const { fileURLToPath } = require('node:url');
 const tar = require('tar');
 const gamepack = require('../core/gamepack');
 const disc = require('../core/disc');
+const soundtrack = require('../core/soundtrack');
 const delta = require('../core/delta');
 const { downloadAll, fetchJson } = require('../core/download');
 const { ensureMinecraft } = require('./mcinstall');
@@ -22,9 +23,9 @@ const { ensureMinecraft } = require('./mcinstall');
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 const writeJson = (f, d) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(d, null, 2)); };
 
-function run(cmd, args) {
+function run(cmd, args, { timeout = 120000 } = {}) {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { windowsHide: true, timeout: 120000, maxBuffer: 16 << 20 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { windowsHide: true, timeout, maxBuffer: 16 << 20 }, (err, stdout, stderr) => {
       if (err) reject(new Error(`${path.basename(cmd)}: ${(stderr || err.message).trim().split('\n').slice(-3).join(' ')}`));
       else resolve(stdout);
     });
@@ -58,8 +59,9 @@ function fileResponse(url) {
 
 class Installer extends EventEmitter {
   constructor({ paths, fetchFn = globalThis.fetch, manifestUrl = gamepack.LATEST_URL, system = gamepack.systemKey(),
-    ensureMinecraftFn = ensureMinecraft }) {
+    ensureMinecraftFn = ensureMinecraft, soundtrackDefaults = path.join(__dirname, '..', '..', 'content', 'soundtrack.tsv') }) {
     super();
+    this.soundtrackDefaults = soundtrackDefaults;
     this.ensureMinecraftFn = ensureMinecraftFn;
     this.paths = paths;
     // file: URLs (only a game.json on this machine has them, gamepack.localManifest) are read from disk.
@@ -126,6 +128,7 @@ class Installer extends EventEmitter {
 
       // 2. The disc files, from the player's game.
       await this.makeDiscFiles(lay, sys, rom);
+      await this.makeSoundtrack(lay, sys, rom);
 
       // 3. Minecraft, Fabric and Java.
       if (minecraft) await this.minecraft(manifest);
@@ -178,6 +181,30 @@ class Installer extends EventEmitter {
     }
   }
 
+  /**
+   * The soundtrack folder (<data>/soundtrack, shared by every installation): the songs of the
+   * default catalog copied from the player's disc once, and tracks.tsv. The music is optional: a
+   * failure here is logged and never stops the install or PLAY.
+   */
+  async makeSoundtrack(lay, sys, rom) {
+    try {
+      const defaults = fs.readFileSync(this.soundtrackDefaults, 'utf8');
+      const tool = path.join(lay.dolphin, sys.tool);
+      const r = await soundtrack.install({
+        dir: path.join(this.paths.dataDir, 'soundtrack'), defaults,
+        extract: async (out) => {
+          this.progress({ phase: 'disc', label: 'Your Super Mario Galaxy 2 songs', done: 0, total: 1, bytes: 0, totalBytes: 0 });
+          await run(tool, ['extract', '-i', rom, '-s', soundtrack.DISC_DIR, '-o', out, '-q'], { timeout: 600000 });
+        },
+        onProgress: (p) => this.progress({ phase: 'disc', label: 'Your Super Mario Galaxy 2 songs', ...p, bytes: 0, totalBytes: 0 }),
+      });
+      if (r.copied) this.log(`Copied ${r.copied} songs from your Super Mario Galaxy 2`);
+      if (r.missing.length) this.log(`${r.missing.length} songs are not on your disc: ${r.missing.slice(0, 3).join(', ')}...`);
+    } catch (e) {
+      this.log(`The soundtrack could not be set up (${e.message}); the game works without it`);
+    }
+  }
+
   /** Minecraft ready to run for a manifest: { version, java, dirs }. Quick when nothing is missing. */
   minecraft(manifest, { verify = 'size' } = {}) {
     const lay = gamepack.layout(this.paths, manifest.version);
@@ -193,6 +220,7 @@ class Installer extends EventEmitter {
     if (!i) throw new Error('The game is not installed');
     const sys = i.manifest.dolphin[this.system];
     await this.makeDiscFiles(i.lay, sys, rom);
+    await this.makeSoundtrack(i.lay, sys, rom);
     writeJson(i.lay.descriptor, gamepack.descriptor(rom, i.lay.module));
     return { ...i, sys };
   }

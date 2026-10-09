@@ -1,0 +1,98 @@
+# Super Minecraft Galaxy: the default soundtrack catalog (sorted by the maker; players change theirs in the music player).
+# id	title	file	source	mood	tags	enabled
+boss01a	Boss 01 A	SMG2_boss01a_strm.ast	smg2			true
+boss01b	Boss 01 B	SMG2_boss01b_strm.ast	smg2			true
+boss02a	Boss 02 A	SMG2_boss02a_strm.ast	smg2			true
+boss02b	Boss 02 B	SMG2_boss02b_strm.ast	smg2			true
+boss03a	Boss 03 A (layered)	SMG2_boss03a_multi.ast	smg2			true
+boss03b	Boss 03 B	SMG2_boss03b_strm.ast	smg2			true
+boss05a	Boss 05 A	SMG2_boss05a_strm.ast	smg2			true
+boss05b	Boss 05 B	SMG2_boss05b_strm.ast	smg2			true
+boss06a	Boss 06 A	SMG2_boss06a_strm.ast	smg2			true
+boss06b	Boss 06 B	SMG2_boss06b_strm.ast	smg2			true
+boss07	Boss 07 (layered)	SMG2_boss07_multi.ast	smg2			true
+boss07b	Boss 07 B (layered)	SMG2_boss07b_multi.ast	smg2			true
+boss08a	Boss 08 A	SMG2_boss08a_strm.ast	smg2			true
+boss08b	Boss 08 B	SMG2_boss08b_strm.ast	smg2			true
+boss10_multi	Boss 10 (layered)	SMG2_boss10_multi.ast	smg2			true
+boss10_strm	Boss 10	SMG2_boss10_strm.ast	smg2			true
+ev_ending01	Event Ending 01	SMG2_ev_ending01_strm.ast	smg2	planet		true
+ev_epilogue01	Event Epilogue 01	SMG2_ev_epilogue01_strm.ast	smg2	space		true
+ev_glider	Event Glider	SMG2_ev_glider_strm.ast	smg2	planet		true
+ev_kinotan	Event Kinotan	SMG2_ev_kinotan_strm.ast	smg2			true
+ev_kuppabt01	Event Bowser Battle 01	SMG2_ev_kuppabt01_strm.ast	smg2			true
+ev_minigame	Event Minigame	SMG2_ev_minigame_strm.ast	smg2			true
+ev_mokku	Event Mokku	SMG2_ev_mokku_strm.ast	smg2			true
+ev_prolo02	Event Prologue 02	SMG2_ev_prolo02_strm.ast	smg2	planet		true
+ev_prolo05	Event Prologue 05	SMG2_ev_prolo05_strm.ast	smg2			true
+ev_rabbit	Event Rabbit	SMG2_ev_rabbit_strm.ast	smg2			true
+ev_starchance02	Event Star Chance 02	SMG2_ev_starchance02_strm.ast	smg2			true
+ev_starchance03	Event Star Chance 03	SMG2_ev_starchance03_strm.ast	smg2			true
+ev_starchance	Event Star Chance	SMG2_ev_starchance_strm.ast	smg2	space		true
+first_astro2	First Astro 2	SMG2_first_astro2_strm.ast	smg2			true
+first_astro	First Astro	SMG2_first_astro_strm.ast	smg2	space		true
+galaxy01	Galaxy 01 (layered)	SMG2_galaxy01_multi.ast	smg2			true
+galaxy02	Galaxy 02	SMG2_galaxy02_strm.ast	smg2	space		true
+galaxy03	Galaxy 03 (layered)	SMG2_galaxy03_multi.ast	smg2			true
+galaxy04	Galaxy 04	SMG2_galaxy04_strm.ast	smg2			true
+galaxy05	Galaxy 05	SMG2_galaxy05_strm.ast	smg2	space		true
+galaxy06	Galaxy 06	SMG2_galaxy06_strm.ast	smg2	space		true
+galaxy07	Galaxy 07	SMG2_galaxy07_strm.ast	smg2	space		true
+galaxy08	Galaxy 08	SMG2_galaxy08_strm.ast	smg2			true
+galaxy09	Galaxy 09	SMG2_galaxy09_strm.ast	smg2			true
+galaxy10	Galaxy 10	SMG2_galaxy10_strm.ast	smg2	space		true
+galaxy11	Galaxy 11	SMG2_galaxy11_strm.ast	smg2			true
+galaxy12	Galaxy 12	SMG2_galaxy12_strm.ast	smg2			true
+galaxy13	Galaxy 13	SMG2_galaxy13_strm.ast	smg2	planet		true
+galaxy14	Galaxy 14	SMG2_galaxy14_strm.ast	smg2			true
+galaxy15	Galaxy 15	SMG2_galaxy15_strm.ast	smg2			true
+galaxy16	Galaxy 16 (layered)	SMG2_galaxy16_multi.ast	smg2			true
+galaxy18	Galaxy 18	SMG2_galaxy18_strm.ast	smg2	space		true
+galaxy19	Galaxy 19	SMG2_galaxy19_strm.ast	smg2	planet		true
+galaxy20	Galaxy 20	SMG2_galaxy20_strm.ast	smg2	space		true
+galaxy21	Galaxy 21	SMG2_galaxy21_strm.ast	smg2	planet		true
+galaxy22	Galaxy 22 (layered)	SMG2_galaxy22_multi.ast	smg2			true
+galaxy23	Galaxy 23	SMG2_galaxy23_strm.ast	smg2			true
+galaxy24	Galaxy 24	SMG2_galaxy24_strm.ast	smg2			true
+galaxy24b	Galaxy 24 B	SMG2_galaxy24b_strm.ast	smg2			true
+galaxy25	Galaxy 25	SMG2_galaxy25_strm.ast	smg2	planet		true
+galaxy26	Galaxy 26	SMG2_galaxy26_strm.ast	smg2			true
+galaxy27	Galaxy 27 (layered)	SMG2_galaxy27_multi.ast	smg2			true
+galaxy28	Galaxy 28	SMG2_galaxy28_strm.ast	smg2			true
+galaxy29	Galaxy 29	SMG2_galaxy29_strm.ast	smg2			true
+galaxy30	Galaxy 30	SMG2_galaxy30_strm.ast	smg2			true
+galaxy31	Galaxy 31	SMG2_galaxy31_strm.ast	smg2			true
+galaxy32	Galaxy 32	SMG2_galaxy32_strm.ast	smg2	planet		true
+galaxy_danger	Galaxy Danger	SMG2_galaxy_danger_strm.ast	smg2			true
+galaxy_hurry	Galaxy Hurry	SMG2_galaxy_hurry_strm.ast	smg2			true
+galaxy_inter	Galaxy Intermission	SMG2_galaxy_inter_strm.ast	smg2	space		true
+jg_cometse	JG Comet	SMG2_jg_cometse_strm.ast	smg2	planet		true
+mario_ship01	Starship Mario 01	SMG2_mario_ship01_strm.ast	smg2	planet		true
+mario_ship02	Starship Mario 02	SMG2_mario_ship02_strm.ast	smg2	planet		true
+mario_ship03	Starship Mario 03	SMG2_mario_ship03_strm.ast	smg2			true
+second_astro	Second Astro	SMG2_second_astro_strm.ast	smg2			true
+staffroll	Staff Roll	SMG2_staffroll_strm.ast	smg2			true
+title	Title	SMG2_title_strm.ast	smg2			true
+worldmap00	World Map 00 (layered)	SMG2_worldmap00_multi.ast	smg2	planet		true
+worldmap01	World Map 01	SMG2_worldmap01_strm.ast	smg2			true
+worldmap02	World Map 02	SMG2_worldmap02_strm.ast	smg2			true
+worldmap03	World Map 03 (layered)	SMG2_worldmap03_multi.ast	smg2	planet		true
+worldmap04	World Map 04 (layered)	SMG2_worldmap04_multi.ast	smg2	space		true
+worldmap05	World Map 05 (layered)	SMG2_worldmap05_multi.ast	smg2			true
+worldmap06	World Map 06 (layered)	SMG2_worldmap06_multi.ast	smg2	space		true
+worldmap07	World Map 07 (layered)	SMG2_worldmap07_multi.ast	smg2			true
+worldmap08	World Map 08 (layered)	SMG2_worldmap08_multi.ast	smg2	space		true
+SMG_astroout02	SMG1 Astro Out 02	SMG_astroout02_strm.ast	smg2	planet		true
+SMG_astroout03	SMG1 Astro Out 03	SMG_astroout03_strm.ast	smg2	planet		true
+SMG_boss01a	SMG1 Boss 01 A	SMG_boss01a_strm.ast	smg2			true
+SMG_boss01b	SMG1 Boss 01 B	SMG_boss01b_strm.ast	smg2			true
+SMG_boss03a	SMG1 Boss 03 A	SMG_boss03a_strm.ast	smg2			true
+SMG_boss03b	SMG1 Boss 03 B	SMG_boss03b_strm.ast	smg2			true
+SMG_boss05a	SMG1 Boss 05 A	SMG_boss05a_strm.ast	smg2			true
+SMG_boss05b	SMG1 Boss 05 B	SMG_boss05b_strm.ast	smg2			true
+SMG_boss09a	SMG1 Boss 09 A (layered)	SMG_boss09a_multi.ast	smg2			true
+SMG_boss09b	SMG1 Boss 09 B (layered)	SMG_boss09b_multi.ast	smg2			true
+SMG_galaxy01	SMG1 Galaxy 01	SMG_galaxy01_strm.ast	smg2	space		true
+SMG_galaxy14	SMG1 Galaxy 14	SMG_galaxy14_strm.ast	smg2	space		true
+SMG_galaxy17	SMG1 Galaxy 17 (layered)	SMG_galaxy17_multi.ast	smg2	space		true
+SMG_galaxy28	SMG1 Galaxy 28	SMG_galaxy28_strm.ast	smg2	space		true

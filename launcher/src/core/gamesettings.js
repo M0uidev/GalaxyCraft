@@ -57,6 +57,37 @@ const SCHEMA = [
     key: 'particles', label: 'Game Particles', type: 'toggle', default: true,
     help: 'Minecraft\'s particles (explosions, broken blocks, hits) drawn in the game.',
   },
+  {
+    key: 'musicAuto', label: 'Automatic Music', type: 'toggle', default: true,
+    help: 'The soundtrack follows where you are: space or a planet. Off: music plays only what you pick in the music player.',
+  },
+  {
+    key: 'musicSource', label: 'Music Source', type: 'choice', default: 'BOTH',
+    help: 'Both games: Super Mario Galaxy 2 by place, Minecraft\'s music on planets. Super Mario Galaxy 2 or Minecraft: only that '
+      + 'game\'s. Random: any song of either game, wherever you are.',
+    options: [
+      { value: 'BOTH', label: 'Both games' },
+      { value: 'SMG2', label: 'Super Mario Galaxy 2' },
+      { value: 'MINECRAFT', label: 'Minecraft' },
+      { value: 'RANDOM', label: 'Random (any)' },
+    ],
+  },
+  {
+    key: 'musicCooldown', label: 'Music Cooldown', type: 'range', min: 0, max: 600, step: 5, default: 120, unit: ' s',
+    help: 'After the music changes, it will not change again for this long (0: no cooldown).',
+  },
+  {
+    key: 'musicDwell', label: 'Music Delay', type: 'range', min: 0, max: 60, step: 1, default: 5, unit: ' s',
+    help: 'How long you must stay in a new place before its music starts.',
+  },
+  {
+    key: 'musicCrossfade', label: 'Music Crossfade', type: 'range', min: 0, max: 15, step: 1, default: 4, unit: ' s',
+    help: 'How long one song takes to melt into the next (0: a cut).',
+  },
+  {
+    key: 'musicVolume', label: 'Soundtrack Volume', type: 'range', min: 0, max: 100, step: 5, default: 100, unit: '%',
+    help: 'On top of Minecraft\'s Music and Master volume.',
+  },
 ];
 
 /** A value made valid as the game would (Setting.valid): snapped, clamped, or the default. */

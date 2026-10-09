@@ -1,6 +1,7 @@
 package dev.moui.galaxycraft.client.music;
 
 import dev.moui.galaxycraft.music.AstFile;
+import dev.moui.galaxycraft.play.PlayConfig;
 import dev.moui.galaxycraft.music.AstSource;
 import dev.moui.galaxycraft.music.Catalog;
 import dev.moui.galaxycraft.music.Mood;
@@ -21,13 +22,25 @@ import net.minecraft.server.packs.resources.Resource;
 
 /** The songs the player can hear: soundtrack/tracks.tsv (SMG2) plus Minecraft's own music/game songs. */
 final class MusicLibrary {
-    /** -Dgalaxycraft.soundtrackDir points tests at a scratch folder instead of the game's. */
-    private final Path dir = System.getProperty("galaxycraft.soundtrackDir") != null
-            ? Path.of(System.getProperty("galaxycraft.soundtrackDir"))
-            : FabricLoader.getInstance().getGameDir().resolve("soundtrack");
+    /**
+     * The songs and tracks.tsv live in the launcher's data folder (soundtrack/, shared by every
+     * installation, put there from the player's disc by the launcher); -Dgalaxycraft.soundtrackDir
+     * points tests at a scratch folder. Older runs kept them in the game folder: used if that is
+     * all there is.
+     */
+    private final Path dir = pickDir();
     private final Path tsv = dir.resolve("tracks.tsv");
     private final Path mcTsv = dir.resolve("minecraft.tsv");
     private List<Track> tracks = List.of();
+
+    private static Path pickDir() {
+        String own = System.getProperty("galaxycraft.soundtrackDir");
+        if (own != null) return Path.of(own);
+        Path shared = PlayConfig.dataDir(System.getenv(), Map.of("user.home", System.getProperty("user.home", "")),
+                System.getProperty("os.name", "").toLowerCase().contains("win")).resolve("soundtrack");
+        Path inGame = FabricLoader.getInstance().getGameDir().resolve("soundtrack");
+        return !Files.isDirectory(shared) && Files.isDirectory(inGame) ? inGame : shared;
+    }
 
     List<Track> tracks() {
         return tracks;
