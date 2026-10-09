@@ -134,10 +134,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 });
         // A voxel planet's chunks arrive unrotated, placed at its center: their faces collide exactly.
         GalaxyCraft.FIELD.setBlockParts(m -> m[0] == 1 && m[5] == 1 && m[10] == 1 && m[1] == 0 && m[2] == 0
-                && m[4] == 0 && m[6] == 0 && m[8] == 0 && m[9] == 0 && PlanetClient.planets().stream().anyMatch(
+                && m[4] == 0 && m[6] == 0 && m[8] == 0 && m[9] == 0 && PlanetClient.bodies().stream().anyMatch(
                         s -> s != null && s.center() != null && s.center().distance(m[3], m[7], m[11]) < 1));
         GalaxyCraft.FIELD.setBlockSource((f, q, out) -> {
-            for (PlanetSession s : PlanetClient.planets())
+            for (PlanetSession s : PlanetClient.bodies())
                 if (s != null && s.planet() != null && s.center() != null)
                     dev.moui.galaxycraft.voxel.PlanetCollision.boxes(s.planet(), s::galOf, s::localOf, f, q, out);
         });
@@ -692,7 +692,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     /** The block grid of the planet the player is in (PlanetSession.gridAt), if any. */
     private static Vector3d[] planetGrid(LocalPlayer player) {
         Vector3d feetGal = sneakAnchor != null ? sneakAnchor : frame.toGal(vec(player.position().add(0, 0.5, 0)));
-        for (PlanetSession s : PlanetClient.planets()) {
+        for (PlanetSession s : PlanetClient.bodies()) {
             if (s == null || s.planet() == null) continue;
             Vector3d[] grid = s.gridAt(feetGal);
             if (grid != null) return grid;
@@ -725,7 +725,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         Vector3d anchor = null;
         for (double[] o : new double[][] {{0, 0}, {0.29, 0.29}, {0.29, -0.29}, {-0.29, 0.29}, {-0.29, -0.29}}) {
             Vector3d under = frame.toGal(vec(feet.add(o[0], -0.3, o[1])));
-            for (PlanetSession s : PlanetClient.planets()) {
+            for (PlanetSession s : PlanetClient.bodies()) {
                 if (s == null || s.planet() == null) continue;
                 int c = s.cellAt(under);
                 if (c < 0 || !s.planet().info(c).collides()) continue;
