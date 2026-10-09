@@ -16,7 +16,6 @@
 		"MinecraftMixin",
 		"ModelPartAccessor",
 		"OptionsMixin",
-		"ScreenshotMixin",
 		"WindowHiddenMixin"
 	],
 	"injectors": {
