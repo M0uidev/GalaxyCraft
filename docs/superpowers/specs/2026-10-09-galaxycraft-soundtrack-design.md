@@ -41,19 +41,23 @@ without reclassifying.
 
 ### Engine (`dev.moui.galaxycraft.music`)
 
-One streaming engine on Minecraft's OpenAL (LWJGL is already loaded; no new libraries).
+A small software mixer feeding one Java Sound line (the baseline mod's approach, and robust: it
+never touches Minecraft's OpenAL context from another thread). The mixer is pure Java, so it is
+unit tested without audio hardware.
 
-- `AstFile`: parses the header (channels, rate, samples, loop start/end), reads PCM frames, byte
-  swaps to little-endian. Pure Java, unit tested on a synthetic file.
-- `PcmStream`: a track being played. Produces buffers; at the loop end it continues at the loop
-  start inside the same buffer (sample accurate, no gap). Tracks without loop flag stop (or go to
-  the next track).
-- `MusicEngine`: two decks (A and B). Each deck is an OpenAL source with a queue of ~4 buffers
-  of ~0.5 s, refilled by one low-priority streaming thread. Gain per deck is set every client tick
-  and ramped per frame. Pause is `alSourcePause` (true pause/resume). Master gain = soundtrack
-  volume x Minecraft's Music slider x master slider. One thread, no allocation per buffer (buffers
-  recycled), so no GC spikes while flying.
-- `Crossfade`: pure equal-power curves (cos/sin) for a given duration; unit tested.
+- `AstFile`: parses the header (channels, rate, frames, loop start/end) and a block index
+  (`BLCK` chunks, per-channel PCM16 big-endian). Pure Java, tested on a synthetic file.
+- `PcmSource`: anything that yields stereo float frames: `AstSource` (loops at the file's own loop
+  points inside one read, so no gap) and, in the client, `OggSource` (Minecraft's own
+  `JOrbisAudioStream` over a music `.ogg`).
+- `Mixer`: decks (a deck = a source + linear resampler to 44.1 kHz + fade). `play(source, fade)`
+  fades the new deck in and every other out with equal-power curves (sin/cos), so a crossfade is
+  sample accurate. Pause stops advancing (true pause/resume). Master volume = soundtrack volume
+  x Minecraft's Music x Master sliders. Commands from the game thread are queued and applied at
+  the start of each render, so no locks in the audio path; buffers are reused (no allocation per
+  block, no GC spikes while flying).
+- `JavaSoundSink`: a daemon thread that calls `Mixer.render` and writes 16-bit stereo to a
+  `SourceDataLine`. No audio device: music is off, the game carries on.
 
 ### Mood logic
 
@@ -91,8 +95,8 @@ In every source the cooldown, dwell and crossfade apply (Random has no moods, so
 changes track when one ends, or when the player skips). Minecraft's songs are `source: "minecraft"`
 catalog entries (mood `planet` by default; in "Minecraft only" and "Random" the mood is ignored).
 They are played by **our engine**, not by vanilla's `MusicManager`: the engine decodes Minecraft's
-own `sounds/music/**` ogg files (found through the resource manager, so a resource pack's music
-is respected) with LWJGL's `STBVorbis` pull API, streaming, no whole-file decode. That gives the
+own `sounds/music/**` ogg files (found through the sound manager's `music.*` events, so a resource pack's music
+is respected) with vanilla's own `JOrbisAudioStream` (streaming, no whole-file decode). That gives the
 two games one crossfade, true pause, one volume and one player list. The mixin
 silences vanilla's `MusicManager` (and its jukebox/menu music stays untouched). The plan must
 verify that the resource manager exposes those files; fallback: read the files from the assets
@@ -100,13 +104,17 @@ index in the game directory, the way the baseline mod does.
 
 ### Catalog and settings
 
-`soundtrack/tracks.json` in the game directory (written by the install step, edited by the
+`soundtrack/tracks.tsv` in the game directory (written by the install step, edited by the
 player). One entry per song:
 
-```json
-{ "id": "galaxy02", "title": "Yoshi Star Galaxy", "file": "SMG2_galaxy02_strm.ast",
-  "mood": "planet", "tags": [], "enabled": true }
 ```
+# id <TAB> title <TAB> file <TAB> source <TAB> mood <TAB> tags <TAB> enabled
+galaxy02	Yoshi Star Galaxy	SMG2_galaxy02_strm.ast	smg2	planet		true
+```
+
+(A tab-separated text file: hand-editable and read with no libraries, so the unit tests need
+none.) `source` is `smg2` or `minecraft`; `mood` is `space`, `planet` or empty; `tags` is a
+comma-separated list.
 
 `mood` is `space`, `planet` or `null` (not in any automatic pool, still in the manual library).
 Tracks not yet classified are `null`, so nothing plays by itself that the user did not choose.
@@ -146,9 +154,9 @@ Mixin: Minecraft's `MusicManager` stops starting its own tracks while automatic 
 
 ### Install (later, once classified)
 
-The launcher's disc step copies the `.ast` files listed in `tracks.json` from `AudioRes/Stream` to
+The launcher's disc step copies the `.ast` files listed in `tracks.tsv` from `AudioRes/Stream` to
 `<game>/soundtrack/` (about 12 MB per song). Nothing is copied until the user finishes classifying;
-until then the engine is developed and tested against a synthetic `.ast` and the 3 Starship Mario
+(The catalog and files are written by the install step; until then the engine is developed and tested against a synthetic `.ast` and the 3 Starship Mario
 files extracted into the scratchpad.
 
 ## Testing
