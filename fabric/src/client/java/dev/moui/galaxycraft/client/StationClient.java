@@ -122,15 +122,16 @@ public final class StationClient {
             sinceSave = 0;
             saveAll();
         }
-        if (++sinceScan < SCAN_TICKS && !rescan || marioUniverse == null) return;
+        if (++sinceScan < SCAN_TICKS && !rescan || marioUniverse == null && wanted == null) return;
         sinceScan = 0;
         if (rescan) headers = store.list();
         rescan = false;
         for (Active a : new ArrayList<>(active))
-            if (!stage.equals(a.station().stage) || blocks(a.station().center.distance(marioUniverse)) > INACTIVE) deactivate(a);
+            if (!stage.equals(a.station().stage) || !a.station().id.equals(wanted) && marioUniverse != null
+                    && blocks(a.station().center.distance(marioUniverse)) > INACTIVE) deactivate(a);
         for (StationStore.Header h : headers) {
             if (!stage.equals(h.stage()) || active.size() >= Station.MAX_ACTIVE || isActive(h.id())) continue;
-            if (blocks(h.center().distance(marioUniverse)) > ACTIVE) continue;
+            if (!h.id().equals(wanted) && (marioUniverse == null || blocks(h.center().distance(marioUniverse)) > ACTIVE)) continue;
             try {
                 Station s = store.read(h.id(), blocks());
                 activate(s);
@@ -139,6 +140,53 @@ public final class StationClient {
                 GalaxyCraft.LOG.warn("Could not load station {}: {}", h.id(), e.toString());
             }
         }
+    }
+
+    /** The station kept in the scene for the player to land on (not dropped for being far off), or null. */
+    private static String wanted;
+
+    /**
+     * The player is about to land on this station (a saved spot): it comes in at the next scan
+     * wherever it is, and stays until {@link #landed()}. False: no such station placed in this stage.
+     */
+    static boolean want(String id) {
+        if (store == null || id == null) return false;
+        if (header(id).isEmpty()) return false;
+        wanted = id;
+        rescan = true;
+        return true;
+    }
+
+    /** The player landed (or gave up): the station is dropped like any far one. */
+    static void landed() {
+        wanted = null;
+    }
+
+    /** Where a placed station of the stage is, universe units (null: none such). */
+    static Vector3d centerOf(String id) {
+        return header(id).map(h -> new Vector3d(h.center())).orElse(null);
+    }
+
+    private static Optional<StationStore.Header> header(String id) {
+        String stage = stage();
+        if (store == null || stage == null) return Optional.empty();
+        for (StationStore.Header h : store.list())
+            if (h.id().equals(id) && stage.equals(h.stage())) return Optional.of(h);
+        return Optional.empty();
+    }
+
+    /** The active station's session by id, or null. */
+    static PlanetSession sessionOf(String id) {
+        for (Active a : active) if (a.station().id.equals(id)) return a.session();
+        return null;
+    }
+
+    /** The active station whose gravity box has this galaxy point (units) inside, or null. */
+    static Station standingOn(Vector3d galPoint) {
+        Vector3d blocks = new Vector3d(galPoint).mul(GravityFrame.SCALE);
+        for (Active a : active)
+            if (a.session().body(GravityFrame.SCALE).outside(blocks) <= 0) return a.station();
+        return null;
     }
 
     private static boolean isActive(String id) {
