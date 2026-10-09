@@ -93,6 +93,7 @@ struct Planet
   f32 surface, occluder, mario_radius;
   PointGravity* gravity;
   ParallelGravity* flat;  // a station's box gravity (GXC_PLANET_FLAT), from gFlat; 0 for a planet
+  gxc::ShellStretch stretch;  // a station's shell easing to its grown box (drawn only)
   Slot* slots;
   u32 slot_count;
   u32* drawn;
@@ -885,7 +886,22 @@ public:
     p->surface = in.surface;
     p->occluder = 0.f;
     p->mario_radius = in.mario_radius;
+    f32 before[12];
+    const bool was_on = p->flat->mActivated;
+    for (int r = 0; r < 3; r++)
+      for (int c = 0; c < 4; c++)
+        before[4 * r + c] = p->flat->mLocalMtx.mMtx[r][c];
     FlatOn(p->flat, in);
+    if (!was_on)
+      memset(&p->stretch, 0, sizeof(p->stretch));
+    else
+    {
+      f32 after[12];
+      for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 4; c++)
+          after[4 * r + c] = p->flat->mLocalMtx.mMtx[r][c];
+      gxc::ShellStretchStart(p->stretch, before, after);  // the box grew: the shell stretches to it
+    }
     mTranslation = TVec3f(p->center[0], p->center[1], p->center[2]);
     if (gTeleportPending && (gPendingTeleport.planet == 0 || gPendingTeleport.planet == p->id))
       Teleport(*p, gPendingTeleport);
@@ -1292,7 +1308,10 @@ public:
     if (p.flat)
     {
       // The box's matrix: its axes times its half sizes, then its middle.
-      const f32(*b)[4] = p.flat->mLocalMtx.mMtx;
+      f32 b[3][4];  // the gravity's box plus the stretch still to ease (the drawn box)
+      for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 4; c++)
+          b[r][c] = p.flat->mLocalMtx.mMtx[r][c] + p.stretch.resid[4 * r + c];
       const f32 d[3] = {cam.x - b[0][3], cam.y - b[1][3], cam.z - b[2][3]};
       *outside = -1.0e30f;
       for (int k = 0; k < 3; k++)
@@ -1367,7 +1386,13 @@ public:
       f32 m[12], outside;
       if (!p.id || !Shell(p, view, cam, m, &outside))
         continue;
-      const f32 a = SHELL_ALPHA * gxc::ShellShown(outside, SHELL_FADE, in_any);
+      // A station's shell stretching glows even where it would fade out: the player sees it grow.
+      f32 shown = gxc::ShellShown(outside, SHELL_FADE, in_any);
+      if (p.flat && p.stretch.glow > shown)
+        shown = p.stretch.glow;
+      const f32 a = SHELL_ALPHA * shown;
+      if (p.flat)
+        gxc::ShellStretchStep(const_cast<Planet&>(p).stretch);
       if (a < 1.f)
         continue;
       if (!set)
