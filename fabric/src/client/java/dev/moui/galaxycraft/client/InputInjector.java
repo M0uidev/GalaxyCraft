@@ -31,7 +31,7 @@ final class InputInjector {
             int keycode = SDLKeyboard.SDL_GetKeyFromScancode(e.code(), (short) mods, true);
             if (e.code() == SC_F6 && e.down() && mc.gui.screen() == null) GalaxyCraftClient.toggleMovement();
             if (e.code() == Warp.SC_K && e.down() && mc.gui.screen() == null) Warp.key(mc);
-            if (e.code() == Warp.SC_M && e.down() && mc.gui.screen() == null) Warp.map(mc);
+            if (e.code() == Warp.SC_N && e.down() && mc.gui.screen() == null) Warp.map(mc);
             mc.keyboardHandler.keyPress(window, e.down() ? PRESS : RELEASE, new KeyEvent(e.code(), keycode, mods));
         }
         for (InputDiff.KeyEvent e : InputDiff.buttons(prev.buttons(), cur.buttons())) {
