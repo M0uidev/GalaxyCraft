@@ -64,14 +64,29 @@ stop_minecraft
 # the GPU on one thread and leaves no headroom on planets.
 # Background input / hotkeys without focus, for this run only (-C is not saved): on Hyprland,
 # Dolphin's window can hold the compositor's focus without Qt noticing.
+# The Mario Model setting (Steve's body or the original Mario) picks which Mario the game loads, so it
+# is read here, at the start: change it in Super Minecraft Galaxy's settings and play again.
+MODEL=galaxycraft
+grep -qi '^marioModel=original' "$GAME_DIR/config/galaxycraft.properties" 2> /dev/null && MODEL=galaxycraft-mario
+# Picture Quality (a Super Minecraft Galaxy setting; the same table as launcher/src/core/videoquality.js):
+# Dolphin's internal resolution, MSAA and anisotropic filtering, for this run only.
+QUALITY=$(sed -n 's/^[[:space:]]*videoQuality[[:space:]]*=[[:space:]]*\([A-Za-z]*\).*/\1/p' "$GAME_DIR/config/galaxycraft.properties" 2> /dev/null | tr a-z A-Z)
+case "$QUALITY" in
+  LOW) VQ="1 1 0" ;;
+  MEDIUM) VQ="2 2 2" ;;
+  ULTRA) VQ="4 4 3" ;;
+  *) VQ="3 4 3" ;; # High, the default
+esac
+read -r VRES VMSAA VANISO <<< "$VQ"
+VIDEO=(-C "Graphics.Settings.InternalResolution=$VRES" -C "Graphics.Settings.MSAA=$VMSAA" -C "Graphics.Enhancements.MaxAnisotropy=$VANISO")
 GALAXYCRAFT=1 GALAXYCRAFT_BOOT=space dolphin/build/Binaries/dolphin-emu -u "$DOLPHIN_DIR" \
-  -e syati/build/galaxycraft.json \
+  -e "syati/build/$MODEL.json" \
   -C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False \
   -C Dolphin.Core.RAMOverrideEnable=True -C Dolphin.Core.MEM2Size=268435456 -C Dolphin.Core.CPUThread=True \
-  -C Dolphin.Interface.ConfirmStop=False &
+  -C Dolphin.Interface.ConfirmStop=False "${VIDEO[@]}" &
 DOLPHIN=$!
 # Minecraft itself (not a game test): its title screen, its worlds, its options, kept between runs.
-(cd fabric && exec ./gradlew runClient -PgalaxycraftHidden -PgalaxycraftGameDir="$GAME_DIR" \
+(cd fabric && exec ./gradlew runClient -PgalaxycraftHidden -PgalaxycraftGameDir="$GAME_DIR" ${GXC_TRACE_BODIES:+-PgalaxycraftTraceBodies} \
   --console=plain -q) &
 MINECRAFT=$!
 trap 'kill $DOLPHIN $MINECRAFT 2> /dev/null' INT TERM

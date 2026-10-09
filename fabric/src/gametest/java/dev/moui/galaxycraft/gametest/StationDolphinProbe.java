@@ -37,7 +37,7 @@ public final class StationDolphinProbe implements FabricClientGameTest {
     /** GxcMailbox.anchor_pos: Mario's position. */
     private static final int MBX_MARIO = 36;
     /** Empty space: this many blocks above the stage. */
-    private static final double SPACE_UP = 3000;
+    private static final double SPACE_UP = Integer.getInteger("galaxycraft.stationUp", 3000);
     private boolean failed;
 
     @Override
@@ -62,6 +62,16 @@ public final class StationDolphinProbe implements FabricClientGameTest {
             Vector3d space = new Vector3d(0, 1, 0).mul(units(SPACE_UP)).add(home);
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(space));
             ctx.waitTicks(60);
+            int pin = Integer.getInteger("galaxycraft.stationPin", 0);
+            if (pin != 0) { // the floating origin pinned this many blocks (on x) from the station: the real galaxy's case
+                Vector3d at = new Vector3d(space).mul(GravityFrame.SCALE).add(pin, 0, 0); // blocks from the universe's (0, 0, 0)
+                int moves = ctx.computeOnClient(mc -> dev.moui.galaxycraft.client.UniverseClient.moves());
+                ctx.runOnClient(mc -> dev.moui.galaxycraft.client.UniverseClient.pin(at));
+                for (int i = 0; i < 600 && ctx.computeOnClient(mc -> dev.moui.galaxycraft.client.UniverseClient.moves()) == moves; i++)
+                    waitReal(ctx, 100);
+                ctx.waitTicks(40);
+                log("origin pinned: " + ctx.computeOnClient(mc -> dev.moui.galaxycraft.universe.GameOrigin.offset()));
+            }
             check(ctx.computeOnClient(mc -> GalaxyCraftClient.inVoid()), "far above the stage is space");
             int partsEmpty = parts();
 

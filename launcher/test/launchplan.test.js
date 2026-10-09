@@ -77,3 +77,11 @@ test('Dolphin runs in batch mode (no main window) in the dev plan and the player
     }
   }
 });
+
+test('Picture Quality becomes Dolphin graphics settings (High when unset)', () => {
+  const { videoArgs, levelOf } = require('../src/core/videoquality');
+  assert.deepEqual(videoArgs(''), ['-C', 'Graphics.Settings.InternalResolution=3', '-C', 'Graphics.Settings.MSAA=4', '-C', 'Graphics.Enhancements.MaxAnisotropy=3']);
+  assert.equal(levelOf('videoQuality=LOW\n'), 'LOW');
+  assert.equal(levelOf('videoQuality=nonsense'), 'HIGH');
+  assert.deepEqual(videoArgs('videoQuality=LOW')[1], 'Graphics.Settings.InternalResolution=1');
+});

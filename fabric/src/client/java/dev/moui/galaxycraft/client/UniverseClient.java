@@ -46,9 +46,11 @@ public final class UniverseClient {
     private static Universe.Sector starsSector;
     private static double starsNearest;
     private static int starsSent;
-    /** Systems within this many sectors are stars; nearer than STAR_SKIP_BLOCKS their planets show instead. */
+    /** Systems within this many sectors are stars (fading as they open into their planets, FarSight.opened). */
     static final int STAR_SECTORS = 8;
-    static final double STAR_SKIP_BLOCKS = GalaxyStream.LOAD_BLOCKS;
+    /** Ticks between two sends of the star field at least. */
+    static final int STARS_EVERY = 5;
+    private static int starsTicks;
     /** The epoch the game said its last reading is in (it echoes a move once it made it). */
     private static int gameEpoch;
 
@@ -143,24 +145,30 @@ public final class UniverseClient {
     }
 
     /**
-     * The other systems on the sky, again when Mario changes sector or has moved a tenth of the way to
-     * the nearest star (their directions shift: parallax).
+     * The other systems on the sky and the far planets too small for their far view, as points of
+     * light; again when Mario changes sector or has moved a tenth of the way to the nearest point
+     * (their directions shift: parallax), at most every STARS_EVERY ticks. A system's star fades
+     * as it opens into its planets.
      */
     private static void stars(BridgeClient bridge, Vector3d mario) {
+        if (++starsTicks < STARS_EVERY && starsFrom != null) return;
         UPos at = UPos.of(mario);
         Universe.Sector sector = Universe.sectorOf(at);
         if (starsFrom != null && sector.equals(starsSector) && starsFrom.distance(mario) < starsNearest / 10) return;
+        GalaxyStream stream = PlanetClient.stream();
         List<Universe.Star> stars = starsHidden ? List.of() : universe.around(at, STAR_SECTORS);
-        byte[] m = StarField.message(stars, at, STAR_SKIP_BLOCKS, UNITS);
+        List<StarField.Dot> dots = starsHidden || stream == null ? List.of() : stream.dots(mario);
+        java.util.function.ToDoubleFunction<Universe.Star> opened = s -> stream != null && stream.knows(s.sector())
+                ? dev.moui.galaxycraft.voxel.FarSight.opened(s.center().minus(at).length() / UNITS) : 0;
+        byte[] m = StarField.message(stars, opened, dots, at, UNITS);
         if (!bridge.send(Layout.MSG_STARS, m)) return;
+        starsTicks = 0;
         starsFrom = new Vector3d(mario);
         starsSector = sector;
         starsSent = java.nio.ByteBuffer.wrap(m).getInt();
         starsNearest = Double.MAX_VALUE;
-        for (Universe.Star s : stars) {
-            double d = s.center().minus(at).length();
-            if (d >= STAR_SKIP_BLOCKS * UNITS) starsNearest = Math.min(starsNearest, d);
-        }
+        for (Universe.Star s : stars) starsNearest = Math.min(starsNearest, s.center().minus(at).length());
+        for (StarField.Dot d : dots) starsNearest = Math.min(starsNearest, d.center().minus(at).length());
     }
 
     private static void move(BridgeClient bridge, UPos goal) {

@@ -18,6 +18,7 @@ import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.view.CameraDistance;
 import dev.moui.galaxycraft.view.CameraMath;
 import dev.moui.galaxycraft.view.IntroCamera;
+import dev.moui.galaxycraft.universe.GameOrigin;
 import dev.moui.galaxycraft.view.View;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
@@ -103,7 +104,16 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         dev.moui.galaxycraft.station.StationHooks.set(StationClient.HOOKS);
         bridge = new BridgeClient(Path.of(Layout.SHM_PATH), () -> System.nanoTime() / 1_000_000L,
                 new BridgeClient.PartListener() {
-                    @Override public void onUpsert(int partId, double[] mtx, byte[] kcl) {
+                    @Override public void onUpsert(int partId, double[] gameMtx, byte[] kcl) {
+                        // The game's parts are in its floats, relative to the floating origin; the field keeps
+                        // them in the universe's units, as the player's frame is (a part from an epoch too
+                        // old to place is left out: its next record comes in the new one).
+                        double[] mtx = gameMtx.clone();
+                        Vector3d at = GameOrigin.fromGame(new Vector3d(mtx[3], mtx[7], mtx[11]), UniverseClient.gameEpoch());
+                        if (at == null) return;
+                        mtx[3] = at.x;
+                        mtx[7] = at.y;
+                        mtx[11] = at.z;
                         try {
                             GalaxyCraft.FIELD.upsertPart(partId, mtx, kcl);
                         } catch (IllegalArgumentException e) {
@@ -124,10 +134,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 });
         // A voxel planet's chunks arrive unrotated, placed at its center: their faces collide exactly.
         GalaxyCraft.FIELD.setBlockParts(m -> m[0] == 1 && m[5] == 1 && m[10] == 1 && m[1] == 0 && m[2] == 0
-                && m[4] == 0 && m[6] == 0 && m[8] == 0 && m[9] == 0 && PlanetClient.planets().stream().anyMatch(
+                && m[4] == 0 && m[6] == 0 && m[8] == 0 && m[9] == 0 && PlanetClient.bodies().stream().anyMatch(
                         s -> s != null && s.center() != null && s.center().distance(m[3], m[7], m[11]) < 1));
         GalaxyCraft.FIELD.setBlockSource((f, q, out) -> {
-            for (PlanetSession s : PlanetClient.planets())
+            for (PlanetSession s : PlanetClient.bodies())
                 if (s != null && s.planet() != null && s.center() != null)
                     dev.moui.galaxycraft.voxel.PlanetCollision.boxes(s.planet(), s::galOf, s::localOf, f, q, out);
         });
@@ -135,6 +145,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(GalaxyCraftClient::afterTick);
         ClientTickEvents.END_CLIENT_TICK.register(PlanetEditorScreen::openIfRequested);
         ClientTickEvents.END_CLIENT_TICK.register(client -> { // after the chat that ran the command has closed
+            if (panoramaRequested && client.gui.screen() == null) {
+                panoramaRequested = false;
+                if (!PanoramaCapture.start(client)) say("a panorama needs the game running in a world");
+            }
             if (settingsRequested && client.gui.screen() == null) {
                 settingsRequested = false;
                 client.gui.setScreen(new GalaxySettingsScreen(null));
@@ -148,8 +162,14 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
             PlanetClient.leaveWorld(bridge);
             resetFrame();
+            dev.moui.galaxycraft.client.music.MusicService.shutdown();
         }));
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> DolphinStarter.stop());
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> dev.moui.galaxycraft.client.music.MusicService.shutdown());
+        dev.moui.galaxycraft.client.music.MusicKeys.register();
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (client.player != null && client.level != null) dev.moui.galaxycraft.client.music.MusicService.tick();
+        });
         ClientTickEvents.END_CLIENT_TICK.register(DolphinStarter::keepScreen);
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             client.options.cloudStatus().set(CloudStatus.OFF); // see OptionsMixin
@@ -158,12 +178,18 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             if (dolphinUp && Boolean.getBoolean("galaxycraft.hidden")) { // Dolphin shows the overlay instead
                 client.options.pauseOnLostFocus = false; // hidden, never focused: hostFocused pauses
                 SDLVideo.SDL_HideWindow(client.getWindow().handle());
+            } else if (!dolphinUp && Boolean.getBoolean("galaxycraft.hidden")) {
+                SDLVideo.SDL_ShowWindow(client.getWindow().handle()); // created hidden (WindowHiddenMixin): no Dolphin to show it
             }
         });
         GalaxyOptions.init();
         PauseMenu.register();
         TitleMenu.register();
         CreateWorldDefaults.register();
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("panorama").executes(c -> {
+            panoramaRequested = true; // the chat that ran the command is still open: the capture starts once it has closed
+            return 1;
+        })));
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("fly").executes(c -> {
             toggleFlying();
             return 1;
@@ -233,6 +259,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     }
 
     private static boolean settingsRequested;
+    private static boolean panoramaRequested;
 
     /** While a host is linked, Minecraft renders a transparent overlay and exports it. */
     public static boolean exportingOverlay() {
@@ -254,7 +281,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt)), pt) : null,
                 walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
         SkinClient.frame(bridge);
-        bridge.input().ifPresentOrElse(in -> input.apply(Minecraft.getInstance(), in), input::reset);
+        bridge.input().ifPresentOrElse(in -> {
+            if (PanoramaCapture.active()) input.reset(); // standing still for the six shots
+            else input.apply(Minecraft.getInstance(), in);
+        }, input::reset);
         bridge.pointer().ifPresentOrElse(p -> {
             hostFocused(mc, !p.background());
             input.applyPointer(mc, p);
@@ -327,8 +357,12 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     /** Super Mario Galaxy 2 behind Minecraft's menus: booting, ready (in GalaxyCraftSpace), or no Dolphin. */
     static String smg2Status() {
         if (!bridge.linked()) return "Super Mario Galaxy 2: Dolphin is not running";
-        return bridge.spaceReady() || dev.moui.galaxycraft.proto.Layout.SPACE_STAGE.equals(bridge.stage()) ? "Super Mario Galaxy 2: ready"
-                : "Super Mario Galaxy 2: starting...";
+        return smg2Ready() ? "Super Mario Galaxy 2: ready" : "Super Mario Galaxy 2: starting...";
+    }
+
+    /** Super Mario Galaxy 2 is in GalaxyCraftSpace, ready for a world's planets. */
+    static boolean smg2Ready() {
+        return bridge.spaceReady() || dev.moui.galaxycraft.proto.Layout.SPACE_STAGE.equals(bridge.stage());
     }
 
     public static boolean linked() {
@@ -658,7 +692,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     /** The block grid of the planet the player is in (PlanetSession.gridAt), if any. */
     private static Vector3d[] planetGrid(LocalPlayer player) {
         Vector3d feetGal = sneakAnchor != null ? sneakAnchor : frame.toGal(vec(player.position().add(0, 0.5, 0)));
-        for (PlanetSession s : PlanetClient.planets()) {
+        for (PlanetSession s : PlanetClient.bodies()) {
             if (s == null || s.planet() == null) continue;
             Vector3d[] grid = s.gridAt(feetGal);
             if (grid != null) return grid;
@@ -691,7 +725,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         Vector3d anchor = null;
         for (double[] o : new double[][] {{0, 0}, {0.29, 0.29}, {0.29, -0.29}, {-0.29, 0.29}, {-0.29, -0.29}}) {
             Vector3d under = frame.toGal(vec(feet.add(o[0], -0.3, o[1])));
-            for (PlanetSession s : PlanetClient.planets()) {
+            for (PlanetSession s : PlanetClient.bodies()) {
                 if (s == null || s.planet() == null) continue;
                 int c = s.cellAt(under);
                 if (c < 0 || !s.planet().info(c).collides()) continue;
@@ -854,8 +888,18 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 : frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
         Vector3d up = camUpGal != null ? camUpGal : frame.upGal();
         Vector3d offset = camOffsetGal != null ? camOffsetGal : frame.upGal().mul(eye);
+        float fov = client.options.fov().get().floatValue();
+        int viewId = view().protocolId();
+        if (PanoramaCapture.active()) { // one face of a panorama: from the eyes, 90 degrees
+            Vector3d[] cam = PanoramaCapture.camera();
+            look = frame.dirToGal(cam[0]);
+            up = frame.dirToGal(cam[1]);
+            fov = 90f;
+            viewId = View.FIRST.protocolId();
+            if (view() != View.FIRST) offset = frame.upGal().mul(eye); // not behind or in front of the player
+        }
         bridge.sendPlayer(new Seqlock.PlayerOut(++frameId, frame.toGal(vec(player.position())), look, up,
-                client.options.fov().get().floatValue(), eye, player.onGround(), offset, view().protocolId(), frameScene,
+                fov, eye, player.onGround(), offset, viewId, frameScene,
                 PlanetClient.itemActive(player), client.gui.screen() != null, flying,
                 client.debugEntries.isCurrentlyEnabled(DebugScreenEntries.ENTITY_HITBOXES), ownPhysics(), System.nanoTime() - plusUntil < 0, mcFeel()));
     }

@@ -68,6 +68,9 @@ public:
   bool Following() const { return m_following; }
   // Mario is playable: game frames within the last 30 ticks, gravity, no cutscene. Else a menu.
   bool InGame() const { return m_in_game; }
+  // Mario alive and playable: InGame, or out in the void of GalaxyCraftSpace (no gravity, which InGame
+  // takes for a menu): the mouse turns the view there too, and the star pointer stays hidden.
+  bool Playing() const { return m_playing; }
   // A cutscene owns Mario and the camera (game frames within the last 30 ticks, DEMO).
   bool Cutscene() const { return m_cutscene; }
   // Escape is Minecraft's (its screen closes, or its pause menu opens) rather than SMG2's + button:
@@ -152,6 +155,7 @@ private:
   std::optional<PlayerState> m_player;
   bool m_following = false;
   bool m_in_game = false;
+  bool m_playing = false;
   bool m_cutscene = false;
   bool m_galaxy_view = false;
   std::optional<u32> m_game_seq;

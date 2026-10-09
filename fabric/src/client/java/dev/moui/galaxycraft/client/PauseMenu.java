@@ -14,8 +14,8 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 
 /**
  * Esc opens Minecraft's own pause menu (Dolphin gives Escape to Minecraft while Mario is
- * playable), with a row of GalaxyCraft's above Options...: Super Minecraft Galaxy... opens
- * {@link GalaxySettingsScreen}, SMG2 Menu presses the + button that Escape no longer does.
+ * playable), with a Super Minecraft Galaxy... button above Options... that opens
+ * {@link GalaxySettingsScreen}.
  */
 final class PauseMenu {
     /** The pause menu's rows are this far apart, pixels. */
@@ -32,30 +32,25 @@ final class PauseMenu {
     private static void addButtons(Minecraft mc, Screen pause) {
         List<AbstractWidget> buttons = Screens.getWidgets(pause);
         if (buttons.isEmpty()) return; // F3+Esc: paused without a menu
-        // A row of their own where Options... and World Options... are, those and the rest pushed
-        // down a row; without Options... (another version's menu), the top left corner.
+        // A row of its own where Options... is, the rest pushed down a row; with no room for the
+        // row (large GUI scale), or without Options... (another version's menu), the top left corner.
         AbstractWidget options = buttons.stream().filter(w -> key(w, "menu.options")).findFirst().orElse(null);
-        int[][] at;
+        int x = 4, y = 4, w = 120;
         if (options != null) {
-            int y = options.getY(), w = options.getWidth();
-            for (AbstractWidget b : buttons)
-                if (b.getY() >= y) b.setY(b.getY() + ROW);
-            int right = buttons.stream().filter(b -> b.getY() == y + ROW && b != options).mapToInt(AbstractWidget::getX)
-                    .max().orElse(options.getX() + w + 8);
-            at = new int[][] {{options.getX(), y, w}, {right, y, w}};
-        } else at = new int[][] {{4, 4, 98}, {106, 4, 98}};
-
+            int bottom = buttons.stream().mapToInt(b -> b.getY() + b.getHeight()).max().orElse(0);
+            if (bottom + ROW <= pause.height - 4) {
+                y = options.getY();
+                for (AbstractWidget b : buttons)
+                    if (b.getY() >= y) b.setY(b.getY() + ROW);
+                x = buttons.stream().mapToInt(AbstractWidget::getX).min().orElse(options.getX());
+                int right = buttons.stream().mapToInt(b -> b.getX() + b.getWidth()).max().orElse(x + w);
+                w = right - x;
+            }
+        }
         buttons.add(Button.builder(Component.literal("Super Minecraft Galaxy..."), b -> mc.gui.setScreen(new GalaxySettingsScreen(pause)))
-                .bounds(at[0][0], at[0][1], at[0][2], 20).tooltip(Tooltip.create(Component.literal(
+                .bounds(x, y, w, 20).tooltip(Tooltip.create(Component.literal(
                         "Movement, skin and Super Minecraft Galaxy's other settings")))
                 .build());
-        Button smg2 = Button.builder(Component.literal("SMG2 Menu"), b -> {
-            mc.gui.setScreen(null);
-            GalaxyCraftClient.pressPlus();
-        }).bounds(at[1][0], at[1][1], at[1][2], 20).tooltip(Tooltip.create(Component.literal(
-                "Super Mario Galaxy 2's own pause menu (the + button)"))).build();
-        smg2.active = GalaxyCraftClient.linked();
-        buttons.add(smg2);
     }
 
     private static boolean key(AbstractWidget w, String key) {

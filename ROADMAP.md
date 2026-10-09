@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-08 (Export report done, no Dolphin main window; v0.1.2 released; Now: 1.7 terrain rework; Next: far view bugs, swimming)
+Last updated: 2026-10-09 (v0.1.4 published: station polish done; terrain, swimming and soundtrack ship in it, awaiting the Windows check)
 
 ---
 
@@ -24,14 +24,16 @@ Last updated: 2026-10-08 (Export report done, no Dolphin main window; v0.1.2 rel
 | Feature | Status | Notes |
 |---|---|---|
 | Planets with Minecraft 1.7 terrain | now | User 2026-10-08: today's terrain "not that good", old terrain fits small worlds. 3D density with overhangs, several biomes per planet scaled to its size, oceans, rivers, beaches, cave labyrinths, heights scaled to the radius. Then check whether trees still come out broken (one block above the grass, a trunk missing a log). [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-legacy-terrain-design.md) |
-| First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
+| Swimming and water look | now | User 2026-10-08: swim like Minecraft, characters in water drawn over it, Minecraft's underwater view. Built on `feat/swimming` (water draw order, underwater fog, Minecraft's swimming in F6), awaiting playtest. [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-swimming-water-design.md) |
+| Panorama screenshots, and F2 that works | now | User 2026-10-08: F2 saved a blank blue picture (Dolphin draws the game): now Dolphin takes it. Ctrl+F2 or /panorama takes six 90° shots from the eyes (panorama_0..5 + one equirectangular picture); tools/set_panorama.py makes a capture the title screen's background. Branch feat/panorama, awaiting playtest. |
+| Soundtrack player and space/planet music | now | User 2026-10-09: a music player based on Soundtrack Player; music follows space or planet with a crossfade, a dwell time and a cooldown (all settings, can be turned off); Music Source: both games, SMG2 only, Minecraft only or random; a Station Core option to pick a station's music. Built on `feat/soundtrack` (engine, player screen, settings, Minecraft songs working; probe passes), awaiting your listening test. Your sorting (18 space, 15 planet songs from the 96 on the disc) ships as the default list; the launcher copies the songs from the player's own disc once into a shared folder at install and PLAY. [Spec](docs/superpowers/specs/2026-10-09-galaxycraft-soundtrack-design.md) |
+| First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells; v0.1.3 pushed 2026-10-08 (fe6276a) with Export report and no empty Dolphin window, tested on Windows; v0.1.4 published 2026-10-09 (1.7 terrain, far planets, swimming, soundtrack, station polish), not yet checked on Windows (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
 
 ## Next
 
 | Feature | Status | Notes |
 |---|---|---|
 | Far view bugs | next | User 2026-10-08: chunks right by the player draw their blocks and a far view copy that should be gone; caves look wrong from outside and only draw right once inside. After the terrain rework. |
-| Swimming | next | After the far view bugs: the 1.7 terrain brings real ocean depths. |
 
 ---
 
@@ -53,7 +55,8 @@ Last updated: 2026-10-08 (Export report done, no Dolphin main window; v0.1.2 rel
 
 | Feature | Status | Notes |
 |---|---|---|
-| Swimming | next | Its own stage. Water is already translucent and smooth. |
+| Swimming | now | Minecraft's own swimming in F6 (float, sink, swim up, air), built on `feat/swimming`, awaiting playtest. Mario mode swimming and Steve's swim pose: later. [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-swimming-water-design.md) |
+| Water look | now | Water blends over what is in it (Steve, mobs); under water Minecraft's fog (biome color, opens up over 30 s). On `feat/swimming`, awaiting playtest. |
 | Deeper seas | now | Part of the 1.7 terrain: real depths scaled to the planet. |
 | Lava damage | planned | Lava doesn't hurt yet. |
 
@@ -134,6 +137,12 @@ Last updated: 2026-10-08 (Export report done, no Dolphin main window; v0.1.2 rel
 | 2026-10-08 | Gravity shells only out in space (inside a gravity, only its own, fading); no fall or flight wind sounds and no snoring while Minecraft's movement carries Mario | 9089508 |
 | 2026-10-08 | Export report in the launcher: one button saves a zip with the logs, crash reports, settings and a system summary (home folders and tokens blanked, nothing uploaded) to send when something fails | c77618e |
 | 2026-10-08 | The game starts with only its own window: Dolphin's empty main window no longer opens behind it (Linux and Windows) | 1e18b8d |
+| 2026-10-09 | Stations: building outside the gravity box stretches its blue shell toward the new size instead of jumping (visual only) | a977f32 |
+| 2026-10-09 | Leave the world standing on a station and you come back on it, on the same column of blocks | 385c46a |
+| 2026-10-09 | Stations walk like planets: exact block collision, the player's box lined up with the blocks and as wide as Minecraft's (no sinking into walls, no step at corners when crouching) | d1d7aa1 |
+| 2026-10-09 | Walls on planets are flat where you stand: sliding along a straight wall no longer catches on the twist between columns | de552aa |
+| 2026-10-09 | The D-pad no longer opens SMG2's first-person look or plays its camera sounds; SMG2's own HUD stays hidden while Minecraft drives | 8ba1a10 |
+| 2026-10-09 | New title panorama (the 07:09 capture: the planet, small planets and a station's edge under the blue nebula) | c969072 |
 
 ---
 
@@ -141,6 +150,17 @@ Last updated: 2026-10-08 (Export report done, no Dolphin main window; v0.1.2 rel
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-09: Soundtrack follow-ups (user/Claude): biome music (Slipsand Galaxy is tagged desert), more moods later (night, underwater, danger), layered `*_multi` songs mixing their layers, mp3/flac custom songs.
+- 2026-10-08: Swimming matters (user): Minecraft's swimming, or Mario's body swimming, undecided. Water look: a
+  character standing with legs in water is drawn over the water as if above it (screenshot coming; check
+  mobs too); under water everything should be tinted like Minecraft's underwater view, faithful to it.
+  Asked Claude to propose a design (links to Swimming in Water and fluids).
+- 2026-10-08: Joining a galaxy should wait until the planet you land on and the other planets are
+  loaded, to avoid lag spikes right after entering (user, after playtesting the far view fix).
+- 2026-10-08: Planets farther apart, and seen from much farther (user): too close "doesn't feel the
+  same"; far planets should be drawn from a long way off and grow as you approach, not appear out of
+  nowhere in front of you. Rethink how far planets are drawn. Designed:
+  [spec](docs/superpowers/specs/2026-10-08-galaxycraft-far-planets-design.md).
 - 2026-10-07: Follow-ups of flat stations (Claude, review): a station's bounds grow only from what
   the player places, not from what Minecraft adds by itself (flowing water, growing trees, pistons);
   Mario's own movement keeps SMG2's crouch (user: "not made for that").

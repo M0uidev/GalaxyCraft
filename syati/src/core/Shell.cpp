@@ -1,4 +1,5 @@
 #include "Shell.h"
+#include "ViewMath.h"
 
 namespace gxc
 {
@@ -119,6 +120,18 @@ f32 ShellShown(f32 outside, f32 fade, bool in_any)
   return ShellAlpha(outside, fade);
 }
 
+bool ShellsHidden(f32 sky_red)
+{
+  return sky_red >= 2.f;
+}
+
+f32 SkyChannel(f32 v)
+{
+  if (v >= 2.f)  // the hide-shells flag: the channel is what is over 2
+    v -= 2.f;
+  return v < 0.f ? 0.f : v > 1.f ? 1.f : v;
+}
+
 f32 ShellAlpha(f32 outside, f32 fade)
 {
   if (outside >= 0.f)
@@ -127,4 +140,60 @@ f32 ShellAlpha(f32 outside, f32 fade)
     return 0.f;
   return 1.f + outside / fade;
 }
+
+namespace
+{
+const f32 STRETCH_KEEP = 0.9f, GLOW_KEEP = 0.975f, STRETCH_EPS = 0.5f, GLOW_EPS = 0.01f;
+
+f32 Axes(const f32 m[12], int col)
+{
+  return Sqrt(m[col] * m[col] + m[4 + col] * m[4 + col] + m[8 + col] * m[8 + col]);
+}
+}  // namespace
+
+bool ShellStretchStart(ShellStretch& s, const f32 from[12], const f32 to[12])
+{
+  bool axes_changed = false;
+  f32 size = 0.f;
+  for (int r = 0; r < 3; r++)
+    for (int c = 0; c < 3; c++)
+    {
+      const f32 d = from[4 * r + c] - to[4 * r + c];
+      axes_changed = axes_changed || d > 1.f || d < -1.f;
+    }
+  for (int c = 0; c < 3; c++)
+    size += Axes(from, c) + Axes(to, c);
+  f32 jump2 = 0.f;
+  for (int r = 0; r < 3; r++)
+  {
+    const f32 d = from[4 * r + 3] - to[4 * r + 3];
+    jump2 += d * d;
+  }
+  if (!axes_changed || jump2 > size * size)
+    return false;
+  for (int k = 0; k < 12; k++)
+    s.resid[k] += from[k] - to[k];
+  s.glow = 1.f;
+  return true;
+}
+
+void ShellStretchStep(ShellStretch& s)
+{
+  for (int k = 0; k < 12; k++)
+  {
+    s.resid[k] *= STRETCH_KEEP;
+    if (s.resid[k] > -STRETCH_EPS && s.resid[k] < STRETCH_EPS)
+      s.resid[k] = 0.f;
+  }
+  s.glow = s.glow < GLOW_EPS ? 0.f : s.glow * GLOW_KEEP;
+}
+
+bool ShellStretching(const ShellStretch& s)
+{
+  for (int k = 0; k < 12; k++)
+    if (s.resid[k] != 0.f)
+      return true;
+  return s.glow > 0.f;
+}
+
 }  // namespace gxc

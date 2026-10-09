@@ -12,8 +12,8 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 
 /**
- * How generated planets look in the dev Dolphin (tools/gxvoxel.sh biomes): several biomes with
- * water, and a swamp, in first person all around and looking down. Screenshots:
+ * How generated planets look in the dev Dolphin (tools/gxvoxel.sh biomes): 1.7 terrain on planets
+ * of several sizes, windswept hills and badlands, in first person all around and looking down. Screenshots:
  * biomes-<kind>-<view>.png. The biomes of each planet are logged.
  */
 public final class BiomeProbe implements FabricClientGameTest {
@@ -25,17 +25,20 @@ public final class BiomeProbe implements FabricClientGameTest {
             sp.getServer().runCommand("tp @a 0 100 0 0 0");
             ctx.waitFor(mc -> GalaxyCraftClient.galaxyPos().isPresent(), 1200);
             ctx.waitTicks(40);
-            PlanetBlueprint g = PlanetBlueprint.standard("gen", 64).withMode(PlanetBlueprint.Mode.GENERATED).withPlants(100)
-                    .withWater(true);
+            java.util.function.IntFunction<PlanetBlueprint> g = r -> PlanetBlueprint.standard("gen", r)
+                    .withMode(PlanetBlueprint.Mode.GENERATED).withPlants(100).withWater(true).withUnderground(50, true, 100);
             Object[][] kinds = {
-                    {"mixed", g.withBiome(11, PlanetBlueprint.RANDOM, 40)},
-                    {"mixed2", g.withBiome(5, PlanetBlueprint.RANDOM, 40)},
-                    {"swamp", g.withBiome(3, "minecraft:swamp", 0)},
+                    {"mixed", g.apply(64).withBiome(11, PlanetBlueprint.RANDOM, PlanetBlueprint.AUTO)},
+                    {"auto128", g.apply(128).withBiome(5, PlanetBlueprint.RANDOM, PlanetBlueprint.AUTO)},
+                    {"auto32", g.apply(32).withBiome(8, PlanetBlueprint.RANDOM, PlanetBlueprint.AUTO)},
+                    {"hills", g.apply(96).withBiome(3, "minecraft:windswept_hills", 0)},
+                    {"badlands", g.apply(96).withBiome(4, "minecraft:badlands", 0)},
             };
             String only = System.getProperty("galaxycraft.biomesOnly", "");
             for (Object[] k : kinds) {
                 String name = (String) k[0];
                 if (!name.contains(only)) continue;
+                sp.getServer().runCommand("time set noon"); // the light check leaves it at midnight
                 PlanetSession s = PlanetClient.session();
                 ctx.runOnClient(mc -> PlanetClient.remove());
                 ctx.waitTicks(20);

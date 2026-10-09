@@ -136,6 +136,13 @@ public final class PlanetSession {
     private boolean detail = true;
     private final Deque<Integer> farPending = new ArrayDeque<>(); // tiles whose far view is to send (or hide)
     private final BitSet farPendingSet = new BitSet();
+    /**
+     * Tiles in farPending whose chunks are going out: their far view must reach the game before the
+     * chunks go, or a hole shows. The other far views wait for the chunks to send (what stands near
+     * Mario, and the covering of its far view, come first): else the far view keeps drawing over
+     * chunks the game has already.
+     */
+    private final BitSet farBlocking = new BitSet();
     private int[] farVersion = new int[0];
     private final BitSet farDirty = new BitSet(); // tiles edited since their far view was sent
     /** The player's settings, which every session follows (setRenderDistance pins one's own: tests). */
@@ -379,6 +386,39 @@ public final class PlanetSession {
      * Mario onto the surface, where the game puts him: on the line from the center through him.
      * The collision there goes first, then the teleport, so he never lands where nothing is solid.
      */
+    /** The top of the column through p is water or lava (a fresh player is not to start in it). */
+    private boolean wet(Vector3d p) {
+        CubeSphere g = planet.sphere();
+        int c0 = g.cellAt(new Vector3d(p).normalize(g.core + 0.5));
+        if (c0 >= 0)
+            for (int k = g.layers - 1; k >= 0; k--)
+                if (planet.get(c0 + k) != Blocks.AIR) return planet.fluid(c0 + k) != Blocks.NO_FLUID;
+        return false;
+    }
+
+    /**
+     * toward, or the closest direction to it (planet space) whose ground is dry; toward itself if
+     * everything around is wet. Where a player first lands: not in the sea.
+     */
+    public Vector3d dryToward(Vector3d toward) {
+        if (planet == null) return toward;
+        Vector3d t = new Vector3d(toward).normalize();
+        if (!wet(t)) return t;
+        Vector3d a = t.cross(Math.abs(t.y) < 0.9 ? new Vector3d(0, 1, 0) : new Vector3d(1, 0, 0), new Vector3d()).normalize();
+        Vector3d b = t.cross(a, new Vector3d());
+        double r = Math.max(planet.surface(), 1);
+        for (double arc = 3; arc <= Math.PI * r; arc += 3) {
+            double th = arc / r;
+            int n = Math.max(8, (int) (2 * Math.PI * Math.sin(th) * r / 3));
+            for (int i = 0; i < n; i++) {
+                double ph = 2 * Math.PI * i / n;
+                Vector3d d = new Vector3d(t).mul(Math.cos(th)).fma(Math.sin(th) * Math.cos(ph), a).fma(Math.sin(th) * Math.sin(ph), b);
+                if (!wet(d)) return d;
+            }
+        }
+        return t;
+    }
+
     /** Radius of the top of the highest block in the column through p (blocks); the surface if it is all air. */
     double ground(Vector3d p) {
         CubeSphere g = planet.sphere();
@@ -581,7 +621,9 @@ public final class PlanetSession {
             build(c);
         }
         while (built == null && !farPending.isEmpty() && planet != null && bulk.getAsBoolean()) {
-            int t = farPending.peek();
+            int t = nextFar();
+            if (t < 0) break;
+            builtTile = t;
             // A tile of chunks gets it too, covered: the game draws it only from afar.
             builtFarShows = !shown.get(t);
             // A tile of chunks is drawn only from afar: coarse. Else as fine as its level.
@@ -604,6 +646,9 @@ public final class PlanetSession {
             if (!pendingSet.get(c)) continue; // went in the urgent lane since
             pendingSet.clear(c);
             build(c);
+        }
+        if (built == null && pending.isEmpty() && !farPending.isEmpty() && planet != null && bulk.getAsBoolean()) {
+            return peek(bulk); // the chunks were all out (or nothing): the far views that waited for them
         }
         if (built == null && pending.isEmpty() && farPending.isEmpty() && !farLater.isEmpty() && bulk.getAsBoolean()) {
             for (int t : farLater) queueFar(t);
@@ -707,8 +752,10 @@ public final class PlanetSession {
         if (builtFar) {
             builtFar = false;
             built = null;
-            int t = farPending.poll();
+            int t = builtTile;
+            farPending.removeFirstOccurrence(t);
             farPendingSet.clear(t);
+            farBlocking.clear(t);
             farOnGuest.set(t, builtFarShows); // what it carried, whatever the tile is by now
             farHeld.set(t);
             if (t < farCols.length) farCols[t] = builtCols;
@@ -1120,6 +1167,7 @@ public final class PlanetSession {
         control.clear();
         farPending.clear();
         farPendingSet.clear();
+        farBlocking.clear();
         farLater.clear();
         farDirty.clear();
         builtFar = false;
@@ -1227,6 +1275,7 @@ public final class PlanetSession {
         }
         out.stream().forEach(t -> {
             queueFar(t);
+            farBlocking.set(t);
             for (int c : PlanetLod.chunksOfTile(planet, t)) if (onGuest.get(c)) queue(c);
         });
     }
@@ -1263,6 +1312,22 @@ public final class PlanetSession {
         farStep = Math.max(8, blocks);
     }
 
+    /** Dev trace (GXC_TRACE_BODIES): the state of the tiles within a few blocks of Mario, and whether far views are drawn near. */
+    public String traceTiles(Vector3d mario) {
+        if (planet == null || mario == null) return "no planet";
+        StringBuilder b = new StringBuilder();
+        BitSet seen = new BitSet();
+        for (int c : chunksNear(mario, 40)) {
+            int t = PlanetLod.tileOfChunk(planet, c);
+            if (seen.get(t)) continue;
+            seen.set(t);
+            b.append(String.format("[tile %d shown=%b farOnGuest=%b held=%b cols=%d/%d inFarPending=%b blocking=%b] ", t, shown.get(t),
+                    farOnGuest.get(t), farHeld.get(t), farCols[t], farWant[t], farPendingSet.get(t), farBlocking.get(t)));
+        }
+        return b + "detail=" + detail + " pending=" + pending.size() + " urgent=" + urgent.size() + " farPending=" + farPending.size()
+                + " farLater=" + farLater.size() + " shown=" + shown.cardinality() + " farOnGuest=" + farOnGuest.cardinality();
+    }
+
     /** Whether the game draws a tile's far view up close (not covered by its chunks; tests). */
     boolean farDrawnNear(int t) {
         return farOnGuest.get(t);
@@ -1271,6 +1336,15 @@ public final class PlanetSession {
     /** Patch columns of the far view the game has for a tile (0: none yet; tests). */
     public int farColumns(int t) {
         return farCols[t];
+    }
+
+    /**
+     * The next far view to send: one whose chunks are going out first, then (once no chunks wait)
+     * the first queued; -1 while chunks wait.
+     */
+    private int nextFar() {
+        if (!farBlocking.isEmpty()) for (int t : farPending) if (farBlocking.get(t)) return t;
+        return pending.isEmpty() && urgent.isEmpty() ? farPending.peek() : -1;
     }
 
     /** A tile's far view to send (or hide, if it is chunks by then). */

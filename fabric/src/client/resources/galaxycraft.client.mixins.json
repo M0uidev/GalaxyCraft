@@ -12,9 +12,11 @@
 		"GameRendererMixin",
 		"LevelRendererMixin",
 		"LocalPlayerMixin",
+		"MusicManagerMixin",
 		"MinecraftMixin",
 		"ModelPartAccessor",
-		"OptionsMixin"
+		"OptionsMixin",
+		"WindowHiddenMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

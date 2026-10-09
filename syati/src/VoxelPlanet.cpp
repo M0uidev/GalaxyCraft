@@ -93,6 +93,7 @@ struct Planet
   f32 surface, occluder, mario_radius;
   PointGravity* gravity;
   ParallelGravity* flat;  // a station's box gravity (GXC_PLANET_FLAT), from gFlat; 0 for a planet
+  gxc::ShellStretch stretch;  // a station's shell easing to its grown box (drawn only)
   Slot* slots;
   u32 slot_count;
   u32* drawn;
@@ -147,6 +148,9 @@ void FlatMove(ParallelGravity* g, const f32 d[3])
 // The camera is this far above a planet's surface (or its radius, if more), galaxy units, or
 // farther: its far view alone is drawn, covered parts and all, not its chunks.
 const f32 FAR_VIEW_ABOVE = 96.f * 80.f;
+// How far from the camera a far view may be drawn and still pass the depth test against the sky
+// (units): planets 500 blocks off showed, so its depth is farther than that; 375 blocks keeps clear.
+const f32 SKY_DEPTH = 375.f * 80.f;
 
 // Replaced chunks' memory is freed a few frames later: Mario's binder may still read the last
 // triangle it stood on, the GPU the last display list. A planet streaming in replaces dozens of
@@ -222,6 +226,41 @@ MarioHitbox gHitbox;
 bool gHitboxOn = false;
 // The light of full sky light now (GXC_MSG_SKY): white by day, dim and bluish at night.
 GXColor gSky = {255, 255, 255, 255};
+bool gHideShells = false;  // a panorama is being captured: no gravity shells in the picture
+// Under water (the camera in a water cell, from the mod's SKY record): Minecraft's water fog, its
+// color and where it starts and ends in game units; end 0: none.
+struct WaterFog
+{
+  GXColor color;
+  f32 start, end;
+};
+WaterFog gWaterFog = {{0, 0, 0, 255}, 0.f, 0.f};
+
+// The projection's near and far planes (perspective: its z terms are -n / (f - n) and -f n / (f - n)).
+bool ProjectionRange(const f32 proj[7], f32* nearZ, f32* farZ)
+{
+  if (proj[5] == 0.f || proj[5] >= 0.f)
+    return false;
+  const f32 f = proj[6] / proj[5];
+  if (f <= 0.f)
+    return false;
+  *farZ = f;
+  *nearZ = -proj[5] * f / (1.f - proj[5]);
+  return true;
+}
+
+// Fog for what is drawn next: Minecraft's under water (linear, in front of the camera), none out of it.
+void ApplyWaterFog(const f32 proj[7])
+{
+  f32 n, f;
+  if (gWaterFog.end > 0.f && ProjectionRange(proj, &n, &f))
+    GXSetFog(GX_FOG_LIN, gWaterFog.start, gWaterFog.end, n, f, gWaterFog.color);
+  else
+  {
+    GXColor black = {0, 0, 0, 0};
+    GXSetFog(GX_FOG_NONE, 0.f, 0.f, 0.f, 0.f, black);
+  }
+}
 u8* gHitboxDl[2] = {0, 0};
 u32 gHitboxNext = 0;
 
@@ -501,11 +540,17 @@ public:
     {
       u8 c[3];
       for (int k = 0; k < 3; k++)
-      {
-        const f32 v = r.sky[k] < 0.f ? 0.f : r.sky[k] > 1.f ? 1.f : r.sky[k];
-        c[k] = static_cast<u8>(v * 255.f + 0.5f);
-      }
+        c[k] = static_cast<u8>(gxc::SkyChannel(r.sky[k]) * 255.f + 0.5f);
       gSky.r = c[0], gSky.g = c[1], gSky.b = c[2];
+      gHideShells = gxc::ShellsHidden(r.sky[0]);
+      const f32 end = r.water[4] * 80.f;
+      gWaterFog.end = end > 0.f ? end : 0.f;
+      gWaterFog.start = r.water[3] * 80.f;
+      for (int k = 0; k < 3; k++)
+      {
+        const f32 v = r.water[k] < 0.f ? 0.f : r.water[k] > 1.f ? 1.f : r.water[k];
+        (&gWaterFog.color.r)[k] = static_cast<u8>(v * 255.f + 0.5f);
+      }
     }
     else if (r.type == gxc::InboxRecord::HURT)
     {
@@ -603,6 +648,7 @@ public:
   // (measured: tested, none showed); every planet is drawn after them, over them.
   static void DrawStars(const f32 proj[7])
   {
+
     if (!gStarsDraw)
       return;
     const f32 farZ = proj[5] != 0.f ? proj[6] / proj[5] : 0.f;
@@ -646,6 +692,65 @@ public:
       GXSetPointSize(gxc::STAR_SIZES[k], GX_TO_ZERO);
       GXCallDisplayList(gStarsDraw + gStarsAt[k], gStarsBytes[k]);
     }
+  }
+
+  // Under water: the fog's color over what nothing drawn covers (the game's sky, the stars), as
+  // Minecraft fogs its sky. A quad at the far plane, drawn only where the depth is still the far
+  // plane's.
+  static void DrawFogVeil(const f32 proj[7])
+  {
+    f32 n, f;
+    if (gWaterFog.end <= 0.f || !ProjectionRange(proj, &n, &f))
+      return;
+    static u8* quad = 0;
+    if (!quad)
+    {
+      quad = Alloc32(64);
+      if (!quad)
+      {
+        gVoxelStats.alloc_failed++;
+        return;
+      }
+    }
+    // GX_QUADS in format 6 (three f32 each), a camera-space square far past the screen's edges.
+    const f32 z = -0.9995f * f, e = 6.f * f;
+    const f32 v[4][3] = {{-e, -e, z}, {e, -e, z}, {e, e, z}, {-e, e, z}};
+    u8* p = quad;
+    *p++ = 0x80 | GX_VTXFMT6;
+    *p++ = 0;
+    *p++ = 4;
+    for (int k = 0; k < 4; k++)
+      for (int c = 0; c < 3; c++)
+      {
+        u32 bits;
+        memcpy(&bits, &v[k][c], 4);
+        *p++ = bits >> 24, *p++ = bits >> 16, *p++ = bits >> 8, *p++ = bits;
+      }
+    while (p < quad + 64)
+      *p++ = 0;  // NOP
+    DCFlushRange(quad, 64);
+    GXClearVtxDesc();
+    GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GXSetVtxAttrFmt(GX_VTXFMT6, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
+    GXSetNumChans(1);
+    GXSetChanCtrl(GX_COLOR0A0, GX_FALSE, GX_SRC_REG, GX_SRC_REG, 0, GX_DF_NONE, GX_AF_NONE);
+    GXSetChanMatColor(GX_COLOR0A0, gWaterFog.color);
+    GXSetNumTexGens(0);
+    GXSetNumIndStages(0);
+    GXSetNumTevStages(1);
+    GXSetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD_NULL, GX_TEXMAP_NULL, GX_COLOR0A0);
+    GXSetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
+    GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_NOOP);
+    GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+    GXSetZMode(GX_TRUE, GX_LEQUAL, GX_FALSE);
+    GXSetCullMode(GX_CULL_NONE);
+    GXSetColorUpdate(GX_TRUE);
+    GXSetAlphaUpdate(GX_FALSE);
+    f32 m[12] = {1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f};
+    GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(m), GX_PNMTX0);
+    GXSetCurrentMtx(GX_PNMTX0);
+    GXCallDisplayList(quad, 64);
+    GXSetCullMode(GX_CULL_FRONT);
   }
 
   static void Teleport(const Planet& p, const gxc::InboxTeleport& tp)
@@ -781,7 +886,22 @@ public:
     p->surface = in.surface;
     p->occluder = 0.f;
     p->mario_radius = in.mario_radius;
+    f32 before[12];
+    const bool was_on = p->flat->mActivated;
+    for (int r = 0; r < 3; r++)
+      for (int c = 0; c < 4; c++)
+        before[4 * r + c] = p->flat->mLocalMtx.mMtx[r][c];
     FlatOn(p->flat, in);
+    if (!was_on)
+      memset(&p->stretch, 0, sizeof(p->stretch));
+    else
+    {
+      f32 after[12];
+      for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 4; c++)
+          after[4 * r + c] = p->flat->mLocalMtx.mMtx[r][c];
+      gxc::ShellStretchStart(p->stretch, before, after);  // the box grew: the shell stretches to it
+    }
     mTranslation = TVec3f(p->center[0], p->center[1], p->center[2]);
     if (gTeleportPending && (gPendingTeleport.planet == 0 || gPendingTeleport.planet == p->id))
       Teleport(*p, gPendingTeleport);
@@ -1114,8 +1234,7 @@ public:
     GXLoadTexObj(&tex, GX_TEXMAP0);
     GXSetNumIndStages(0);
     GXSetTevSwapModeTable(GX_TEV_SWAP0, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE, GX_CH_ALPHA);
-    GXColor black = {0, 0, 0, 0};
-    GXSetFog(GX_FOG_NONE, 0.f, 0.f, 0.f, 0.f, black);
+    ApplyWaterFog(proj);
     GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
     GXSetZCompLoc(GX_FALSE);
     GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_NOOP);
@@ -1142,6 +1261,12 @@ public:
     for (u32 i = 0; i < MAX_PLANETS; i++)
       if (gPlanets[i].id)
         DrawPlanet(gPlanets[i], view, proj, &drawn, &far, PASS_SOLID);
+    // The entities (mobs, drops, Steve) before the water, so it blends over the part of them in it.
+    // They leave the state and the texture their own.
+    EntityDrawRender();
+    GXLoadTexObj(&tex, GX_TEXMAP0);
+    UseCornerLight();
+    GXSetZCompLoc(GX_FALSE);
     // Water, over everything opaque: blended by its texture's alpha, hiding nothing behind it (no
     // depth written), seen from both sides (from under the surface too).
     GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
@@ -1151,6 +1276,12 @@ public:
     for (u32 i = 0; i < MAX_PLANETS; i++)
       if (gPlanets[i].id)
         DrawPlanet(gPlanets[i], view, proj, &drawn, &far, PASS_CLEAR);
+    // Under water the sky is fogged too (what no planet covers: the game's sky and stars).
+    DrawFogVeil(proj);
+    {
+      GXColor black = {0, 0, 0, 0};
+      GXSetFog(GX_FOG_NONE, 0.f, 0.f, 0.f, 0.f, black);
+    }
     // The block being broken: its cracks over everything drawn (the atlas is still loaded).
     const Planet* cracked = mCrackOn ? Find(mCrackPlanet) : 0;
     if (cracked)
@@ -1177,7 +1308,10 @@ public:
     if (p.flat)
     {
       // The box's matrix: its axes times its half sizes, then its middle.
-      const f32(*b)[4] = p.flat->mLocalMtx.mMtx;
+      f32 b[3][4];  // the gravity's box plus the stretch still to ease (the drawn box)
+      for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 4; c++)
+          b[r][c] = p.flat->mLocalMtx.mMtx[r][c] + p.stretch.resid[4 * r + c];
       const f32 d[3] = {cam.x - b[0][3], cam.y - b[1][3], cam.z - b[2][3]};
       *outside = -1.0e30f;
       for (int k = 0; k < 3; k++)
@@ -1218,6 +1352,8 @@ public:
   // ground). Behind the planets (depth tested, none written).
   void DrawShells(const f32 view[12]) const
   {
+    if (gHideShells)
+      return;
     static u8* sphere = 0;
     static u8* box = 0;
     if (!sphere)
@@ -1250,7 +1386,13 @@ public:
       f32 m[12], outside;
       if (!p.id || !Shell(p, view, cam, m, &outside))
         continue;
-      const f32 a = SHELL_ALPHA * gxc::ShellShown(outside, SHELL_FADE, in_any);
+      // A station's shell stretching glows even where it would fade out: the player sees it grow.
+      f32 shown = gxc::ShellShown(outside, SHELL_FADE, in_any);
+      if (p.flat && p.stretch.glow > shown)
+        shown = p.stretch.glow;
+      const f32 a = SHELL_ALPHA * shown;
+      if (p.flat)
+        gxc::ShellStretchStep(const_cast<Planet&>(p).stretch);
       if (a < 1.f)
         continue;
       if (!set)
@@ -1377,36 +1519,43 @@ public:
     const bool translucent = pass == PASS_CLEAR;
     if (p.far && pass == PASS_FAR)
     {
-      // Past the camera's far plane the GPU would clip it away: drawn smaller and nearer by the
-      // same factor, about the camera, it looks the same and stays in front of that plane.
+      // Past the camera's far plane the GPU would clip it away, and past the sky (drawn before,
+      // writing a nearer depth than the far plane's) the depth test hides it: planets seemed to
+      // pop in out of nowhere a few hundred blocks off. So a part that far is drawn smaller and
+      // nearer by the same factor, about the camera, inside both: it looks the same. Each part
+      // has its own factor (1 up to 0.9 of the limit), so what is near stays where it is and
+      // does not slip in front of the chunks, as the whole planet shrunk together did.
       // GX's perspective: m22 = -n/(f-n), m23 = -fn/(f-n), so f = m23/m22.
       const f32 farZ = proj[5] != 0.f ? proj[6] / proj[5] : 0.f;
-      const f32 dist = gxc::Sqrt(eye[0] * eye[0] + eye[1] * eye[1] + eye[2] * eye[2]);
-      const f32 reach = dist + p.surface + 32.f * 80.f;
-      f32 scale = 1.f;
-      if (farZ > 0.f && reach > 0.9f * farZ)  // its far side kept under 0.99 f, nearer ones nearer
-        scale = farZ * (0.9f + 0.09f * (1.f - 0.9f * farZ / reach)) / reach;
-      if (scale < 1.f)
-      {
-        f32 at[3];
-        for (int k = 0; k < 3; k++)
-          at[k] = p.center[k] + eye[k] * (1.f - scale);  // camera + (center - camera) * scale
-        gxc::ViewRelative(view, eyeAt, at, planet);
-        for (int r = 0; r < 3; r++)
-          for (int c = 0; c < 3; c++)
-            planet[4 * r + c] *= scale;
-      }
-      GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(planet), GX_PNMTX0);
+      const f32 limit = farZ > 0.f && farZ < SKY_DEPTH ? farZ : SKY_DEPTH;
       for (u32 f = 0; f < p.far_count; f++)
       {
         const FarPart& part = p.far[f];
         if (!part.dl || (part.covered && !afar) || gxc::SphereHidden(eye, fwd, origin, p.occluder, part.sphere, part.sphere[3]))
           continue;
+        const f32 off[3] = {part.sphere[0] - eye[0], part.sphere[1] - eye[1], part.sphere[2] - eye[2]};
+        const f32 reach = gxc::Sqrt(off[0] * off[0] + off[1] * off[1] + off[2] * off[2]) + part.sphere[3];
+        f32 scale = 1.f;
+        f32 shown[12];
+        const f32* mtx = planet;
+        if (reach > 0.9f * limit)  // its far side kept under 0.99 of the limit, nearer ones nearer
+        {
+          scale = limit * (0.9f + 0.09f * (1.f - 0.9f * limit / reach)) / reach;
+          f32 at[3];
+          for (int k = 0; k < 3; k++)
+            at[k] = p.center[k] + eye[k] * (1.f - scale);  // camera + (center - camera) * scale
+          gxc::ViewRelative(view, eyeAt, at, shown);
+          for (int r = 0; r < 3; r++)
+            for (int c = 0; c < 3; c++)
+              shown[4 * r + c] *= scale;
+          mtx = shown;
+        }
         f32 pos[12];
-        gxc::ViewTranslate(planet, part.sphere, pos);
+        gxc::ViewTranslate(mtx, part.sphere, pos);
         const f32 at[3] = {pos[3], pos[7], pos[11]};
         if (gxc::SphereOutsideView(proj, at, part.sphere[3] * scale))
           continue;
+        GXLoadPosMtxImm(reinterpret_cast<f32(*)[4]>(const_cast<f32*>(mtx)), GX_PNMTX0);
         GXCallDisplayList(part.dl, part.dl_size);
         (*far)++;
       }
@@ -1632,6 +1781,13 @@ void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size)
   gActor->initWithoutIter();
   *inbox_addr = reinterpret_cast<u32>(gInbox);
   *inbox_size = INBOX_BYTES;
+}
+
+void VoxelPlanetApplyFog()
+{
+  f32 proj[7];
+  GXGetProjectionv(proj);
+  ApplyWaterFog(proj);
 }
 
 void VoxelPlanetHitbox(const MarioHitbox* box)

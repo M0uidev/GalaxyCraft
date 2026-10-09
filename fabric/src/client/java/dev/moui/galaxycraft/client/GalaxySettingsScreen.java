@@ -22,6 +22,10 @@ public final class GalaxySettingsScreen extends Screen {
     private static final int W = 150, GAP = 10, ROW = 24, TOP = 40, WHITE = 0xFFFFFFFF, GRAY = 0xFFA0A0A0;
     private final Screen parent;
     private final List<Label> labels = new ArrayList<>();
+    /** The settings and actions, which scroll when the screen is too short for them (large GUI scale). */
+    private final List<AbstractWidget> scrolling = new ArrayList<>();
+    private final List<Integer> baseY = new ArrayList<>();
+    private int contentBottom, scroll;
 
     public GalaxySettingsScreen(Screen parent) {
         super(Component.literal("Super Minecraft Galaxy Settings"));
@@ -31,6 +35,8 @@ public final class GalaxySettingsScreen extends Screen {
     @Override
     protected void init() {
         labels.clear();
+        scrolling.clear();
+        baseY.clear();
         int left = width / 2 - W - GAP / 2, right = width / 2 + GAP / 2;
         int col = 0, y = TOP;
         for (Setting<?> s : GalaxyOptions.SETTINGS.all()) {
@@ -48,7 +54,7 @@ public final class GalaxySettingsScreen extends Screen {
                 case Setting.Range r -> new Slider(r, x, y);
                 case Setting.Text t -> throw new IllegalStateException(t.key());
             };
-            addRenderableWidget(w);
+            scrollAdd(w);
             if (!s.tooltip().isEmpty()) w.setTooltip(Tooltip.create(Component.literal(s.tooltip())));
             col ^= 1;
             if (col == 0) y += ROW;
@@ -57,7 +63,7 @@ public final class GalaxySettingsScreen extends Screen {
         y += ROW / 2;
         col = 0;
         for (GalaxyOptions.Action a : GalaxyOptions.ACTIONS) {
-            Button b = addRenderableWidget(Button.builder(Component.literal(a.label().get()), btn -> {
+            Button b = scrollAdd(Button.builder(Component.literal(a.label().get()), btn -> {
                 a.run().run();
                 if (minecraft.gui.screen() == this) rebuildWidgets(); // labels and states may have changed
             }).bounds(col == 0 ? left : right, y, W, 20).build());
@@ -66,7 +72,37 @@ public final class GalaxySettingsScreen extends Screen {
             col ^= 1;
             if (col == 0) y += ROW;
         }
+        contentBottom = y;
         addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose()).bounds(width / 2 - 100, height - 27, 200, 20).build());
+        applyScroll();
+    }
+
+    private <T extends AbstractWidget> T scrollAdd(T w) {
+        scrolling.add(w);
+        baseY.add(w.getY());
+        return addRenderableWidget(w);
+    }
+
+    private int viewBottom() {
+        return height - 32;
+    }
+
+    /** Moves the scrolling widgets by the scroll, hiding the ones that would reach the title or Done. */
+    private void applyScroll() {
+        scroll = Math.max(0, Math.min(scroll, contentBottom - viewBottom()));
+        for (int i = 0; i < scrolling.size(); i++) {
+            AbstractWidget w = scrolling.get(i);
+            w.setY(baseY.get(i) - scroll);
+            w.visible = w.getY() >= TOP - 4 && w.getY() + w.getHeight() <= viewBottom();
+        }
+        for (Label l : labels) l.dy = l.baseY - scroll;
+    }
+
+    @Override
+    public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
+        scroll -= (int) Math.signum(scrollY) * ROW;
+        applyScroll();
+        return true;
     }
 
     /** A button showing "Label: value", which changes it when clicked. */
@@ -84,19 +120,31 @@ public final class GalaxySettingsScreen extends Screen {
         box.setMaxLength(t.maxLength());
         box.setValue(t.get());
         if (!t.tooltip().isEmpty()) box.setTooltip(Tooltip.create(Component.literal(t.tooltip())));
-        addRenderableWidget(box);
-        addRenderableWidget(Button.builder(Component.literal("Apply"), b -> t.set(box.getValue()))
+        scrollAdd(box);
+        scrollAdd(Button.builder(Component.literal("Apply"), b -> t.set(box.getValue()))
                 .bounds(x + labelW + boxW + 8, y, applyW, 20).build());
         labels.add(new Label(t.label(), x, y + 6));
     }
 
-    private record Label(String text, int x, int y) {}
+    private static final class Label {
+        final String text;
+        final int x, baseY;
+        int dy;
+
+        Label(String text, int x, int y) {
+            this.text = text;
+            this.x = x;
+            this.baseY = y;
+            this.dy = y;
+        }
+    }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
         super.extractRenderState(g, mouseX, mouseY, a);
         g.centeredText(font, title.getString(), width / 2, 15, WHITE);
-        for (Label l : labels) g.text(font, l.text(), l.x(), l.y(), GRAY);
+        for (Label l : labels)
+            if (l.dy >= TOP && l.dy + 8 <= viewBottom()) g.text(font, l.text, l.x, l.dy, GRAY);
     }
 
     @Override

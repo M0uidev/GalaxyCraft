@@ -203,6 +203,7 @@ struct InboxRecord
   InboxOrigin origin;
   InboxStars stars;
   f32 sky[3];  // SKY: the light of full sky light now, 0 to 1
+  f32 water[5];  // SKY: under water, the fog: r, g, b (0 to 1), start and end in blocks; end 0: not under water
 };
 
 u32 ReadBE32(const u8* p);

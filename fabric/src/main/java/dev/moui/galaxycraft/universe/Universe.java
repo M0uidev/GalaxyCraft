@@ -27,8 +27,8 @@ public final class Universe {
     /** A sector's side, cells (8192 blocks). Sector s spans s * SECTOR_CELLS ± SECTOR_CELLS / 2 cells. */
     public static final long SECTOR_CELLS = 10;
     public static final double SECTOR = SECTOR_CELLS * UPos.CELL;
-    /** A system's planets and their gravities reach this far from its center, blocks at most. */
-    public static final double SYSTEM_BLOCKS = 2560;
+    /** A system's planets and their gravities reach this far from its center, blocks at most (layout 1; layout 2: WIDE_SYSTEM_BLOCKS). */
+    public static final double SYSTEM_BLOCKS = 2560, WIDE_SYSTEM_BLOCKS = 3500;
     /** Empty space between two systems' reaches, blocks at least. */
     public static final double GAP_BLOCKS = 512;
     /** Share of the sectors that hold a system. */
@@ -61,11 +61,13 @@ public final class Universe {
 
     private final long seed;
     private final double unitsPerBlock;
+    /** The world's layout (GalaxyCatalog.LAYOUT): how far systems reach and how far apart their planets are. */
+    private final int layout;
     /**
      * How far the world's own galaxy reaches from (0, 0, 0), blocks: its catalog may be bigger than a
      * generated system (64 planets, far apart). No other system comes within GAP_BLOCKS of it.
      */
-    private double homeReach = SYSTEM_BLOCKS;
+    private double homeReach;
     private final Map<Sector, GalaxyCatalog.Result> systems = new LinkedHashMap<>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<Sector, GalaxyCatalog.Result> e) {
@@ -74,25 +76,36 @@ public final class Universe {
     };
 
     public Universe(long seed, double unitsPerBlock) {
+        this(seed, unitsPerBlock, 1);
+    }
+
+    public Universe(long seed, double unitsPerBlock, int layout) {
         this.seed = seed;
         this.unitsPerBlock = unitsPerBlock;
+        this.layout = layout;
+        homeReach = systemBlocks();
+    }
+
+    /** How far a generated system reaches from its center in this layout, blocks. */
+    public double systemBlocks() {
+        return layout >= 2 ? WIDE_SYSTEM_BLOCKS : SYSTEM_BLOCKS;
     }
 
     /** The world's galaxy reaches this far (blocks; at least a system's reach). */
     public Universe withHome(double reachBlocks) {
-        homeReach = Math.max(SYSTEM_BLOCKS, reachBlocks);
+        homeReach = Math.max(systemBlocks(), reachBlocks);
         systems.clear();
         return this;
     }
 
     /** How far a system reaches from its center, blocks. */
     public double reach(Star s) {
-        return s.home() ? homeReach : SYSTEM_BLOCKS;
+        return s.home() ? homeReach : systemBlocks();
     }
 
     /** How far a system's center strays from its sector's, units on each axis at most. */
     double jitter() {
-        return SECTOR / 2 - (SYSTEM_BLOCKS + GAP_BLOCKS / 2) * unitsPerBlock;
+        return SECTOR / 2 - (systemBlocks() + GAP_BLOCKS / 2) * unitsPerBlock;
     }
 
     /** The sector p is in. */
@@ -113,7 +126,7 @@ public final class Universe {
         UPos c = s.center();
         UPos center = UPos.of(c.cx(), c.cy(), c.cz(), ox, oy, oz);
         // A big world's galaxy takes its neighbors' room.
-        if (!home && center.minus(UPos.ZERO).length() < (homeReach + SYSTEM_BLOCKS + GAP_BLOCKS) * unitsPerBlock)
+        if (!home && center.minus(UPos.ZERO).length() < (homeReach + systemBlocks() + GAP_BLOCKS) * unitsPerBlock)
             return Optional.empty();
         int planets = MIN_PLANETS + rnd.nextInt(MAX_PLANETS - MIN_PLANETS + 1);
         int a = GalaxyCatalog.MIN_RADIUS + rnd.nextInt(GalaxyCatalog.MAX_RADIUS - GalaxyCatalog.MIN_RADIUS + 1);
@@ -165,8 +178,8 @@ public final class Universe {
             int first = star.minRadius() + rnd.nextInt(star.maxRadius() - star.minRadius() + 1);
             var options = new GalaxyCatalog.Options(star.planets(), star.minRadius(), star.maxRadius(),
                     GalaxyCatalog.First.generated("random", first), star.spacing(), star.seed());
-            var made = GalaxyCatalog.make(options, first, land, unitsPerBlock);
-            double reach = SYSTEM_BLOCKS * unitsPerBlock;
+            var made = GalaxyCatalog.make(options, first, land, unitsPerBlock, layout);
+            double reach = systemBlocks() * unitsPerBlock;
             List<GalaxyCatalog.Entry> kept = new ArrayList<>();
             for (var e : made.entries())
                 if (e.center().length() + PlanetSession.gravityRadius(e.radius()) * unitsPerBlock <= reach) kept.add(e);

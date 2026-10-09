@@ -4,41 +4,38 @@ import dev.moui.galaxycraft.voxel.Blocks;
 import dev.moui.galaxycraft.voxel.CubeSphere;
 import dev.moui.galaxycraft.voxel.PlanetBlueprint;
 import dev.moui.galaxycraft.voxel.VoxelPlanet;
-import dev.moui.galaxycraft.voxel.gen.TerrainNoise.Field;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.ToIntFunction;
+import java.util.stream.IntStream;
 import org.joml.Vector3d;
 
 /**
- * Builds a generated planet: per column of the cube-sphere, Minecraft's noises sampled in 3D at
- * where that column points give a climate, the climate a biome and a height, the biome the
- * blocks. Neighboring columns sample neighboring points whatever face they are on, so the terrain
- * has no seams on the cube's edges or corners.
+ * Builds a generated planet with Minecraft 1.7's terrain ({@link Density}): its density sampled on
+ * a coarse lattice of each face and interpolated between, as 1.7 does, gives ground and sky; what
+ * lies under the sea fills with water; each biome's top and filler cover the ground
+ * (replaceBlocksForBiome); then caves ({@link Caves}), ores and plants. The lattice's points on a
+ * face's edge are the same directions as the next face's, so the faces meet without seams.
  */
 public final class PlanetGenerator {
-    /** Noise space per block for the terrain: eight times Minecraft's (blocks / 4), planets being small. */
-    static final double TERRAIN_SCALE = 2;
-    /** Rise from a neighbor that makes a column a cliff, its top bare stone. */
-    static final int STEEP = 3;
-    /** Below this a planet's relief is scaled down with its radius. */
-    static final double FULL_RELIEF_RADIUS = 64;
-    /** Continentalness from the coast inland: what several-biome planets without water use. */
-    static final Climate.Span INLAND = new Climate.Span(new Climate(-0.11, -1, -1, -1, -1), new Climate(1, 1, 1, 1, 1));
-    static final Climate.Span EVERYWHERE = new Climate.Span(new Climate(-1, -1, -1, -1, -1), new Climate(1, 1, 1, 1, 1));
-    /** Deepest water, blocks: Mario walks its floor (no swimming yet) with his head out. */
-    static final int MAX_WATER_DEPTH = 2;
-    /** An ocean or river planet's continentalness reaches this far inland: it gets a few islands. */
-    static final double ISLANDS = 0.2;
+    static final String STONE = "minecraft:stone", WATER = BiomeSurface.WATER, ICE = BiomeSurface.ICE, LAVA = "minecraft:lava",
+            GRAVEL = "minecraft:gravel", SANDSTONE = "minecraft:sandstone", SAND = "minecraft:sand", RED_SAND = "minecraft:red_sand";
+    /** Badlands' terracotta bands, bottom to top, repeating. */
+    static final List<String> BANDS = List.of("minecraft:terracotta", "minecraft:orange_terracotta", "minecraft:orange_terracotta",
+            "minecraft:yellow_terracotta", "minecraft:terracotta", "minecraft:white_terracotta", "minecraft:brown_terracotta",
+            "minecraft:orange_terracotta", "minecraft:red_terracotta", "minecraft:red_terracotta", "minecraft:terracotta",
+            "minecraft:light_gray_terracotta", "minecraft:yellow_terracotta", "minecraft:orange_terracotta", "minecraft:brown_terracotta");
 
     private PlanetGenerator() {}
 
-    /** The biome a one-biome blueprint gets: its own, or for "random" one of the land biomes by its seed. */
-    public static String biome(PlanetBlueprint bp, BiomeTable table) {
+    /** The biome a one-biome blueprint gets: its own, or for "random" one of 1.7's land biomes by its seed. */
+    public static String biome(PlanetBlueprint bp) {
         if (!PlanetBlueprint.RANDOM.equals(bp.biome())) return bp.biome();
-        List<String> land = table.land();
+        List<String> land = LegacyBiome.land();
         return land.get(new Random(bp.seed()).nextInt(land.size()));
     }
 
@@ -52,114 +49,158 @@ public final class PlanetGenerator {
     }
 
     /** ids gives the planet's id for a block's text (Blocks.parse in the game). */
-    public static VoxelPlanet build(PlanetBlueprint bp, TerrainNoise noise, BiomeTable table, Vegetation.Library plants,
-            Blocks blocks, ToIntFunction<String> ids) {
-        return cells(bp, noise, table, plants, ids).planet(blocks);
+    public static VoxelPlanet build(PlanetBlueprint bp, Vegetation.Library plants, Blocks blocks, ToIntFunction<String> ids) {
+        return cells(bp, plants, ids).planet(blocks);
     }
 
-    /** Every block a generated planet can be made of: what ids must know. */
-    public static java.util.Set<String> blocks() {
-        java.util.Set<String> all = new java.util.TreeSet<>(BiomeSurface.blocks());
+    /** Every block a generated planet can be made of, before plants: what ids must know. */
+    public static Set<String> blocks() {
+        Set<String> all = new TreeSet<>(BiomeSurface.blocks());
         all.addAll(Underground.blocks());
+        all.addAll(BANDS);
+        all.addAll(List.of(LAVA, GRAVEL, SANDSTONE, SAND, RED_SAND, "minecraft:snow"));
         return all;
     }
 
+    /** The direction through a point of a face's grid at fractional (u, v) (vertices at whole numbers). */
+    static Vector3d dirAt(CubeSphere g, int f, double u, double v) {
+        int i = Math.min((int) Math.floor(u), g.n - 1), j = Math.min((int) Math.floor(v), g.n - 1);
+        double a = u - i, b = v - j;
+        Vector3d d = g.dir(f, i, j).mul((1 - a) * (1 - b));
+        d.fma(a * (1 - b), g.dir(f, i + 1, j)).fma((1 - a) * b, g.dir(f, i, j + 1)).fma(a * b, g.dir(f, i + 1, j + 1));
+        return d.normalize();
+    }
+
     /** The cells alone: safe off the game's thread when ids only reads (see {@link #blocks()}). */
-    public static Cells cells(PlanetBlueprint bp, TerrainNoise noise, BiomeTable table, Vegetation.Library plants,
-            ToIntFunction<String> ids) {
-        int radius = bp.radius(), air = bp.air(), depth = VoxelPlanet.groundDepth(radius);
-        SurfaceSampler sampler = new SurfaceSampler(bp, noise, table);
-        CubeSphere grid = sampler.grid();
-        int n = grid.n;
-        boolean water = sampler.water();
-        int columns = 6 * n * n;
-        int[] height = new int[columns];
-        String[] biome = new String[columns];
-        float[] dirs = new float[3 * columns];
-        java.util.stream.IntStream.range(0, 6).parallel().forEach(f -> {
+    public static Cells cells(PlanetBlueprint bp, Vegetation.Library plants, ToIntFunction<String> ids) {
+        Density density = new Density(bp);
+        Density.Scale scale = density.scale();
+        int radius = bp.radius(), depth = scale.depth();
+        CubeSphere grid = new CubeSphere(VoxelPlanet.gridSize(radius), radius - depth, depth + scale.air());
+        int n = grid.n, layers = grid.layers, columns = 6 * n * n;
+        char[] cells = new char[grid.cellCount()];
+        LegacyBiome[] biome = new LegacyBiome[columns];
+        boolean water = bp.water();
+        char stone = id(ids, STONE), deepslate = id(ids, Underground.DEEPSLATE), waterId = id(ids, WATER), bedrock = id(ids, "minecraft:bedrock");
+        int deepTop = (depth - 1) / 3;
+
+        // Ground and sky: the density on a lattice, between its points interpolated (Lattice).
+        Lattice lattice = new Lattice(density, grid);
+        int m = lattice.m;
+        IntStream.range(0, 6).parallel().forEach(f -> {
+            double[][] nodes = new double[(m + 1) * (m + 1)][];
+            for (int a = 0; a <= m; a++)
+                for (int b = 0; b <= m; b++) nodes[a * (m + 1) + b] = lattice.column(f, a, b);
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++) {
-                    int col = (f * n + i) * n + j;
-                    Vector3d p = SurfaceSampler.columnDir(grid, f, i, j);
-                    dirs[3 * col] = (float) p.x;
-                    dirs[3 * col + 1] = (float) p.y;
-                    dirs[3 * col + 2] = (float) p.z;
-                    SurfaceSampler.Column c = sampler.at(p);
-                    biome[col] = c.biome();
-                    height[col] = c.height();
+                    int col = (f * n + i) * n + j, base = col * layers;
+                    biome[col] = density.layout().at(dirAt(grid, f, i + 0.5, j + 0.5));
+                    double[] at = lattice.place(i, j);
+                    int a = (int) at[0], b = (int) at[1];
+                    double[] c00 = nodes[a * (m + 1) + b], c10 = nodes[(a + 1) * (m + 1) + b], c01 = nodes[a * (m + 1) + b + 1],
+                            c11 = nodes[(a + 1) * (m + 1) + b + 1];
+                    cells[base] = bedrock;
+                    for (int k = 1; k < layers; k++) {
+                        if (lattice.solid(c00, c10, c01, c11, at[2], at[3], k)) cells[base + k] = k <= deepTop ? deepslate : stone;
+                        else if (water && k < depth) cells[base + k] = waterId;
+                    }
                 }
         });
 
-        Map<String, int[]> palettes = new HashMap<>(); // cover, top, filler, stone ids by biome
-        char[] cells = new char[grid.cellCount()];
-        int bedrock = ids.applyAsInt("minecraft:bedrock"), waterId = ids.applyAsInt(BiomeSurface.WATER),
-                ice = ids.applyAsInt(BiomeSurface.ICE), sea = depth - 1, stone = ids.applyAsInt(Underground.STONE),
-                deepslate = ids.applyAsInt(Underground.DEEPSLATE), deepslateTop = (depth - 1) / 3;
-        for (int col = 0; col < columns; col++) {
-            int[] pal = palettes.computeIfAbsent(biome[col], b -> {
-                BiomeSurface.Palette s = BiomeSurface.of(b);
-                return new int[] {s.cover() == null ? Blocks.AIR : ids.applyAsInt(s.cover()), ids.applyAsInt(s.top()),
-                        ids.applyAsInt(s.filler()), ids.applyAsInt(s.stone())};
+        // Each biome's blocks over its ground, 1.7's way.
+        Map<LegacyBiome, char[]> palettes = new HashMap<>(); // cover, top, filler
+        for (LegacyBiome b : biome)
+            palettes.computeIfAbsent(b, x -> {
+                BiomeSurface.Palette p = BiomeSurface.of(x.id());
+                return new char[] {p.cover() == null ? (char) Blocks.AIR : id(ids, p.cover()), id(ids, p.top()), id(ids, p.filler())};
             });
-            int base = col * grid.layers, top = depth - 1 + height[col];
-            boolean steep = steep(grid, n, height, col), wet = water && top < sea;
-            cells[base] = (char) bedrock;
-            for (int k = 1; k <= top; k++) {
-                int below = top - k;
-                int id = below == 0 ? (steep ? pal[3] : wet ? pal[2] : pal[1]) : below <= BiomeSurface.FILLER_DEPTH ? pal[2] : pal[3];
-                cells[base + k] = (char) (id == stone && k <= deepslateTop ? deepslate : id);
+        char redSand = id(ids, RED_SAND), gravel = id(ids, GRAVEL), sand = id(ids, SAND), sandstone = id(ids, SANDSTONE), ice = id(ids, ICE), lava = id(ids, LAVA);
+        char[] bands = new char[BANDS.size()];
+        for (int i = 0; i < bands.length; i++) bands[i] = id(ids, BANDS.get(i));
+        Perlin.Octaves surface = new Perlin.Octaves(new Random(bp.seed() * 7 + 3), 4);
+        int[] top = new int[columns];
+        IntStream.range(0, 6).parallel().forEach(f -> {
+            Random rnd = new Random(bp.seed() * 31 + f);
+            for (int col = f * n * n; col < (f + 1) * n * n; col++) {
+                int base = col * layers;
+                LegacyBiome b = biome[col];
+                char[] pal = palettes.get(b);
+                boolean badlands = b == LegacyBiome.BADLANDS || b == LegacyBiome.WOODED_BADLANDS;
+                Vector3d d = dirAt(grid, f, grid.i(base) + 0.5, grid.j(base) + 0.5);
+                double s = radius / scale.hs() * 0.0625;
+                int run = (int) (surface.sample(d.x * s, d.y * s, d.z * s) / 3 + 3 + rnd.nextDouble() * 0.25);
+                int left = -1;
+                char filler = pal[2];
+                top[col] = 0;
+                for (int k = layers - 1; k > 0; k--) {
+                    char id = cells[base + k];
+                    if (id == Blocks.AIR || id == waterId) {
+                        left = -1;
+                        continue;
+                    }
+                    if (top[col] == 0) top[col] = k;
+                    if (left == -1) {
+                        int below = k - (depth - 1); // 0: the base surface's top block
+                        char head = pal[1];
+                        filler = pal[2];
+                        if (run <= 0) head = filler = stone;
+                        else if (below < 0 && k + 1 < layers && cells[base + k + 1] == waterId)
+                            head = below < (-7 - run) * scale.v() ? gravel : filler; // the sea's floor
+                        if (badlands && head != stone && below > 1) {
+                            head = b == LegacyBiome.WOODED_BADLANDS && below > 0.5 * scale.air() ? pal[1] : redSand;
+                            filler = (char) 0;
+                        }
+                        cells[base + k] = head;
+                        left = run;
+                    } else if (left > 0) {
+                        left--;
+                        cells[base + k] = filler == 0 ? bands[Math.floorMod(k, bands.length)] : filler;
+                        if (left == 0 && filler == sand) {
+                            left = rnd.nextInt(4);
+                            filler = sandstone;
+                        }
+                    } else if (badlands && k >= depth - 1) cells[base + k] = bands[Math.floorMod(k, bands.length)];
+                }
             }
-            if (wet) {
-                for (int k = top + 1; k <= sea; k++) cells[base + k] = (char) waterId;
-                if (BiomeSurface.frozen(biome[col])) cells[base + sea] = (char) ice;
-            } else if (!steep && top + 1 < grid.layers) cells[base + top + 1] = (char) pal[0];
-        }
-        boolean[] keepRoof = new boolean[columns]; // wet, or beside water: caves there would drain it
+        });
+
+        Caves.carve(grid, depth, cells, top, bp.seed(), bp.caves(), bp.entrances(), Math.max(1, Math.round(depth * 0.15f)), waterId, lava);
+
+        // After the caves: ground a cave opened to the sky gets its biome's top (dirt left bare there
+        // would turn to grass later, a block at a time); snow over snowy ground, ice over frozen water.
+        int[] height = new int[columns];
+        boolean[] bare = new boolean[columns];
         for (int col = 0; col < columns; col++) {
-            if (!water || height[col] >= 0) continue;
-            keepRoof[col] = true;
-            for (int side = CubeSphere.I_MINUS; side <= CubeSphere.J_PLUS; side++) {
-                int nb = grid.neighbor(col * grid.layers, side);
-                if (nb >= 0) keepRoof[nb / grid.layers] = true;
+            int base = col * layers, k = layers - 1;
+            while (k > 0 && cells[base + k] == Blocks.AIR) k--;
+            char[] pal = palettes.get(biome[col]);
+            char id = cells[base + k];
+            if (id == waterId) {
+                if (biome[col].frozen()) cells[base + k] = ice;
+                while (k > 0 && (cells[base + k] == waterId || cells[base + k] == ice)) k--;
+                height[col] = k - (depth - 1);
+                continue;
             }
-        }
-        Underground.carve(grid, depth, cells, height, dirs, keepRoof, noise, bp.caves(), bp.entrances(), radius);
-        // Ground a cave opened to the sky gets its biome's top, as Minecraft's carvers leave it:
-        // dirt left bare there would turn to grass later, a block at a time, each meshed and sent.
-        for (int col = 0; col < columns; col++) {
-            int[] pal = palettes.get(biome[col]);
-            if (pal[1] == pal[2]) continue;
-            int base = col * grid.layers;
-            for (int k = grid.layers - 2; k > 0; k--) {
-                int id = cells[base + k];
-                if (id == Blocks.AIR || id == pal[0]) continue;
-                if (id == pal[2] && cells[base + k + 1] == Blocks.AIR) cells[base + k] = (char) pal[1];
-                break; // the first ground from the sky down
+            if (id == pal[2] && pal[1] != pal[2] && cells[base + k] != stone) cells[base + k] = pal[1];
+            height[col] = k - (depth - 1);
+            if (k + 1 < layers && cells[base + k] == pal[1]) {
+                bare[col] = true;
+                if (pal[0] != Blocks.AIR) cells[base + k + 1] = pal[0];
             }
         }
         Underground.ores(grid, depth, cells, height, bp.seed(), bp.ores(), ids);
         if (bp.plants() > 0) {
-            // Bare ground: its biome's top block, not under water, not a cliff, open above (or snow).
-            boolean[] bare = new boolean[columns];
-            int snow = ids.applyAsInt("minecraft:snow");
-            for (int col = 0; col < columns; col++) {
-                int base = col * grid.layers, top = depth - 1 + height[col];
-                if (top + 1 >= grid.layers || keepRoof[col] && height[col] < 0) continue;
-                int above = cells[base + top + 1];
-                bare[col] = cells[base + top] == palettes.get(biome[col])[1] && (above == Blocks.AIR || above == snow);
-            }
-            Vegetation.plant(grid, depth, cells, height, biome, bare, plants, bp.seed(), bp.plants(), ids);
+            String[] names = new String[columns];
+            for (int col = 0; col < columns; col++) names[col] = biome[col].id();
+            Vegetation.plant(grid, depth, cells, height, names, bare, plants, bp.seed(), bp.plants(), ids);
         }
-        return new Cells(grid, depth, cells, dev.moui.galaxycraft.voxel.PlanetBiomes.of(biome));
+        String[] names = new String[columns];
+        for (int col = 0; col < columns; col++) names[col] = biome[col].id();
+        return new Cells(grid, depth, cells, dev.moui.galaxycraft.voxel.PlanetBiomes.of(names));
     }
 
-    /** Whether a column stands STEEP or more above any of its four neighbors (on its face or past an edge). */
-    private static boolean steep(CubeSphere grid, int n, int[] height, int col) {
-        int cell = col * grid.layers;
-        for (int side = CubeSphere.I_MINUS; side <= CubeSphere.J_PLUS; side++) {
-            int nb = grid.neighbor(cell, side);
-            if (nb >= 0 && height[nb / grid.layers] <= height[col] - STEEP) return true;
-        }
-        return false;
+    private static char id(ToIntFunction<String> ids, String name) {
+        return (char) ids.applyAsInt(name);
     }
+
 }

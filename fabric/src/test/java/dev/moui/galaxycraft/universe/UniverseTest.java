@@ -108,4 +108,21 @@ class UniverseTest {
         assertTrue(stars.size() > 2000);
         assertTrue(ms < 250, "17^3 sectors in " + ms + " ms");
     }
+
+    @Test void layoutOneIsTodaysUniverseLayoutTwoReachesFarther() {
+        var today = new Universe(7, U).around(UPos.ZERO, 3);
+        var one = new Universe(7, U, 1).around(UPos.ZERO, 3);
+        assertEquals(today, one);
+        Universe two = new Universe(7, U, 2);
+        assertEquals(Universe.SYSTEM_BLOCKS, new Universe(7, U, 1).systemBlocks());
+        assertEquals(3500, two.systemBlocks());
+        var stars = two.around(UPos.ZERO, 3);
+        for (var a : stars)
+            for (var b : stars)
+                if (a != b) assertTrue(a.center().minus(b.center()).length() / U >= 2 * 3500 + Universe.GAP_BLOCKS - 1e-6);
+        for (var s : stars)
+            if (!s.home())
+                for (var e : two.system(s, java.util.List.of("minecraft:plains")).entries())
+                    assertTrue(e.center().length() / U + dev.moui.galaxycraft.voxel.PlanetSession.gravityRadius(e.radius()) <= 3500 + 1e-6);
+    }
 }

@@ -32,6 +32,13 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftWater")) { // tools/gxvoxel.sh water: WaterProbe in the dev Dolphin
+				vmArg "-Dgalaxycraft.water=true"
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftEntities")) { // tools/gxvoxel.sh entities: EntityTest in the dev Dolphin
 				vmArg "-Dgalaxycraft.entities=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
@@ -70,6 +77,13 @@ loom {
 			}
 			if (project.hasProperty("galaxycraftUniverse")) { // tools/gxvoxel.sh universe: UniverseProbe, the floating origin and endless systems
 				vmArg "-Dgalaxycraft.universeProbe=true"
+				if (project.hasProperty("galaxycraftUniverseStation")) vmArg "-Dgalaxycraft.universeStation=true"
+				vmArg "-Dgalaxycraft.planetDir=" // empty: each world keeps its own galaxy, as when playing
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
+			if (project.hasProperty("galaxycraftApproach")) { // tools/gxvoxel.sh approach: ApproachProbe, planets seen from afar
+				vmArg "-Dgalaxycraft.approachProbe=true"
 				vmArg "-Dgalaxycraft.planetDir=" // empty: each world keeps its own galaxy, as when playing
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
@@ -112,6 +126,8 @@ loom {
 			}
 			if (project.hasProperty("galaxycraftStationGame")) { // tools/gxvoxel.sh station: StationDolphinProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.stationGame=true"
+				if (project.hasProperty("galaxycraftStationPin")) vmArg "-Dgalaxycraft.stationPin=" + project.property("galaxycraftStationPin")
+				if (project.hasProperty("galaxycraftStationUp")) vmArg "-Dgalaxycraft.stationUp=" + project.property("galaxycraftStationUp")
 				vmArg "-Dgalaxycraft.stationsAnywhere=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
 				vmArg "-Dgalaxycraft.galaxy=true"
@@ -167,6 +183,12 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.stationsAnywhere=true"
 			}
+			if (project.hasProperty("galaxycraftSoundtrack")) { // SoundtrackProbe: synthetic songs, no audio line, no game
+				vmArg "-Dgalaxycraft.soundtrack=true"
+				vmArg "-Dgalaxycraft.soundtrackNull=true"
+				vmArg "-Dgalaxycraft.soundtrackDir=${buildDir}/soundtrack-probe"
+				vmArg "-Dgalaxycraft.hidden=true"
+			}
 			if (project.hasProperty("galaxycraftSpawn")) { // SpawnProbe: mobs spawning on a planet, no game
 				vmArg "-Dgalaxycraft.spawn=true"
 				vmArg "-Dgalaxycraft.hidden=true"
@@ -192,6 +214,9 @@ loom {
 			}
 			if (name == "client" && project.hasProperty("galaxycraftGameDir")) { // tools/gxplay.sh: kept between runs
 				runDir = project.property("galaxycraftGameDir")
+			}
+			if (project.hasProperty("galaxycraftTraceBodies")) { // tools/gxplay.sh with GXC_TRACE_BODIES=1: bodies near Mario, once a second
+				vmArg "-Dgalaxycraft.traceBodies=true"
 			}
 			if (project.hasProperty("galaxycraftHidden")) { // no window on the desktop
 				vmArg "-Dgalaxycraft.hidden=true"

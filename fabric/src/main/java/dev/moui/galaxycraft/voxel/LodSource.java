@@ -98,8 +98,7 @@ public interface LodSource {
 
             @Override public Patch patch(int face, int i0, int i1, int j0, int j1) {
                 int i = (i0 + i1) / 2, j = (j0 + j1) / 2;
-                Vector3d dir = SurfaceSampler.columnDir(g, face, Math.min(i, g.n - 1), Math.min(j, g.n - 1));
-                SurfaceSampler.Column c = s.at(dir);
+                SurfaceSampler.Column c = s.at(face, Math.min(i, g.n - 1), Math.min(j, g.n - 1));
                 int cell = g.index(face, Math.min(i, g.n - 1), Math.min(j, g.n - 1), 0);
                 biomeAt.put(cell, c.biome());
                 boolean wet = s.water() && c.height() < 0;

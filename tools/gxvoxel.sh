@@ -6,6 +6,7 @@
 #   tools/gxvoxel.sh          (captures: ~/.local/share/galaxycraft-dev/ScreenShots/SB4E01/voxel-*.png)
 #   tools/gxvoxel.sh held     HeldItemTest instead: Steve holds the hotbar's items (held-*.png)
 #   tools/gxvoxel.sh entities EntityTest instead: mobs, TNT and drops drawn by the game (entities-*.png)
+#   tools/gxvoxel.sh water    WaterProbe instead: water over what is in it, the view from under it (water-*.png)
 #   tools/gxvoxel.sh perf     PerfProbe instead: what each kind of planet costs the emulator (perf-*.png);
 #                             GXC_PERF_ARGS="-PperfOnly=caves -PperfRadius=128" narrows or changes it
 #   tools/gxvoxel.sh lod      LodProbe instead: a planet seen from 40 to 1200 blocks off (lod-*.png)
@@ -25,6 +26,8 @@
 #                             back (launch-*.png in fabric/build/run/clientGameTest/screenshots)
 #   tools/gxvoxel.sh universe UniverseProbe: the floating origin a million blocks out and following Mario
 #                             through the void (universe-*.png)
+#   tools/gxvoxel.sh approach ApproachProbe: a planet from 5000 blocks to its gravity, never invisible; a star
+#                             opening into its planets (approach-*.png in the dev Dolphin's ScreenShots)
 #   tools/gxvoxel.sh galaxy   GalaxyProbe: Create World's tab, a galaxy of 64 planets, 8 complete and the
 #                             rest far, an edit on the farthest kept (galaxy-*.png)
 set -u
@@ -32,7 +35,7 @@ set -u
 GUI="${GXC_GUI:+--gui}"
 # Under gdb (crash backtraces in the log) the windowed Dolphin quits at once: not with GXC_GUI.
 GDB="--gdb"; [ -z "$GUI" ] || GDB=""
-if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ] || [ "${1:-}" = universe ]; then
+if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ] || [ "${1:-}" = universe ] || [ "${1:-}" = approach ]; then
   # LauncherProbe (or GalaxyProbe, a world of many planets): the dev Dolphin boots by itself (no
   # savestate), Minecraft starts at its title.
   G="python3 tools/gxdev.py"
@@ -40,6 +43,7 @@ if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ] || [ "${1:-}" = universe ]; th
   export JAVA_HOME
   if [ "$1" = galaxy ]; then NAME=GalaxyProbe GPROP=galaxycraftGalaxy GTAG=galaxy
   elif [ "$1" = universe ]; then NAME=UniverseProbe GPROP=galaxycraftUniverse GTAG=universe
+  elif [ "$1" = approach ]; then NAME=ApproachProbe GPROP=galaxycraftApproach GTAG=approach
   else NAME=LauncherProbe GPROP=galaxycraftLauncher GTAG=launch; fi
   LOG="$HOME/.local/share/galaxycraft-dev/$GTAG-minecraft.log"
   syati/build.sh > /dev/null 2>&1 || { echo "gxvoxel: FAILED: syati/build.sh" >&2; exit 1; }
@@ -64,6 +68,7 @@ cd "$(dirname "$0")/.." || exit 1
 G="python3 tools/gxdev.py"
 if [ "${1:-}" = held ]; then TEST=HeldItemTest PROP=galaxycraftHeld TAG=held
 elif [ "${1:-}" = entities ]; then TEST=EntityTest PROP=galaxycraftEntities TAG=entities
+elif [ "${1:-}" = water ]; then TEST=WaterProbe PROP=galaxycraftWater TAG=water
 elif [ "${1:-}" = perf ]; then TEST=PerfProbe PROP=galaxycraftPerf TAG=perf
 elif [ "${1:-}" = walk ]; then TEST=WalkProbe PROP=galaxycraftWalk TAG=walk
 elif [ "${1:-}" = movement ]; then TEST=MovementProbe PROP=galaxycraftMovement TAG=movement

@@ -40,8 +40,8 @@ import org.joml.Vector3d;
 final class GalaxyStream {
     /** Ticks between looks at which planets are near. */
     static final int EVERY = 10;
-    /** Far views built in one tick at most. */
-    static final int MESHES_PER_TICK = 2;
+    /** Far views built in one tick at most (their costly part was worked out on the workers). */
+    static final int MESHES_PER_TICK = 4;
     private static final double UNITS = 1 / GravityFrame.SCALE;
 
     private final GalaxySave save;
@@ -49,6 +49,8 @@ final class GalaxyStream {
     private final String stage;
     private final List<GalaxyCatalog.Entry> entries;
     private final GalaxyCatalog.Options options;
+    /** The world's layout, kept when the galaxy is saved again. */
+    private final int layout;
     /**
      * The endless universe around the world's galaxy (its home system): the generated systems near
      * Mario, their planets as entries like the world's own (indexes from SystemIndex, centers in
@@ -56,8 +58,6 @@ final class GalaxyStream {
      */
     private final Universe universe;
     private final Map<Universe.Sector, List<GalaxyCatalog.Entry>> systems = new java.util.LinkedHashMap<>();
-    /** A system's planets join within this many blocks of its center, and leave past UNLOAD_BLOCKS. */
-    static final double LOAD_BLOCKS = 6000, UNLOAD_BLOCKS = 8000;
     private List<GalaxyCatalog.Entry> all;
     private final Map<Integer, FarPlanet> far = new HashMap<>();
     private final List<FarPlanet> farLeaving = new ArrayList<>();
@@ -84,6 +84,7 @@ final class GalaxyStream {
         this.store = store;
         this.stage = stage;
         this.options = galaxy.options();
+        this.layout = galaxy.layout();
         this.entries = new ArrayList<>(galaxy.entries());
         this.universe = universe;
     }
@@ -117,15 +118,16 @@ final class GalaxyStream {
         return all().stream().filter(x -> x.index() == index).findFirst();
     }
 
-    /** The systems near Mario in, the far ones out (only once none of their planets is complete or being made). */
+    /** The systems near Mario in (FarSight.load), the far ones out (only once none of their planets is complete or being made). */
     private void systemsNear(Vector3d from) {
         if (universe == null) return;
         UPos at = UPos.of(from);
-        for (Universe.Star star : universe.around(at, 1))
-            if (!star.home() && star.center().minus(at).length() < LOAD_BLOCKS * UNITS) load(star.sector());
+        // Known (as dots) from FarSight.LOAD blocks: a sector is 8192, so three around reach that far.
+        for (Universe.Star star : universe.around(at, 3))
+            if (!star.home() && dev.moui.galaxycraft.voxel.FarSight.load(star.center().minus(at).length() / UNITS, false)) load(star.sector());
         for (Universe.Sector s : new ArrayList<>(systems.keySet())) {
             Universe.Star star = universe.star(s).orElse(null);
-            if (star != null && star.center().minus(at).length() < UNLOAD_BLOCKS * UNITS) continue;
+            if (star != null && dev.moui.galaxycraft.voxel.FarSight.load(star.center().minus(at).length() / UNITS, true)) continue;
             List<GalaxyCatalog.Entry> planets = systems.get(s);
             boolean busy = planets.stream().anyMatch(e -> {
                 PlanetSession ps = PlanetClient.sessionOf(e.index());
@@ -135,6 +137,10 @@ final class GalaxyStream {
             for (GalaxyCatalog.Entry e : planets) {
                 dropFar(e.index());
                 meshes.keySet().removeIf(k -> k >> 4 == e.index());
+                samplers.remove(e.index());
+                levels.remove(e.index());
+                dotColors.remove(e.index());
+                warming.keySet().removeIf(k -> k >> 4 == e.index());
                 fromCells.remove(e.index());
                 recent.remove(e.index());
                 failed.remove(e.index());
@@ -143,6 +149,33 @@ final class GalaxyStream {
             all = null;
             GalaxyCraft.LOG.info("System {} left behind", SystemIndex.name(s));
         }
+    }
+
+    /** -Dgalaxycraft.traceBodies: the catalog planets within 1500 blocks of their gravity that are not complete, and what is being done about them. */
+    void trace(Vector3d from, double speed) {
+        for (GalaxyCatalog.Entry e : all()) {
+            PlanetSession s = PlanetClient.sessionOf(e.index());
+            if (s != null && s.active()) continue;
+            double past = (e.center().distance(from) - PlanetSession.gravityRadius(e.radius()) * UNITS) / UNITS;
+            if (past > 1500) continue;
+            GalaxyCraft.LOG.info("trace: planet {} not complete, {} blocks past gravity, {} blocks/s, {}, wanted {}, ahead {}, making {}, failed {}",
+                    e.index(), Math.round(past), Math.round(speed), shownAs(e.index()), wanted.contains(e.index()), ahead.contains(e.index()),
+                    making.containsKey(e.index()), failed.contains(e.index()));
+        }
+    }
+
+    /** How a planet shows now (tests): complete, far (and its patches), dot, or none (not known here). */
+    String shownAs(int index) {
+        PlanetSession s = PlanetClient.sessionOf(index);
+        if (s != null && s.active()) return "complete";
+        FarPlanet f = far.get(index);
+        if (f != null && f.patches() > 0 && f.queued() == 0) return "far" + f.patches();
+        return all().stream().anyMatch(e -> e.index() == index) ? "dot" : "none";
+    }
+
+    /** Whether that system's planets are known here (shown as dots or more): home always. */
+    boolean knows(Universe.Sector s) {
+        return s.equals(Universe.Sector.HOME) || systems.containsKey(s);
     }
 
     /** Out between systems: no planet's system. */
@@ -161,13 +194,27 @@ final class GalaxyStream {
         if (star == null || star.home() || gen == null) return;
         Vector3d c = star.center().minus(UPos.ZERO);
         List<GalaxyCatalog.Entry> planets = new ArrayList<>();
-        for (GalaxyCatalog.Entry e : universe.system(star, gen.biomes().land()).entries())
+        for (GalaxyCatalog.Entry e : universe.system(star, dev.moui.galaxycraft.voxel.gen.LegacyBiome.land()).entries())
             planets.add(new GalaxyCatalog.Entry(SystemIndex.index(s, e.index()), c.x + e.x(), c.y + e.y(), c.z + e.z(), e.radius(),
                     e.kind(), e.biome(), e.blueprint(), e.seed()));
         systems.put(s, planets);
         all = null;
         GalaxyCraft.LOG.info("System {} in: {} planets, {} blocks from home", SystemIndex.name(s), planets.size(),
                 Math.round(c.length() / UNITS));
+    }
+
+    /**
+     * The planets near Mario that are made and fully in the game, and how many are wanted: what
+     * entering a galaxy waits for, so their making and sending does not stall the first moments.
+     * One that could not be made counts as done.
+     */
+    int[] nearLoaded() {
+        int done = 0;
+        for (int index : wanted) {
+            PlanetSession s = PlanetClient.sessionOf(index);
+            if (failed.contains(index) || s != null && s.active() && s.queued() == 0) done++;
+        }
+        return new int[] {done, wanted.size()};
     }
 
     /** That planet could not be made (it is not waited for). */
@@ -271,11 +318,18 @@ final class GalaxyStream {
         making.put(index, f);
     }
 
-    /** What a catalog planet is made from when it has no file (null: nothing to make it from). */
-    static PlanetBlueprint recipe(GalaxyCatalog.Entry e) {
-        if (e.kind() == GalaxyCatalog.Kind.GENERATED)
+    /**
+     * What a catalog planet is made from when it has no file (null: nothing to make it from). A
+     * generated one is several biomes (Auto), but the first planet when Create World named its biome.
+     */
+    PlanetBlueprint recipe(GalaxyCatalog.Entry e) {
+        if (e.kind() == GalaxyCatalog.Kind.GENERATED) {
+            GalaxyCatalog.First first = options == null ? null : options.first();
+            boolean named = e.index() == 0 && first != null && !first.isBlueprint() && first.biome() != null
+                    && !PlanetBlueprint.RANDOM.equals(first.biome());
             return PlanetBlueprint.standard("Planet " + e.index(), e.radius()).withMode(PlanetBlueprint.Mode.GENERATED)
-                    .withBiome(e.seed(), e.biome(), 0).withWater(true).withUnderground(50, true, 100).withPlants(100);
+                    .withBiome(e.seed(), named ? first.biome() : PlanetBlueprint.RANDOM, named ? 0 : PlanetBlueprint.AUTO).withWater(true).withUnderground(50, true, 100).withPlants(100);
+        }
         if (e.blueprint() == null) return null;
         try {
             return PlanetClient.blueprints.read(e.blueprint()).orElse(null);
@@ -331,35 +385,138 @@ final class GalaxyStream {
         GalaxyCraft.LOG.info("Planet {} of the galaxy is far now", e.index());
     }
 
-    /** Every planet not complete is far; its view as detailed as it looks big, a few built per tick. */
+    /** Far views at once at most: the game draws 80 planets that only show, a few kept for those leaving. */
+    static final int MAX_FAR = 72;
+    /** What each planet far away shows as now (no entry: a dot). */
+    private final Map<Integer, dev.moui.galaxycraft.voxel.FarSight.Level> levels = new HashMap<>();
+    /** Generated planets' samplers: their terrain worked out once, refined views read it again. */
+    private final Map<Integer, SurfaceSampler> samplers = new HashMap<>();
+    /** Far views being worked out on the workers (index << 4 | patches): built here once done. */
+    private final Map<Integer, CompletableFuture<Void>> warming = new HashMap<>();
+
+    /**
+     * Every planet not complete is a dot, or a far view once it looks big enough (the biggest on
+     * screen first, MAX_FAR at most); a view's costly part is worked out on the workers, then built
+     * here from it.
+     */
     private void meshFar(Vector3d from) {
-        int built = 0;
+        List<GalaxyCatalog.Entry> want = new ArrayList<>();
+        Map<Integer, Double> angle = new HashMap<>();
         for (GalaxyCatalog.Entry e : all()) {
             PlanetSession s = PlanetClient.sessionOf(e.index());
             boolean complete = s != null && s.active();
             if (complete && !promoting.containsKey(e.index())) {
                 dropFar(e.index());
+                levels.remove(e.index());
                 continue;
             }
+            double a = dev.moui.galaxycraft.voxel.FarSight.angle(e.radius() * UNITS, e.center().distance(from));
+            var had = levels.getOrDefault(e.index(), dev.moui.galaxycraft.voxel.FarSight.Level.DOT);
+            var now = dev.moui.galaxycraft.voxel.FarSight.level(a, had);
+            if (now == dev.moui.galaxycraft.voxel.FarSight.Level.FAR || complete) {
+                want.add(e);
+                angle.put(e.index(), a);
+            } else {
+                levels.remove(e.index());
+                dropFar(e.index());
+            }
+        }
+        want.sort(java.util.Comparator.comparingDouble((GalaxyCatalog.Entry e) -> -angle.get(e.index())));
+        int built = 0;
+        for (int k = 0; k < want.size(); k++) {
+            GalaxyCatalog.Entry e = want.get(k);
+            boolean complete = PlanetClient.sessionOf(e.index()) != null && PlanetClient.sessionOf(e.index()).active();
+            if (k >= MAX_FAR && !complete) { // no room: a dot
+                levels.remove(e.index());
+                dropFar(e.index());
+                continue;
+            }
+            levels.put(e.index(), dev.moui.galaxycraft.voxel.FarSight.Level.FAR);
             FarPlanet f = far.get(e.index());
-            double surface = e.radius();
-            int patches = PlanetLayout.farPatches(surface * UNITS, e.center().distance(from), f == null ? 0 : f.patches());
+            int patches = PlanetLayout.farPatches(e.radius() * UNITS, e.center().distance(from), f == null ? 0 : f.patches());
             if (f != null && f.patches() == patches) continue;
-            PlanetLod.Part[] parts = meshes.get(e.index() << 4 | patches);
+            int key = e.index() << 4 | patches;
+            PlanetLod.Part[] parts = meshes.get(key);
             if (parts == null) {
+                if (!ready(e, patches)) continue; // being worked out
                 if (built >= MESHES_PER_TICK) continue;
                 parts = build(e, patches);
                 built++;
+                warming.remove(key);
                 if (parts == null) continue;
-                meshes.put(e.index() << 4 | patches, parts);
+                meshes.put(key, parts);
             }
             if (f == null) {
                 if (complete) continue; // promoting: its own far view is on its way
-                f = new FarPlanet(e.center(), surface, UNITS);
+                f = new FarPlanet(e.center(), e.radius(), UNITS);
                 far.put(e.index(), f);
             }
             f.mesh(patches, parts);
         }
+    }
+
+    /**
+     * Whether a far view at that many patches can be built on this thread now: at once for those
+     * cheap to make (blueprints, kept cells); for generated planets once their terrain there has
+     * been worked out on the workers (started here the first time).
+     */
+    private boolean ready(GalaxyCatalog.Entry e, int patches) {
+        if (fromCells.contains(e.index())) return true;
+        PlanetBlueprint bp = recipe(e);
+        if (bp == null || bp.mode() != PlanetBlueprint.Mode.GENERATED) return true;
+        int key = e.index() << 4 | patches;
+        CompletableFuture<Void> w = warming.get(key);
+        if (w == null) {
+            SurfaceSampler sampler = samplers.computeIfAbsent(e.index(), i -> new SurfaceSampler(bp));
+            warming.put(key, CompletableFuture.runAsync(() -> sampler.warm(patches), PlanetClient.workers));
+            return false;
+        }
+        if (w.isCompletedExceptionally()) {
+            warming.remove(key);
+            failed.add(e.index());
+            return false;
+        }
+        return w.isDone();
+    }
+
+    /**
+     * The planets shown only as dots of light now (with the star field): far ones without a far
+     * view sent yet, each as much as its system has opened from its star.
+     */
+    List<dev.moui.galaxycraft.universe.StarField.Dot> dots(Vector3d from) {
+        List<dev.moui.galaxycraft.universe.StarField.Dot> out = new ArrayList<>();
+        UPos at = UPos.of(from);
+        Map<Universe.Sector, Double> open = new HashMap<>();
+        for (GalaxyCatalog.Entry e : all()) {
+            PlanetSession s = PlanetClient.sessionOf(e.index());
+            if (s != null && s.active()) continue;
+            FarPlanet f = far.get(e.index());
+            if (f != null && f.patches() > 0 && f.queued() == 0) continue; // its far view shows
+            Universe.Sector sector = sectorOf(e);
+            double weight = open.computeIfAbsent(sector, k -> {
+                if (universe == null) return 1.0;
+                Universe.Star star = universe.star(k).orElse(null);
+                return star == null ? 1.0 : dev.moui.galaxycraft.voxel.FarSight.opened(star.center().minus(at).length() / UNITS);
+            });
+            out.add(new dev.moui.galaxycraft.universe.StarField.Dot(UPos.of(e.center()), e.radius(), dotColor(e), weight));
+        }
+        return out;
+    }
+
+    private final Map<Integer, Integer> dotColors = new HashMap<>();
+
+    /** A planet's dot color, from its recipe (worked out once). */
+    private int dotColor(GalaxyCatalog.Entry e) {
+        return dotColors.computeIfAbsent(e.index(), i -> {
+            PlanetBlueprint bp = recipe(e);
+            if (bp == null) return dev.moui.galaxycraft.voxel.DotColor.AUTO;
+            if (bp.mode() == PlanetBlueprint.Mode.GENERATED)
+                return dev.moui.galaxycraft.voxel.DotColor.generated(bp.biomeSize() == 0 ? dev.moui.galaxycraft.voxel.gen.PlanetGenerator.biome(bp) : null);
+            McBlocks blocks = PlanetClient.blocks();
+            if (bp.layers().isEmpty() || blocks == null) return dev.moui.galaxycraft.voxel.DotColor.AUTO;
+            var state = blocks.state(blocks.parse(bp.layers().getFirst().block()));
+            return dev.moui.galaxycraft.voxel.DotColor.blueprint(state == null ? -1 : state.getBlock().defaultMapColor().col);
+        });
     }
 
     /** A far view at that many patches: from the generator, a blueprint's top layer, or a ball of grass. */
@@ -376,9 +533,7 @@ final class GalaxyStream {
             }
             PlanetBlueprint bp = recipe(e);
             if (bp != null && bp.mode() == PlanetBlueprint.Mode.GENERATED) {
-                McWorldgen gen = PlanetClient.worldgen();
-                if (gen == null) return null;
-                SurfaceSampler sampler = new SurfaceSampler(bp, gen.noise(bp.seed()), gen.biomes());
+                SurfaceSampler sampler = samplers.computeIfAbsent(e.index(), i -> new SurfaceSampler(bp));
                 return PlanetLod.coarse(LodSource.sampled(sampler, blocks, blocks::parse), patches, UNITS);
             }
             String top = bp != null && !bp.layers().isEmpty() ? bp.layers().getFirst().block() : "minecraft:grass_block";
@@ -420,6 +575,10 @@ final class GalaxyStream {
         farLeaving.clear();
         for (CompletableFuture<Object> f : making.values()) f.cancel(false);
         making.clear();
+        for (CompletableFuture<Void> w : warming.values()) w.cancel(false);
+        warming.clear();
+        samplers.clear();
+        levels.clear();
         promoting.clear();
         recent.clear();
     }
@@ -456,7 +615,7 @@ final class GalaxyStream {
     }
 
     private void write() {
-        GalaxySave.Galaxy g = new GalaxySave.Galaxy(1, options, List.copyOf(entries));
+        GalaxySave.Galaxy g = new GalaxySave.Galaxy(layout, options, List.copyOf(entries));
         PlanetClient.saveLater(() -> {
             try {
                 save.writeGalaxy(g);

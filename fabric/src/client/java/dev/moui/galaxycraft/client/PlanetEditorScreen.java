@@ -308,9 +308,7 @@ public final class PlanetEditorScreen extends Screen {
     private void generatedWidgets(int x, int right) {
         int w = Math.min(220, right - x - 20);
         addRenderableWidget(Button.builder(Component.empty(), b -> {
-            McWorldgen gen = PlanetClient.worldgen();
-            if (gen == null) say("Biomes need a single player world", RED);
-            else minecraft.gui.setScreen(PickerScreen.biomes(this, gen.biomes().all(), biome, v -> biome = v));
+            minecraft.gui.setScreen(PickerScreen.biomes(this, dev.moui.galaxycraft.voxel.gen.LegacyBiome.all(), biome, v -> biome = v));
         }).bounds(x + 40, TOP, w, 20).tooltip(Tooltip.create(Component.literal(biome + "\nClick to choose another biome"))).build());
         EditBox seedBox = box(x + 40, TOP + ROW, Math.min(140, w - 40), seed, 20, v -> seed = v);
         seedBox.setResponder(v -> {
@@ -321,10 +319,12 @@ public final class PlanetEditorScreen extends Screen {
             seed = Long.toString(new java.util.Random().nextLong());
             rebuildWidgets();
         }).bounds(x + 44 + Math.min(140, w - 40), TOP + ROW, 34, 20).tooltip(Tooltip.create(Component.literal("Another seed"))).build());
+        // The slider's first stop (-16) is Auto (-1 in the blueprint).
         addRenderableWidget(new IntSlider(x + 40, TOP + 2 * ROW, w,
-                v -> v == 0 ? "Biomes: one per planet" : "Biomes: about " + v + " blocks across",
-                0, PlanetBlueprint.MAX_BIOME_SIZE, 16, biomeSize, v -> biomeSize = v))
-                .setTooltip(Tooltip.create(Component.literal("One per planet: all of it the biome above\nMore: Minecraft's biomes mixed, this big")));
+                v -> v < 0 ? "Biomes: Auto" : v == 0 ? "Biomes: one per planet" : "Biomes: about " + v + " blocks across",
+                -16, PlanetBlueprint.MAX_BIOME_SIZE, 16, biomeSize < 0 ? -16 : biomeSize, v -> biomeSize = v < 0 ? PlanetBlueprint.AUTO : v))
+                .setTooltip(Tooltip.create(Component.literal(
+                        "Auto: several biomes, sized to the planet\nOne per planet: all of it the biome above\nMore: biomes mixed, this big")));
         addRenderableWidget(Button.builder(Component.literal("Water: " + (water ? "On" : "Off")), b -> {
             water = !water;
             rebuildWidgets();
@@ -349,8 +349,7 @@ public final class PlanetEditorScreen extends Screen {
 
     /** The biome's name, red when this game has no such land biome. */
     private boolean biomeKnown() {
-        McWorldgen gen = PlanetClient.worldgen();
-        return PlanetBlueprint.RANDOM.equals(biome) || gen == null || gen.biomes().span(biome) != null;
+        return PlanetBlueprint.RANDOM.equals(biome) || dev.moui.galaxycraft.voxel.gen.LegacyBiome.of(biome) != null;
     }
 
     private EditBox box(int x, int y, int w, String value, int max, java.util.function.Consumer<String> to) {
@@ -519,15 +518,15 @@ public final class PlanetEditorScreen extends Screen {
         int right = width - 10, infoX = x + MODE_W + 6;
         if (mode == PlanetBlueprint.Mode.GENERATED) {
             if (entrancesButton != null) entrancesButton.active = caves > 0;
-            g.text(font, font.plainSubstrByWidth("From Minecraft's worldgen", right - infoX), infoX, 50, GRAY);
+            g.text(font, font.plainSubstrByWidth("Minecraft 1.7's terrain", right - infoX), infoX, 50, GRAY);
             g.text(font, "Biome", x, TOP + 6, GRAY);
             g.text(font, "Seed", x, TOP + ROW + 6, GRAY);
             String shown = PlanetBlueprint.RANDOM.equals(biome) ? "Random (from the seed)" : McWorldgen.name(biome);
-            if (biomeSize > 0) shown = "Mixed (" + shown + " unused)";
+            if (biomeSize != 0) shown = "Mixed (" + shown + " unused)";
             BlockState top = PlanetBlueprint.RANDOM.equals(biome) ? null : state(dev.moui.galaxycraft.voxel.gen.BiomeSurface.of(biome).top());
             if (top != null) g.item(new ItemStack(top.getBlock().asItem()), x + 42, TOP + 2);
             g.text(font, font.plainSubstrByWidth(shown, Math.min(220, right - x - 20) - 28), x + 62, TOP + 6,
-                    biomeKnown() ? biomeSize > 0 ? GRAY : WHITE : RED);
+                    biomeKnown() ? biomeSize != 0 ? GRAY : WHITE : RED);
             g.text(font, status, x, height - 40, statusColor);
             return;
         }

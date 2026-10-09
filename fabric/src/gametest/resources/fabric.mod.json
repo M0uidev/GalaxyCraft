@@ -9,6 +9,7 @@
 			"dev.moui.galaxycraft.gametest.LauncherProbe",
 			"dev.moui.galaxycraft.gametest.GalaxyProbe",
 			"dev.moui.galaxycraft.gametest.UniverseProbe",
+			"dev.moui.galaxycraft.gametest.ApproachProbe",
 			"dev.moui.galaxycraft.gametest.BiomeProbe",
 			"dev.moui.galaxycraft.gametest.PerfProbe",
 			"dev.moui.galaxycraft.gametest.WalkProbe",
@@ -25,6 +26,7 @@
 			"dev.moui.galaxycraft.gametest.PlanetEditorProbe",
 			"dev.moui.galaxycraft.gametest.HeldItemTest",
 			"dev.moui.galaxycraft.gametest.EntityTest",
+			"dev.moui.galaxycraft.gametest.WaterProbe",
 			"dev.moui.galaxycraft.gametest.MarioFitTest",
 			"dev.moui.galaxycraft.gametest.WalkOnStubPlanetTest",
 			"dev.moui.galaxycraft.gametest.DolphinOverlayDemo",
@@ -34,7 +36,8 @@
 			"dev.moui.galaxycraft.gametest.ShadowProbe",
 			"dev.moui.galaxycraft.gametest.WorkingBlocksProbe",
 			"dev.moui.galaxycraft.gametest.SpawnProbe",
-			"dev.moui.galaxycraft.gametest.StationProbe"
+			"dev.moui.galaxycraft.gametest.StationProbe",
+			"dev.moui.galaxycraft.gametest.SoundtrackProbe"
 		]
 	},
 	"depends": {"galaxycraft": "*"}

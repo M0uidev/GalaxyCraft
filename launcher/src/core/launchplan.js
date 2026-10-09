@@ -3,6 +3,7 @@
 // the plan out; building it touches nothing, so every system's plan is unit tested.
 const { pathFor, modulePatch } = require('./paths');
 const { gameDirOf } = require('./store');
+const { videoArgs } = require('./videoquality');
 
 /** The Java processes of Minecraft run hidden for the game say this in their command line. */
 const HIDDEN_MATCH = 'galaxycraft.hidden=true';
@@ -35,7 +36,7 @@ function splitArgs(text) {
  *   dolphinBin the patched Dolphin's binary
  *   env        the launcher's environment (copied into both processes)
  */
-function buildPlan({ root, paths, inst, javaHome, dolphinBin, descriptor = null, env = process.env }) {
+function buildPlan({ root, paths, inst, javaHome, dolphinBin, descriptor = null, env = process.env, settingsText = null }) {
   const p = pathFor(paths.platform);
   const win = paths.platform === 'win32';
   const gameDir = gameDirOf(inst, paths);
@@ -78,6 +79,7 @@ function buildPlan({ root, paths, inst, javaHome, dolphinBin, descriptor = null,
       // Dual core: the CPU and the GPU on their own threads, headroom on planets.
       '-C', `Dolphin.Core.CPUThread=${inst.dualCore ? 'True' : 'False'}`,
       '-C', 'Dolphin.Interface.ConfirmStop=False',
+      ...(settingsText === null ? [] : videoArgs(settingsText)), // null: the caller did not look
       ...(inst.fullscreen ? ['-C', 'Dolphin.Display.Fullscreen=True'] : []),
       ...splitArgs(inst.dolphinArgs),
     ],

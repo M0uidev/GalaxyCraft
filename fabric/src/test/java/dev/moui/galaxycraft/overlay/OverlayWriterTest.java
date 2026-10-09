@@ -58,9 +58,24 @@ class OverlayWriterTest {
         assertEquals(3, s.get(ValueLayout.JAVA_BYTE, pixels(0) + 3 * 4 + 1), "x of 4th pixel");
     }
 
-    @Test void rejectsOversizedFrames() throws Exception {
+    @Test void scalesOversizedFramesDownToFit() throws Exception {
         MemorySegment s = Shm.create(dir.resolve("shm")).seg();
-        assertFalse(new OverlayWriter(s).write(4000, 10, ByteBuffer.allocateDirect(4000 * 10 * 4), false));
+        assertTrue(new OverlayWriter(s).write(3840, 2160, ByteBuffer.allocateDirect(3840 * 2160 * 4), false));
+        assertEquals(1920, s.get(I, Layout.OFF_OVERLAY + 4));
+        assertEquals(1080, s.get(I, Layout.OFF_OVERLAY + 8));
+        assertEquals(0, s.get(I, Layout.OFF_OVERLAY));
+    }
+
+    @Test void scalingKeepsAspectRatio() throws Exception {
+        MemorySegment s = Shm.create(dir.resolve("shm")).seg();
+        assertTrue(new OverlayWriter(s).write(2560, 1600, ByteBuffer.allocateDirect(2560 * 1600 * 4), false));
+        assertEquals(1728, s.get(I, Layout.OFF_OVERLAY + 4));
+        assertEquals(1080, s.get(I, Layout.OFF_OVERLAY + 8));
+    }
+
+    @Test void rejectsEmptyFrames() throws Exception {
+        MemorySegment s = Shm.create(dir.resolve("shm")).seg();
+        assertFalse(new OverlayWriter(s).write(0, 10, ByteBuffer.allocateDirect(0), false));
         assertEquals(-1, s.get(I, Layout.OFF_OVERLAY));
     }
 }

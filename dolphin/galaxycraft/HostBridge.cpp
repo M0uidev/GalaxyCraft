@@ -163,6 +163,7 @@ void HostBridge::Tick(GuestMemory& mem)
   {
     m_shm.SetU32(offsetof(GxcHeader, host_flags), 0);
     m_in_game = false;
+    m_playing = false;
     m_cutscene = false;
     return;
   }
@@ -210,6 +211,7 @@ void HostBridge::Tick(GuestMemory& mem)
   }
   if (m_boot_space)
     m_minecraft_mode = m_in_world;
+  m_playing = m_in_game || (m_boot_space && m_in_world && m_ticks_since_game_frame <= IN_GAME_TICKS && !demo);
 
   // The stage name is set when a Mario spawns: empty while booting, FileSelect on the title.
   if (m_link_on_save && mbx.stage_name[0])
@@ -571,7 +573,7 @@ void HostBridge::WriteFollow(GuestMemory& mem, const PlayerState* player)
   const bool third = player && !(player->flags & GXC_PLAYER_WALKING) &&
                      (player->view != GXC_VIEW_FIRST || (player->flags & GXC_PLAYER_FLYING));
   // Playing in Minecraft's view the IR sits under its crosshair, which stands in for the pointer.
-  const bool hide_pointer = player && !galaxy && m_in_game;
+  const bool hide_pointer = player && !galaxy && m_playing;
   const bool hitboxes = player && (player->flags & GXC_PLAYER_HITBOXES);
   const bool mc_feel = player && (player->flags & GXC_PLAYER_MC_FEEL);
   const u32 boot = m_boot_space ? GXC_MBX_BOOT_SPACE | (InMenu() ? GXC_MBX_HOLD : 0u) : 0u;

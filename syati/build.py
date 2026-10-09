@@ -40,10 +40,11 @@ def run(cmd, env=None):
         sys.exit(1)
 
 
-def riivolution_xml():
+def riivolution_xml(steve=True):
     with open(os.path.join(HERE, "build/loader_patches.xml")) as f:
         patches = f.read().strip()
-    for arc in sorted(os.listdir(os.path.join(HERE, "build/ObjectData"))):
+    # Without the Steve arcs the game loads its own Mario (Mario Model: Original Mario).
+    for arc in sorted(os.listdir(os.path.join(HERE, "build/ObjectData"))) if steve else []:
         if arc.endswith(".arc"):
             patches += f'\n\t\t<file disc="/ObjectData/{arc}" external="/ObjectData/{arc}" />'
     patches += '\n\t\t<folder disc="/StageData/GalaxyCraftSpace" external="/StageData/GalaxyCraftSpace" create="true" />'
@@ -51,7 +52,7 @@ def riivolution_xml():
         return f.read().replace("@LOADER_PATCHES@", patches)
 
 
-def descriptor(game):
+def descriptor(game, xml="galaxycraft.xml"):
     build = os.path.join(HERE, "build")
     return {
         "type": "dolphin-game-mod-descriptor",
@@ -59,7 +60,7 @@ def descriptor(game):
         "base-file": game,
         "display-name": "Super Mario Galaxy 2 (Super Minecraft Galaxy)",
         "riivolution": {"patches": [{
-            "xml": os.path.join(build, "galaxycraft.xml"),
+            "xml": os.path.join(build, xml),
             "root": build,
             "options": [{"section-name": "GalaxyCraft", "option-name": "GalaxyCraft", "choice": 1}],
         }]},
@@ -102,6 +103,11 @@ def main():
         f.write(riivolution_xml())
     with open(os.path.join(HERE, "build/galaxycraft.json"), "w", newline="\n") as f:
         json.dump(descriptor(game), f, indent=2)
+    # The same with the game's own Mario instead of Steve's body (Mario Model: Original Mario).
+    with open(os.path.join(HERE, "build/galaxycraft-mario.xml"), "w", newline="\n") as f:
+        f.write(riivolution_xml(steve=False))
+    with open(os.path.join(HERE, "build/galaxycraft-mario.json"), "w", newline="\n") as f:
+        json.dump(descriptor(game, "galaxycraft-mario.xml"), f, indent=2)
     size = os.path.getsize(os.path.join(HERE, "build/CustomCode/CustomCode_SB4E.bin"))
     print(f"built build/CustomCode/CustomCode_SB4E.bin ({size} bytes)")
 

@@ -437,14 +437,34 @@ public final class McBlocks implements Blocks {
     /** Biomes by name, for their colors (looked up once each). */
     private final Map<String, java.util.Optional<net.minecraft.world.level.biome.Biome>> biomes = new java.util.concurrent.ConcurrentHashMap<>();
 
-    @Override public int biomeColor(String biome, int kind, double x, double z) {
-        var b = biomes.computeIfAbsent(biome, name -> {
+    private java.util.Optional<net.minecraft.world.level.biome.Biome> biome(String biome) {
+        return biomes.computeIfAbsent(biome, name -> {
             var level = mc.level;
             Identifier id = Identifier.tryParse(name);
             if (level == null || id == null) return java.util.Optional.empty();
             return level.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.BIOME)
                     .getOptional(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BIOME, id));
         });
+    }
+
+    /**
+     * A biome's water fog as Minecraft has it under water (its attributes): color r, g, b (0 to 1),
+     * and where the fog starts and ends, in blocks. The defaults for an unknown biome.
+     */
+    public float[] waterFog(String biome) {
+        var attrs = biome(biome).map(net.minecraft.world.level.biome.Biome::getAttributes)
+                .orElse(net.minecraft.world.attribute.EnvironmentAttributeMap.EMPTY);
+        var color = attrs.applyModifier(net.minecraft.world.attribute.EnvironmentAttributes.WATER_FOG_COLOR,
+                net.minecraft.world.attribute.EnvironmentAttributes.WATER_FOG_COLOR.defaultValue());
+        float start = attrs.applyModifier(net.minecraft.world.attribute.EnvironmentAttributes.WATER_FOG_START_DISTANCE,
+                net.minecraft.world.attribute.EnvironmentAttributes.WATER_FOG_START_DISTANCE.defaultValue());
+        float end = attrs.applyModifier(net.minecraft.world.attribute.EnvironmentAttributes.WATER_FOG_END_DISTANCE,
+                net.minecraft.world.attribute.EnvironmentAttributes.WATER_FOG_END_DISTANCE.defaultValue());
+        return new float[] {color.x(), color.y(), color.z(), start, end};
+    }
+
+    @Override public int biomeColor(String biome, int kind, double x, double z) {
+        var b = biome(biome);
         if (b.isEmpty()) return -1;
         return switch (kind) {
             case PlanetBiomes.GRASS -> b.get().getGrassColor(x, z);

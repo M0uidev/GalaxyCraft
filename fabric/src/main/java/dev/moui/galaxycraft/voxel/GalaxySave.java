@@ -21,15 +21,26 @@ public final class GalaxySave {
      * Where the player stands: on the planet of that file index (PlanetStore.key), in the direction
      * (dx, dy, dz) from its center (galaxy axes, any length), looking that way (Minecraft's yaw and
      * pitch). system: null for the world's own galaxy; else a generated system's sector
-     * (SystemIndex.name), and planet is n in it.
+     * (SystemIndex.name), and planet is n in it. station: the id of a station the player stands
+     * on, instead of a planet; (dx, dy, dz) is then where, in the station's own space (blocks).
      */
-    public record Spot(int planet, double dx, double dy, double dz, float yaw, float pitch, String system) {
+    public record Spot(int planet, double dx, double dy, double dz, float yaw, float pitch, String system, String station) {
         public Spot(int planet, double dx, double dy, double dz, float yaw, float pitch) {
-            this(planet, dx, dy, dz, yaw, pitch, null);
+            this(planet, dx, dy, dz, yaw, pitch, null, null);
+        }
+
+        public Spot(int planet, double dx, double dy, double dz, float yaw, float pitch, String system) {
+            this(planet, dx, dy, dz, yaw, pitch, system, null);
+        }
+
+        /** On a station: where the player stands in its space (blocks), looking yaw and pitch. */
+        public static Spot onStation(String id, double x, double y, double z, float yaw, float pitch) {
+            return new Spot(-1, x, y, z, yaw, pitch, null, id);
         }
 
         boolean usable() {
-            return planet >= 0 && Double.isFinite(dx + dy + dz) && dx * dx + dy * dy + dz * dz > 1e-12;
+            return (planet >= 0 || station != null && !station.isBlank()) && Double.isFinite(dx + dy + dz)
+                    && (station != null || dx * dx + dy * dy + dz * dz > 1e-12);
         }
     }
 
@@ -55,7 +66,12 @@ public final class GalaxySave {
     }
 
     /** The world's planets: the options it was made with and the catalog (galaxy.json). */
-    public record Galaxy(int version, GalaxyCatalog.Options options, java.util.List<GalaxyCatalog.Entry> entries) {}
+    public record Galaxy(int version, GalaxyCatalog.Options options, java.util.List<GalaxyCatalog.Entry> entries) {
+        /** Its world layout (GalaxyCatalog.LAYOUT): saves from before layouts (version 0 or 1) are 1. */
+        public int layout() {
+            return Math.max(1, version);
+        }
+    }
 
     public Optional<Galaxy> galaxy() {
         Path f = dir.resolve("galaxy.json");

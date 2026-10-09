@@ -27,6 +27,18 @@ class GalaxySaveTest {
         assertEquals(spot, GalaxySave.of(world).spot().orElseThrow());
     }
 
+    @Test void aStationSpotComesBack() throws Exception {
+        GalaxySave g = GalaxySave.of(world);
+        GalaxySave.Spot spot = GalaxySave.Spot.onStation("st-1", 0, 1.5, 0, 30f, 5f); // right above the core
+        g.writeSpot(spot);
+        GalaxySave.Spot back = GalaxySave.of(world).spot().orElseThrow();
+        assertEquals(spot, back);
+        assertEquals("st-1", back.station());
+        // A spot saved before stations has no station field.
+        java.nio.file.Files.writeString(world.resolve("galaxycraft/player.json"), "{\"planet\": 3, \"dx\": 0, \"dy\": 5, \"dz\": 0}");
+        assertNull(g.spot().orElseThrow().station());
+    }
+
     @Test void theBedIsKeptApartFromTheSpot() throws Exception {
         GalaxySave g = GalaxySave.of(world);
         assertTrue(g.bed().isEmpty());
@@ -85,5 +97,11 @@ class GalaxySaveTest {
             assertNull(e.blueprint());
         }
         assertEquals(3, made.options().count());
+    }
+
+    @Test void aGalaxySavedBeforeLayoutsIsLayoutOne() {
+        assertEquals(1, new GalaxySave.Galaxy(0, null, java.util.List.of()).layout());
+        assertEquals(1, new GalaxySave.Galaxy(1, null, java.util.List.of()).layout());
+        assertEquals(2, new GalaxySave.Galaxy(2, null, java.util.List.of()).layout());
     }
 }

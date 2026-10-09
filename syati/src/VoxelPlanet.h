@@ -37,6 +37,8 @@ void VoxelPlanetHitbox(const MarioHitbox* box);
 // 32-byte aligned memory from the scene's MEM2 heap (null if it would leave the game short), for
 // the held item (HeldItem.cpp).
 uint8_t* VoxelPlanetAlloc32(uint32_t size);
+// Fog for what is drawn next: Minecraft's under water, none out of it (the entities use the planet's).
+void VoxelPlanetApplyFog();
 
 // Counters for the dev harness (peek): inbox batches, records, chunks with something to draw,
 // collision parts made, last chunk slot and version seen, chunks dropped for lack of memory, free

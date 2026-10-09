@@ -8,6 +8,7 @@ const { pathToFileURL } = require('node:url');
 const { pathFor } = require('./paths');
 const { DOLPHIN_BATCH, HIDDEN_MATCH, SMG2_SAVE, MEM2_BYTES, splitArgs } = require('./launchplan');
 const { gameDirOf } = require('./store');
+const { videoArgs } = require('./videoquality');
 
 const FORMAT = 1;
 const LATEST_URL = 'https://github.com/M0uidev/GalaxyCraft/releases/latest/download/game.json';
@@ -100,7 +101,7 @@ function layout(paths, version) {
 }
 
 /** Dolphin's game mod descriptor: the player's disc, with the module's Riivolution patch. */
-function descriptor(rom, moduleDir, platform = process.platform) {
+function descriptor(rom, moduleDir, platform = process.platform, xml = 'galaxycraft.xml') {
   const p = pathFor(platform);
   return {
     type: 'dolphin-game-mod-descriptor',
@@ -109,7 +110,7 @@ function descriptor(rom, moduleDir, platform = process.platform) {
     'display-name': 'Super Mario Galaxy 2 (Super Minecraft Galaxy)',
     riivolution: {
       patches: [{
-        xml: p.join(moduleDir, 'galaxycraft.xml'),
+        xml: p.join(moduleDir, xml),
         root: moduleDir,
         options: [{ 'section-name': 'GalaxyCraft', 'option-name': 'GalaxyCraft', choice: 1 }],
       }],
@@ -127,7 +128,7 @@ function devDescriptor(rom, root, platform = process.platform) {
  * started directly (Mojang's files, Fabric, the mods) with the player's account.
  *   mcCommand  { cmd, args } from minecraft.command()
  */
-function playerPlan({ paths, inst, lay, dolphinExe, mcCommand, env = process.env }) {
+function playerPlan({ paths, inst, lay, dolphinExe, mcCommand, env = process.env, settingsText = '' }) {
   const p = paths.path;
   const gameDir = gameDirOf(inst, paths);
   const dolphinDir = paths.dolphinDir;
@@ -151,6 +152,7 @@ function playerPlan({ paths, inst, lay, dolphinExe, mcCommand, env = process.env
       '-C', 'Dolphin.Input.BackgroundInput=True', '-C', 'Dolphin.General.HotkeysRequireFocus=False',
       '-C', 'Dolphin.Core.RAMOverrideEnable=True', '-C', `Dolphin.Core.MEM2Size=${MEM2_BYTES}`,
       '-C', `Dolphin.Core.CPUThread=${inst.dualCore ? 'True' : 'False'}`, '-C', 'Dolphin.Interface.ConfirmStop=False',
+      ...videoArgs(settingsText),
       ...(inst.fullscreen ? ['-C', 'Dolphin.Display.Fullscreen=True'] : []),
       ...splitArgs(inst.dolphinArgs),
     ],

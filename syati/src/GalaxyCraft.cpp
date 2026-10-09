@@ -831,6 +831,13 @@ bool ClipFrustumLevel0(const void* self, const TVec3f& pos, f32 radius)
 }
 }  // namespace
 
+// Whether the game's own HUD stays off: while a host (Minecraft) is driving the game, its life
+// meter, counters, pause menu and pointer are never drawn (Minecraft's interface stands in).
+extern "C" bool SmgUiHidden()
+{
+  return gOut.mbx.host_flags != 0 && gFramesSinceHost < HOST_TIMEOUT_FRAMES;
+}
+
 uint32_t BootHostFlags()
 {
   return gOut.mbx.host_flags;
@@ -854,3 +861,49 @@ kmWritePointer(0x80694EC8 + 0x14, ClippingJudgeMovement);
 // ClippingJudge::isJudgedToClipFrustum(pos, radius) and (pos, radius, level).
 kmBranch(0x80231100, ClipFrustumLevel0);
 kmBranch(0x802311C0, ClipFrustum);
+// LayoutActor::draw (every SMG2 layout: meters, counters, menus, messages) returns at once while
+// SmgUiHidden(); the displaced first instruction (stwu r1,-16(r1)) runs on the visible path.
+kmBranchDefAsm(0x8047A370, 0x8047A374)
+{
+  nofralloc
+  stwu r1, -16(r1)
+  mflr r0
+  stw r0, 20(r1)
+  stw r3, 8(r1)
+  bl SmgUiHidden
+  mr r12, r3
+  lwz r3, 8(r1)
+  lwz r0, 20(r1)
+  mtlr r0
+  addi r1, r1, 16
+  cmpwi r12, 0
+  beq visible
+  mflr r0
+  mtctr r0
+  bctr
+visible:
+  stwu r1, -16(r1)
+  blr
+}
+// CameraDirector::startSubjectiveCamera: the D-pad's first-person look never starts (Minecraft
+// owns the view); the function becomes a plain blr.
+kmWrite32(0x80114E30, PPC_BLR);
+// The D-pad's camera sounds: CameraDirector::controlCameraSE plays a system SE at each of its ten
+// places (zoom in and out, up and down), and Mario plays one when the first-person look cannot
+// start. Each MR::startSystemSE call becomes a nop; the rest of the functions runs as it did.
+kmWrite32(0x80115354, 0x60000000);
+kmWrite32(0x801153C8, 0x60000000);
+kmWrite32(0x801153FC, 0x60000000);
+kmWrite32(0x8011546C, 0x60000000);
+kmWrite32(0x801154A0, 0x60000000);
+kmWrite32(0x801154FC, 0x60000000);
+kmWrite32(0x8011550C, 0x60000000);
+kmWrite32(0x80115540, 0x60000000);
+kmWrite32(0x8011559C, 0x60000000);
+kmWrite32(0x801155E4, 0x60000000);
+kmWrite32(0x8038976C, 0x60000000);
+// And the first-person look itself: MR::isPossibleToShiftToFirstPersonCamera says no (Mario never
+// enters MarioFpView, whose animation sounds too), and the sound it plays leaving it is a nop.
+kmWrite32(0x8001E570, 0x38600000);  // li r3, 0
+kmWrite32(0x8001E574, PPC_BLR);
+kmWrite32(0x803EBF6C, 0x60000000);

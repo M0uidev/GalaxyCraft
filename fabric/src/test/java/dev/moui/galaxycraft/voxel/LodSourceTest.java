@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.moui.galaxycraft.voxel.gen.GenFixtures;
 import dev.moui.galaxycraft.voxel.gen.PlanetGenerator;
 import dev.moui.galaxycraft.voxel.gen.SurfaceSampler;
-import dev.moui.galaxycraft.voxel.gen.TerrainNoise;
 import org.joml.Vector3d;
 import org.junit.jupiter.api.Test;
 
@@ -33,9 +32,8 @@ class LodSourceTest {
     @Test void aSampledPlanetLooksLikeTheBuiltOne() {
         PlanetBlueprint bp = PlanetBlueprint.standard("g", 48).withMode(PlanetBlueprint.Mode.GENERATED).withBiome(3, "minecraft:plains", 0)
                 .withUnderground(0, false, 0).withPlants(0);
-        TerrainNoise noise = GenFixtures.waves(bp.seed());
-        VoxelPlanet built = PlanetGenerator.build(bp, noise, GenFixtures.TABLE, null, GenFixtures.B, GenFixtures::id);
-        SurfaceSampler s = new SurfaceSampler(bp, noise, GenFixtures.TABLE);
+        VoxelPlanet built = PlanetGenerator.build(bp, null, GenFixtures.B, GenFixtures::id);
+        SurfaceSampler s = new SurfaceSampler(bp);
         PlanetLod.Part[] real = PlanetLod.coarse(LodSource.of(built), 6, 80);
         PlanetLod.Part[] sampled = PlanetLod.coarse(LodSource.sampled(s, GenFixtures.B, GenFixtures::id), 6, 80);
         for (int f = 0; f < 6; f++)
@@ -64,6 +62,18 @@ class LodSourceTest {
             double top = 0;
             for (Vector3d v : PlanetLodTest.vertices(part)) top = Math.max(top, v.length());
             assertEquals(surface, top, 0.05, "the tops (skirts hang below)");
+        }
+    }
+
+    @Test void warmingWorksOutEveryColumnAFarViewAsksFor() {
+        PlanetBlueprint bp = PlanetBlueprint.standard("g", 96).withMode(PlanetBlueprint.Mode.GENERATED).withBiome(5, PlanetBlueprint.RANDOM,
+                PlanetBlueprint.AUTO);
+        for (int patches : new int[] {1, 2, 3, 6, 12}) {
+            SurfaceSampler s = new SurfaceSampler(bp);
+            s.warm(patches);
+            int warmed = s.cachedColumns();
+            PlanetLod.coarse(LodSource.sampled(s, GenFixtures.B, GenFixtures::id), patches, 80);
+            assertEquals(warmed, s.cachedColumns(), patches + " patches: nothing left to work out on the game's thread");
         }
     }
 }
