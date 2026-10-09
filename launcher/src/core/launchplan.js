@@ -13,6 +13,26 @@ const SMG2_SAVE = ['Wii', 'title', '00010000', '53423445'];
 /** The game needs 256 MiB of MEM2 (Dolphin's RAM override): the module keeps planets there. */
 const MEM2_BYTES = 268435456;
 
+/**
+ * Smoother video than Dolphin's own defaults (the native 640x528, no anti-aliasing, which makes
+ * far planets and block edges jagged): 3x internal resolution, 4x MSAA, 8x anisotropic filtering.
+ * Each one only if the player's GFX.ini does not already say its own value.
+ */
+const VIDEO_DEFAULTS = [
+  ['Settings', 'InternalResolution', 3],
+  ['Settings', 'MSAA', 4],
+  ['Enhancements', 'MaxAnisotropy', 3],
+];
+
+/** The -C arguments for the video defaults that the GFX.ini text (or '' if none) leaves unset. */
+function videoArgs(gfxIni = '') {
+  const args = [];
+  for (const [section, key, value] of VIDEO_DEFAULTS) {
+    if (!new RegExp(`^\\s*${key}\\s*=`, 'm').test(gfxIni)) args.push('-C', `GFX.${section}.${key}=${value}`);
+  }
+  return args;
+}
+
 /** Splits a command line typed by the player into arguments ("quoted parts" kept whole). */
 function splitArgs(text) {
   const out = [];
@@ -35,7 +55,7 @@ function splitArgs(text) {
  *   dolphinBin the patched Dolphin's binary
  *   env        the launcher's environment (copied into both processes)
  */
-function buildPlan({ root, paths, inst, javaHome, dolphinBin, descriptor = null, env = process.env }) {
+function buildPlan({ root, paths, inst, javaHome, dolphinBin, descriptor = null, env = process.env, gfxIni = null }) {
   const p = pathFor(paths.platform);
   const win = paths.platform === 'win32';
   const gameDir = gameDirOf(inst, paths);
@@ -78,6 +98,7 @@ function buildPlan({ root, paths, inst, javaHome, dolphinBin, descriptor = null,
       // Dual core: the CPU and the GPU on their own threads, headroom on planets.
       '-C', `Dolphin.Core.CPUThread=${inst.dualCore ? 'True' : 'False'}`,
       '-C', 'Dolphin.Interface.ConfirmStop=False',
+      ...(gfxIni === null ? [] : videoArgs(gfxIni)), // null: the caller did not look
       ...(inst.fullscreen ? ['-C', 'Dolphin.Display.Fullscreen=True'] : []),
       ...splitArgs(inst.dolphinArgs),
     ],
@@ -115,4 +136,4 @@ function describe(plan, platform = process.platform) {
   return plan.processes.map((proc) => `[${proc.name}] ${[proc.cmd, ...hide(proc.args)].map(q).join(' ')}`);
 }
 
-module.exports = { DOLPHIN_BATCH, HIDDEN_MATCH, SMG2_SAVE, MEM2_BYTES, splitArgs, buildPlan, describe };
+module.exports = { DOLPHIN_BATCH, HIDDEN_MATCH, SMG2_SAVE, MEM2_BYTES, splitArgs, videoArgs, buildPlan, describe };

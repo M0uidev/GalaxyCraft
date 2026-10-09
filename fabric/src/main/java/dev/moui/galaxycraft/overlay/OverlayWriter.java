@@ -43,15 +43,29 @@ public final class OverlayWriter {
         MemorySegment src = MemorySegment.ofBuffer(rgba);
         long srcRowBytes = width * 4L, outRowBytes = outW * 4L;
         for (int y = 0; y < outH; y++) {
-            int sy = outH == height ? y : (int) ((long) y * height / outH);
-            int srcRow = flipRows ? height - 1 - sy : sy;
-            if (outW == width) {
+            if (outW == width && outH == height) {
+                int srcRow = flipRows ? height - 1 - y : y;
                 MemorySegment.copy(src, srcRow * srcRowBytes, seg, dst + y * outRowBytes, outRowBytes);
-            } else {
-                for (int x = 0; x < outW; x++) {
-                    long sx = (long) x * width / outW;
-                    seg.set(INT, dst + y * outRowBytes + x * 4L, src.get(INT, srcRow * srcRowBytes + sx * 4));
+                continue;
+            }
+            // Scaled down: each output pixel is the average of the source pixels it covers (picking
+            // one of them made text and thin lines jagged).
+            int sy0 = (int) ((long) y * height / outH), sy1 = Math.max(sy0 + 1, (int) ((long) (y + 1) * height / outH));
+            for (int x = 0; x < outW; x++) {
+                int sx0 = (int) ((long) x * width / outW), sx1 = Math.max(sx0 + 1, (int) ((long) (x + 1) * width / outW));
+                int r = 0, g = 0, b = 0, a = 0, n = 0;
+                for (int yy = sy0; yy < sy1; yy++) {
+                    int srcRow = flipRows ? height - 1 - yy : yy;
+                    for (int xx = sx0; xx < sx1; xx++) {
+                        int px = src.get(INT, srcRow * srcRowBytes + xx * 4L);
+                        r += px & 0xFF;
+                        g += (px >>> 8) & 0xFF;
+                        b += (px >>> 16) & 0xFF;
+                        a += px >>> 24;
+                        n++;
+                    }
                 }
+                seg.set(INT, dst + y * outRowBytes + x * 4L, (r / n) | (g / n) << 8 | (b / n) << 16 | (a / n) << 24);
             }
         }
         seg.set(INT, hdr + 4, outW);

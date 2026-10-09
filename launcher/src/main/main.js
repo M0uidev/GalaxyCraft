@@ -278,7 +278,11 @@ function playFolder(inst) {
     fs.mkdirSync(path.dirname(descriptor), { recursive: true });
     fs.writeFileSync(descriptor, JSON.stringify(gamepack.devDescriptor(rom.path, pf.root), null, 2));
   }
-  return buildPlan({ root: pf.root, paths: paths(), inst, javaHome: pf.java.home, dolphinBin: pf.dolphinBin, descriptor });
+  let gfxIni = '';
+  try {
+    gfxIni = fs.readFileSync(path.join(paths().dolphinDir, 'Config', 'GFX.ini'), 'utf8');
+  } catch {}
+  return buildPlan({ root: pf.root, paths: paths(), inst, javaHome: pf.java.home, dolphinBin: pf.dolphinBin, descriptor, gfxIni });
 }
 
 async function play(instId) {

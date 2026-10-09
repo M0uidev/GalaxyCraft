@@ -77,3 +77,9 @@ test('Dolphin runs in batch mode (no main window) in the dev plan and the player
     }
   }
 });
+
+test('video defaults fill in only the settings the GFX.ini leaves out', () => {
+  const { videoArgs } = require('../src/core/launchplan');
+  assert.deepEqual(videoArgs(''), ['-C', 'GFX.Settings.InternalResolution=3', '-C', 'GFX.Settings.MSAA=4', '-C', 'GFX.Enhancements.MaxAnisotropy=3']);
+  assert.deepEqual(videoArgs('[Settings]\nInternalResolution = 5\nMSAA = 1\n[Enhancements]\nMaxAnisotropy = 0\n'), []);
+});
