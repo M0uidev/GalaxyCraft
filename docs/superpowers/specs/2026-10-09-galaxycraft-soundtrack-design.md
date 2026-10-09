@@ -76,6 +76,28 @@ settings)`, output "keep" or "switch to mood M". Unit tested with a fake clock.
 - **Crossfade.** `crossfadeSeconds` (default 4). The new track starts at its beginning (intro
   included) while the old fades out; with 0 it is a cut.
 
+### Music source (SMG2, Minecraft, both, or random)
+
+A setting, **Music source**, decides which games' songs the automatic music uses:
+
+| Source | Space | Planet |
+|---|---|---|
+| Both (default) | SMG2 space songs | SMG2 planet songs **and** Minecraft's music, mixed in one pool |
+| Super Mario Galaxy 2 only | SMG2 space songs | SMG2 planet songs |
+| Minecraft only | Minecraft's music everywhere (no silence in space) | Minecraft's music |
+| Random | any song of either game, no criteria: space and planet make no difference | same |
+
+In every source the cooldown, dwell and crossfade apply (Random has no moods, so it only
+changes track when one ends, or when the player skips). Minecraft's songs are `source: "minecraft"`
+catalog entries (mood `planet` by default; in "Minecraft only" and "Random" the mood is ignored).
+They are played by **our engine**, not by vanilla's `MusicManager`: the engine decodes Minecraft's
+own `sounds/music/**` ogg files (found through the resource manager, so a resource pack's music
+is respected) with LWJGL's `STBVorbis` pull API, streaming, no whole-file decode. That gives the
+two games one crossfade, true pause, one volume and one player list. The mixin
+silences vanilla's `MusicManager` (and its jukebox/menu music stays untouched). The plan must
+verify that the resource manager exposes those files; fallback: read the files from the assets
+index in the game directory, the way the baseline mod does.
+
 ### Catalog and settings
 
 `soundtrack/tracks.json` in the game directory (written by the install step, edited by the
@@ -92,16 +114,16 @@ The user's classification so far (titles; files are matched when importing):
 
 | Mood | Songs |
 |---|---|
-| space | Sky Station Galaxy, Unknown Star, Starship Mario Launch!, The Starship Travel, Puzzle Plank Galaxy, Tip TV, Wild Glide Galaxy, Cosmic Cove Galaxy, Slide, Cloudy Court Galaxy, World 5, Space Storm Galaxy |
-| planet | Another Story, Yoshi Star Galaxy, Starship Mario, Hightail Falls Galaxy, World 3, Freezy Flake Galaxy, Starship Mario 2, World 4, Honeybloom Galaxy, Starshine Beach Galaxy, Starship Mario 3 |
-| later (desert) | Slipsand Galaxy (`tags: ["desert"]`, `mood: null` for now) |
+| space | Sky Station Galaxy, Unknown Star, Starship Mario Launch!, The Starship Travel, Puzzle Plank Galaxy, Tip TV, Wild Glide Galaxy, Cosmic Cove Galaxy, Slide, Cloudy Court Galaxy, World 5, Space Storm Galaxy, Sweet Mystery Galaxy |
+| planet | Another Story, Yoshi Star Galaxy, Starship Mario, Hightail Falls Galaxy, World 3, Freezy Flake Galaxy, Starship Mario 2, World 4, Honeybloom Galaxy, Starshine Beach Galaxy, Starship Mario 3, Throwback Galaxy, World S |
+| later (desert) | Slipsand Galaxy (`tags: ["desert"]`, `mood: null`: stays out of every automatic pool until biome music exists) |
 
 `config/galaxycraft-soundtrack.json` (and the mod's settings screen, ported from the baseline):
 
 | Setting | Default | Range |
 |---|---|---|
 | Automatic music | on | on/off (off: only what the player picks) |
-| Replace Minecraft's music | on | on/off |
+| Music source | Both | Both / SMG2 only / Minecraft only / Random |
 | Cooldown between switches | 120 s | 0 (off) to 600 s |
 | Dwell time | 5 s | 0 to 60 s |
 | Crossfade | 4 s | 0 (cut) to 15 s |
@@ -120,8 +142,7 @@ A keybind opens the player: library list with a mood filter (Space / Planet / Al
 context menu to set a track's mood or enable/disable it, transport buttons, shuffle/loop,
 volume, Auto button. Keybinds: open, play/pause, next, previous, volume up/down, shuffle, loop.
 Now Playing toast (title, "Super Mario Galaxy 2") and mini player on the pause menu.
-Mixin: Minecraft's `MusicManager` stops starting its own tracks when "Replace Minecraft's music"
-is on.
+Mixin: Minecraft's `MusicManager` stops starting its own tracks while automatic music is on.
 
 ### Install (later, once classified)
 
@@ -141,8 +162,9 @@ files extracted into the scratchpad.
 
 ## Doubts for the user
 
-1. Slipsand Galaxy (desert): keep out of rotation until biome music, or play as planet meanwhile?
-2. Unclassified songs: out of every automatic pool (as designed).
-3. Titles to files: the in-game names above are matched to `.ast` files by a draft list the user
-   corrects; a few (Tip TV, Slide, Another Story, The Starship Travel, Unknown Star, World 3/4/5)
+Settled: Slipsand stays out; unclassified songs are out of every automatic pool; Minecraft's music
+plays on planets (not in space) under "Both".
+
+Open: titles to files: the in-game names above are matched to `.ast` files by a draft list the user
+   corrects (the user will check); a few (Tip TV, Slide, Another Story, The Starship Travel, Unknown Star, World 3/4/5)
    are event/map tracks whose filename does not say the title.
