@@ -13,6 +13,12 @@ import org.joml.Vector3d;
  * planet never built (its ground sampled where each patch is, nothing else made).
  */
 public interface LodSource {
+    /**
+     * Patches this many columns wide or less (the finest levels, next to the chunks) show the
+     * leaves of a crown as its top; wider ones skip them, or trees blur into lumps from afar.
+     */
+    int LEAF_COLUMNS = 4;
+
     /** A patch's ground: its top (layers from the grid's bottom), its block, and a cell of it (tints). */
     record Patch(int height, int block, int cell) {}
 
@@ -48,13 +54,15 @@ public interface LodSource {
                 int cols = 0, best = Blocks.AIR, bestCount = 0;
                 for (int i = i0; i < i1; i += stride)
                     for (int j = j0; j < j1; j += stride) {
-                        // The top of the highest opaque block or fluid; leaves, plants and air above
-                        // them do not count: trees blur into lumps from afar.
+                        // The top of the highest opaque block or fluid; plants and air above it do
+                        // not count, nor leaves in a wide patch: trees blur into lumps from afar.
+                        boolean leafy = Math.max(i1 - i0, j1 - j0) <= LEAF_COLUMNS;
                         int top = 0, block = Blocks.AIR;
                         for (int k = g.layers - 1; k >= 0; k--) {
                             int id = p.get(g.index(face, i, j, k));
                             BlockInfo b = p.blocks.info(id);
-                            if ((b.occludes() || b.isFluid()) && !p.blocks.leaves(id)) {
+                            boolean leaf = p.blocks.leaves(id);
+                            if (leaf ? leafy : b.occludes() || b.isFluid()) {
                                 top = k + 1;
                                 block = id;
                                 break;

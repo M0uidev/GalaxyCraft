@@ -760,6 +760,8 @@ public final class PlanetSession {
             farHeld.set(t);
             if (t < farCols.length) farCols[t] = builtCols;
             if (builtFarShows && shown.get(t)) pending.add(HIDE_MARK - t); // chunks there since: hidden after them
+            // Chunks kept drawn until this far view was back (they lost their collision first) go now.
+            if (builtFarShows && !shown.get(t)) for (int c : PlanetLod.chunksOfTile(planet, t)) if (onGuest.get(c)) queue(c);
             return;
         }
         if (builtFarMark) {
@@ -1326,6 +1328,41 @@ public final class PlanetSession {
         }
         return b + "detail=" + detail + " pending=" + pending.size() + " urgent=" + urgent.size() + " farPending=" + farPending.size()
                 + " farLater=" + farLater.size() + " shown=" + shown.cardinality() + " farOnGuest=" + farOnGuest.cardinality();
+    }
+
+    /**
+     * The LOD inspector: what is wrong with the planet's tiles once everything queued has gone out
+     * (nothing while the game is still being sent to: that is in transit). A tile that is chunks
+     * must have no far view drawn over them and all its chunks in the game; one that is not must
+     * have a far view at the level it wants and no chunks left behind.
+     */
+    public List<String> audit() {
+        List<String> out = new ArrayList<>();
+        if (planet == null || !detail || built != null || !pending.isEmpty() || !urgent.isEmpty() || !farPending.isEmpty()) return out;
+        int count = PlanetLod.tileCount(planet);
+        for (int t = 0; t < count; t++) {
+            int[] chunks = PlanetLod.chunksOfTile(planet, t);
+            int missing = 0, held = 0, ground = 0, wanted = 0, kcl = 0;
+            for (int c : chunks) {
+                boolean show = planet.mayShow(c);
+                if (show) ground++;
+                if (show && !onGuest.get(c)) missing++;
+                if (onGuest.get(c)) held++;
+                if (near.get(c)) wanted++;
+                if (onGuest.get(c) && withKcl.get(c)) kcl++;
+            }
+            if (shown.get(t)) {
+                if (farOnGuest.get(t)) out.add("ghost: tile " + t + " is chunks but its far view is still drawn over them");
+                if (missing > 0) out.add("hole: tile " + t + " is chunks but " + missing + " of its " + ground + " chunks with ground are not in the game");
+            } else {
+                if (held > 0) out.add("leftover: tile " + t + " is far view but " + held + " of its chunks are still in the game (" + kcl + " with collision, " + wanted + " wanted for collision)");
+                if (ground > 0 && !farHeld.get(t)) out.add("hole: tile " + t + " has ground but neither chunks nor a far view");
+                if (farHeld.get(t) && !farOnGuest.get(t)) out.add("covered: tile " + t + " is far view but the game keeps it hidden");
+                if (farLater.isEmpty() && farHeld.get(t) && farCols[t] != farWant[t])
+                    out.add("level: tile " + t + " far view has " + farCols[t] + " columns per patch, wants " + farWant[t]);
+            }
+        }
+        return out;
     }
 
     /** Whether the game draws a tile's far view up close (not covered by its chunks; tests). */

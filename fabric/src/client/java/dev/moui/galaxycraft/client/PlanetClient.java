@@ -821,6 +821,7 @@ public final class PlanetClient {
         leaving.removeIf(s -> s.queued() == 0);
         rescue();
         traceBodies(world.queryPos());
+        auditLod();
         if (stream != null) stream.send(bridge, bulk);
         if (++sinceSave >= SAVE_TICKS) {
             sinceSave = 0;
@@ -834,6 +835,28 @@ public final class PlanetClient {
     private static final boolean TRACE_BODIES = Boolean.getBoolean("galaxycraft.traceBodies");
     private static int traceTicks;
     private static Vector3d traceLast;
+
+    private static int auditTicks;
+    private static String auditLast = "";
+
+    /**
+     * The LOD inspector, always on: once a second, what is wrong with the tiles of the planets
+     * (PlanetSession.audit), logged when it changes, so a playtest's log tells what stayed behind.
+     */
+    private static void auditLod() {
+        if (++auditTicks < 20) return;
+        auditTicks = 0;
+        StringBuilder b = new StringBuilder();
+        for (PlanetSession s : bodies()) {
+            if (!s.active()) continue;
+            for (String problem : s.audit()) b.append("\n  planet ").append(indexOf(s)).append(' ').append(problem);
+        }
+        String now = b.toString();
+        if (now.equals(auditLast)) return;
+        auditLast = now;
+        if (now.isEmpty()) GalaxyCraft.LOG.info("lod-audit: all tiles right");
+        else GalaxyCraft.LOG.warn("lod-audit: problems{}", now);
+    }
 
     private static void traceBodies(Vector3d mario) {
         if (!TRACE_BODIES || mario == null || ++traceTicks < 20) return;

@@ -113,14 +113,28 @@ class PlanetLodTest {
 
     @Test void treetopsDoNotRaiseTheFarView() {
         VoxelPlanet p = VoxelPlanet.standard(new LeafyBlocks(CubeBlocks.INSTANCE));
-        int before = vertices(PlanetLod.face(p, 2, 80)).length;
-        int s = PlanetLod.patchColumns(p.grid.n), top = p.grid.layers - 1;
+        int before = vertices(PlanetLod.coarse(LodSource.of(p), 4, 80)[2]).length;
+        int s = (p.grid.n + 3) / 4, top = p.grid.layers - 1;
         while (p.get(p.grid.index(2, s, s, top)) == Blocks.AIR) top--;
         // Leaves two blocks over the grass of the patch at (1, 1): a crown seen from above.
         for (int i = s; i < 2 * s; i++)
             for (int j = s; j < 2 * s; j++) p.set(p.grid.index(2, i, j, top + 3), CubeBlocks.GLASS);
-        Vector3d[] v = vertices(PlanetLod.face(p, 2, 80));
+        Vector3d[] v = vertices(PlanetLod.coarse(LodSource.of(p), 4, 80)[2]);
         assertEquals(before, v.length, "no walls: the patch stays at the ground");
         for (Vector3d x : v) assertTrue(x.length() <= p.surface() + 0.05, "nothing over the surface: " + x.length());
+    }
+
+    @Test void treetopsShowInTheFinestPatchesOnly() {
+        VoxelPlanet p = VoxelPlanet.standard(new LeafyBlocks(CubeBlocks.INSTANCE));
+        int top = p.grid.layers - 1;
+        while (p.get(p.grid.index(2, 8, 8, top)) == Blocks.AIR) top--;
+        for (int i = 8; i < 24; i++)
+            for (int j = 8; j < 24; j++) p.set(p.grid.index(2, i, j, top + 3), CubeBlocks.GLASS);
+        LodSource src = LodSource.of(p);
+        LodSource.Patch fine = src.patch(2, 8, 10, 8, 10), wide = src.patch(2, 8, 24, 8, 24);
+        assertEquals(top + 4, fine.height(), "a small patch is as high as the crown");
+        assertEquals(CubeBlocks.GLASS, fine.block());
+        assertEquals(top + 1, wide.height(), "a wide one stays at the ground");
+        assertNotEquals(CubeBlocks.GLASS, wide.block());
     }
 }
