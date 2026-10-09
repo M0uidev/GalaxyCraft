@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-09 (soundtrack player and space/planet music, now)
+Last updated: 2026-10-09 (soundtrack player built, awaiting listening test)
 
 ---
 
@@ -25,7 +25,7 @@ Last updated: 2026-10-09 (soundtrack player and space/planet music, now)
 |---|---|---|
 | Planets with Minecraft 1.7 terrain | now | User 2026-10-08: today's terrain "not that good", old terrain fits small worlds. 3D density with overhangs, several biomes per planet scaled to its size, oceans, rivers, beaches, cave labyrinths, heights scaled to the radius. Then check whether trees still come out broken (one block above the grass, a trunk missing a log). [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-legacy-terrain-design.md) |
 | Swimming and water look | now | User 2026-10-08: swim like Minecraft, characters in water drawn over it, Minecraft's underwater view. Built on `feat/swimming` (water draw order, underwater fog, Minecraft's swimming in F6), awaiting playtest. [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-swimming-water-design.md) |
-| Soundtrack player and space/planet music | now | User 2026-10-09: a music player based on Soundtrack Player with the SMG2 songs from your disc; music follows space or planet with a crossfade, a dwell time and a cooldown (all settings, can be turned off); a Station Core option to pick a station's music. Songs are still being sorted by you. On `feat/soundtrack`. [Spec](docs/superpowers/specs/2026-10-09-galaxycraft-soundtrack-design.md) |
+| Soundtrack player and space/planet music | now | User 2026-10-09: a music player based on Soundtrack Player; music follows space or planet with a crossfade, a dwell time and a cooldown (all settings, can be turned off); Music Source: both games, SMG2 only, Minecraft only or random; a Station Core option to pick a station's music. Built on `feat/soundtrack` (engine, player screen, settings, Minecraft songs working; probe passes), awaiting your listening test. Still to do: copying your sorted songs from the disc (you are still classifying them). [Spec](docs/superpowers/specs/2026-10-09-galaxycraft-soundtrack-design.md) |
 | First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells; v0.1.3 pushed 2026-10-08 (fe6276a) with Export report and no empty Dolphin window, tested on Windows (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
 
 ## Next
@@ -143,6 +143,7 @@ Last updated: 2026-10-09 (soundtrack player and space/planet music, now)
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
+- 2026-10-09: Soundtrack follow-ups (user/Claude): biome music (Slipsand Galaxy is tagged desert), more moods later (night, underwater, danger), layered `*_multi` songs mixing their layers, mp3/flac custom songs, installing the sorted songs from the disc in the launcher.
 - 2026-10-08: Swimming matters (user): Minecraft's swimming, or Mario's body swimming, undecided. Water look: a
   character standing with legs in water is drawn over the water as if above it (screenshot coming; check
   mobs too); under water everything should be tinted like Minecraft's underwater view, faithful to it.

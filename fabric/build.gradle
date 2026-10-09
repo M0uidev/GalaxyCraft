@@ -183,6 +183,12 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.stationsAnywhere=true"
 			}
+			if (project.hasProperty("galaxycraftSoundtrack")) { // SoundtrackProbe: synthetic songs, no audio line, no game
+				vmArg "-Dgalaxycraft.soundtrack=true"
+				vmArg "-Dgalaxycraft.soundtrackNull=true"
+				vmArg "-Dgalaxycraft.soundtrackDir=${buildDir}/soundtrack-probe"
+				vmArg "-Dgalaxycraft.hidden=true"
+			}
 			if (project.hasProperty("galaxycraftSpawn")) { // SpawnProbe: mobs spawning on a planet, no game
 				vmArg "-Dgalaxycraft.spawn=true"
 				vmArg "-Dgalaxycraft.hidden=true"

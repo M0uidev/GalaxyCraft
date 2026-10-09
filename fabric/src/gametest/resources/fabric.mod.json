@@ -36,7 +36,8 @@
 			"dev.moui.galaxycraft.gametest.ShadowProbe",
 			"dev.moui.galaxycraft.gametest.WorkingBlocksProbe",
 			"dev.moui.galaxycraft.gametest.SpawnProbe",
-			"dev.moui.galaxycraft.gametest.StationProbe"
+			"dev.moui.galaxycraft.gametest.StationProbe",
+			"dev.moui.galaxycraft.gametest.SoundtrackProbe"
 		]
 	},
 	"depends": {"galaxycraft": "*"}
