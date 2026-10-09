@@ -20,7 +20,7 @@ import net.minecraft.world.level.block.state.BlockState;
 /**
  * Chooses one of a list (blocks for a planet layer, biomes for a generated planet), each with an
  * icon and the name the game shows for it, narrowed by what is typed (words of the name or of the
- * id). Clicking one, or Enter on the highlighted one, hands its text back and returns to the editor.
+ * id). Clicking one highlights it; Enter, a double click or Select on the highlighted one hands its text back and returns to the editor.
  */
 public final class PickerScreen extends Screen {
     private static final int WHITE = 0xFFFFFFFF, GRAY = 0xFFA0A0A0, HOVER = 0x40FFFFFF, PICKED = 0x60FFFFFF;
@@ -124,8 +124,11 @@ public final class PickerScreen extends Screen {
         });
         addRenderableWidget(search);
         setInitialFocus(search);
+        addRenderableWidget(Button.builder(Component.literal("Select"), b -> {
+            if (selected < shown.size()) choose(shown.get(selected));
+        }).bounds(width / 2 - 85, height - 26, 80, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Cancel"), b -> onClose())
-                .bounds(width / 2 - 40, height - 26, 80, 20).build());
+                .bounds(width / 2 + 5, height - 26, 80, 20).build());
         if (shown.isEmpty() && query.isEmpty()) {
             filter();
             // Start on the block the layer already has.
@@ -158,7 +161,9 @@ public final class PickerScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent ev, boolean doubled) {
         int i = at(ev.x(), ev.y());
         if (i >= 0 && ev.button() == 0) {
-            choose(shown.get(i));
+            // One click picks the row; a second one on it is Enter.
+            if (doubled && i == selected) choose(shown.get(i));
+            selected = i;
             return true;
         }
         return super.mouseClicked(ev, doubled);
