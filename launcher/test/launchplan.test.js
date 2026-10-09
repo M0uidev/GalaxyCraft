@@ -78,8 +78,10 @@ test('Dolphin runs in batch mode (no main window) in the dev plan and the player
   }
 });
 
-test('video defaults fill in only the settings the GFX.ini leaves out', () => {
-  const { videoArgs } = require('../src/core/launchplan');
+test('Picture Quality becomes Dolphin graphics settings (High when unset)', () => {
+  const { videoArgs, levelOf } = require('../src/core/videoquality');
   assert.deepEqual(videoArgs(''), ['-C', 'Graphics.Settings.InternalResolution=3', '-C', 'Graphics.Settings.MSAA=4', '-C', 'Graphics.Enhancements.MaxAnisotropy=3']);
-  assert.deepEqual(videoArgs('[Settings]\nInternalResolution = 5\nMSAA = 1\n[Enhancements]\nMaxAnisotropy = 0\n'), []);
+  assert.equal(levelOf('videoQuality=LOW\n'), 'LOW');
+  assert.equal(levelOf('videoQuality=nonsense'), 'HIGH');
+  assert.deepEqual(videoArgs('videoQuality=LOW')[1], 'Graphics.Settings.InternalResolution=1');
 });

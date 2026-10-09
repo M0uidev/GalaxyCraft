@@ -26,6 +26,17 @@ const SCHEMA = [
     ],
   },
   {
+    key: 'videoQuality', label: 'Picture Quality', type: 'choice', default: 'HIGH',
+    help: 'How sharp the game is drawn: Dolphin\'s internal resolution, anti-aliasing and texture filtering. Higher looks '
+      + 'smoother and asks more of the graphics card. It takes effect the next time the game starts.',
+    options: [
+      { value: 'LOW', label: 'Low (native)' },
+      { value: 'MEDIUM', label: 'Medium (2x, MSAA 2x)' },
+      { value: 'HIGH', label: 'High (3x, MSAA 4x)' },
+      { value: 'ULTRA', label: 'Ultra (4x, MSAA 4x)' },
+    ],
+  },
+  {
     key: 'skin', label: 'Skin', type: 'text', default: '', maxLength: 16,
     help: 'A Minecraft account\'s name: its skin goes on your character (also /skin <name>). Empty: Steve.',
   },

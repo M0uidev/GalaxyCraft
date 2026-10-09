@@ -165,6 +165,11 @@ async function roadmap() {
 
 // ---- the game ------------------------------------------------------------------------------
 
+/** The text of the installation's galaxycraft.properties ('' if the game has not made one). */
+function settingsText(inst) {
+  try { return fs.readFileSync(settingsFile(inst), 'utf8'); } catch { return ''; }
+}
+
 function settingsFile(inst) {
   return path.join(store.gameDirOf(inst, paths()), 'config', 'galaxycraft.properties');
 }
@@ -264,7 +269,8 @@ async function playRelease(inst) {
     jvmArgs: gamepack.minecraftJvmArgs(i.manifest, inst), launcher: { name: 'super-minecraft-galaxy', version: app.getVersion() },
   });
   const lay = mariomodel.layFor({ lay: i.lay, rom: rom.path, propertiesFile: settingsFile(inst) });
-  return gamepack.playerPlan({ paths: paths(), inst, lay, dolphinExe: path.join(i.lay.dolphin, i.sys.exe), mcCommand });
+  return gamepack.playerPlan({ paths: paths(), inst, lay, dolphinExe: path.join(i.lay.dolphin, i.sys.exe), mcCommand,
+    settingsText: settingsText(inst) });
 }
 
 /** PLAY from a game folder (developers): as tools/gxplay.sh, with the chosen disc if there is one. */
@@ -278,11 +284,8 @@ function playFolder(inst) {
     fs.mkdirSync(path.dirname(descriptor), { recursive: true });
     fs.writeFileSync(descriptor, JSON.stringify(gamepack.devDescriptor(rom.path, pf.root), null, 2));
   }
-  let gfxIni = '';
-  try {
-    gfxIni = fs.readFileSync(path.join(paths().dolphinDir, 'Config', 'GFX.ini'), 'utf8');
-  } catch {}
-  return buildPlan({ root: pf.root, paths: paths(), inst, javaHome: pf.java.home, dolphinBin: pf.dolphinBin, descriptor, gfxIni });
+  return buildPlan({ root: pf.root, paths: paths(), inst, javaHome: pf.java.home, dolphinBin: pf.dolphinBin, descriptor,
+    settingsText: settingsText(inst) });
 }
 
 async function play(instId) {

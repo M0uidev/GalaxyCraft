@@ -20,4 +20,21 @@ abstract class WindowHiddenMixin {
     private long galaxycraft$createHidden(long flags) {
         return Boolean.getBoolean("galaxycraft.hidden") ? flags | SDL_WINDOW_HIDDEN : flags;
     }
+
+    /**
+     * And at the overlay's full size: Dolphin stretches Minecraft's frame over its own window, so a
+     * small hidden window (854x480) made the inventory and hotbar blocky. 1920x1080 is the biggest
+     * frame the overlay carries (OverlayWriter scales a smaller Dolphin window down by averaging).
+     */
+    @ModifyArg(method = "createWindow", index = 1, at = @At(value = "INVOKE",
+            target = "Lcom/mojang/renderpearl/api/device/GpuBackend;createWindow(Ljava/lang/String;IIJ)J"))
+    private int galaxycraft$width(int width) {
+        return Boolean.getBoolean("galaxycraft.hidden") ? 1920 : width;
+    }
+
+    @ModifyArg(method = "createWindow", index = 2, at = @At(value = "INVOKE",
+            target = "Lcom/mojang/renderpearl/api/device/GpuBackend;createWindow(Ljava/lang/String;IIJ)J"))
+    private int galaxycraft$height(int height) {
+        return Boolean.getBoolean("galaxycraft.hidden") ? 1080 : height;
+    }
 }

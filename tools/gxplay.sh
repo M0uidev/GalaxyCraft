@@ -68,14 +68,17 @@ stop_minecraft
 # is read here, at the start: change it in Super Minecraft Galaxy's settings and play again.
 MODEL=galaxycraft
 grep -qi '^marioModel=original' "$GAME_DIR/config/galaxycraft.properties" 2> /dev/null && MODEL=galaxycraft-mario
-# Smoother video than Dolphin's defaults (same as the launcher's VIDEO_DEFAULTS), each only if
-# this folder's GFX.ini does not set its own.
-VIDEO=()
-for kv in Settings:InternalResolution=3 Settings:MSAA=4 Enhancements:MaxAnisotropy=3; do
-  key=${kv#*:}; key=${key%%=*}
-  grep -qE "^[[:space:]]*$key[[:space:]]*=" "$DOLPHIN_DIR/Config/GFX.ini" 2>/dev/null \
-    || VIDEO+=(-C "Graphics.${kv%%:*}.${kv#*:}")
-done
+# Picture Quality (a Super Minecraft Galaxy setting; the same table as launcher/src/core/videoquality.js):
+# Dolphin's internal resolution, MSAA and anisotropic filtering, for this run only.
+QUALITY=$(sed -n 's/^[[:space:]]*videoQuality[[:space:]]*=[[:space:]]*\([A-Za-z]*\).*/\1/p' "$GAME_DIR/config/galaxycraft.properties" 2> /dev/null | tr a-z A-Z)
+case "$QUALITY" in
+  LOW) VQ="1 1 0" ;;
+  MEDIUM) VQ="2 2 2" ;;
+  ULTRA) VQ="4 4 3" ;;
+  *) VQ="3 4 3" ;; # High, the default
+esac
+read -r VRES VMSAA VANISO <<< "$VQ"
+VIDEO=(-C "Graphics.Settings.InternalResolution=$VRES" -C "Graphics.Settings.MSAA=$VMSAA" -C "Graphics.Enhancements.MaxAnisotropy=$VANISO")
 GALAXYCRAFT=1 GALAXYCRAFT_BOOT=space dolphin/build/Binaries/dolphin-emu -u "$DOLPHIN_DIR" \
   -e "syati/build/$MODEL.json" \
   -C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False \

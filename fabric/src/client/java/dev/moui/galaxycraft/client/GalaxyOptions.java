@@ -5,6 +5,7 @@ import dev.moui.galaxycraft.settings.MarioModel;
 import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.settings.Setting;
 import dev.moui.galaxycraft.settings.Settings;
+import dev.moui.galaxycraft.settings.VideoQuality;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import java.util.List;
 import java.util.function.BooleanSupplier;
@@ -41,6 +42,10 @@ public final class GalaxyOptions {
             "Mario movement's body: Steve's boxes on Mario's skeleton (with your skin), or the game's original Mario.\n"
                     + "Minecraft movement is always Steve. It takes effect the next time the game starts.",
             MarioModel.class, MarioModel.STEVE, MarioModel::label));
+    public static final Setting.Choice<VideoQuality> VIDEO_QUALITY = SETTINGS.add(new Setting.Choice<>("videoQuality", "Picture Quality",
+            "How sharp the game is drawn: Dolphin's internal resolution, anti-aliasing and texture filtering.\n"
+                    + "Higher looks smoother, and asks more of the graphics card. It takes effect the next time the game starts.",
+            VideoQuality.class, VideoQuality.HIGH, VideoQuality::label));
     public static final Setting.Text SKIN = SETTINGS.add(new Setting.Text("skin", "Skin",
             "A Minecraft account's name: its skin goes on your character (also /skin <name>). Empty: Steve.", "", 16));
     public static final Setting.Range ENTITY_RANGE = SETTINGS.add(new Setting.Range("entityRange", "Entity Distance",
