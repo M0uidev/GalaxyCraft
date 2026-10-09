@@ -142,9 +142,6 @@ Last updated: 2026-10-09 (inbox: fullscreen shrinks on start)
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
-- 2026-10-08: Fullscreen shrinks on start (user): F11 pressed right as the game opens, before the start screen
-  has loaded, and Dolphin's window goes back to normal size; the player has to press F11 again. Fix: keep
-  fullscreen once asked for (DolphinQt MainWindow::FullScreen / RenderWidget state change). Not reproduced yet.
 - 2026-10-08: Swimming matters (user): Minecraft's swimming, or Mario's body swimming, undecided. Water look: a
   character standing with legs in water is drawn over the water as if above it (screenshot coming; check
   mobs too); under water everything should be tinted like Minecraft's underwater view, faithful to it.
