@@ -641,8 +641,7 @@ public final class PlanetClient {
         boolean space = galaxy != null && Layout.SPACE_STAGE.equals(stage);
         marioUniverse = world.queryPos();
         // The floating origin first: what this tick sends is from wherever it is now.
-        UniverseClient.tick(bridge, world, landPending || generating != null, landPending && landOn != null && stream != null
-                ? stream.entry(landOn.planet()).map(GalaxyCatalog.Entry::center).orElse(null) : null);
+        UniverseClient.tick(bridge, world, landPending || generating != null, landPending ? landCenter() : null);
         for (ShadowWorld.Bed b; (b = ShadowWorld.pollBed()) != null; ) slept(b, player);
         // The player died and came back (Minecraft made it anew): Mario lands at the bed, else where he stood.
         if (space && lastPlayer != null && player != lastPlayer) {
@@ -719,7 +718,7 @@ public final class PlanetClient {
         } else unlandedSince = 0;
         if (stream != null) {
             Vector3d from = world.queryPos();
-            if (landPending && landOn != null) from = stream.entry(landOn.planet()).map(GalaxyCatalog.Entry::center).orElse(from);
+            if (landPending && landOn != null) from = landOn.station() != null ? from : stream.entry(landOn.planet()).map(GalaxyCatalog.Entry::center).orElse(from);
             else if (landPending) from = new Vector3d();
             stream.tick(from, world.sceneId(), bridge.hostPid());
         }
@@ -1150,8 +1149,43 @@ public final class PlanetClient {
         return galaxy;
     }
 
+    /** Where the saved spot's planet or station is (universe units), if known: the origin goes there before Mario lands. */
+    private static Vector3d landCenter() {
+        if (landOn == null) return null;
+        if (landOn.station() != null) return StationClient.centerOf(landOn.station());
+        return stream == null ? null : stream.entry(landOn.planet()).map(GalaxyCatalog.Entry::center).orElse(null);
+    }
+
+    /**
+     * Mario onto the station the player logged out on, at the column they stood on (on top of its
+     * highest block). The station is brought into the scene wherever it is; one that is gone (packed
+     * up, or from another stage) lets the player land on the first planet instead.
+     */
+    private static void landOnStation(LocalPlayer player) {
+        String id = landOn.station();
+        if (!StationClient.want(id)) {
+            GalaxyCraft.LOG.info("The station {} the player left from is not placed: landing on the first planet", id);
+            landOn = null;
+            return;
+        }
+        PlanetSession on = StationClient.sessionOf(id);
+        if (on == null || !on.active() || on.queued() > 0) return; // still coming in
+        Vector3d at = on.teleportToward(new Vector3d(landOn.dx(), landOn.dy(), landOn.dz()));
+        if (at == null) return;
+        focus = on;
+        Flight.end(player);
+        if (GalaxyCraftClient.walking()) GalaxyCraftClient.moveTo(on.galOf(at));
+        landPending = false;
+        StationClient.landed();
+        GalaxyCraft.LOG.info("Entered the world's galaxy: Mario onto station {} at {}", id, at);
+    }
+
     /** Mario onto the saved spot's planet, the way he stood there; or onto the first planet's top. */
     private static void landOnSpot(LocalPlayer player) {
+        if (landOn != null && landOn.station() != null) {
+            landOnStation(player);
+            return;
+        }
         PlanetSession on = null;
         if (landOn != null)
             for (PlanetSession p : planets())
@@ -1178,6 +1212,23 @@ public final class PlanetClient {
         GalaxySave g = galaxy;
         PlanetSession on = standingOn();
         Vector3d feet = GalaxyCraftClient.galaxyPos().orElse(null);
+        if (landPending) return; // not landed yet: the spot saved is the one being landed on
+        if (g != null && feet != null && player != null) {
+            var st = StationClient.standingOn(feet);
+            if (st != null) { // on a station: where, in its own space, so it comes back there
+                PlanetSession ss = StationClient.sessionOf(st.id);
+                Vector3d at = ss.localOf(feet);
+                GalaxySave.Spot spot = GalaxySave.Spot.onStation(st.id, at.x, at.y, at.z, player.getYRot(), player.getXRot());
+                saver.execute(() -> {
+                    try {
+                        g.writeSpot(spot);
+                    } catch (IOException e) {
+                        GalaxyCraft.LOG.warn("Could not save where the player stands: {}", e.toString());
+                    }
+                });
+                return;
+            }
+        }
         if (g == null || on == null || feet == null || player == null) return;
         Vector3d d = new Vector3d(feet).sub(on.center());
         GalaxySave.Spot spot = saved(new GalaxySave.Spot(indexOf(on), d.x, d.y, d.z, player.getYRot(), player.getXRot()));
