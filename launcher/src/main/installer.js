@@ -128,7 +128,7 @@ class Installer extends EventEmitter {
 
       // 2. The disc files, from the player's game.
       await this.makeDiscFiles(lay, sys, rom);
-      await this.makeSoundtrack(lay, sys, rom);
+      await this.makeSoundtrack(lay, sys, rom, { progress: true });
 
       // 3. Minecraft, Fabric and Java.
       if (minecraft) await this.minecraft(manifest);
@@ -186,17 +186,20 @@ class Installer extends EventEmitter {
    * default catalog copied from the player's disc once, and tracks.tsv. The music is optional: a
    * failure here is logged and never stops the install or PLAY.
    */
-  async makeSoundtrack(lay, sys, rom) {
+  async makeSoundtrack(lay, sys, rom, { progress = false } = {}) {
+    // Progress only while installing: the launcher's page keeps it until INSTALL ends, so a
+    // PLAY that reported some would leave the button on INSTALLING.
+    const report = (p) => { if (progress) this.progress(p); };
     try {
       const defaults = fs.readFileSync(this.soundtrackDefaults, 'utf8');
       const tool = path.join(lay.dolphin, sys.tool);
       const r = await soundtrack.install({
         dir: path.join(this.paths.dataDir, 'soundtrack'), defaults,
         extract: async (out) => {
-          this.progress({ phase: 'disc', label: 'Your Super Mario Galaxy 2 songs', done: 0, total: 1, bytes: 0, totalBytes: 0 });
+          report({ phase: 'disc', label: 'Your Super Mario Galaxy 2 songs', done: 0, total: 1, bytes: 0, totalBytes: 0 });
           await run(tool, ['extract', '-i', rom, '-s', soundtrack.DISC_DIR, '-o', out, '-q'], { timeout: 600000 });
         },
-        onProgress: (p) => this.progress({ phase: 'disc', label: 'Your Super Mario Galaxy 2 songs', ...p, bytes: 0, totalBytes: 0 }),
+        onProgress: (p) => report({ phase: 'disc', label: 'Your Super Mario Galaxy 2 songs', ...p, bytes: 0, totalBytes: 0 }),
       });
       if (r.copied) this.log(`Copied ${r.copied} songs from your Super Mario Galaxy 2`);
       if (r.missing.length) this.log(`${r.missing.length} songs are not on your disc: ${r.missing.slice(0, 3).join(', ')}...`);

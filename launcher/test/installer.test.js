@@ -154,3 +154,33 @@ test('game.json is checked before anything is done', () => {
     module: { file: '../x', url: 'https://x', sha256: '0'.repeat(64) }, mods: [] }).message, /no module/);
   assert.equal(gamepack.compareVersions('0.10.0', '0.9.9') > 0, true);
 });
+
+// The launcher's PLAY button stays "INSTALLING" for as long as the page has install progress,
+// and only an INSTALL clears it: songs copied while PLAY prepares the game must not report any.
+test('the soundtrack reports progress while installing but not while PLAY prepares', { skip: process.platform === 'win32' }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gxl-songs-'));
+  const defaults = path.join(dir, 'soundtrack.tsv');
+  fs.writeFileSync(defaults, '# id\ttitle\tfile\tsource\tmood\ttags\tenabled\na\tA\tSMG2_a_strm.ast\tsmg2\tspace\t\ttrue\n');
+  const dol = path.join(dir, 'dolphin');
+  fs.mkdirSync(dol);
+  fs.writeFileSync(path.join(dol, 'dolphin-tool'),
+    '#!/bin/sh\nmkdir -p "$7/DATA/files/AudioRes/Stream"\necho song > "$7/DATA/files/AudioRes/Stream/SMG2_a_strm.ast"\n', { mode: 0o755 });
+  const mk = (name) => {
+    const paths = platformPaths({ platform: 'linux', env: { GXC_DATA_DIR: path.join(dir, name) }, home: dir });
+    const inst = new Installer({ paths, system: 'linux-x64', soundtrackDefaults: defaults });
+    const events = [];
+    inst.on('progress', (p) => events.push(p));
+    return { inst, events, paths };
+  };
+
+  const play = mk('play');
+  await play.inst.makeSoundtrack({ dolphin: dol }, { tool: 'dolphin-tool' }, path.join(dir, 'rom.iso'));
+  assert.ok(fs.existsSync(path.join(dir, 'play', 'soundtrack', 'SMG2_a_strm.ast')), 'the song is copied');
+  assert.deepEqual(play.events, [], 'no progress at PLAY');
+
+  const inst = mk('install');
+  await inst.inst.makeSoundtrack({ dolphin: dol }, { tool: 'dolphin-tool' }, path.join(dir, 'rom.iso'), { progress: true });
+  assert.ok(inst.events.length > 0 && inst.events.every((e) => e.phase === 'disc'), 'progress while installing');
+  const last = inst.events[inst.events.length - 1];
+  assert.equal(last.done, last.total, 'and it ends complete');
+});
