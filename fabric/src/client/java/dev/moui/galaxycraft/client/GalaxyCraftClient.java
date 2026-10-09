@@ -168,6 +168,8 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             if (dolphinUp && Boolean.getBoolean("galaxycraft.hidden")) { // Dolphin shows the overlay instead
                 client.options.pauseOnLostFocus = false; // hidden, never focused: hostFocused pauses
                 SDLVideo.SDL_HideWindow(client.getWindow().handle());
+            } else if (!dolphinUp && Boolean.getBoolean("galaxycraft.hidden")) {
+                SDLVideo.SDL_ShowWindow(client.getWindow().handle()); // created hidden (WindowHiddenMixin): no Dolphin to show it
             }
         });
         GalaxyOptions.init();
