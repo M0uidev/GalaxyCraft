@@ -145,6 +145,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(GalaxyCraftClient::afterTick);
         ClientTickEvents.END_CLIENT_TICK.register(PlanetEditorScreen::openIfRequested);
         ClientTickEvents.END_CLIENT_TICK.register(client -> { // after the chat that ran the command has closed
+            if (panoramaRequested && client.gui.screen() == null) {
+                panoramaRequested = false;
+                if (!PanoramaCapture.start(client)) say("a panorama needs the game running in a world");
+            }
             if (settingsRequested && client.gui.screen() == null) {
                 settingsRequested = false;
                 client.gui.setScreen(new GalaxySettingsScreen(null));
@@ -183,8 +187,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         TitleMenu.register();
         CreateWorldDefaults.register();
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("panorama").executes(c -> {
-            if (!PanoramaCapture.start(Minecraft.getInstance()))
-                c.getSource().sendFeedback(Component.literal("Super Minecraft Galaxy: a panorama needs the game running in a world"));
+            panoramaRequested = true; // the chat that ran the command is still open: the capture starts once it has closed
             return 1;
         })));
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("fly").executes(c -> {
@@ -256,6 +259,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     }
 
     private static boolean settingsRequested;
+    private static boolean panoramaRequested;
 
     /** While a host is linked, Minecraft renders a transparent overlay and exports it. */
     public static boolean exportingOverlay() {
