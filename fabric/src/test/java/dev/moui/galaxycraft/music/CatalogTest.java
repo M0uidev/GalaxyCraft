@@ -42,4 +42,11 @@ class CatalogTest {
         assertEquals("A B", out.get(0).title(), "tabs in a title become spaces");
         assertEquals(Source.MINECRAFT, out.get(0).source());
     }
+
+    @Test void twoSongsWithTheSameIdGetDistinctIds() {
+        List<Track> t = Catalog.parse("a\tFirst\ta1.ast\tsmg2\tspace\t\ttrue\na\tSecond\ta2.ast\tsmg2\tplanet\t\ttrue\na\tThird\ta3.ast\tsmg2\t\t\ttrue\n");
+        assertEquals(List.of("a", "a#2", "a#3"), t.stream().map(Track::id).toList());
+        assertEquals("a2.ast", t.get(1).file());
+        assertEquals(Mood.PLANET, t.get(1).mood());
+    }
 }

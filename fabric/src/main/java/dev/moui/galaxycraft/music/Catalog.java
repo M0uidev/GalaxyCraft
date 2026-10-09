@@ -18,6 +18,7 @@ public final class Catalog {
 
     public static List<Track> parse(String text) {
         List<Track> out = new ArrayList<>();
+        java.util.Map<String, Integer> seen = new java.util.HashMap<>();
         for (String line : text.split("\\R")) {
             if (line.isBlank() || line.startsWith("#")) continue;
             String[] f = line.split("\t", -1);
@@ -34,7 +35,10 @@ public final class Catalog {
                 default -> null;
             };
             List<String> tags = Arrays.stream(f[5].split(",")).map(String::strip).filter(s -> !s.isEmpty()).toList();
-            out.add(new Track(f[0].strip(), f[1].strip(), f[2].strip(), source, mood, tags, f[6].strip().equals("true")));
+            String id = f[0].strip();
+            int n = seen.merge(id, 1, Integer::sum); // ids must be unique: later copies become id#2, id#3...
+            if (n > 1) id = id + "#" + n;
+            out.add(new Track(id, f[1].strip(), f[2].strip(), source, mood, tags, f[6].strip().equals("true")));
         }
         return out;
     }
