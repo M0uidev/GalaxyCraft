@@ -17,6 +17,7 @@ const report = require('../core/report');
 const { preflight } = require('../core/preflight');
 const { buildPlan } = require('../core/launchplan');
 const gamepack = require('../core/gamepack');
+const mariomodel = require('../core/mariomodel');
 const minecraft = require('../core/minecraft');
 const disc = require('../core/disc');
 const { playerState } = require('../core/playstate');
@@ -262,7 +263,8 @@ async function playRelease(inst) {
     version: ready.version, java: ready.java, dirs: { ...ready.dirs, game: gameDir }, auth: sessionInfo,
     jvmArgs: gamepack.minecraftJvmArgs(i.manifest, inst), launcher: { name: 'super-minecraft-galaxy', version: app.getVersion() },
   });
-  return gamepack.playerPlan({ paths: paths(), inst, lay: i.lay, dolphinExe: path.join(i.lay.dolphin, i.sys.exe), mcCommand });
+  const lay = mariomodel.layFor({ lay: i.lay, rom: rom.path, propertiesFile: settingsFile(inst) });
+  return gamepack.playerPlan({ paths: paths(), inst, lay, dolphinExe: path.join(i.lay.dolphin, i.sys.exe), mcCommand });
 }
 
 /** PLAY from a game folder (developers): as tools/gxplay.sh, with the chosen disc if there is one. */

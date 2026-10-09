@@ -17,6 +17,15 @@ const SCHEMA = [
     ],
   },
   {
+    key: 'marioModel', label: 'Mario Model', type: 'choice', default: 'STEVE',
+    help: 'Mario movement\'s body: Steve\'s boxes on Mario\'s skeleton (with your skin), or the game\'s original Mario. '
+      + 'Minecraft movement is always Steve. It takes effect the next time the game starts.',
+    options: [
+      { value: 'STEVE', label: 'Steve\'s body' },
+      { value: 'ORIGINAL', label: 'Original Mario' },
+    ],
+  },
+  {
     key: 'skin', label: 'Skin', type: 'text', default: '', maxLength: 16,
     help: 'A Minecraft account\'s name: its skin goes on your character (also /skin <name>). Empty: Steve.',
   },

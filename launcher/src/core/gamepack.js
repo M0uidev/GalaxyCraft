@@ -100,7 +100,7 @@ function layout(paths, version) {
 }
 
 /** Dolphin's game mod descriptor: the player's disc, with the module's Riivolution patch. */
-function descriptor(rom, moduleDir, platform = process.platform) {
+function descriptor(rom, moduleDir, platform = process.platform, xml = 'galaxycraft.xml') {
   const p = pathFor(platform);
   return {
     type: 'dolphin-game-mod-descriptor',
@@ -109,7 +109,7 @@ function descriptor(rom, moduleDir, platform = process.platform) {
     'display-name': 'Super Mario Galaxy 2 (Super Minecraft Galaxy)',
     riivolution: {
       patches: [{
-        xml: p.join(moduleDir, 'galaxycraft.xml'),
+        xml: p.join(moduleDir, xml),
         root: moduleDir,
         options: [{ 'section-name': 'GalaxyCraft', 'option-name': 'GalaxyCraft', choice: 1 }],
       }],
