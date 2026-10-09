@@ -25,4 +25,10 @@ f32 ShellAlpha(f32 outside, f32 fade);
 // `in_any`: the camera is inside some body's gravity. Out in space every shell shows; inside a
 // gravity only that body's own (fading as above), not the others' around it.
 f32 ShellShown(f32 outside, f32 fade, bool in_any);
+
+// A panorama capture hides the shells (they would be in the picture): the mod sends the sky
+// message's red channel 2 or more over the 0..1 it means (the message has no spare field, and
+// the host passes it on as is). ShellsHidden: that flag; SkyChannel: the channel without it.
+bool ShellsHidden(f32 sky_red);
+f32 SkyChannel(f32 v);
 }  // namespace gxc

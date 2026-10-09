@@ -215,7 +215,8 @@ enum {
                               sent every frame while he rides (the game lets go if they stop) */
   GXC_MSG_HURT = 111,      /* the player was hurt in Minecraft: f32 from[3] (galaxy), u32 GXC_HURT_*; big-endian */
   GXC_MSG_SKY = 113,       /* the sky's light now (Minecraft's lightmap at full sky light, day or night): f32 rgb[3],
-                              big-endian; planets' sky-lit faces take it */
+                              big-endian; planets' sky-lit faces take it. Red 2 or more over its 0..1 means a
+                              panorama is being captured: no gravity shells (core/Shell.h ShellsHidden) */
   GXC_MSG_MARIO_SKIN = 114, /* M -> S, for the host itself: the skin of Mario's model (Steve), all big-endian:
                                u32 id (unused), u32 width, u32 height (64 and 64), GX RGB5A3 texels. The host
                                writes them over the "steve" texture of Mario.bdl wherever it is in guest RAM */

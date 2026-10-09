@@ -119,6 +119,16 @@ f32 ShellShown(f32 outside, f32 fade, bool in_any)
   return ShellAlpha(outside, fade);
 }
 
+bool ShellsHidden(f32 sky_red)
+{
+  return sky_red >= 2.f;
+}
+
+f32 SkyChannel(f32 v)
+{
+  return v < 0.f ? 0.f : v > 1.f ? 1.f : v;
+}
+
 f32 ShellAlpha(f32 outside, f32 fade)
 {
   if (outside >= 0.f)

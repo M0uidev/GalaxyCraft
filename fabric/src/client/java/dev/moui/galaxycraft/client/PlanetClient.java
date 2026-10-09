@@ -302,19 +302,18 @@ public final class PlanetClient {
         }
         int packed = (int) Math.round(c[0] * 255) << 16 | (int) Math.round(c[1] * 255) << 8 | (int) Math.round(c[2] * 255);
         int fogKey = java.util.Arrays.hashCode(fog);
-        if (packed == skySent && fogKey == fogSent && ++skyAge < 100) return;
+        boolean hide = PanoramaCapture.active(); // no gravity shells in a panorama
+        if (packed == skySent && fogKey == fogSent && hide == shellsHidden && ++skyAge < 100) return;
         // After the light: under water, Minecraft's fog (r, g, b, start and end in blocks), else zeros.
-        float[] f = fog != null ? fog : new float[5];
-        java.nio.ByteBuffer msg = java.nio.ByteBuffer.allocate(32).putFloat((float) c[0]).putFloat((float) c[1])
-                .putFloat((float) c[2]);
-        for (float v : f) msg.putFloat(v);
-        if (bridge.send(Layout.MSG_SKY, msg.array())) {
+        if (bridge.send(Layout.MSG_SKY, dev.moui.galaxycraft.proto.SkyMessage.pack(c, fog, hide))) {
             skySent = packed;
             fogSent = fogKey;
+            shellsHidden = hide;
             skyAge = 0;
         }
     }
 
+    private static boolean shellsHidden;
     private static int fogSent;
     /** Ticks the camera has been in water (Minecraft's water vision: the fog opens up over 30 s). */
     private static int waterVisionTime;

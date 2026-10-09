@@ -225,6 +225,7 @@ MarioHitbox gHitbox;
 bool gHitboxOn = false;
 // The light of full sky light now (GXC_MSG_SKY): white by day, dim and bluish at night.
 GXColor gSky = {255, 255, 255, 255};
+bool gHideShells = false;  // a panorama is being captured: no gravity shells in the picture
 // Under water (the camera in a water cell, from the mod's SKY record): Minecraft's water fog, its
 // color and where it starts and ends in game units; end 0: none.
 struct WaterFog
@@ -538,11 +539,9 @@ public:
     {
       u8 c[3];
       for (int k = 0; k < 3; k++)
-      {
-        const f32 v = r.sky[k] < 0.f ? 0.f : r.sky[k] > 1.f ? 1.f : r.sky[k];
-        c[k] = static_cast<u8>(v * 255.f + 0.5f);
-      }
+        c[k] = static_cast<u8>(gxc::SkyChannel(r.sky[k]) * 255.f + 0.5f);
       gSky.r = c[0], gSky.g = c[1], gSky.b = c[2];
+      gHideShells = gxc::ShellsHidden(r.sky[0]);
       const f32 end = r.water[4] * 80.f;
       gWaterFog.end = end > 0.f ? end : 0.f;
       gWaterFog.start = r.water[3] * 80.f;
@@ -1334,6 +1333,8 @@ public:
   // ground). Behind the planets (depth tested, none written).
   void DrawShells(const f32 view[12]) const
   {
+    if (gHideShells)
+      return;
     static u8* sphere = 0;
     static u8* box = 0;
     if (!sphere)
