@@ -28,7 +28,7 @@ const VIDEO_DEFAULTS = [
 function videoArgs(gfxIni = '') {
   const args = [];
   for (const [section, key, value] of VIDEO_DEFAULTS) {
-    if (!new RegExp(`^\\s*${key}\\s*=`, 'm').test(gfxIni)) args.push('-C', `GFX.${section}.${key}=${value}`);
+    if (!new RegExp(`^\\s*${key}\\s*=`, 'm').test(gfxIni)) args.push('-C', `Graphics.${section}.${key}=${value}`);
   }
   return args;
 }

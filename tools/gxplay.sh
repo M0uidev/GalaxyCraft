@@ -74,7 +74,7 @@ VIDEO=()
 for kv in Settings:InternalResolution=3 Settings:MSAA=4 Enhancements:MaxAnisotropy=3; do
   key=${kv#*:}; key=${key%%=*}
   grep -qE "^[[:space:]]*$key[[:space:]]*=" "$DOLPHIN_DIR/Config/GFX.ini" 2>/dev/null \
-    || VIDEO+=(-C "GFX.${kv%%:*}.${kv#*:}")
+    || VIDEO+=(-C "Graphics.${kv%%:*}.${kv#*:}")
 done
 GALAXYCRAFT=1 GALAXYCRAFT_BOOT=space dolphin/build/Binaries/dolphin-emu -u "$DOLPHIN_DIR" \
   -e "syati/build/$MODEL.json" \
