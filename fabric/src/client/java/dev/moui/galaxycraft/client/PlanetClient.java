@@ -1155,6 +1155,8 @@ public final class PlanetClient {
         Vector3d dir = on != null ? new Vector3d(landOn.dx(), landOn.dy(), landOn.dz()) : new Vector3d(0, 1, 0);
         if (on == null) on = planets().stream().filter(PlanetSession::active).findFirst().orElse(null);
         if (on == null || on.queued() > 0) return; // the planet still being made, or on its way to the game
+        // No saved spot (a first visit): the planet's top, or the dry ground nearest to it.
+        if (landOn == null || dir.x == 0 && dir.y == 1 && dir.z == 0) dir = on.dryToward(dir);
         Vector3d at = on.teleportToward(dir);
         if (at == null) return;
         focus = on;

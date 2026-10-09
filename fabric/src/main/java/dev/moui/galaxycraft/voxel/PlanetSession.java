@@ -386,6 +386,39 @@ public final class PlanetSession {
      * Mario onto the surface, where the game puts him: on the line from the center through him.
      * The collision there goes first, then the teleport, so he never lands where nothing is solid.
      */
+    /** The top of the column through p is water or lava (a fresh player is not to start in it). */
+    private boolean wet(Vector3d p) {
+        CubeSphere g = planet.sphere();
+        int c0 = g.cellAt(new Vector3d(p).normalize(g.core + 0.5));
+        if (c0 >= 0)
+            for (int k = g.layers - 1; k >= 0; k--)
+                if (planet.get(c0 + k) != Blocks.AIR) return planet.fluid(c0 + k) != Blocks.NO_FLUID;
+        return false;
+    }
+
+    /**
+     * toward, or the closest direction to it (planet space) whose ground is dry; toward itself if
+     * everything around is wet. Where a player first lands: not in the sea.
+     */
+    public Vector3d dryToward(Vector3d toward) {
+        if (planet == null) return toward;
+        Vector3d t = new Vector3d(toward).normalize();
+        if (!wet(t)) return t;
+        Vector3d a = t.cross(Math.abs(t.y) < 0.9 ? new Vector3d(0, 1, 0) : new Vector3d(1, 0, 0), new Vector3d()).normalize();
+        Vector3d b = t.cross(a, new Vector3d());
+        double r = Math.max(planet.surface(), 1);
+        for (double arc = 3; arc <= Math.PI * r; arc += 3) {
+            double th = arc / r;
+            int n = Math.max(8, (int) (2 * Math.PI * Math.sin(th) * r / 3));
+            for (int i = 0; i < n; i++) {
+                double ph = 2 * Math.PI * i / n;
+                Vector3d d = new Vector3d(t).mul(Math.cos(th)).fma(Math.sin(th) * Math.cos(ph), a).fma(Math.sin(th) * Math.sin(ph), b);
+                if (!wet(d)) return d;
+            }
+        }
+        return t;
+    }
+
     /** Radius of the top of the highest block in the column through p (blocks); the surface if it is all air. */
     double ground(Vector3d p) {
         CubeSphere g = planet.sphere();
