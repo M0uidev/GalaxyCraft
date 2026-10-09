@@ -31,4 +31,23 @@ f32 ShellShown(f32 outside, f32 fade, bool in_any);
 // the host passes it on as is). ShellsHidden: that flag; SkyChannel: the channel without it.
 bool ShellsHidden(f32 sky_red);
 f32 SkyChannel(f32 v);
+
+// A station's shell stretches when its box grows, as the player builds past its edge: the gravity
+// itself changes at once, only the drawn box eases to it. `resid` is the drawn box's 3x4 matrix
+// (row-major, as the gravity's) minus the actual one, `glow` (0..1) how lit the lines are to
+// show it happening even where the shell would be faded out.
+struct ShellStretch
+{
+  f32 resid[12];
+  f32 glow;
+};
+// The actual matrix went from `from` to `to`: the drawn one stays where it was and eases there
+// (the side that did not move stays still). Only a change of the box's axes counts: a move of the
+// whole box (the floating origin shifting) or a jump farther than the boxes are big does not.
+// False: nothing was started.
+bool ShellStretchStart(ShellStretch& s, const f32 from[12], const f32 to[12]);
+// One frame: the gap closes by a fraction, the glow dims; both end at exactly 0.
+void ShellStretchStep(ShellStretch& s);
+bool ShellStretching(const ShellStretch& s);
+
 }  // namespace gxc

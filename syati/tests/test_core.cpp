@@ -980,6 +980,32 @@ static void TestShell()
   CHECK(!ShellsHidden(1.f) && !ShellsHidden(0.f) && !ShellsHidden(0.5f) && !ShellsHidden(-1.f) && !ShellsHidden(1.99f));
   CHECK(SkyChannel(2.5f) == 0.5f && SkyChannel(2.f) == 0.f && SkyChannel(0.25f) == 0.25f && SkyChannel(-3.f) == 0.f && SkyChannel(7.f) == 1.f);
   CHECK(std::fabs(ShellShown(-25.f, 100.f, true) - 0.75f) < 1e-6f);
+  // A station's box grows by 2 half-units on +X: the drawn box starts where it was, eases to the
+  // new one, the far side (center - half) staying put all along.
+  {
+    const float from[12] = {400, 0, 0, 1000, 0, 80, 0, 0, 0, 0, 400, 0};
+    const float to[12] = {480, 0, 0, 1080, 0, 80, 0, 0, 0, 0, 400, 0};
+    ShellStretch s = {};
+    CHECK(ShellStretchStart(s, from, to) && s.glow == 1.f);
+    CHECK(std::fabs(to[0] + s.resid[0] - from[0]) < 1e-4f);  // drawn = actual + resid = old
+    float far0 = (to[3] + s.resid[3]) - (to[0] + s.resid[0]);
+    for (int i = 0; i < 40; i++)
+    {
+      ShellStretchStep(s);
+      const float far = (to[3] + s.resid[3]) - (to[0] + s.resid[0]);
+      CHECK(std::fabs(far - far0) < 1e-3f);
+    }
+    CHECK(std::fabs(s.resid[0]) < 2.f && ShellStretching(s));
+    for (int i = 0; i < 400; i++)
+      ShellStretchStep(s);
+    CHECK(!ShellStretching(s));
+    // The whole box moving (the floating origin) is no stretch; nor is a jump across space.
+    const float shifted[12] = {400, 0, 0, 1010, 0, 80, 0, 0, 0, 0, 400, 0};
+    const float away[12] = {480, 0, 0, 900000, 0, 80, 0, 0, 0, 0, 400, 0};
+    ShellStretch t = {};
+    CHECK(!ShellStretchStart(t, from, shifted) && !ShellStretching(t));
+    CHECK(!ShellStretchStart(t, from, away) && !ShellStretching(t));
+  }
 }
 
 int main()
