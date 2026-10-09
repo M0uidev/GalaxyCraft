@@ -759,9 +759,11 @@ public final class PlanetClient {
             }
             ShadowWorld.steer(new ShadowWorld.Steer(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),
                     key(in, SC_LSHIFT) || key(in, SC_RSHIFT)));
-            // A station's core: its menu on a right click, and it never breaks.
+            // A station's core: its menu on a right click (crouching, the click places blocks as on any
+            // block), and it never breaks.
             boolean core = aim != null && StationClient.isCore(session, aim.cell());
-            if (core && pressed(buttons, MOUSE_RIGHT) && target == null) {
+            boolean crouch = key(in, SC_LSHIFT) || key(in, SC_RSHIFT);
+            if (core && !crouch && pressed(buttons, MOUSE_RIGHT) && target == null) {
                 StationScreen.open(session);
                 hit = true;
             }
