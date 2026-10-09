@@ -1,5 +1,6 @@
 package dev.moui.galaxycraft.client;
 
+import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.universe.GameOrigin;
 import dev.moui.galaxycraft.universe.SystemIndex;
 
@@ -426,8 +427,13 @@ public final class PlanetClient {
         return main.is(Items.BUCKET) || main.isEmpty() && player.getOffhandItem().is(Items.BUCKET);
     }
 
+    /**
+     * Whether the clicks break and place blocks. Mario's empty fist is his punch, so there it
+     * takes something in hand; with Minecraft's movement (Steve, no punch) a fist breaks blocks.
+     */
     public static boolean itemActive(LocalPlayer player) {
-        return player != null && (!player.getMainHandItem().isEmpty() || !player.getOffhandItem().isEmpty() || aimUsable);
+        return player != null && (!player.getMainHandItem().isEmpty() || !player.getOffhandItem().isEmpty() || aimUsable
+                || GalaxyOptions.MOVEMENT.get() != Movement.MARIO);
     }
 
     /** /galaxycraft planet spawn [radius]: next tick, above the player, replacing the one in focus. */
