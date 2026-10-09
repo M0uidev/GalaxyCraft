@@ -12,6 +12,7 @@
 		"GameRendererMixin",
 		"LevelRendererMixin",
 		"LocalPlayerMixin",
+		"MusicManagerMixin",
 		"MinecraftMixin",
 		"ModelPartAccessor",
 		"OptionsMixin",

@@ -62,6 +62,24 @@ public final class GalaxyOptions {
     public static final Setting.Toggle PARTICLES = SETTINGS.add(new Setting.Toggle("particles", "Game Particles",
             "Minecraft's particles (explosions, broken blocks, hits) drawn in the game", true));
 
+    public static final Setting.Toggle MUSIC_AUTO = SETTINGS.add(new Setting.Toggle("musicAuto", "Automatic Music",
+            "The soundtrack follows where you are: space or a planet.\nOff: music plays only what you pick in the music player.", true));
+    public static final Setting.Choice<dev.moui.galaxycraft.music.SourceMode> MUSIC_SOURCE = SETTINGS.add(new Setting.Choice<>(
+            "musicSource", "Music Source",
+            "Both games: Super Mario Galaxy 2 by place, Minecraft's music on planets.\n"
+                    + "Super Mario Galaxy 2: only its songs, by place.\nMinecraft: only Minecraft's music, everywhere.\n"
+                    + "Random: any song of either game, wherever you are.",
+            dev.moui.galaxycraft.music.SourceMode.class, dev.moui.galaxycraft.music.SourceMode.BOTH,
+            dev.moui.galaxycraft.music.SourceMode::label));
+    public static final Setting.Range MUSIC_COOLDOWN = SETTINGS.add(new Setting.Range("musicCooldown", "Music Cooldown",
+            "After the music changes, it will not change again for this long (0: no cooldown).", 0, 600, 5, 120, " s"));
+    public static final Setting.Range MUSIC_DWELL = SETTINGS.add(new Setting.Range("musicDwell", "Music Delay",
+            "How long you must stay in a new place before its music starts.", 0, 60, 1, 5, " s"));
+    public static final Setting.Range MUSIC_CROSSFADE = SETTINGS.add(new Setting.Range("musicCrossfade", "Music Crossfade",
+            "How long one song takes to melt into the next (0: a cut).", 0, 15, 1, 4, " s"));
+    public static final Setting.Range MUSIC_VOLUME = SETTINGS.add(new Setting.Range("musicVolume", "Soundtrack Volume",
+            "On top of Minecraft's Music and Master volume.", 0, 100, 5, 100, "%"));
+
     /** Buttons under the settings. */
     public static final List<Action> ACTIONS = List.of(
             new Action(() -> "Fly: " + (GalaxyCraftClient.flying() ? "ON" : "OFF"),
@@ -73,7 +91,9 @@ public final class GalaxyOptions {
                         PlanetClient.teleport();
                     }),
             new Action("Planets...", "Design planets and put them in this galaxy (/galaxycraft)",
-                    () -> PlanetEditorScreen.open(Minecraft.getInstance())));
+                    () -> PlanetEditorScreen.open(Minecraft.getInstance())),
+            new Action("Music Player...", "The soundtrack: pick songs, sort them into space and planet music (M)",
+                    () -> dev.moui.galaxycraft.client.music.SoundtrackScreen.open()));
 
     private GalaxyOptions() {}
 

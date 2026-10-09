@@ -14,15 +14,15 @@ import org.joml.Vector3d;
 
 /**
  * Warp to another solar system, free: aim at its star on the sky and press K, or pick it on the
- * galaxy map (M, or K with no star in the crosshair). The screen goes dark, Mario lands on the
+ * galaxy map (N, or K with no star in the crosshair). The screen goes dark, Mario lands on the
  * system's first planet (the floating origin moves there first) and the camera zooms in from
  * space, as entering a world.
  */
 public final class Warp {
     /** A star counts as aimed at within this many degrees of the crosshair. */
     static final double AIM_DEG = 2.5;
-    /** SDL scancodes: K warps to the star aimed at (or opens the map), M opens the map. */
-    static final int SC_K = 14, SC_M = 16;
+    /** SDL scancodes: K warps to the star aimed at (or opens the map), N opens the map. */
+    static final int SC_K = 14, SC_N = 17;
     private static final double UNITS = 1 / GravityFrame.SCALE;
     private static int hintTicks;
 

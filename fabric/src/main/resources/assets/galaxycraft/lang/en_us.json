@@ -16,5 +16,15 @@
   "message.galaxycraft.station.too_big": "The station can't grow further",
   "message.galaxycraft.station.core": "The core holds the station together: pack it up from its menu",
   "message.galaxycraft.station.lost": "That station's file is missing",
-  "message.galaxycraft.station.packed": "Packed %s"
+  "message.galaxycraft.station.packed": "Packed %s",
+  "music.galaxycraft.now_playing": "♪ %s",
+  "screen.galaxycraft.music.title": "Soundtrack",
+  "screen.galaxycraft.music.auto": "Automatic",
+  "screen.galaxycraft.music.silent": "Nothing playing",
+  "screen.galaxycraft.station.music": "Music",
+  "key.galaxycraft.music.open": "Open Soundtrack",
+  "key.galaxycraft.music.play_pause": "Play / Pause Music",
+  "key.galaxycraft.music.next": "Next Song",
+  "key.galaxycraft.music.previous": "Previous Song",
+  "key.category.galaxycraft.music": "Soundtrack"
 }

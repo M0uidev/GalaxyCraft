@@ -27,7 +27,7 @@ moverte, las estrellas cambian de lugar como lo harían de verdad.
 |---|---|---|
 | **Élitros** | Dentro de un sistema | Como siempre: saltar en el aire con élitros y cohetes. |
 | **Pulso** | En el vacío | Planeando con élitros fuera de toda gravedad, **mantén sprint** (Ctrl): aceleras hasta 400 bloques por segundo hacia donde miras. Frenas solo al acercarte a la gravedad de un planeta, o al soltar sprint. |
-| **Warp** | A otro sistema | Apunta a una estrella y pulsa **K** (en el vacío, su nombre aparece sobre la barra). Sin estrella en la mira, K abre el **mapa de la galaxia**; también con **M**. El warp es gratis. |
+| **Warp** | A otro sistema | Apunta a una estrella y pulsa **K** (en el vacío, su nombre aparece sobre la barra). Sin estrella en la mira, K abre el **mapa de la galaxia**; también con **N**. El warp es gratis. |
 
 - Un warp oscurece la pantalla, te deja en el primer planeta del sistema y la cámara baja desde el
   espacio como al entrar al mundo. Si estabas planeando, aterrizas de pie.
