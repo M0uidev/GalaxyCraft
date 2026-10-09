@@ -131,6 +131,89 @@ class WalkFeelTest {
                 + ": fell " + (startY - feet.y) + " blocks into the dug hole");
     }
 
+    @Test void slidingAlongAFlatWallNeverCatches() {
+        // 164: the size of the planet where it was found (at 0.66 across its face); a small one (64)
+        // is twisted past what a flat wall can hide, but at its middle too it has to hold.
+        for (double[] c : new double[][] {{164, 0.5}, {164, 0.66}, {64, 0.5}})
+            for (int dir = 0; dir < 4; dir++)
+                for (int side = -1; side <= 1; side += 2) slide((int) c[0], c[1], dir, side);
+    }
+
+    /**
+     * Pressed against a straight wall of blocks (dir: which of the arena's four, in Minecraft's axes)
+     * and walking along it, the player keeps its full speed: no block's edge in the flat wall catches it.
+     */
+    private void slide(int radius, double at, int dir, int side) {
+        p = VoxelPlanet.ofRadius(radius);
+        g = p.sphere();
+        field.clear();
+        int face = 0, n = g.n, top = p.depth;
+        int mid = Math.max(14, Math.min(n - 15, (int) Math.round(n * at)));
+        for (int a = -12; a <= 12; a++)
+            for (int k = top; k < top + 3; k++) {
+                p.set(g.index(face, mid + a, mid + 8, k), Material.STONE);
+                p.set(g.index(face, mid + a, mid - 8, k), Material.STONE);
+                p.set(g.index(face, mid + 8, mid + a, k), Material.STONE);
+                p.set(g.index(face, mid - 8, mid + a, k), Material.STONE);
+            }
+        load();
+        int start = g.index(face, mid, mid, top + 4);
+        Vector3d gal = new Vector3d(g.center(start)).mul(UPB);
+        Vector3d feet = new Vector3d(0.5, 100, 0.5);
+        GravityFrame frame = new GravityFrame(gal, feet, new Vector3d(gal).normalize().negate());
+        Vector3d v = new Vector3d();
+        boolean onGround = false;
+        int axis = dir < 2 ? 0 : 2, into = dir % 2 == 0 ? 1 : -1; // into the wall along `axis`; along the wall: the other
+        int along = axis == 0 ? 2 : 0;
+        String first = null;
+        double worst = 0;
+        for (int tick = 0; tick < 200; tick++) {
+            Vector3d here = frame.toGal(feet);
+            frame.update(new Vector3d(here).normalize().negate(), feet);
+            int cell = g.cellAt(frame.toGal(new Vector3d(feet).add(0, 0.5, 0)).div(UPB));
+            if (cell >= 0) {
+                Vector3d corner = new Vector3d(g.corner(cell, 0, 0, 0)).mul(UPB);
+                Vector3d edge = new Vector3d(g.corner(cell, 1, 0, 0)).mul(UPB).sub(corner);
+                GravityFrame.Align a = frame.alignGrid(edge, corner, feet);
+                feet.add(a.shift());
+                v = new org.joml.Quaterniond().rotationY(a.yaw()).transform(v);
+            }
+            field.setFrame(frame);
+            feet.add(field.pushOut(box(feet), STEP, 0.25));
+            double[] h = {0, 0, 0};
+            h[axis] = into * 0.1;
+            if (tick >= 100) h[along] = side * 0.2; // pressed against the wall since tick 60 or so
+            else if (tick < 60) { h[axis] = into * 0.2; }
+            else h[along] = 0;
+            v.x = h[0];
+            v.z = h[2];
+            v.y = (v.y - 0.08) * 0.98;
+            Vector3d before = new Vector3d(feet);
+            Vector3d moved = collide(feet, v, onGround);
+            onGround = v.y < 0 && moved.y > v.y + 1e-9;
+            if (moved.y != v.y) v.y = 0;
+            feet.add(moved);
+            if (tick >= 100 && tick < 124 && onGround) {
+                double got = side * (along == 0 ? moved.x : moved.z), lost = 0.2 - got;
+                if (lost > 0.01) {
+                    worst = Math.max(worst, lost);
+                    if (first == null) first = "tick " + tick + " lost " + lost + " at " + before + " moved " + moved
+                            + " boxes " + boxesNear(before);
+                }
+            }
+        }
+        assertTrue(first == null, "radius " + radius + " at " + at + " wall " + dir + " side " + side + ": slid slower, worst " + worst + "; " + first);
+    }
+
+    private String boxesNear(Vector3d feet) {
+        StringBuilder sb = new StringBuilder();
+        double[] a = box(feet); // the query collide makes
+        for (double[] b : field.boxesFor(new double[] {a[0] - 1, a[1] - 1, a[2] - 1, a[3] + 1, a[4] + 1, a[5] + 1}))
+            if (b[1] < feet.y + 0.5 && b[4] > feet.y + 0.2)
+            sb.append(String.format("[%.4f %.4f %.4f | %.4f %.4f %.4f]", b[0], b[1], b[2], b[3], b[4], b[5]));
+        return sb.toString();
+    }
+
     /** Walks around (at a fraction `at` across face 0) a planet of that radius, built on by seed. */
     private void walk(int radius, int seed, double at) {
         walk(radius, seed, at, 0);
