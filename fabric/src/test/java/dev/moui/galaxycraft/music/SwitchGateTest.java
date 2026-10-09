@@ -70,4 +70,15 @@ class SwitchGateTest {
         assertNull(g.update(0, null, 5, 5));
         assertNull(g.current());
     }
+
+    @Test void tellsHowLongAgoTheLastSwitchWas() {
+        SwitchGate<String> g = new SwitchGate<>();
+        assertEquals(Double.POSITIVE_INFINITY, g.secondsSinceSwitch(5), "nothing switched yet");
+        g.update(0, "space", 0, 0); // the first want starts the music: not a switch
+        assertEquals(Double.POSITIVE_INFINITY, g.secondsSinceSwitch(5));
+        g.update(10, "planet", 0, 0);
+        assertEquals(7, g.secondsSinceSwitch(17), 1e-9);
+        g.force("space", 20);
+        assertEquals(1, g.secondsSinceSwitch(21), 1e-9);
+    }
 }

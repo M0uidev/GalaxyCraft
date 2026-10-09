@@ -35,6 +35,11 @@ public final class SwitchGate<T> {
         return null;
     }
 
+    /** Seconds since the last switch (or the last pick), infinity if there has been none: the cooldown runs from it. */
+    public double secondsSinceSwitch(double now) {
+        return now - lastSwitch;
+    }
+
     public T current() {
         return current;
     }
