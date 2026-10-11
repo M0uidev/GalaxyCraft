@@ -18,6 +18,7 @@
     "ShadowParticleMixin",
     "ShadowReachMixin",
     "PlayerGlideMixin",
+    "LivingGlideMixin",
     "ShadowRideMixin",
     "ShadowSpawnMixin",
     "SignUpdateMixin"

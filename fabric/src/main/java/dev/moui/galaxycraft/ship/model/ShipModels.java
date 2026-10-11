@@ -14,8 +14,8 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The ship's pieces: each module's SMG2 model (from the arcs the launcher copied from the player's
- * disc) as quads and skins in the form {@link EntityWire} sends to the game, sized to the module's
+ * The ship's pieces: the Starshroom, SMG2's own Toad Brigade ship (UFOKinoko.arc, copied by the
+ * launcher from the player's disc), the hull's model; the other modules have none as quads and skins in the form {@link EntityWire} sends to the game, sized to the module's
  * slot, with tinted cubes where a model is missing or unsupported. Quads keep the model's own axes
  * (y up) and are centred; the caller's matrix maps pixels to the galaxy without mirroring.
  */
@@ -25,10 +25,12 @@ public final class ShipModels {
     private static final int[] WHITE = {0xFFFFFFFF};
 
     public enum Slot {
-        HULL("MiniPlayerRocket.arc", 64f, new float[] {0, 0, 0}, 0xFFFFFFFF),
-        ENGINE("MarioFaceShipJet.arc", 24f, new float[] {0, 0, -40}, 0xE03030FF),
-        RUDDER("MarioFaceShipRudder.arc", 40f, new float[] {0, -16, -56}, 0xE03030FF),
-        CABIN("MarioFaceShipChimney.arc", 32f, new float[] {0, -18, 6}, 0xFFFFFFFF);
+        /** The Starshroom, the Toad Brigade's mushroom ship: the one model the ship is drawn with. */
+        HULL("UFOKinoko.arc", 80f, new float[] {0, 0, 0}, 0xFFFFFFFF),
+        /** The other modules live inside the Starshroom (they change stats and seats, not the look). */
+        ENGINE(null, 0f, new float[] {0, 0, 0}, 0xE03030FF),
+        RUDDER(null, 0f, new float[] {0, 0, 0}, 0xE03030FF),
+        CABIN(null, 0f, new float[] {0, 0, 0}, 0xFFFFFFFF);
 
         final String arc;
         /** The longest side of the module at tier 1, in pixels (16 per block). */
@@ -62,6 +64,7 @@ public final class ShipModels {
     public static synchronized void load(Path dir) {
         Map<Slot, BdlReader.Model> found = new EnumMap<>(Slot.class);
         for (Slot s : Slot.values()) {
+            if (s.arc == null) continue;
             Path f = dir.resolve(s.arc);
             try {
                 if (!Files.isRegularFile(f)) continue;
@@ -80,12 +83,14 @@ public final class ShipModels {
 
     /** The pieces of a module at a tier (1..3): its model, or a tinted cube. */
     public static List<PartModel> parts(Slot slot, int tier) {
+        if (slot.arc == null) return List.of();
         int t = Math.max(1, Math.min(ShipModules.MAX_TIER, tier));
         return CACHE.computeIfAbsent(slot.ordinal() * 10 + t, k -> {
             float grow = 1f + 0.1f * (t - 1);
             BdlReader.Model m = models.get(slot);
             if (m == null) return List.of(cube(slot, grow));
             List<PartModel> p = parts(m, fitScale(m, slot.pixels) * grow, 0xFFFFFFFF);
+            if (slot == Slot.HULL) p = p.stream().map(ShipModels::painted).toList();
             return p.isEmpty() ? List.of(cube(slot, grow)) : p;
         });
     }
@@ -100,6 +105,30 @@ public final class ShipModels {
             for (PartModel p : parts(s, tier)) out.add(new Placed(s, p, s.offset));
         }
         return out;
+    }
+
+    /** The Starshroom's red (its ColorChange.brk's first colour at frame 0). */
+    static final int RED = 0xFFDC321E;
+
+    /**
+     * A dark skin is the Starshroom's gloss map: the game gets its red from a TEV register (the
+     * colour animation's), which a textured piece cannot carry, so such skins are given that red
+     * under their highlights. Light skins (the window, the stem) are left as they are.
+     */
+    static PartModel painted(PartModel p) {
+        int[] px = p.skin().argb();
+        long sum = 0;
+        for (int c : px) sum += ((c >> 16 & 0xFF) + (c >> 8 & 0xFF) + (c & 0xFF)) / 3;
+        if (px.length == 0 || sum / px.length > 70) return p;
+        int[] out = new int[px.length];
+        for (int i = 0; i < px.length; i++) {
+            int c = px[i];
+            int r = Math.min(255, (RED >> 16 & 0xFF) * 9 / 10 + (c >> 16 & 0xFF) * 8 / 10);
+            int g = Math.min(255, (RED >> 8 & 0xFF) * 9 / 10 + (c >> 8 & 0xFF) * 8 / 10);
+            int b = Math.min(255, (RED & 0xFF) * 9 / 10 + (c & 0xFF) * 8 / 10);
+            out[i] = (c & 0xFF000000) | r << 16 | g << 8 | b;
+        }
+        return new PartModel(p.quads(), new Skin(p.skin().width(), p.skin().height(), out), p.tint());
     }
 
     /** Pixels per model unit that make the model's longest side `pixels` long. */

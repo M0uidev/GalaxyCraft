@@ -8,8 +8,8 @@ progress, a rare piece or a ship crafting table, and make ships modular."
 
 | Question | Answer |
 |---|---|
-| Which ship | The Toad Brigade's ship (not Starship Mario). |
-| Its look | Built from SMG2's own pieces. The disc has **no** Toad ship model (checked in `ObjectData`: no `KinopioShip`/`ToadShip`), so it is assembled from `MiniPlayerRocket`, `MarioFaceShipJet`, `MarioFaceShipRudder`, `MarioFaceShipChimney` and `SpaceShipStep`, tinted Toad red and white. |
+| Which ship | The Toad Brigade's ship, the **Starshroom** (the red mushroom ship; not Starship Mario). |
+| Its look | SMG2's own model of it: `UFOKinoko.arc` on the disc (the mushroom UFO), one piece that is the hull; the engine, rudder and cabin modules live inside it and change stats and seats, not the look. (An earlier draft built it from Starship Mario's pieces by mistake; the disc does have the Starshroom.) |
 | Real models or cubes | Real SMG2 models from the start (cubes only as a fallback, below). |
 | Getting in and out | Right click to board, Shift to get off, as boats and minecarts. |
 | Progression | Advancements -> Ship Table -> modules. The Ship Table is craftable **without** any advancement: advancements are a suggested linear path, balanced later by the user. |
@@ -62,9 +62,8 @@ cushion draws and can be sat on there with the entity pipeline (a probe, not par
 
 Players have no Python, so the conversion is in the mod:
 
-1. At install and PLAY the launcher copies five arcs from the player's own disc (decompressed) to
-   `<data>/ship/` (`MiniPlayerRocket`, `MarioFaceShipJet`, `MarioFaceShipRudder`,
-   `MarioFaceShipChimney`, `SpaceShipStep`), as the soundtrack is copied.
+1. At install and PLAY the launcher copies one arc from the player's own disc (decompressed) to
+   `<data>/ship/` (`UFOKinoko`, the Starshroom), as the soundtrack is copied.
 2. The mod reads them at run time with a Java RARC and BDL reader (vertices, UVs, textures) and
    builds rigid pieces (quads and a skin) in the shape `EntityWire` already sends through the
    existing MODEL/SKIN/ENTITIES records. The C++ module is unchanged.
@@ -114,11 +113,11 @@ the ship beside Steve and Mario in Dolphin; the value is recorded in the spec wh
 ## Risks
 
 - **Models:** `j3d.py` reads no textures; the Java reader adds TEX1 and maps one skin per model. J3D skeletons, multiple materials and TEV effects may not reduce to rigid textured
-  pieces. First task of the plan is a spike on one arc (`MiniPlayerRocket`); the decision rule is
+  pieces. First task of the plan is a spike on one arc (`UFOKinoko`); the decision rule is
   that pieces missing a texture get a flat color, and a model that needs real TEV falls back to
   cubes for that piece.
-- **No Toad ship on the disc:** the look is assembled; the user may want to refine which pieces
-  after seeing it.
+- **One model for all modules:** the Starshroom is a single model, so engine/rudder/cabin tiers
+  are not visible on it yet (a later stage may add visible parts).
 - **Flight and seats across planet and space:** the seat message is sent per frame (holds 30
   frames); the ship must keep sending it when no planet is in focus.
 

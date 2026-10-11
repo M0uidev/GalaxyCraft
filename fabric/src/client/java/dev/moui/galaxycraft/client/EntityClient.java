@@ -366,10 +366,17 @@ final class EntityClient {
             net.minecraft.world.phys.Vec3 offset = r.getRenderOffset(st);
             ps.translate(offset.x, offset.y, offset.z);
             capture.begin(at, out);
-            r.submit(st, ps, capture, camera);
+            // `at` is already galaxy units: no planet (or player frame) stands between.
+            Matrix4d was = galaxy;
+            galaxy = new Matrix4d();
+            try {
+                r.submit(st, ps, capture, camera);
+            } finally {
+                galaxy = was;
+            }
         } catch (RuntimeException ex) {
             failed.add(net.minecraft.world.entity.decoration.Cushion.class);
-            GalaxyCraft.LOG.warn("Not drawing the ship's cushions in the game: {}", ex.toString());
+            GalaxyCraft.LOG.warn("Not drawing the ship's cushions in the game", ex);
         }
     }
 

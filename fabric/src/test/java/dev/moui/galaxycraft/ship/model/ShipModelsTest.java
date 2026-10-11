@@ -20,23 +20,22 @@ class ShipModelsTest {
     }
 
     @Test
-    void withoutArcsEverySlotIsATintedCube(@TempDir Path none) {
+    void withoutTheArcTheHullIsATintedCubeAndTheOtherModulesHaveNoPiece(@TempDir Path none) {
         ShipModels.load(none.resolve("missing"));
-        for (Slot s : Slot.values()) {
-            List<ShipModels.PartModel> parts = ShipModels.parts(s, 1);
-            assertFalse(parts.isEmpty(), s.name());
-            for (var p : parts) {
-                assertFalse(p.quads().isEmpty(), s.name());
-                assertNotNull(p.skin());
-            }
+        List<ShipModels.PartModel> hull = ShipModels.parts(Slot.HULL, 1);
+        assertFalse(hull.isEmpty());
+        for (var p : hull) {
+            assertFalse(p.quads().isEmpty());
+            assertNotNull(p.skin());
         }
+        for (Slot s : new Slot[] {Slot.ENGINE, Slot.RUDDER, Slot.CABIN}) assertTrue(ShipModels.parts(s, 1).isEmpty(), s.name());
     }
 
     @Test
-    void layoutHasPiecesOfEveryPresentModuleAndOnlyThose(@TempDir Path none) {
+    void layoutIsTheStarshroomWhateverTheModules(@TempDir Path none) {
         ShipModels.load(none.resolve("missing"));
-        assertEquals(EnumSet.of(Slot.ENGINE, Slot.CABIN), slots(ShipModels.layout(new ShipModules(0, 1, 0, 1))));
-        assertEquals(EnumSet.allOf(Slot.class), slots(ShipModels.layout(new ShipModules(1, 2, 3, 1))));
+        assertEquals(EnumSet.noneOf(Slot.class), slots(ShipModels.layout(new ShipModules(0, 1, 0, 1))), "no hull, nothing drawn");
+        assertEquals(EnumSet.of(Slot.HULL), slots(ShipModels.layout(new ShipModules(1, 2, 3, 1))));
     }
 
     private static Set<Slot> slots(List<Placed> l) {
@@ -77,7 +76,7 @@ class ShipModelsTest {
     @Test
     void anArcWithAModelIsUsedWithItsTexture(@TempDir Path dir) throws Exception {
         byte[] arc = BdlReaderTest.Fixture.rarcWith("x.bdl", BdlReaderTest.Fixture.oneTriangle());
-        Files.write(dir.resolve("MiniPlayerRocket.arc"), arc);
+        Files.write(dir.resolve("UFOKinoko.arc"), arc);
         ShipModels.load(dir);
         var parts = ShipModels.parts(Slot.HULL, 1);
         assertEquals(1, parts.size());
@@ -87,7 +86,7 @@ class ShipModelsTest {
 
     @Test
     void aDamagedArcFallsBackToCubesInsteadOfThrowing(@TempDir Path dir) throws Exception {
-        Files.write(dir.resolve("MiniPlayerRocket.arc"), new byte[100]);
+        Files.write(dir.resolve("UFOKinoko.arc"), new byte[100]);
         ShipModels.load(dir);
         assertFalse(ShipModels.parts(Slot.HULL, 1).isEmpty());
     }
@@ -95,7 +94,7 @@ class ShipModelsTest {
     @Test
     void higherTiersAreLarger(@TempDir Path none) {
         ShipModels.load(none.resolve("missing"));
-        float lo = extent(ShipModels.parts(Slot.ENGINE, 1)), hi = extent(ShipModels.parts(Slot.ENGINE, 3));
+        float lo = extent(ShipModels.parts(Slot.HULL, 1)), hi = extent(ShipModels.parts(Slot.HULL, 3));
         assertTrue(hi > lo);
     }
 
@@ -103,5 +102,14 @@ class ShipModelsTest {
         float m = 0;
         for (var p : parts) for (var q : p.quads()) for (float[] c : q.pos()) m = Math.max(m, Math.abs(c[0]));
         return m;
+    }
+
+    @Test
+    void aDarkSkinGetsTheStarshroomsRedAndALightOneIsKept() {
+        var dark = new ShipModels.PartModel(List.of(), new ShipModels.Skin(1, 1, new int[] {0xFF101010}), 0xFFFFFFFF);
+        int c = ShipModels.painted(dark).skin().argb()[0];
+        assertTrue((c >> 16 & 0xFF) > 150 && (c >> 8 & 0xFF) < 120, "red");
+        var light = new ShipModels.PartModel(List.of(), new ShipModels.Skin(1, 1, new int[] {0xFFE0D0B0}), 0xFFFFFFFF);
+        assertSame(light, ShipModels.painted(light));
     }
 }

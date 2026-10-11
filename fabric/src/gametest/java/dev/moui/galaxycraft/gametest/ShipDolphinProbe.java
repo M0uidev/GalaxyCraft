@@ -1,0 +1,173 @@
+package dev.moui.galaxycraft.gametest;
+
+import dev.moui.galaxycraft.client.GalaxyCraftClient;
+import dev.moui.galaxycraft.client.GalaxyOptions;
+import dev.moui.galaxycraft.client.PlanetClient;
+import dev.moui.galaxycraft.client.ShipClient;
+import dev.moui.galaxycraft.gravity.GravityFrame;
+import dev.moui.galaxycraft.settings.Movement;
+import dev.moui.galaxycraft.ship.ShipHooks;
+import dev.moui.galaxycraft.ship.ShipModules;
+import dev.moui.galaxycraft.ship.ShipRecord;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
+import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
+import net.minecraft.world.InteractionHand;
+import org.joml.Quaterniond;
+import org.joml.Vector3d;
+
+/**
+ * The Toad ship in the real game, only with -Dgalaxycraft.shipGame=true (tools/gxvoxel.sh ship): in
+ * empty space a ship goes down ahead of the player and is drawn from the disc's models (screenshots
+ * ship-placed, ship-side, ship-top); right click boards it, W flies it, Shift leaves (ship-flying).
+ * -Dgalaxycraft.shipDir has the five arcs.
+ */
+public final class ShipDolphinProbe implements FabricClientGameTest {
+    private static final double SPACE_UP = Integer.getInteger("galaxycraft.shipUp", 3000);
+    private boolean failed;
+
+    @Override
+    public void runTest(ClientGameTestContext ctx) {
+        if (!Boolean.getBoolean("galaxycraft.shipGame")) return;
+        try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
+            sp.getServer().runCommand("gamemode survival @a");
+            sp.getServer().runCommand("gamerule fall_damage false");
+            sp.getServer().runCommand("effect give @a resistance infinite 255 true");
+            sp.getServer().runCommand("time set day");
+            sp.getServer().runCommand("tp @a 0 100 0 0 0");
+            ctx.waitFor(mc -> GalaxyCraftClient.galaxyPos().isPresent(), 1200);
+            ctx.waitTicks(40);
+
+            ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MINECRAFT));
+            ctx.runOnClient(mc -> PlanetClient.remove());
+            ctx.waitTicks(10);
+            Vector3d home = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
+            Vector3d space = new Vector3d(0, 1, 0).mul(units(SPACE_UP)).add(home);
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(space));
+            ctx.waitTicks(60);
+            check(ctx.computeOnClient(mc -> GalaxyCraftClient.inVoid()), "far above the stage is space");
+
+            // 1. A full ship goes down ahead of the player.
+            boolean placed = ctx.computeOnClient(mc ->
+                    ShipHooks.get().place(mc.player, InteractionHand.MAIN_HAND, new ShipModules(2, 2, 2, 2)));
+            check(placed, "the ship goes down in empty space");
+            ShipRecord r = ctx.computeOnClient(mc -> ShipClient.ships().isEmpty() ? null : ShipClient.ships().get(0));
+            if (r == null) {
+                log("FAIL");
+                return;
+            }
+            Vector3d center = new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]);
+            Quaterniond q = new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]);
+            ctx.waitTicks(40);
+            aimAt(ctx, center);
+            ctx.waitTicks(60);
+            shot(ctx, "ship-placed");
+
+            // 2. From its side and from above, 14 blocks off.
+            Vector3d side = new Vector3d(center).fma(units(14), q.transform(new Vector3d(1, 0, 0)));
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(side));
+            ctx.waitTicks(40);
+            aimAt(ctx, center);
+            ctx.waitTicks(60);
+            aimAt(ctx, center);
+            shot(ctx, "ship-side");
+            Vector3d top = new Vector3d(center).fma(units(14), q.transform(new Vector3d(0, 1, 0)));
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(top));
+            ctx.waitTicks(40);
+            aimAt(ctx, center);
+            ctx.waitTicks(60);
+            aimAt(ctx, center);
+            shot(ctx, "ship-top");
+
+            // 3. Right click boards, W flies, Shift leaves.
+            Vector3d near = new Vector3d(center).fma(units(4), q.transform(new Vector3d(0, 0, -1)));
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(near));
+            ctx.waitTicks(30);
+            aimAt(ctx, center);
+            ctx.waitTicks(5);
+            gxdev("ctl", "keys rmb"); // the game's input, as the player's mouse
+            waitReal(ctx, 300);
+            gxdev("ctl", "keys");
+            waitReal(ctx, 500);
+            check(ctx.computeOnClient(mc -> ShipClient.aboard().isPresent()), "right click boards the ship");
+            Vector3d before = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
+            ctx.getInput().holdKey(o -> o.keyUp);
+            waitReal(ctx, 5000);
+            Vector3d after = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
+            log(String.format("flew %.1f blocks in 5 s", after.distance(before) * GravityFrame.SCALE));
+            check(after.distance(before) * GravityFrame.SCALE > 5, "W flies the ship");
+            shot(ctx, "ship-flying");
+            ctx.getInput().releaseKey(o -> o.keyUp);
+            waitReal(ctx, 300);
+            ctx.getInput().holdKey(o -> o.keyShift);
+            waitReal(ctx, 600);
+            ctx.getInput().releaseKey(o -> o.keyShift);
+            waitReal(ctx, 500);
+            check(ctx.computeOnClient(mc -> ShipClient.aboard().isEmpty()), "Shift leaves the ship");
+
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(home));
+            ctx.waitTicks(100);
+            ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MARIO));
+            ctx.waitTicks(60);
+            log(failed ? "FAIL" : "PASS");
+        }
+    }
+
+    // ---- helpers ----
+
+    /** Looks at a galaxy point. */
+    private static void aimAt(ClientGameTestContext ctx, Vector3d targetGal) {
+        ctx.runOnClient(mc -> {
+            GravityFrame f = GalaxyCraftClient.frame();
+            Vector3d eye = f.toGal(new Vector3d(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ()));
+            Vector3d d = f.dirToMc(new Vector3d(targetGal).sub(eye).normalize());
+            mc.player.setYRot((float) Math.toDegrees(Math.atan2(-d.x, d.z)));
+            mc.player.setXRot((float) Math.toDegrees(-Math.asin(Math.max(-1, Math.min(1, d.y)))));
+        });
+    }
+
+    private static void waitReal(ClientGameTestContext ctx, long ms) {
+        long end = System.currentTimeMillis() + ms;
+        while (System.currentTimeMillis() < end) ctx.waitTicks(1);
+    }
+
+    /** A Dolphin screenshot of the game a moment from now (test ticks outrun the game). */
+    private static void shot(ClientGameTestContext ctx, String name) {
+        waitReal(ctx, 500);
+        log(gxdev("ctl", "shot " + name).strip());
+    }
+
+    private void check(boolean ok, String what) {
+        log((ok ? "ok   " : "FAIL ") + what);
+        if (!ok) failed = true;
+    }
+
+    private static double units(double blocks) {
+        return blocks / GravityFrame.SCALE;
+    }
+
+    private static void log(String msg) {
+        System.out.println("[GalaxyCraft ship] " + msg);
+    }
+
+    private static String gxdev(String... args) {
+        String[] cmd = new String[args.length + 2];
+        cmd[0] = Python.exe();
+        cmd[1] = Path.of(System.getProperty("galaxycraft.repoRoot"), "tools/gxdev.py").toString();
+        System.arraycopy(args, 0, cmd, 2, args.length);
+        try {
+            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            p.waitFor();
+            return out;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+    }
+}

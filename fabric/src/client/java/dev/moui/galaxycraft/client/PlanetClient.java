@@ -699,9 +699,12 @@ public final class PlanetClient {
         screenButtons = screen || screenLast ? buttons : screenButtons & buttons;
         screenLast = screen;
         buttons &= ~screenButtons;
-        // A ship: a right click on it boards, Shift leaves, W thrusts (the click is the ship's, then).
+        // A ship: a right click on it boards, Shift leaves, W thrusts (the click is the ship's, then);
+        // Minecraft's own keys count too (tests press those, the keyboard reaches the game through Dolphin).
         if (frame != null && player != null && !screen
-                && ShipClient.tick(player, frame, pressed(buttons, MOUSE_RIGHT), key(in, SC_LSHIFT) || key(in, SC_RSHIFT), key(in, SC_W)))
+                && ShipClient.tick(player, frame, pressed(buttons, MOUSE_RIGHT),
+                        key(in, SC_LSHIFT) || key(in, SC_RSHIFT) || Minecraft.getInstance().options.keyShift.isDown(),
+                        key(in, SC_W) || Minecraft.getInstance().options.keyUp.isDown()))
             buttons &= ~MOUSE_RIGHT;
         PlanetSession was = focus;
         focus = nearest(world.queryPos());

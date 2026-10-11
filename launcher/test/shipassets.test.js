@@ -1,5 +1,5 @@
 'use strict';
-// The Toad ship's models: five arcs copied from the player's disc, decompressed if Yaz0.
+// The Toad ship's models: the Starshroom's arc copied from the player's disc, decompressed if Yaz0.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -13,13 +13,13 @@ test('copies the arcs the disc has and lists the ones it lacks', async () => {
     dir,
     extract: async (out) => {
       fs.mkdirSync(path.join(out, 'ObjectData'), { recursive: true });
-      fs.writeFileSync(path.join(out, 'ObjectData', 'MiniPlayerRocket.arc'), Buffer.from('RARC'));
+      fs.writeFileSync(path.join(out, 'ObjectData', 'UFOKinoko.arc'), Buffer.from('RARC'));
     },
     yaz0: (b) => b,
   });
   assert.equal(r.copied, 1);
-  assert.ok(fs.existsSync(path.join(dir, 'MiniPlayerRocket.arc')));
-  assert.ok(r.missing.includes('MarioFaceShipJet.arc'));
+  assert.ok(fs.existsSync(path.join(dir, 'UFOKinoko.arc')));
+  assert.deepEqual(r.missing, []);
 });
 
 test('decompresses Yaz0 arcs', async () => {
@@ -28,11 +28,11 @@ test('decompresses Yaz0 arcs', async () => {
     dir,
     extract: async (out) => {
       fs.mkdirSync(path.join(out, 'ObjectData'), { recursive: true });
-      fs.writeFileSync(path.join(out, 'ObjectData', 'SpaceShipStep.arc'), Buffer.from('Yaz0xxxx'));
+      fs.writeFileSync(path.join(out, 'ObjectData', 'UFOKinoko.arc'), Buffer.from('Yaz0xxxx'));
     },
     yaz0: () => Buffer.from('RARCok'),
   });
-  assert.equal(fs.readFileSync(path.join(dir, 'SpaceShipStep.arc')).toString(), 'RARCok');
+  assert.equal(fs.readFileSync(path.join(dir, 'UFOKinoko.arc')).toString(), 'RARCok');
 });
 
 test('a disc with none of the arcs installs nothing and does not throw', async () => {
