@@ -115,6 +115,14 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             Vector3d after = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
             log(String.format("flew %.1f blocks in 5 s", after.distance(before) * GravityFrame.SCALE));
             check(after.distance(before) * GravityFrame.SCALE > 20, "W flies the ship");
+            // Smooth: the player's old position is the one before this tick's move (the view is drawn between).
+            ctx.getInput().holdKey(o -> o.keyUp);
+            waitReal(ctx, 500);
+            double stride = ctx.computeOnClient(mc -> Math.sqrt(Math.pow(mc.player.getX() - mc.player.xo, 2)
+                    + Math.pow(mc.player.getY() - mc.player.yo, 2) + Math.pow(mc.player.getZ() - mc.player.zo, 2)));
+            log(String.format("last tick's step, seen between ticks: %.3f blocks", stride));
+            check(stride > 0.05, "the flight is drawn between ticks (old position kept)");
+            ctx.getInput().releaseKey(o -> o.keyUp);
             // Space climbs, S goes back, A strafes.
             Vector3d up = ctx.computeOnClient(mc -> GalaxyCraftClient.frame().upGal().normalize());
             Vector3d a0 = after;
@@ -134,11 +142,17 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             check(a2.distance(a1) * GravityFrame.SCALE > 4, "A strafes");
             shot(ctx, "ship-flying");
             waitReal(ctx, 300);
+            String aboardId = ctx.computeOnClient(mc -> ShipClient.aboard().orElseThrow().id());
             ctx.getInput().holdKey(o -> o.keyShift);
             waitReal(ctx, 600);
             ctx.getInput().releaseKey(o -> o.keyShift);
             waitReal(ctx, 500);
             check(ctx.computeOnClient(mc -> ShipClient.aboard().isEmpty()), "Shift leaves the ship");
+            Vector3d outside = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
+            ShipRecord parked = ctx.computeOnClient(mc -> ShipClient.ships().stream().filter(x -> x.id().equals(aboardId)).findFirst().orElseThrow());
+            double gap = outside.distance(new Vector3d(parked.pos()[0], parked.pos()[1], parked.pos()[2])) * GravityFrame.SCALE;
+            log(String.format("after leaving: %.1f blocks from the ship's middle", gap));
+            check(gap > 3.0, "leaving puts the player outside the hull");
 
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(home));
             ctx.waitTicks(100);

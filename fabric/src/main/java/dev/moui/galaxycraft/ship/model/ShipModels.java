@@ -81,6 +81,7 @@ public final class ShipModels {
         }
         models = found;
         CACHE.clear();
+        CACHE_GLASS.clear();
     }
 
     /** The pieces of a module at a tier (1..3): its model, or a tinted cube. */
@@ -175,6 +176,30 @@ public final class ShipModels {
         }
         return out;
     }
+
+    /**
+     * The Starshroom's portholes' glass as pieces (white, the file's own UVs over each disc) for
+     * Minecraft's glass texture to be put on; none for a model that is not the Starshroom.
+     */
+    public static List<PartModel> glass(int hullTier) {
+        int t = Math.max(1, Math.min(ShipModules.MAX_TIER, hullTier));
+        return CACHE_GLASS.computeIfAbsent(t, k -> {
+            BdlReader.Model m = models.get(Slot.HULL);
+            if (m == null || !starshroomShape(m)) return List.of();
+            float scale = fitScale(m, Slot.HULL.pixels) * (1f + 0.1f * (t - 1));
+            float[] b = bounds(m);
+            float cx = (b[0] + b[3]) / 2, cy = (b[1] + b[4]) / 2, cz = (b[2] + b[5]) / 2;
+            List<PartModel> out = new ArrayList<>();
+            var tris = m.shapes().get(STAR_GLASS).tris();
+            for (int from = 0; from < tris.size(); from += MAX_QUADS) {
+                var chunk = tris.subList(from, Math.min(tris.size(), from + MAX_QUADS));
+                out.add(new PartModel(quads(chunk, scale, cx, cy, cz), WHITE_4X4, 0xFFFFFFFF));
+            }
+            return out;
+        });
+    }
+
+    private static final Map<Integer, List<PartModel>> CACHE_GLASS = new ConcurrentHashMap<>();
 
     private static long key(float[] p) {
         return ((long) Math.round(p[0] * 4) & 0x1FFFFF) << 42 | ((long) Math.round(p[1] * 4) & 0x1FFFFF) << 21
