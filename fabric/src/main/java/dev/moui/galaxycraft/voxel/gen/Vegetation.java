@@ -182,12 +182,21 @@ public final class Vegetation {
             // A block lower, as Minecraft lets a giant trunk stand: its dirt fills the step.
             if (!floor.contains(under) || !open(cells[under], ids) || cells[under - 1] != top) return false;
         }
+        // Logs are the tree's body: where one does not fit (an overhang, a cave roof, water) the
+        // tree is not planted, instead of standing with a log missing under its crown.
+        for (int b = 0; b < at.length; b++)
+            if (t.dy()[b] >= 1 && solidPart(t.blocks()[b]) && !open(cells[at[b]], ids)) return false;
         for (int b = 0; b < at.length; b++) {
             int cell = at[b];
             if (t.dy()[b] != 0 && !open(cells[cell], ids)) continue;
             cells[cell] = (char) ids.applyAsInt(t.blocks()[b]);
         }
         return true;
+    }
+
+    /** A log, wood, stem or hyphae block: what a tree's body is made of (leaves, vines and the rest may be cut). */
+    static boolean solidPart(String block) {
+        return block.endsWith("_log") || block.endsWith("_wood") || block.endsWith("_stem") || block.endsWith("_hyphae");
     }
 
     /** Air, or snow cover: what a plant grows into. */
