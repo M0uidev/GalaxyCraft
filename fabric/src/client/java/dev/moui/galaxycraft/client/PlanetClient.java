@@ -64,7 +64,7 @@ public final class PlanetClient {
     /** How far Mario's blows reach (Minecraft's entity interaction range), blocks. */
     static final double REACH = 3;
     /** Keys by their USB HID usage (as the host reports them). */
-    private static final int SC_W = 26, SC_A = 4, SC_S = 22, SC_D = 7, SC_LSHIFT = 225, SC_RSHIFT = 229;
+    private static final int SC_W = 26, SC_A = 4, SC_S = 22, SC_D = 7, SC_LSHIFT = 225, SC_RSHIFT = 229, SC_SPACE = 44, SC_LCTRL = 224;
     private static final int SC_P = 19, MOUSE_LEFT = 1 << 1, MOUSE_RIGHT = 1 << 3;
     public static final int DEFAULT_RADIUS = 32;
     /**
@@ -704,7 +704,10 @@ public final class PlanetClient {
         if (frame != null && player != null && !screen
                 && ShipClient.tick(player, frame, pressed(buttons, MOUSE_RIGHT),
                         key(in, SC_LSHIFT) || key(in, SC_RSHIFT) || Minecraft.getInstance().options.keyShift.isDown(),
-                        key(in, SC_W) || Minecraft.getInstance().options.keyUp.isDown()))
+                        new dev.moui.galaxycraft.ship.ShipThrust.Controls(
+                                key(in, SC_W) || Minecraft.getInstance().options.keyUp.isDown(), key(in, SC_S) || Minecraft.getInstance().options.keyDown.isDown(),
+                                key(in, SC_A) || Minecraft.getInstance().options.keyLeft.isDown(), key(in, SC_D) || Minecraft.getInstance().options.keyRight.isDown(),
+                                key(in, SC_SPACE) || Minecraft.getInstance().options.keyJump.isDown(), key(in, SC_LCTRL) || Minecraft.getInstance().options.keySprint.isDown())))
             buttons &= ~MOUSE_RIGHT;
         PlanetSession was = focus;
         focus = nearest(world.queryPos());

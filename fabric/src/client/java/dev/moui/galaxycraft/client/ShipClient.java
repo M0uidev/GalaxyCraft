@@ -7,7 +7,6 @@ import dev.moui.galaxycraft.play.PlayConfig;
 import dev.moui.galaxycraft.ship.SeatLayout;
 import dev.moui.galaxycraft.ship.ShipBlocks;
 import dev.moui.galaxycraft.ship.ShipBoarding;
-import dev.moui.galaxycraft.ship.ShipFlightState;
 import dev.moui.galaxycraft.ship.ShipHooks;
 import dev.moui.galaxycraft.ship.ShipModules;
 import dev.moui.galaxycraft.ship.ShipRecord;
@@ -35,8 +34,9 @@ import org.joml.Vector3d;
 
 /**
  * The world's ships on the client: put down from a Toad Ship item, boarded with a right click and
- * left with Shift. Aboard, the player glides as with elytra (PlayerGlideMixin) and the ship's
- * stats drive it (ShipThrust); the ship goes where the player is. Drawn by EntityClient.
+ * left with Shift. Aboard, the ship hovers where W A S D, Space and Ctrl take it, at the speed
+ * its stats give (ShipThrust); the ship goes where the player is. A ship nobody is aboard is
+ * solid. Drawn by EntityClient.
  */
 public final class ShipClient {
     /** A ship is clicked within this many blocks of the eye, by a sphere of this radius. */
@@ -114,11 +114,18 @@ public final class ShipClient {
 
     // ---- each tick ----
 
+    /** The ship's velocity while boarded, Minecraft space, blocks a tick. */
+    private static Vector3d velocity = new Vector3d();
+    /** Ships whose hull is in the collision field: id -> the record it was made from. */
+    private static final java.util.Map<String, ShipRecord> solid = new java.util.HashMap<>();
+    private static final int FIELD_ID = 0x5A000000;
+
     /**
-     * Client tick: boarding and leaving, and the aboard player's flight. rightClick: the button went
-     * down this tick; sneak and forward: Shift and W held. Returns true if the click was the ship's.
+     * Client tick: boarding and leaving, the aboard player's flight, and the hulls' collision.
+     * rightClick: the button went down this tick; sneak: Shift held; c: the flight keys. Returns
+     * true if the click was the ship's.
      */
-    static boolean tick(LocalPlayer player, GravityFrame frame, boolean rightClick, boolean sneak, boolean forward) {
+    static boolean tick(LocalPlayer player, GravityFrame frame, boolean rightClick, boolean sneak, ShipThrust.Controls c) {
         boolean sneakEdge = sneak && !sneakWas;
         sneakWas = sneak;
         if (store == null || player == null || frame == null) return false;
@@ -126,17 +133,14 @@ public final class ShipClient {
             sinceSave = 0;
             if (dirty) saveNow();
         }
+        syncHulls();
         if (boarded != null) {
             Optional<ShipRecord> r = aboard();
-            if (r.isEmpty()) {
+            if (r.isEmpty() || sneakEdge) {
                 leaveNow(player);
                 return false;
             }
-            if (sneakEdge) {
-                leaveNow(player);
-                return false;
-            }
-            fly(player, frame, r.get(), forward);
+            fly(player, frame, r.get(), c);
             return false;
         }
         if (!rightClick) return false;
@@ -157,49 +161,61 @@ public final class ShipClient {
 
     private static void board(LocalPlayer player, ShipRecord r) {
         boarded = r.id();
+        velocity = new Vector3d();
         ShipStats stats = ShipStats.of(r.modules());
-        ShipFlightState.set(stats);
-        // Off the ground the glide opens (as vanilla's jump press in the air does): a small lift.
-        Vec3 v = player.getDeltaMovement();
-        player.setDeltaMovement(v.x, Math.max(v.y, LIFT), v.z);
-        player.setOnGround(false);
         GalaxyCraft.LOG.info("Aboard ship {} ({} seats, speed {})", r.id(), stats.seats(), stats.speed());
+        syncHulls();
     }
 
-    /** Aboard: the glide opened, thrust and turn from the stats, the ship at the player's feet and turned its way. */
-    private static void fly(LocalPlayer player, GravityFrame frame, ShipRecord r, boolean forward) {
-        if (!player.isFallFlying() && !player.onGround() && player.tryToStartFallFlying()) {
-            var conn = Minecraft.getInstance().getConnection();
-            if (conn != null) conn.send(new net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket(player,
-                    net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
-        }
+    /**
+     * Aboard: the ship hovers where the keys take it (ShipThrust), by Minecraft's own movement so the
+     * ground and walls stop it; no gravity; the ship at the player's feet, turned its way.
+     */
+    private static void fly(LocalPlayer player, GravityFrame frame, ShipRecord r, ShipThrust.Controls c) {
+        var abilities = player.getAbilities();
+        abilities.mayfly = true; // the server's "floating" check: it is not a hack
+        abilities.flying = false;
+        player.setNoGravity(true);
+        player.resetFallDistance();
+        if (player.isFallFlying()) player.stopFallFlying();
         ShipStats stats = ShipStats.of(r.modules());
-        if (player.isFallFlying()) {
-            Vec3 look = player.getLookAngle();
-            Vector3d v = ShipThrust.step(vec(player.getDeltaMovement()), vec(look), forward, stats);
-            player.setDeltaMovement(v.x, v.y, v.z);
-        }
-        // The ship goes where the player is, nose where it looks, up the galaxy's up.
-        Vector3d feet = frame.toGal(vec(player.position()));
+        velocity = ShipThrust.step(velocity, vec(player.getLookAngle()), c, stats);
+        if (velocity.lengthSquared() > 1e-10) player.move(net.minecraft.world.entity.MoverType.SELF, new Vec3(velocity.x, velocity.y, velocity.z));
+        player.setDeltaMovement(Vec3.ZERO);
+        // Held against a wall or the ground it does not build up speed it cannot use.
+        if (player.horizontalCollision) velocity.x = velocity.z = 0;
+        if (player.verticalCollision) velocity.y = 0;
+        ShipRecord at = placed(r, frame, player, 1f);
+        store.put(at);
+        dirty = true;
+    }
+
+    /** The ship's record with its place at the player's feet (partial: the tick's fraction), nose where they look. */
+    private static ShipRecord placed(ShipRecord r, GravityFrame frame, LocalPlayer player, float pt) {
+        Vector3d feet = frame.toGal(vec(player.getPosition(pt)), pt);
         Vector3d up = frame.upGal().normalize();
-        Vector3d fwd = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
+        Vector3d fwd = frame.dirToGal(LookMath.direction(player.getViewYRot(pt), player.getViewXRot(pt)), pt);
         Vector3d flat = new Vector3d(fwd).fma(-fwd.dot(up), up);
         if (flat.lengthSquared() < 1e-6) flat = new Vector3d(up).orthogonalize(new Vector3d(up.y, up.z, up.x));
         flat.normalize();
         Vector3d right = new Vector3d(up).cross(flat);
         Quaterniond q = new Quaterniond().setFromNormalized(new Matrix3d(right, up, flat));
         Vector3d pos = feet.fma(-SEAT_HEIGHT / GravityFrame.SCALE, up);
-        store.put(new ShipRecord(r.id(), r.modules(), new double[] {pos.x, pos.y, pos.z}, new double[] {q.x, q.y, q.z, q.w}, r.stage()));
-        dirty = true;
+        return new ShipRecord(r.id(), r.modules(), new double[] {pos.x, pos.y, pos.z}, new double[] {q.x, q.y, q.z, q.w}, r.stage());
     }
 
     private static void leaveNow(LocalPlayer player) {
         if (boarded == null) return;
         GalaxyCraft.LOG.info("Left ship {}", boarded);
         boarded = null;
-        ShipFlightState.set(null);
-        if (player != null && player.isFallFlying()) player.stopFallFlying();
+        velocity = new Vector3d();
+        if (player != null) {
+            player.setNoGravity(false);
+            player.getAbilities().mayfly = player.getAbilities().instabuild;
+            if (player.isFallFlying()) player.stopFallFlying();
+        }
         saveNow();
+        syncHulls();
     }
 
     /** The player left the ship (tests). */
@@ -217,6 +233,60 @@ public final class ShipClient {
         }
     }
 
+    // ---- solid hulls ----
+
+    /**
+     * Each ship of this stage that nobody is aboard is solid: its hull's skin goes into the
+     * galaxy's collision (the way a planet's does), so the player walks on it and not through it.
+     * The aboard one is not (the player is in it); ships of other stages are not either.
+     */
+    private static void syncHulls() {
+        if (store == null) {
+            solid.keySet().forEach(ShipClient::dropHull);
+            solid.clear();
+            return;
+        }
+        String stage = stageName();
+        java.util.Set<String> want = new java.util.HashSet<>();
+        for (ShipRecord r : store.all()) {
+            if (!r.stage().equals(stage) || r.id().equals(boarded)) continue;
+            want.add(r.id());
+            if (solid.get(r.id()) == r) continue;
+            solid.put(r.id(), r);
+            GalaxyCraft.FIELD.upsertTriangles(fieldId(r.id()), hullTris(r));
+        }
+        for (java.util.Iterator<String> it = solid.keySet().iterator(); it.hasNext(); ) {
+            String id = it.next();
+            if (!want.contains(id)) {
+                dropHull(id);
+                it.remove();
+            }
+        }
+    }
+
+    private static void dropHull(String id) {
+        GalaxyCraft.FIELD.removePart(fieldId(id));
+    }
+
+    private static int fieldId(String shipId) {
+        return FIELD_ID | (shipId.hashCode() & 0x00FFFFFF);
+    }
+
+    /** The hull's triangles in galaxy coordinates for a ship record. */
+    private static List<dev.moui.galaxycraft.geom.Tri> hullTris(ShipRecord r) {
+        double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);
+        Matrix4d m = new Matrix4d().translation(r.pos()[0], r.pos()[1], r.pos()[2])
+                .rotate(new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3])).scale(unitsPerPixel);
+        List<dev.moui.galaxycraft.geom.Tri> out = new ArrayList<>();
+        for (float[] f : ShipModels.hullTriangles(Math.max(1, r.modules().hull()))) {
+            Vector3d a = m.transformPosition(new Vector3d(f[0], f[1], f[2]));
+            Vector3d b = m.transformPosition(new Vector3d(f[3], f[4], f[5]));
+            Vector3d c = m.transformPosition(new Vector3d(f[6], f[7], f[8]));
+            out.add(dev.moui.galaxycraft.geom.Tri.of(a, b, c));
+        }
+        return out;
+    }
+
     // ---- drawing ----
 
     /** The pieces of this stage's ships (and their cushions), universe units, for EntityClient's frame. */
@@ -226,6 +296,11 @@ public final class ShipClient {
         double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);
         for (ShipRecord r : store.all()) {
             if (!r.stage().equals(stage)) continue;
+            // The aboard ship follows the player as drawn between ticks (not as the tick left it),
+            // so it moves as smoothly as the view does.
+            LocalPlayer me = Minecraft.getInstance().player;
+            GravityFrame fr = GalaxyCraftClient.frame();
+            if (r.id().equals(boarded) && me != null && fr != null) r = placed(r, fr, me, pt);
             Matrix4d base = new Matrix4d().translation(r.pos()[0], r.pos()[1], r.pos()[2])
                     .rotate(new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]));
             Matrix4d px = new Matrix4d(base).scale(unitsPerPixel);

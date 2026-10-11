@@ -1,7 +1,6 @@
 package dev.moui.galaxycraft.gametest;
 
 import dev.moui.galaxycraft.ship.ShipBlocks;
-import dev.moui.galaxycraft.ship.ShipFlightState;
 import dev.moui.galaxycraft.ship.ShipModules;
 import dev.moui.galaxycraft.ship.ShipStats;
 import dev.moui.galaxycraft.ship.ShipTableBlock;
@@ -26,7 +25,7 @@ import net.minecraft.world.level.GameType;
 /**
  * The ship without the game (-PgalaxycraftShip): its recipes exist, the Ship Table assembles the
  * best modules of an inventory (and refuses without an engine and a cabin), an assembled ship
- * item keeps its modules, a boarded player glides without elytra, and Minecraft's cushion has a
+ * item keeps its modules, Minecraft's cushion has a
  * renderer the game can draw the cabin's seats with. Prints "[GalaxyCraft ship] PASS" or FAIL.
  */
 public final class ShipProbe implements FabricClientGameTest {
@@ -67,23 +66,6 @@ public final class ShipProbe implements FabricClientGameTest {
             // 3. The item keeps its modules.
             ShipModules back = ToadShipItem.modules(ToadShipItem.stack(new ShipModules(2, 3, 1, 3))).orElse(null);
             if (!new ShipModules(2, 3, 1, 3).equals(back)) fails.add("ship item modules " + back);
-
-            // 4. Aboard a ship the player glides in the air with no elytra, and not otherwise.
-            boolean[] glides = new boolean[2];
-            sp.getServer().runOnServer(server -> {
-                var p = server.getPlayerList().getPlayers().get(0);
-                p.getInventory().clearContent();
-                p.setPos(0, 300, 0);
-                p.setOnGround(false);
-                glides[0] = p.tryToStartFallFlying();
-                if (p.isFallFlying()) p.stopFallFlying();
-                ShipFlightState.set(ShipStats.of(new ShipModules(1, 1, 1, 1)));
-                glides[1] = p.tryToStartFallFlying();
-                ShipFlightState.set(null);
-                if (p.isFallFlying()) p.stopFallFlying();
-            });
-            if (glides[0]) fails.add("glided without a ship or elytra");
-            if (!glides[1]) fails.add("did not glide aboard a ship");
 
             // 5. Minecraft's cushion: made in the client's level, with a renderer and a render state.
             String cushion = ctx.computeOnClient(mc -> {

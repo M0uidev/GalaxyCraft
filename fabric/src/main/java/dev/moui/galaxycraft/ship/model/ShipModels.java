@@ -121,6 +121,9 @@ public final class ShipModels {
     private static final int[] STAR_COLOR = {0xECE2C4, -1, 0x545660, 0xD6281C, -1, -1, -1, 0x8CBEE6, 0x3C3C42};
     /** Shapes drawn from outside: shaded by their (smoothed) normals; the cockpit inside is left lit. */
     private static final boolean[] STAR_OUTSIDE = {true, true, true, true, false, false, false, true, true};
+    /** The portholes' glass: see-through. */
+    private static final int STAR_GLASS = 7;
+    private static final int GLASS_ALPHA = 0x70;
 
     /**
      * The Starshroom with its look rebuilt: the game's materials use the file's textures as masks and
@@ -129,8 +132,7 @@ public final class ShipModels {
      * model is not the Starshroom (then the generic path draws it).
      */
     static List<PartModel> starshroom(BdlReader.Model m, float scale) {
-        if (m.shapes().size() != STAR_TEXTURE.length) return null;
-        for (int i = 0; i < STAR_TEXTURE.length; i++) if (m.shapes().get(i).texture() != STAR_TEXTURE[i]) return null;
+        if (!starshroomShape(m)) return null;
         float[] b = bounds(m);
         float cx = (b[0] + b[3]) / 2, cy = (b[1] + b[4]) / 2, cz = (b[2] + b[5]) / 2;
         // Normals per position, area weighted, over the outside shapes (seams between shapes match).
@@ -147,6 +149,7 @@ public final class ShipModels {
         }
         List<PartModel> out = new ArrayList<>();
         for (int s = 0; s < m.shapes().size(); s++) {
+            if (s == STAR_GLASS) continue; // the portholes are open: the cockpit shows through, as a window does
             BdlReader.Shape sh = m.shapes().get(s);
             boolean flat = STAR_COLOR[s] >= 0;
             BdlReader.Texture tex = m.textures().get(sh.texture());
@@ -163,7 +166,7 @@ public final class ShipModels {
                         pos[i] = new float[] {(p[0] - cx) * scale, (p[1] - cy) * scale, (p[2] - cz) * scale};
                         uv[i] = new float[] {t.uv()[k][0], t.uv()[k][1]};
                         float[] n = STAR_OUTSIDE[s] ? normals.get(key(p)) : null;
-                        cols[i] = shade(n, flat ? STAR_COLOR[s] : 0xFFFFFF, s == 3 || s == 7);
+                        cols[i] = shade(n, flat ? STAR_COLOR[s] : 0xFFFFFF, s == 3 || s == STAR_GLASS, s == STAR_GLASS ? GLASS_ALPHA : 0xFF);
                     }
                     quads.add(new EntityWire.Quad(pos, uv, 0xFFFFFFFF, cols));
                 }
@@ -190,6 +193,10 @@ public final class ShipModels {
 
     /** RGBA (as the wire's colours: 0xRRGGBBAA) of a base colour lit by a key light, a fill and a highlight. */
     static int shade(float[] n, int rgb, boolean glossy) {
+        return shade(n, rgb, glossy, 0xFF);
+    }
+
+    static int shade(float[] n, int rgb, boolean glossy, int alpha) {
         float lit = 0.8f, spec = 0f;
         if (n != null) {
             float len = (float) Math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
@@ -209,7 +216,53 @@ public final class ShipModels {
         int R = Math.min(255, Math.round(r * lit + 255 * spec));
         int G = Math.min(255, Math.round(g * lit + 255 * spec));
         int B = Math.min(255, Math.round(bl * lit + 255 * spec));
-        return R << 24 | G << 16 | B << 8 | 0xFF;
+        return R << 24 | G << 16 | B << 8 | alpha;
+    }
+
+    /**
+     * The hull's solid skin as triangles (nine floats each, ship pixels, the same axes and scale the
+     * drawn pieces have): the Starshroom's cap, stem, rim and grooves (not its glass or cockpit),
+     * or a box of the cube's size where the model is missing.
+     */
+    public static List<float[]> hullTriangles(int tier) {
+        int t = Math.max(1, Math.min(ShipModules.MAX_TIER, tier));
+        float grow = 1f + 0.1f * (t - 1);
+        BdlReader.Model m = models.get(Slot.HULL);
+        List<float[]> out = new ArrayList<>();
+        if (m != null && starshroomShape(m)) {
+            float scale = fitScale(m, Slot.HULL.pixels) * grow;
+            float[] b = bounds(m);
+            float cx = (b[0] + b[3]) / 2, cy = (b[1] + b[4]) / 2, cz = (b[2] + b[5]) / 2;
+            for (int s = 0; s < m.shapes().size(); s++) {
+                if (!STAR_OUTSIDE[s] || s == STAR_GLASS) continue;
+                for (BdlReader.Tri tri : m.shapes().get(s).tris()) {
+                    float[] f = new float[9];
+                    for (int i = 0; i < 3; i++) {
+                        float[] p = tri.pos()[i];
+                        f[3 * i] = (p[0] - cx) * scale;
+                        f[3 * i + 1] = (p[1] - cy) * scale;
+                        f[3 * i + 2] = (p[2] - cz) * scale;
+                    }
+                    out.add(f);
+                }
+            }
+            return out;
+        }
+        float h = Slot.HULL.pixels * grow / 2;
+        float[][] c = new float[8][];
+        for (int i = 0; i < 8; i++) c[i] = new float[] {(i & 1) == 0 ? -h : h, (i & 2) == 0 ? -h : h, (i & 4) == 0 ? -h : h};
+        int[][] quads = {{0, 1, 3, 2}, {4, 6, 7, 5}, {0, 4, 5, 1}, {2, 3, 7, 6}, {0, 2, 6, 4}, {1, 5, 7, 3}};
+        for (int[] q : quads) {
+            out.add(new float[] {c[q[0]][0], c[q[0]][1], c[q[0]][2], c[q[1]][0], c[q[1]][1], c[q[1]][2], c[q[2]][0], c[q[2]][1], c[q[2]][2]});
+            out.add(new float[] {c[q[0]][0], c[q[0]][1], c[q[0]][2], c[q[2]][0], c[q[2]][1], c[q[2]][2], c[q[3]][0], c[q[3]][1], c[q[3]][2]});
+        }
+        return out;
+    }
+
+    private static boolean starshroomShape(BdlReader.Model m) {
+        if (m.shapes().size() != STAR_TEXTURE.length) return false;
+        for (int i = 0; i < STAR_TEXTURE.length; i++) if (m.shapes().get(i).texture() != STAR_TEXTURE[i]) return false;
+        return true;
     }
 
     /** The Starshroom's red (its ColorChange.brk's first colour at frame 0). */
