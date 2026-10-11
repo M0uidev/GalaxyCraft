@@ -340,9 +340,8 @@ public final class ShipClient {
      * ground and walls stop it; no gravity; the ship at the player's feet, turned its way.
      */
     private static void fly(LocalPlayer player, GravityFrame frame, ShipRecord r, ShipThrust.Controls c) {
-        var abilities = player.getAbilities();
-        abilities.mayfly = true; // the server's "floating" check: it is not a hack
-        abilities.flying = false;
+        // (No flight abilities: setting them let a double tap of Space switch creative flight on in
+        // the server, which saved it and closed the elytra for good in that world.)
         player.setNoGravity(true);
         player.resetFallDistance();
         if (player.isFallFlying()) player.stopFallFlying();
@@ -516,7 +515,6 @@ public final class ShipClient {
         }
         if (player != null) {
             player.setNoGravity(false);
-            player.getAbilities().mayfly = player.getAbilities().instabuild;
             if (player.isFallFlying()) player.stopFallFlying();
         }
         saveNow();
