@@ -112,4 +112,19 @@ class ShipModelsTest {
         var light = new ShipModels.PartModel(List.of(), new ShipModels.Skin(1, 1, new int[] {0xFFE0D0B0}), 0xFFFFFFFF);
         assertSame(light, ShipModels.painted(light));
     }
+
+    @Test
+    void aShadedCornerIsLighterFacingTheLightAndKeepsItsColour() {
+        int up = ShipModels.shade(new float[] {0, 1, 0}, 0xD6281C, false);
+        int down = ShipModels.shade(new float[] {0, -1, 0}, 0xD6281C, false);
+        assertTrue((up >>> 24) > (down >>> 24), "red channel: lit side brighter");
+        assertEquals(0xFF, up & 0xFF, "opaque");
+        assertTrue((up >>> 24) > (up >> 8 & 0xFF) * 3, "still red");
+    }
+
+    @Test
+    void aModelThatIsNotTheStarshroomFallsBackToTheGenericPath() {
+        var m = new BdlReader.Model(List.of(new BdlReader.Shape(-1, List.of(tri(0)))), List.of());
+        assertNull(ShipModels.starshroom(m, 1f));
+    }
 }

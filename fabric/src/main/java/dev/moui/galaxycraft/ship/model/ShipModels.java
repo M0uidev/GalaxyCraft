@@ -23,6 +23,8 @@ public final class ShipModels {
     /** Quads per piece: a display list holds at most ENT_DL_MAX bytes (1170 quads), with room to spare. */
     public static final int MAX_QUADS = 1000;
     private static final int[] WHITE = {0xFFFFFFFF};
+    /** A skin is whole 4x4 texels (the game's RGB5A3 blocks): a flat colour's is all white. */
+    private static final Skin WHITE_4X4 = new Skin(4, 4, new int[] {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1});
 
     public enum Slot {
         /** The Starshroom, the Toad Brigade's mushroom ship: the one model the ship is drawn with. */
@@ -89,8 +91,11 @@ public final class ShipModels {
             float grow = 1f + 0.1f * (t - 1);
             BdlReader.Model m = models.get(slot);
             if (m == null) return List.of(cube(slot, grow));
-            List<PartModel> p = parts(m, fitScale(m, slot.pixels) * grow, 0xFFFFFFFF);
-            if (slot == Slot.HULL) p = p.stream().map(ShipModels::painted).toList();
+            float scale = fitScale(m, slot.pixels) * grow;
+            List<PartModel> p = slot == Slot.HULL ? starshroom(m, scale) : null;
+            if (p == null) p = parts(m, scale, 0xFFFFFFFF);
+            if (slot == Slot.HULL && p.stream().noneMatch(x -> x.quads().stream().anyMatch(q -> q.colors() != null)))
+                p = p.stream().map(ShipModels::painted).toList();
             return p.isEmpty() ? List.of(cube(slot, grow)) : p;
         });
     }
@@ -105,6 +110,105 @@ public final class ShipModels {
             for (PartModel p : parts(s, tier)) out.add(new Placed(s, p, s.offset));
         }
         return out;
+    }
+
+    // ---- the Starshroom, shaded ----
+
+    /** What each of the Starshroom's nine shapes is (by index, with the texture it must have). */
+    private static final int[] STAR_TEXTURE = {3, 8, 0, 3, 10, 9, 2, 6, 0};
+    /** Flat colours (RGB) of the shapes that are only masks in the file, -1: keep the texture. */
+    private static final int[] STAR_COLOR = {0xECE2C4, -1, 0x545660, 0xD6281C, -1, -1, -1, 0x8CBEE6, 0x3C3C42};
+    /** Shapes drawn from outside: shaded by their (smoothed) normals; the cockpit inside is left lit. */
+    private static final boolean[] STAR_OUTSIDE = {true, true, true, true, false, false, false, true, true};
+
+    /**
+     * The Starshroom with its look rebuilt: the game's materials use the file's textures as masks and
+     * sphere maps under a TEV setup this wire cannot carry, so each shape gets a flat colour (or its
+     * real texture) and smooth shading and a highlight per corner from averaged normals. null if the
+     * model is not the Starshroom (then the generic path draws it).
+     */
+    static List<PartModel> starshroom(BdlReader.Model m, float scale) {
+        if (m.shapes().size() != STAR_TEXTURE.length) return null;
+        for (int i = 0; i < STAR_TEXTURE.length; i++) if (m.shapes().get(i).texture() != STAR_TEXTURE[i]) return null;
+        float[] b = bounds(m);
+        float cx = (b[0] + b[3]) / 2, cy = (b[1] + b[4]) / 2, cz = (b[2] + b[5]) / 2;
+        // Normals per position, area weighted, over the outside shapes (seams between shapes match).
+        java.util.HashMap<Long, float[]> normals = new java.util.HashMap<>();
+        for (int s = 0; s < m.shapes().size(); s++) {
+            if (!STAR_OUTSIDE[s]) continue;
+            for (BdlReader.Tri t : m.shapes().get(s).tris()) {
+                float[] n = faceNormal(t, cx, cy, cz);
+                for (float[] p : t.pos()) {
+                    float[] acc = normals.computeIfAbsent(key(p), k -> new float[3]);
+                    for (int c = 0; c < 3; c++) acc[c] += n[c];
+                }
+            }
+        }
+        List<PartModel> out = new ArrayList<>();
+        for (int s = 0; s < m.shapes().size(); s++) {
+            BdlReader.Shape sh = m.shapes().get(s);
+            boolean flat = STAR_COLOR[s] >= 0;
+            BdlReader.Texture tex = m.textures().get(sh.texture());
+            Skin skin = flat ? WHITE_4X4 : new Skin(tex.width(), tex.height(), tex.argb());
+            for (int from = 0; from < sh.tris().size(); from += MAX_QUADS) {
+                var chunk = sh.tris().subList(from, Math.min(sh.tris().size(), from + MAX_QUADS));
+                List<EntityWire.Quad> quads = new ArrayList<>(chunk.size());
+                for (BdlReader.Tri t : chunk) {
+                    float[][] pos = new float[4][], uv = new float[4][];
+                    int[] cols = new int[4];
+                    for (int i = 0; i < 4; i++) {
+                        int k = Math.min(i, 2);
+                        float[] p = t.pos()[k];
+                        pos[i] = new float[] {(p[0] - cx) * scale, (p[1] - cy) * scale, (p[2] - cz) * scale};
+                        uv[i] = new float[] {t.uv()[k][0], t.uv()[k][1]};
+                        float[] n = STAR_OUTSIDE[s] ? normals.get(key(p)) : null;
+                        cols[i] = shade(n, flat ? STAR_COLOR[s] : 0xFFFFFF, s == 3 || s == 7);
+                    }
+                    quads.add(new EntityWire.Quad(pos, uv, 0xFFFFFFFF, cols));
+                }
+                out.add(new PartModel(quads, skin, 0xFFFFFFFF));
+            }
+        }
+        return out;
+    }
+
+    private static long key(float[] p) {
+        return ((long) Math.round(p[0] * 4) & 0x1FFFFF) << 42 | ((long) Math.round(p[1] * 4) & 0x1FFFFF) << 21
+                | ((long) Math.round(p[2] * 4) & 0x1FFFFF);
+    }
+
+    /** The triangle's normal times its area, turned to face away from the model's centre. */
+    private static float[] faceNormal(BdlReader.Tri t, float cx, float cy, float cz) {
+        float[] a = t.pos()[0], b = t.pos()[1], c = t.pos()[2];
+        float ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+        float[] n = {uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx};
+        float mx = (a[0] + b[0] + c[0]) / 3 - cx, my = (a[1] + b[1] + c[1]) / 3 - cy, mz = (a[2] + b[2] + c[2]) / 3 - cz;
+        if (n[0] * mx + n[1] * my + n[2] * mz < 0) for (int i = 0; i < 3; i++) n[i] = -n[i];
+        return n;
+    }
+
+    /** RGBA (as the wire's colours: 0xRRGGBBAA) of a base colour lit by a key light, a fill and a highlight. */
+    static int shade(float[] n, int rgb, boolean glossy) {
+        float lit = 0.8f, spec = 0f;
+        if (n != null) {
+            float len = (float) Math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+            if (len > 1e-6f) {
+                float x = n[0] / len, y = n[1] / len, z = n[2] / len;
+                float key = Math.max(0f, x * 0.40f + y * 0.80f + z * 0.45f) / 1.0f;
+                float fill = Math.max(0f, -x * 0.5f + y * 0.1f - z * 0.4f);
+                lit = 0.42f + 0.62f * key + 0.14f * fill;
+                if (glossy) {
+                    float hx = 0.40f, hy = 0.95f, hz = 0.75f, hl = (float) Math.sqrt(hx * hx + hy * hy + hz * hz);
+                    float h = Math.max(0f, (x * hx + y * hy + z * hz) / hl);
+                    spec = (float) Math.pow(h, 28) * 0.75f;
+                }
+            }
+        }
+        int r = rgb >> 16 & 0xFF, g = rgb >> 8 & 0xFF, bl = rgb & 0xFF;
+        int R = Math.min(255, Math.round(r * lit + 255 * spec));
+        int G = Math.min(255, Math.round(g * lit + 255 * spec));
+        int B = Math.min(255, Math.round(bl * lit + 255 * spec));
+        return R << 24 | G << 16 | B << 8 | 0xFF;
     }
 
     /** The Starshroom's red (its ColorChange.brk's first colour at frame 0). */
