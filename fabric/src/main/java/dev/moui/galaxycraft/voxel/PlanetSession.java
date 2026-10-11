@@ -945,6 +945,16 @@ public final class PlanetSession {
         return new Aim(h.hit(), h.face(), hit);
     }
 
+    /** The galaxy point and the planet's up there where the eye's ray meets the ground within reach; null if none. */
+    public Vector3d[] surfaceAt(Vector3d eyeGal, Vector3d lookGal) {
+        PlanetRaycast.Hit h = cast(eyeGal, lookGal);
+        if (h == null) return null;
+        Vector3d at = galOf(h.point());
+        Vector3d up = new Vector3d(at).sub(center);
+        if (up.lengthSquared() < 1e-12) return null;
+        return new Vector3d[] {at, up.normalize()};
+    }
+
     /** A change Minecraft made to the planet (redstone, a door opened): kept, and saved. */
     public void applyExternal(int cell, int id) {
         if (planet == null) return;

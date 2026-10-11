@@ -16,7 +16,7 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 /** The Ship Table, the module items and the assembled ship. */
 public final class ShipBlocks {
     public static Block TABLE;
-    public static Item TABLE_ITEM, HULL, ENGINE, RUDDER, CABIN, TOAD_CORE, TOAD_SHIP;
+    public static Item TABLE_ITEM, HULL, ENGINE, RUDDER, CABIN, TOAD_CORE, TOAD_SHIP, LANDING_PAD;
 
     private ShipBlocks() {}
 
@@ -44,6 +44,8 @@ public final class ShipBlocks {
         TOAD_CORE = item("toad_core", 16);
         ResourceKey<Item> sk = ResourceKey.create(Registries.ITEM, id("toad_ship"));
         TOAD_SHIP = Registry.register(BuiltInRegistries.ITEM, sk, new ToadShipItem(new Item.Properties().setId(sk).stacksTo(1)));
+        ResourceKey<Item> pk = ResourceKey.create(Registries.ITEM, id("landing_pad"));
+        LANDING_PAD = Registry.register(BuiltInRegistries.ITEM, pk, new LandingPadItem(new Item.Properties().setId(pk).stacksTo(16)));
         CreativeModeTabEvents.modifyOutputEvent(CreativeModeTabs.FUNCTIONAL_BLOCKS).register(o -> {
             o.accept(TABLE_ITEM);
             o.accept(HULL);
@@ -51,6 +53,7 @@ public final class ShipBlocks {
             o.accept(RUDDER);
             o.accept(CABIN);
             o.accept(TOAD_CORE);
+            o.accept(LANDING_PAD);
         });
     }
 }

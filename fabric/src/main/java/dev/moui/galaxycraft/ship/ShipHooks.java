@@ -3,10 +3,15 @@ package dev.moui.galaxycraft.ship;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 
-/** What the ship item does when used, set by the client (ShipClient): ships live on the client, like stations. */
+/** What the ship and landing pad items do when used, set by the client (ShipClient): ships live on the client, like stations. */
 public interface ShipHooks {
     /** A Toad Ship used: true if it was put down. */
     boolean place(Player player, InteractionHand hand, ShipModules modules);
+
+    /** A Landing Pad used: true if it was put down. */
+    default boolean placePad(Player player, InteractionHand hand) {
+        return false;
+    }
 
     ShipHooks NONE = (player, hand, modules) -> false;
 

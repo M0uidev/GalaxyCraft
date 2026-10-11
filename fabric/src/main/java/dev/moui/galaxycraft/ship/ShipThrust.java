@@ -5,20 +5,25 @@ import org.joml.Vector3d;
 /** How a boarded ship moves the player: velocity in Minecraft space, blocks a tick. Pure. */
 public final class ShipThrust {
     /** Fractions of the speed stat: the top speed along the look and the climb. */
-    private static final double TOP_PER_SPEED = 0.6, CLIMB = 0.6;
+    private static final double TOP_PER_SPEED = 0.6, CLIMB = 0.6, TURBO = 1.9;
     /** How quickly the velocity goes to the one asked for, per tick: base plus per rudder point. */
     private static final double EASE_BASE = 0.05, EASE_PER_TURN = 0.05;
 
     private ShipThrust() {}
 
     /** The keys that fly a ship. */
-    public record Controls(boolean forward, boolean back, boolean left, boolean right, boolean up, boolean down) {
-        public static final Controls NONE = new Controls(false, false, false, false, false, false);
+    public record Controls(boolean forward, boolean back, boolean left, boolean right, boolean up, boolean down, boolean turbo) {
+        public static final Controls NONE = new Controls(false, false, false, false, false, false, false);
     }
 
     /** Blocks a tick the ship tops out at. */
     public static double topSpeed(ShipStats s) {
         return TOP_PER_SPEED * s.speed();
+    }
+
+    /** Blocks a tick it tops out at with the turbo on. */
+    public static double turboSpeed(ShipStats s) {
+        return TURBO * topSpeed(s);
     }
 
     /**
@@ -38,8 +43,8 @@ public final class ShipThrust {
         want.fma((c.right() ? 1 : 0) - (c.left() ? 1 : 0), right);
         want.y += ((c.up() ? 1 : 0) - (c.down() ? 1 : 0)) * CLIMB;
         if (want.lengthSquared() > 1) want.normalize();
-        want.mul(topSpeed(s));
-        double k = Math.min(1, EASE_BASE + EASE_PER_TURN * s.turn());
+        want.mul(c.turbo() ? turboSpeed(s) : topSpeed(s));
+        double k = Math.min(1, (EASE_BASE + EASE_PER_TURN * s.turn()) * (c.turbo() ? 1.4 : 1));
         return new Vector3d(vel).lerp(want, k);
     }
 }
