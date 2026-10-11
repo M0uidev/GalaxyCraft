@@ -284,6 +284,15 @@ public final class ShipClient {
             return false;
         }
         if (!rightClick) return false;
+        ShipRecord target = aimedShip(player, frame);
+        if (target == null) return false;
+        board(player, frame, target);
+        return true;
+    }
+
+    /** The parked ship of this stage the crosshair is on (within reach), or null. */
+    private static ShipRecord aimedShip(Player player, GravityFrame frame) {
+        if (store == null) return null;
         Vector3d eye = frame.toGal(vec(player.getEyePosition()));
         Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
         List<ShipRecord> here = new ArrayList<>();
@@ -294,9 +303,19 @@ public final class ShipClient {
                 centers.add(s.pos());
             }
         int i = ShipBoarding.nearest(eye, look.normalize(), centers, REACH / GravityFrame.SCALE, RADIUS / GravityFrame.SCALE);
-        if (i < 0) return false;
-        board(player, frame, here.get(i));
-        return true;
+        return i < 0 ? null : here.get(i);
+    }
+
+    /**
+     * Whether a right click is the ship's (boarding it, or piloting it) and so is not an item's:
+     * a ship, a pad or a block in hand must not be put down by the click that boards.
+     */
+    public static boolean swallowsUse() {
+        if (store == null) return false;
+        if (boarded != null) return true;
+        LocalPlayer me = Minecraft.getInstance().player;
+        GravityFrame frame = GalaxyCraftClient.frame();
+        return me != null && frame != null && Minecraft.getInstance().gui.screen() == null && aimedShip(me, frame) != null;
     }
 
     private static void board(LocalPlayer player, GravityFrame frame, ShipRecord r) {
