@@ -556,6 +556,11 @@ final class EntityClient {
         return FontPages.skin(page, (wh, argb) -> addSkin(wh[0], wh[1], argb));
     }
 
+    /** Minecraft's glass block texture, as a skin (the ship's portholes). */
+    int glassSkin() {
+        return entitySkin(net.minecraft.resources.Identifier.withDefaultNamespace("textures/block/glass.png"), true);
+    }
+
     /** A sprite's own image (its first frame), as a skin. */
     int spriteSkin(TextureAtlasSprite s) {
         Identifier name = s.contents().name();

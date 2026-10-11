@@ -46,7 +46,8 @@ public final class ShipClient {
     /** Where on the ship the aboard player's feet are, blocks above its middle (the cabin). */
     private static final double SEAT_HEIGHT = 1;
     private static final int SAVE_TICKS = 100;
-    private static final double LIFT = 0.45;
+    /** Where a player who leaves stands: this far out to the side and this far below the ship's middle, blocks. */
+    private static final double EXIT_SIDE = 3.8, EXIT_BELOW = 1.6;
 
     public static final ShipHooks HOOKS = ShipClient::place;
 
@@ -178,15 +179,28 @@ public final class ShipClient {
         player.setNoGravity(true);
         player.resetFallDistance();
         if (player.isFallFlying()) player.stopFallFlying();
-        ShipStats stats = ShipStats.of(r.modules());
-        velocity = ShipThrust.step(velocity, vec(player.getLookAngle()), c, stats);
-        if (velocity.lengthSquared() > 1e-10) player.move(net.minecraft.world.entity.MoverType.SELF, new Vec3(velocity.x, velocity.y, velocity.z));
+        velocity = ShipThrust.step(velocity, vec(player.getLookAngle()), c, ShipStats.of(r.modules()));
+        // The move itself waits for the player's own tick (onPlayerTick), after Minecraft has
+        // saved the old position: moved before that, the view would not be drawn between the two
+        // and the flight would step at 20 Hz.
+    }
+
+    /**
+     * Start of the player's own tick (after its old position is saved): the aboard ship's move, by
+     * Minecraft's movement so the ground and walls stop it, and the ship at the player's feet.
+     */
+    static void onPlayerTick(LocalPlayer player) {
+        if (boarded == null || store == null) return;
+        Optional<ShipRecord> r = aboard();
+        GravityFrame frame = GalaxyCraftClient.frame();
+        if (r.isEmpty() || frame == null) return;
+        if (velocity.lengthSquared() > 1e-10)
+            player.move(net.minecraft.world.entity.MoverType.SELF, new Vec3(velocity.x, velocity.y, velocity.z));
         player.setDeltaMovement(Vec3.ZERO);
         // Held against a wall or the ground it does not build up speed it cannot use.
         if (player.horizontalCollision) velocity.x = velocity.z = 0;
         if (player.verticalCollision) velocity.y = 0;
-        ShipRecord at = placed(r, frame, player, 1f);
-        store.put(at);
+        store.put(placed(r.get(), frame, player, 1f));
         dirty = true;
     }
 
@@ -207,8 +221,10 @@ public final class ShipClient {
     private static void leaveNow(LocalPlayer player) {
         if (boarded == null) return;
         GalaxyCraft.LOG.info("Left ship {}", boarded);
+        Optional<ShipRecord> was = aboard();
         boarded = null;
         velocity = new Vector3d();
+        if (player != null && was.isPresent()) stepOut(player, was.get());
         if (player != null) {
             player.setNoGravity(false);
             player.getAbilities().mayfly = player.getAbilities().instabuild;
@@ -216,6 +232,21 @@ public final class ShipClient {
         }
         saveNow();
         syncHulls();
+    }
+
+    /** Beside the ship, not inside its shell: out on its right, at the height of its keel. */
+    private static void stepOut(LocalPlayer player, ShipRecord r) {
+        GravityFrame frame = GalaxyCraftClient.frame();
+        if (frame == null) return;
+        Quaterniond q = new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]);
+        Vector3d right = q.transform(new Vector3d(1, 0, 0));
+        Vector3d up = q.transform(new Vector3d(0, 1, 0));
+        double out = EXIT_SIDE / GravityFrame.SCALE, down = EXIT_BELOW / GravityFrame.SCALE;
+        Vector3d feet = new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]).fma(out, right).fma(-down, up);
+        Vector3d mc = frame.toMc(feet);
+        player.setPos(mc.x, mc.y, mc.z);
+        player.setOldPosAndRot();
+        player.setDeltaMovement(Vec3.ZERO);
     }
 
     /** The player left the ship (tests). */
@@ -311,6 +342,12 @@ public final class ShipClient {
                 if (model < 0 || skin < 0) continue;
                 Matrix4d m = new Matrix4d(px).translate(pl.offset()[0], pl.offset()[1], pl.offset()[2]);
                 out.add(new EntityWire.Piece(model, skin, 0, part.tint(), rows(m)));
+            }
+            // The portholes: Minecraft's glass.
+            for (ShipModels.PartModel g : ShipModels.glass(r.modules().hull())) {
+                int model = ec.shipModel(g, g.quads());
+                int skin = ec.glassSkin();
+                if (model >= 0 && skin >= 0) out.add(new EntityWire.Piece(model, skin, 0, 0xFFFFFFFF, rows(px)));
             }
             // The cabin's cushions: Minecraft's own, one per seat, the driver's under the player.
             Matrix4d blocks = new Matrix4d(base).scale(1 / GravityFrame.SCALE);

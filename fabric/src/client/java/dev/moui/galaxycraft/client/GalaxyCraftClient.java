@@ -812,6 +812,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
 
     /** Start of the local player's own tick: Mario mode moves the player here. */
     public static void onPlayerTick(LocalPlayer player) {
+        ShipClient.onPlayerTick(player);
         if (followTarget != null) {
             player.setPos(followTarget.x, followTarget.y, followTarget.z);
             followTarget = null;
