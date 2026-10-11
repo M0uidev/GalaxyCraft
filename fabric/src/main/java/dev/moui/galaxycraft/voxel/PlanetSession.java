@@ -947,12 +947,20 @@ public final class PlanetSession {
 
     /** The galaxy point and the planet's up there where the eye's ray meets the ground within reach; null if none. */
     public Vector3d[] surfaceAt(Vector3d eyeGal, Vector3d lookGal) {
-        PlanetRaycast.Hit h = cast(eyeGal, lookGal);
+        return surfaceAlong(eyeGal, lookGal, REACH);
+    }
+
+    /**
+     * Where a ray from a galaxy point meets the ground within reach blocks: the point and the up
+     * there (the planet's own: radial on a planet, the slab's normal on a station); null if none.
+     */
+    public Vector3d[] surfaceAlong(Vector3d fromGal, Vector3d dirGal, double reach) {
+        if (planet == null) return null;
+        PlanetRaycast.Hit h = PlanetRaycast.cast(planet, local(fromGal), new Vector3d(dirGal).normalize(), reach);
         if (h == null) return null;
-        Vector3d at = galOf(h.point());
-        Vector3d up = new Vector3d(at).sub(center);
+        Vector3d up = new Vector3d(planet.up(h.point()));
         if (up.lengthSquared() < 1e-12) return null;
-        return new Vector3d[] {at, up.normalize()};
+        return new Vector3d[] {galOf(h.point()), up.normalize()};
     }
 
     /** A change Minecraft made to the planet (redstone, a door opened): kept, and saved. */

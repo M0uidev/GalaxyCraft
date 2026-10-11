@@ -42,8 +42,8 @@
   "advancements.galaxycraft.ship.toad_core.description": "Make the rare core of a Toad ship",
   "item.galaxycraft.landing_pad": "Landing Pad",
   "message.galaxycraft.pad.ground": "A landing pad goes on the ground: point at it",
-  "message.galaxycraft.pad.placed": "Landing pad down. Fly over it and hold C to dock",
-  "message.galaxycraft.pad.near": "Landing pad near: hold C to dock",
+  "message.galaxycraft.pad.placed": "Landing pad down. Fly near it and hold C to dock (right click picks another)",
+  "message.galaxycraft.pad.near": "Landing pad %s of %s, %s blocks away: right click for the next, hold C to dock",
   "message.galaxycraft.pad.docked": "Docked. Space to lift off",
   "message.galaxycraft.ship.crowded": "Too close to another ship or pad"
 }

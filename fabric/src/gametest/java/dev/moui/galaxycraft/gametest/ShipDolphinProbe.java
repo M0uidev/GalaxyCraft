@@ -3,6 +3,9 @@ package dev.moui.galaxycraft.gametest;
 import dev.moui.galaxycraft.client.GalaxyCraftClient;
 import dev.moui.galaxycraft.client.GalaxyOptions;
 import dev.moui.galaxycraft.client.PlanetClient;
+import dev.moui.galaxycraft.client.StationClient;
+import dev.moui.galaxycraft.voxel.PlanetSession;
+import dev.moui.galaxycraft.voxel.Station;
 import dev.moui.galaxycraft.client.ShipClient;
 import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.settings.Movement;
@@ -212,6 +215,71 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             check(ctx.computeOnClient(mc -> ShipClient.dockedPad() == null), "Space lifts off from the pad");
             ctx.runOnClient(mc -> ShipClient.leave());
 
+            // 6. On a space station: the pad lies on its slab, the ship rests on its keel, both seen as a ghost first.
+            ctx.runOnClient(mc -> ShipClient.clearAll());
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(space));
+            ctx.waitTicks(40);
+            sp.getServer().runCommand("item replace entity @a hotbar.0 with galaxycraft:station_core");
+            ctx.waitTicks(5);
+            PlanetSession st0 = ctx.computeOnClient(mc -> {
+                StationClient.Spot at0 = StationClient.spot(mc.player);
+                return at0 == null ? null : StationClient.place(mc.player, InteractionHand.MAIN_HAND, at0);
+            });
+            check(st0 != null, "a station goes up for the pad and the ship");
+            if (st0 != null) {
+                ctx.waitFor(mc -> st0.queued() == 0, 1200);
+                ctx.waitTicks(40);
+                Station stn = ctx.computeOnClient(mc -> StationClient.of(st0).orElseThrow());
+                Vector3d over = ctx.computeOnClient(mc -> st0.galOf(stn.rotation.transform(new Vector3d(2, 5, 2))));
+                Vector3d slab = ctx.computeOnClient(mc -> st0.galOf(stn.rotation.transform(new Vector3d(3, 0.5, 4.5))));
+                ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(over));
+                ctx.waitTicks(60);
+                sp.getServer().runCommand("item replace entity @a hotbar.0 with galaxycraft:landing_pad");
+                ctx.waitTicks(10);
+                aimAt(ctx, slab);
+                ctx.waitTicks(20);
+                shot(ctx, "pad-ghost");
+                log(ctx.computeOnClient(mc -> {
+                    var bodies = PlanetClient.bodies();
+                    var f = GalaxyCraftClient.frame();
+                    Vector3d eye = f.toGal(new Vector3d(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ()));
+                    Vector3d look = f.dirToGal(dev.moui.galaxycraft.gravity.LookMath.direction(mc.player.getYRot(), mc.player.getXRot()));
+                    StringBuilder sb = new StringBuilder("bodies " + bodies.size() + ", player y " + mc.player.getY() + " onGround " + mc.player.onGround());
+                    for (var b : bodies) {
+                        var h = b.surfaceAt(eye, look);
+                        var d = b.surfaceAlong(eye, f.upGal().negate(), 14);
+                        sb.append(" [active " + b.active() + " ahead " + (h != null) + " down " + (d != null) + " center " + b.center() + "]");
+                    }
+                    return sb.toString();
+                }));
+                boolean padOk = ctx.computeOnClient(mc -> dev.moui.galaxycraft.ship.ShipHooks.get().placePad(mc.player, InteractionHand.MAIN_HAND));
+                check(padOk, "a landing pad goes down on a station's slab");
+                ShipRecord padRec = ctx.computeOnClient(mc -> ShipClient.ships().stream().filter(ShipRecord::isPad).findFirst().orElse(null));
+                if (padRec != null) {
+                    double h = slabHeight(ctx, st0, new Vector3d(padRec.pos()[0], padRec.pos()[1], padRec.pos()[2]));
+                    log(String.format("the pad's middle is %.2f blocks above the slab's top", h));
+                    check(h > 0.05 && h < 0.4, "the pad lies flat on the slab");
+                }
+                sp.getServer().runCommand("item replace entity @a hotbar.0 with galaxycraft:toad_ship");
+                ctx.waitTicks(10);
+                Vector3d over2 = ctx.computeOnClient(mc -> st0.galOf(stn.rotation.transform(new Vector3d(-1, 5, -1))));
+                Vector3d slab2 = ctx.computeOnClient(mc -> st0.galOf(stn.rotation.transform(new Vector3d(-1, 0.5, -4))));
+                ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(over2));
+                ctx.waitTicks(60);
+                aimAt(ctx, slab2);
+                ctx.waitTicks(20);
+                shot(ctx, "ship-ghost");
+                boolean shipOk = ctx.computeOnClient(mc -> dev.moui.galaxycraft.ship.ShipHooks.get().place(mc.player, InteractionHand.MAIN_HAND,
+                        new ShipModules(1, 1, 1, 1)));
+                check(shipOk, "a ship goes down on a station's slab");
+                ShipRecord shipRec = ctx.computeOnClient(mc -> ShipClient.ships().stream().filter(x -> !x.isPad()).findFirst().orElse(null));
+                if (shipRec != null) {
+                    double h = slabHeight(ctx, st0, new Vector3d(shipRec.pos()[0], shipRec.pos()[1], shipRec.pos()[2]));
+                    log(String.format("the ship's middle is %.2f blocks above the slab's top", h));
+                    check(h > 1.7 && h < 2.6, "the ship rests on its keel on the slab, not under it");
+                }
+            }
+
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(home));
             ctx.waitTicks(100);
             ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MARIO));
@@ -221,6 +289,16 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
     }
 
     // ---- helpers ----
+
+    /** Blocks above the station's slab top (y = 0.5) at a galaxy point, along its up. */
+    private static double slabHeight(ClientGameTestContext ctx, PlanetSession s, Vector3d gal) {
+        return ctx.computeOnClient(mc -> {
+            Station st = StationClient.of(s).orElseThrow();
+            Vector3d base = s.galOf(st.rotation.transform(new Vector3d(0, 0.5, 0)));
+            Vector3d up = s.galOf(st.rotation.transform(new Vector3d(0, 1.5, 0))).sub(base);
+            return new Vector3d(gal).sub(base).dot(up) / up.lengthSquared();
+        });
+    }
 
     /** Collision boxes within r blocks of a galaxy point. */
     private static int boxesAround(Vector3d gal, double r) {
