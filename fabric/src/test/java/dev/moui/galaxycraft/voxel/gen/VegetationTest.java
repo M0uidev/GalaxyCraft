@@ -257,6 +257,22 @@ class VegetationTest {
         return g;
     }
 
+    /** A tall trunk stays with its own tree even when a neighbor's crown reaches it first: if only one is planted, no log floats. */
+    @Test void aTrunkIsNeverTakenByTheNeighborsCrown() {
+        String log = "minecraft:jungle_log[axis=y]", leaf = "minecraft:jungle_leaves[distance=1,persistent=false]";
+        java.util.List<Object[]> rows = new ArrayList<>();
+        for (int y = 1; y <= 4; y++) rows.add(new Object[] {0, y, 3, log}); // the neighbor, its stem is met first
+        rows.add(new Object[] {1, 5, 3, leaf});
+        rows.add(new Object[] {2, 6, 3, leaf}); // its crown reaches the tall trunk as soon as the trunk's own base does
+        for (int y = 1; y <= 10; y++) rows.add(new Object[] {3, y, 3, log});
+        List<Vegetation.Thing> things = Vegetation.things(grown(rows.toArray(new Object[0][])), 4);
+        assertEquals(2, things.size());
+        for (Vegetation.Thing t : things) {
+            long logs = java.util.Arrays.stream(t.blocks()).filter(b -> b.equals(log)).count();
+            assertEquals(t.ax() == 0 ? 4 : 10, logs, "logs of the tree at x " + t.ax());
+        }
+    }
+
     /** A 2×2 trunk is one thing; a flower beside it, a tree past the chunk and touching crowns stay apart. */
     @Test void grownSplitsIntoThings() {
         java.util.List<Object[]> rows = new ArrayList<>();

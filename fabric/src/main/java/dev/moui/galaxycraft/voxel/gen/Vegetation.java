@@ -63,13 +63,60 @@ public final class Vegetation {
                         root[Math.max(a, b)] = Math.min(a, b); // the lowest column is the tree's base
                     }
             }
-        // Grown out from every stem at once: each block is its nearest stem's tree.
+        // A tree's logs are its own, whatever crown is nearer: logs touching each other (sides or
+        // corners) are one body, and the stems under it are one tree. Otherwise a neighbor's crown
+        // could take a trunk's upper logs, and if only that neighbor were planted they would float.
+        int[] body = new int[w * h * w];
+        Arrays.fill(body, -1);
+        ArrayDeque<Integer> grow = new ArrayDeque<>();
+        List<int[]> bodies = new ArrayList<>(); // per body: its blocks, as cell indexes
+        List<Integer> stems = new ArrayList<>(); // per body: a floor column it stands on
+        for (int x = 0; x < w; x++)
+            for (int y = 1; y < h; y++)
+                for (int z = 0; z < w; z++) {
+                    int q0 = (x * h + y) * w + z;
+                    if (body[q0] >= 0 || grown[x][y][z] == null || !solidPart(grown[x][y][z])) continue;
+                    List<Integer> blocks = new ArrayList<>();
+                    body[q0] = bodies.size();
+                    grow.add(q0);
+                    int stem = -1;
+                    while (!grow.isEmpty()) {
+                        int q = grow.poll(), qx = q / (h * w), qy = q / w % h, qz = q % w;
+                        blocks.add(q);
+                        if (qy == 1) {
+                            int c = qx * w + qz;
+                            if (stem < 0) stem = c;
+                            else {
+                                int a = find(root, stem), b = find(root, c);
+                                root[Math.max(a, b)] = Math.min(a, b);
+                            }
+                        }
+                        for (int ox = -1; ox <= 1; ox++)
+                            for (int oy = -1; oy <= 1; oy++)
+                                for (int oz = -1; oz <= 1; oz++) {
+                                    int nx = qx + ox, ny = qy + oy, nz = qz + oz;
+                                    if (nx < 0 || nz < 0 || nx >= w || nz >= w || ny < 1 || ny >= h) continue;
+                                    int r = (nx * h + ny) * w + nz;
+                                    if (body[r] >= 0 || grown[nx][ny][nz] == null || !solidPart(grown[nx][ny][nz])) continue;
+                                    body[r] = bodies.size();
+                                    grow.add(r);
+                                }
+                    }
+                    bodies.add(stem < 0 ? new int[0] : blocks.stream().mapToInt(Integer::intValue).toArray());
+                    stems.add(stem);
+                }
+        // Grown out from every stem and log at once: each other block is its nearest one's tree.
         int[] tree = new int[w * h * w];
         Arrays.fill(tree, -1);
         ArrayDeque<Integer> todo = new ArrayDeque<>();
+        for (int k = 0; k < bodies.size(); k++)
+            for (int q : bodies.get(k)) {
+                tree[q] = find(root, stems.get(k));
+                todo.add(q);
+            }
         for (int x = 0; x < w; x++)
             for (int z = 0; z < w; z++)
-                if (h > 1 && grown[x][1][z] != null) {
+                if (h > 1 && grown[x][1][z] != null && tree[(x * h + 1) * w + z] < 0) {
                     int q = (x * h + 1) * w + z;
                     tree[q] = find(root, x * w + z);
                     todo.add(q);
