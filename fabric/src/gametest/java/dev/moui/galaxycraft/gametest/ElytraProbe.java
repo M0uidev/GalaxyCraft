@@ -40,7 +40,7 @@ public final class ElytraProbe implements FabricClientGameTest {
     public void runTest(ClientGameTestContext ctx) {
         if (!Boolean.getBoolean("galaxycraft.elytra")) return;
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
-            sp.getServer().runCommand("gamemode survival @a");
+            sp.getServer().runCommand("gamemode " + (Boolean.getBoolean("galaxycraft.elytraCreative") ? "creative" : "survival") + " @a");
             sp.getServer().runCommand("gamerule fall_damage false");
             sp.getServer().runCommand("effect give @a resistance infinite 255 true");
             sp.getServer().runCommand("effect give @a saturation infinite 255 true");
