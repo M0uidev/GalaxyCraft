@@ -57,7 +57,7 @@ function parseManifest(raw, { allowFile = false } = {}) {
     released: typeof m.released === 'string' ? m.released : '',
     notes: typeof m.notes === 'string' ? m.notes : '',
     minecraft: { version: mc.version, fabricLoader: mc.fabricLoader },
-    javaArgs: typeof m.javaArgs === 'string' ? m.javaArgs : '-Xmx4G',
+    javaArgs: typeof m.javaArgs === 'string' ? m.javaArgs : '-Xmx6G',
     module: m.module,
     mods: m.mods,
     dolphin,

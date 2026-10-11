@@ -562,8 +562,8 @@ async function editInstallation(inst) {
           <button class="btn" data-browse="ed-java">Browse</button></div>
           <div class="help">A JDK 25 folder (the one holding bin/). Empty: the launcher finds one.</div></div>
         <div class="field"><label for="ed-javaargs">Java arguments</label>
-          <input class="input" id="ed-javaargs" value="${esc(draft.javaArgs || '')}" placeholder="-Xmx4G" spellcheck="false">
-          <div class="help">For Minecraft in the released game: memory and the like. Empty: the release's (-Xmx4G).</div></div>
+          <input class="input" id="ed-javaargs" value="${esc(draft.javaArgs || '')}" placeholder="-Xmx6G" spellcheck="false">
+          <div class="help">For Minecraft in the released game: memory and the like. Empty: the release's (-Xmx6G).</div></div>
         <div class="field"><label for="ed-dolphin">Dolphin arguments</label>
           <input class="input" id="ed-dolphin" value="${esc(draft.dolphinArgs)}" placeholder="-C Dolphin.Display.RenderToMain=True" spellcheck="false"></div>
         <div class="field"><label for="ed-gradle">Gradle arguments</label>
