@@ -114,9 +114,19 @@ public final class CollisionField {
     public Vector3d pushOut(double[] player, double maxUp, double maxSide) {
         double[] p = player.clone();
         Vector3d total = new Vector3d();
+        List<double[]> in = overlapping(p, boxesFor(p));
+        if (in.isEmpty()) return total;
+        // Pushed: the boxes around the player once for every round, not again each round (a
+        // planet's are made afresh per query, a few hundred cells). Same middle as p, so a
+        // planet's boxes line up with the same block's lattice.
+        double[] around = grown(p, maxSide, maxUp);
+        List<double[]> near = boxesFor(around);
         for (int round = 0; round < 8; round++) {
-            List<double[]> in = overlapping(p);
-            if (in.isEmpty()) return total;
+            if (round > 0) {
+                if (!inside(p, around)) near = boxesFor(around = grown(p, maxSide, maxUp));
+                in = overlapping(p, near);
+                if (in.isEmpty()) return total;
+            }
             double[] best = null;
             double bestLen = Double.MAX_VALUE;
             for (double[] b : in) {
@@ -133,19 +143,30 @@ public final class CollisionField {
             p = moved(p, best);
             total.add(best[0], best[1], best[2]);
         }
-        return overlapping(p).isEmpty() ? total : new Vector3d();
+        if (!inside(p, around)) near = boxesFor(p);
+        return overlapping(p, near).isEmpty() ? total : new Vector3d();
     }
 
     private static final double TOUCH = 1e-7;
 
     /** Whether a box (Minecraft space) overlaps the galaxy's collision: Level.noCollision's view of it. */
     public boolean blocked(double[] box) {
-        return !overlapping(box).isEmpty();
+        return !overlapping(box, boxesFor(box)).isEmpty();
     }
 
-    private List<double[]> overlapping(double[] p) {
+    /** p grown by side across and by up both up and down. */
+    private static double[] grown(double[] p, double side, double up) {
+        return new double[] {p[0] - side, p[1] - up, p[2] - side, p[3] + side, p[4] + up, p[5] + side};
+    }
+
+    /** p lies within box (so box's boxes are all those p overlaps). */
+    private static boolean inside(double[] p, double[] box) {
+        return p[0] >= box[0] && p[1] >= box[1] && p[2] >= box[2] && p[3] <= box[3] && p[4] <= box[4] && p[5] <= box[5];
+    }
+
+    private static List<double[]> overlapping(double[] p, List<double[]> boxes) {
         List<double[]> out = new ArrayList<>();
-        for (double[] b : boxesFor(p))
+        for (double[] b : boxes)
             if (b[0] < p[3] - TOUCH && b[3] > p[0] + TOUCH && b[1] < p[4] - TOUCH && b[4] > p[1] + TOUCH
                     && b[2] < p[5] - TOUCH && b[5] > p[2] + TOUCH)
                 out.add(b);

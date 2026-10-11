@@ -29,6 +29,7 @@ public final class PlanetCollision {
     private static final int MAX_REACH = 8;
     /** A box side this near (blocks) to where the player's block's lattice puts it is put there: flat walls, no steps. */
     private static final double FLAT = 0.1;
+    private static final double[] FULL = {0, 0, 0, 1, 1, 1};
 
     private PlanetCollision() {}
 
@@ -58,7 +59,7 @@ public final class PlanetCollision {
                     double[] flat = across >= 0 && lattice != null && g.face(across) == face && g.i(across) == i0 + di
                             && g.j(across) == j0 + dj ? lattice : null;
                     int[] off = {di, dj};
-                    if (b.fullCollision()) add(g, c, across, new double[] {0, 0, 0, 1, 1, 1}, galOf, frame, flat, off, query, out);
+                    if (b.fullCollision()) add(g, c, across, FULL, galOf, frame, flat, off, query, out);
                     else for (double[] box : b.boxes()) add(g, c, across, box, galOf, frame, flat, off, query, out);
                 }
     }
