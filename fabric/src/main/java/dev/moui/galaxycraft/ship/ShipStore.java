@@ -30,9 +30,12 @@ public final class ShipStore {
                 JsonArray p = o.getAsJsonArray("pos");
                 ShipModules m = new ShipModules(o.get("hull").getAsInt(), o.get("engine").getAsInt(),
                         o.get("rudder").getAsInt(), o.get("cabin").getAsInt()).repaired();
+                JsonArray q = o.has("rot") ? o.getAsJsonArray("rot") : null;
+                double[] rot = q == null || q.size() != 4 ? new double[] {0, 0, 0, 1}
+                        : new double[] {q.get(0).getAsDouble(), q.get(1).getAsDouble(), q.get(2).getAsDouble(), q.get(3).getAsDouble()};
                 s.ships.add(new ShipRecord(o.get("id").getAsString(), m,
-                        new double[] {p.get(0).getAsDouble(), p.get(1).getAsDouble(), p.get(2).getAsDouble()},
-                        o.get("yaw").getAsFloat()));
+                        new double[] {p.get(0).getAsDouble(), p.get(1).getAsDouble(), p.get(2).getAsDouble()}, rot,
+                        o.has("stage") ? o.get("stage").getAsString() : ""));
             }
         } catch (IOException | RuntimeException e) {
             s.ships.clear(); // a damaged file loses its ships, not the world
@@ -70,7 +73,10 @@ public final class ShipStore {
             JsonArray p = new JsonArray();
             for (double v : r.pos()) p.add(v);
             o.add("pos", p);
-            o.addProperty("yaw", r.yaw());
+            JsonArray q = new JsonArray();
+            for (double v : r.rot()) q.add(v);
+            o.add("rot", q);
+            o.addProperty("stage", r.stage());
             a.add(o);
         }
         Files.createDirectories(file.toAbsolutePath().getParent());

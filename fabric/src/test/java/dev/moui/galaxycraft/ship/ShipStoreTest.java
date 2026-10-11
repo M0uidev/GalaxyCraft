@@ -12,7 +12,7 @@ class ShipStoreTest {
     void roundTripsShips(@TempDir Path dir) throws Exception {
         Path f = dir.resolve("ships.json");
         ShipStore s = ShipStore.load(f);
-        s.put(new ShipRecord("a", new ShipModules(2, 3, 1, 2), new double[] {1.5, 2, -3}, 90f));
+        s.put(new ShipRecord("a", new ShipModules(2, 3, 1, 2), new double[] {1.5, 2, -3}, new double[] {0, 0.5, 0, 0.5}, "GalaxyCraftSpace"));
         s.save();
         ShipStore back = ShipStore.load(f);
         assertEquals(1, back.all().size());
@@ -20,6 +20,8 @@ class ShipStoreTest {
         assertEquals("a", r.id());
         assertEquals(new ShipModules(2, 3, 1, 2), r.modules());
         assertArrayEquals(new double[] {1.5, 2, -3}, r.pos());
+        assertArrayEquals(new double[] {0, 0.5, 0, 0.5}, r.rot());
+        assertEquals("GalaxyCraftSpace", r.stage());
     }
 
     @Test
@@ -32,14 +34,23 @@ class ShipStoreTest {
     @Test
     void invalidModulesAreRepairedOnLoad(@TempDir Path dir) throws Exception {
         Path f = dir.resolve("ships.json");
-        Files.writeString(f, "[{\"id\":\"x\",\"hull\":0,\"engine\":0,\"rudder\":0,\"cabin\":0,\"pos\":[0,0,0],\"yaw\":0}]");
+        Files.writeString(f, "[{\"id\":\"x\",\"hull\":0,\"engine\":0,\"rudder\":0,\"cabin\":0,\"pos\":[0,0,0],\"rot\":[0,0,0,1],\"stage\":\"s\"}]");
         assertTrue(ShipStore.load(f).all().get(0).modules().valid());
+    }
+
+    @Test
+    void aShipWithoutOrientationLoadsUpright(@TempDir Path dir) throws Exception {
+        Path f = dir.resolve("ships.json");
+        Files.writeString(f, "[{\"id\":\"x\",\"hull\":1,\"engine\":1,\"rudder\":1,\"cabin\":1,\"pos\":[0,0,0]}]");
+        ShipRecord r = ShipStore.load(f).all().get(0);
+        assertArrayEquals(new double[] {0, 0, 0, 1}, r.rot());
+        assertEquals("", r.stage());
     }
 
     @Test
     void removeReturnsTheShip(@TempDir Path dir) {
         ShipStore s = ShipStore.load(dir.resolve("ships.json"));
-        s.put(new ShipRecord("a", new ShipModules(0, 1, 0, 1), new double[3], 0f));
+        s.put(new ShipRecord("a", new ShipModules(0, 1, 0, 1), new double[3], new double[] {0, 0, 0, 1}, "s"));
         assertTrue(s.remove("a").isPresent());
         assertTrue(s.remove("a").isEmpty());
     }

@@ -268,6 +268,7 @@ final class EntityClient {
             if (GalaxyOptions.PARTICLES.get())
                 for (ParticleClient.Live l : particles.all()) particle(l, mario, pt, pieces);
         }
+        ShipClient.pieces(this, pt, pieces);
         if (self != null) self(self, pt, pieces);
         else if (session().active() && marioFeetGal != null) heldPieces(session().cellAt(marioFeetGal), pieces);
         if (pieces.isEmpty() && wasEmpty) return;
@@ -322,6 +323,54 @@ final class EntityClient {
         }
         return new double[] {g.m00(), g.m10(), g.m20(), g.m30(), g.m01(), g.m11(), g.m21(), g.m31(), g.m02(), g.m12(),
                 g.m22(), g.m32()};
+    }
+
+
+    // ---- ships (ShipClient) ----
+
+    /** A ship piece's model, made once and kept for the scene like the others (-1: none left). */
+    int shipModel(Object key, List<EntityWire.Quad> quads) {
+        Integer id = modelIds.get(key);
+        if (id == null) {
+            id = addModel(quads);
+            modelIds.put(key, id);
+        }
+        return id;
+    }
+
+    /** A ship piece's skin, made once (-1: none left). */
+    int shipSkin(Object key, int w, int h, int[] argb) {
+        Integer id = skinIds.get(key);
+        if (id == null) {
+            id = addSkin(w, h, argb);
+            skinIds.put(key, id);
+        }
+        return id;
+    }
+
+    /** Minecraft's cushion, a client-only one (never in a level), at `at` (blocks -> galaxy units), drawn by its own renderer. */
+    private net.minecraft.world.entity.decoration.Cushion cushion;
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void shipCushion(Matrix4d at, float pt, List<EntityWire.Piece> out) {
+        var level = Minecraft.getInstance().level;
+        if (level == null || failed.contains(net.minecraft.world.entity.decoration.Cushion.class)) return;
+        try {
+            if (cushion == null || cushion.level() != level) {
+                cushion = new net.minecraft.world.entity.decoration.Cushion(net.minecraft.world.entity.EntityTypes.CUSHION, level);
+                cushion.setColor(net.minecraft.world.item.DyeColor.RED);
+            }
+            EntityRenderer r = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(cushion);
+            EntityRenderState st = r.createRenderState(cushion, pt);
+            PoseStack ps = new PoseStack();
+            net.minecraft.world.phys.Vec3 offset = r.getRenderOffset(st);
+            ps.translate(offset.x, offset.y, offset.z);
+            capture.begin(at, out);
+            r.submit(st, ps, capture, camera);
+        } catch (RuntimeException ex) {
+            failed.add(net.minecraft.world.entity.decoration.Cushion.class);
+            GalaxyCraft.LOG.warn("Not drawing the ship's cushions in the game: {}", ex.toString());
+        }
     }
 
     // ---- shadow entities ----

@@ -17,6 +17,7 @@
 		"ShadowOpenersMixin",
     "ShadowParticleMixin",
     "ShadowReachMixin",
+    "PlayerGlideMixin",
     "ShadowRideMixin",
     "ShadowSpawnMixin",
     "SignUpdateMixin"
