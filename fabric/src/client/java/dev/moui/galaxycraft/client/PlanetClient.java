@@ -631,7 +631,10 @@ public final class PlanetClient {
     /** Client tick, after the gravity frame is up to date. */
     public static void tick(LocalPlayer player, BridgeClient bridge, GravityFrame frame, Seqlock.WorldState world) {
         if (blocks == null) {
-            if (FIXED_DIR) StationClient.enterWorld(planetDir());
+            if (FIXED_DIR) {
+                StationClient.enterWorld(planetDir());
+                ShipClient.enterWorld(planetDir());
+            }
             blocks = McBlocks.create(Minecraft.getInstance());
             atlasLink = new AtlasLink(blocks.atlas, 1);
             session.setBlocks(blocks);
@@ -696,6 +699,13 @@ public final class PlanetClient {
         screenButtons = screen || screenLast ? buttons : screenButtons & buttons;
         screenLast = screen;
         buttons &= ~screenButtons;
+        // A ship: a right click on it boards, Shift leaves, W thrusts (the click is the ship's, then);
+        // Minecraft's own keys count too (tests press those, the keyboard reaches the game through Dolphin).
+        if (frame != null && player != null && !screen
+                && ShipClient.tick(player, frame, pressed(buttons, MOUSE_RIGHT),
+                        key(in, SC_LSHIFT) || key(in, SC_RSHIFT) || Minecraft.getInstance().options.keyShift.isDown(),
+                        key(in, SC_W) || Minecraft.getInstance().options.keyUp.isDown()))
+            buttons &= ~MOUSE_RIGHT;
         PlanetSession was = focus;
         focus = nearest(world.queryPos());
         if (focus != was) {
@@ -1102,6 +1112,7 @@ public final class PlanetClient {
         galaxy = g;
         store = new PlanetStore(g.planets());
         StationClient.enterWorld(g.planets());
+        ShipClient.enterWorld(g.planets());
         landOn = resolved(g.spot().orElse(null));
         landPending = true;
         homeAsked = false;
@@ -1120,6 +1131,7 @@ public final class PlanetClient {
         writeSpot(Minecraft.getInstance().player);
         saveNow();
         StationClient.enterWorld(null); // saved, dropped with the galaxy
+        ShipClient.enterWorld(null);
         if (stream != null) stream.clear();
         stream = null;
         session.unload();

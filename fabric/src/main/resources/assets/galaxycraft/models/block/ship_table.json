@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "end": "galaxycraft:block/ship_table_top",
+    "side": "galaxycraft:block/ship_table_side"
+  }
+}

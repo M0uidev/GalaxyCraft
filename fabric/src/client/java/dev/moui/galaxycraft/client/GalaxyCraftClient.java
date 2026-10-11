@@ -102,6 +102,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     public void onInitializeClient() {
         ShadowWorld.signEditor = GalaxyCraftClient::editSign;
         dev.moui.galaxycraft.station.StationHooks.set(StationClient.HOOKS);
+        dev.moui.galaxycraft.ship.ShipHooks.set(ShipClient.HOOKS);
         bridge = new BridgeClient(Path.of(Layout.SHM_PATH), () -> System.nanoTime() / 1_000_000L,
                 new BridgeClient.PartListener() {
                     @Override public void onUpsert(int partId, double[] gameMtx, byte[] kcl) {
