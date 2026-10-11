@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-11 (Now: Toad Starshroom, live video quality and cleaner menus)
+Last updated: 2026-10-11 (Toad ship feedback: Inbox landing pads, 3D map, orbit)
 
 ---
 
@@ -152,6 +152,14 @@ Last updated: 2026-10-11 (Now: Toad Starshroom, live video quality and cleaner m
 ## Inbox
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
+
+- 2026-10-11: Toad ship, next steps (user, after the first playtest): **landing pads** (bases a ship lands on
+  more easily, placed on a planet or station); a **3D map** (from a mod, if one fits) to see the world and send the
+  ship by remote, leave it **orbiting**, and choose between landing by hand or landing on a pad, done well;
+  more **interactive items and Ship Table** (tooltips with a module's stats and tier, a table screen that
+  shows the ship being built, not just an automatic assemble); polish the ship's **flight feel** further.
+  Done in the first round: solid hull, open portholes, hover flight (WASD, Space, Ctrl), smooth drawing, new
+  item art.
 
 - 2026-10-09: Soundtrack follow-ups (user/Claude): biome music (Slipsand Galaxy is tagged desert), more moods later (night, underwater, danger), layered `*_multi` songs mixing their layers, mp3/flac custom songs.
 - 2026-10-08: Swimming matters (user): Minecraft's swimming, or Mario's body swimming, undecided. Water look: a
