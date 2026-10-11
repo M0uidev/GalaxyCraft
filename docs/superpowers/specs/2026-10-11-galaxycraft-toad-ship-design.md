@@ -46,6 +46,16 @@ the agreed scale.
 - The launcher extracts files from the player's own `.rvz` with `dolphin-tool` (soundtrack does it
   already); nothing from the disc goes into the repository.
 
+## Seats: Minecraft's cushions (added 2026-10-11, from the user)
+
+Minecraft 26.3 has a `Cushion` entity (16 colors, three wool slabs, sat on by right click, own
+renderer and model). The cabin's seats are cushions in Toad red and white (one per seat the cabin
+holds: 1, 1, 2 or 4) and the player's character is drawn seated on them, not in the glide pose,
+while the ship is slow. A cushion is block-attached in Minecraft, so on the ship it is only drawn
+(a client-only instance through the same renderer); where the entity cannot be built a tinted cube
+stands in. Placing cushions on planets and stations is a separate matter: check that a real
+cushion draws and can be sat on there with the entity pipeline (a probe, not part of this feature).
+
 ## Design
 
 ### 1. Models: real SMG2 pieces without a new C++ message
