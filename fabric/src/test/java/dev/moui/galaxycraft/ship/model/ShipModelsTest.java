@@ -34,7 +34,7 @@ class ShipModelsTest {
     @Test
     void layoutIsTheStarshroomWhateverTheModules(@TempDir Path none) {
         ShipModels.load(none.resolve("missing"));
-        assertEquals(EnumSet.noneOf(Slot.class), slots(ShipModels.layout(new ShipModules(0, 1, 0, 1))), "no hull, nothing drawn");
+        assertEquals(EnumSet.of(Slot.HULL), slots(ShipModels.layout(new ShipModules(0, 1, 0, 1))), "no hull module: the Starshroom is still its body");
         assertEquals(EnumSet.of(Slot.HULL), slots(ShipModels.layout(new ShipModules(1, 2, 3, 1))));
     }
 

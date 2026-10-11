@@ -105,7 +105,8 @@ public final class ShipModels {
         int[] tiers = {m.hull(), m.engine(), m.rudder(), m.cabin()};
         List<Placed> out = new ArrayList<>();
         for (Slot s : Slot.values()) {
-            int tier = tiers[s.ordinal()];
+            // The Starshroom is the ship's body: drawn even where the hull module is missing (tier 0).
+            int tier = s == Slot.HULL ? Math.max(1, tiers[s.ordinal()]) : tiers[s.ordinal()];
             if (tier <= 0) continue;
             for (PartModel p : parts(s, tier)) out.add(new Placed(s, p, s.offset));
         }
