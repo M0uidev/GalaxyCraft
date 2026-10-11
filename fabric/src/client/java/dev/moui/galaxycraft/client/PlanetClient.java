@@ -78,6 +78,8 @@ public final class PlanetClient {
      * waits in line for the game, and Mario's collision would wait behind it.
      */
     static final int BULK_BACKLOG = 256 * 1024;
+    /** Room past that for the far planets (GalaxyStream.send): they do not wait for the planet in focus to be all sent. */
+    static final int FAR_BACKLOG = 64 * 1024;
     /** Bytes the host had not taken at the last tick (status). */
     private static int lastBacklog;
     /** Ticks between saves of an edited planet. */
@@ -820,7 +822,7 @@ public final class PlanetClient {
         leaving.removeIf(s -> s.queued() == 0);
         rescue();
         traceBodies(world.queryPos());
-        if (stream != null) stream.send(bridge, bulk);
+        if (stream != null) stream.send(bridge, () -> bridge.backlog() < BULK_BACKLOG + FAR_BACKLOG);
         if (++sinceSave >= SAVE_TICKS) {
             sinceSave = 0;
             saveNow();

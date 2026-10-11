@@ -1104,6 +1104,7 @@ public final class PlanetSession {
         farVersion = new int[PlanetLod.tileCount(p)];
         farWant = new int[farVersion.length];
         farCols = new int[farVersion.length];
+        farHeld = new BitSet(); // another planet's: the game has nothing of this one
         guestHasIt = false;
         tileSpheres = null;
         scene = host = Integer.MIN_VALUE; // the next update sends it all
@@ -1331,6 +1332,14 @@ public final class PlanetSession {
     /** Whether the game draws a tile's far view up close (not covered by its chunks; tests). */
     boolean farDrawnNear(int t) {
         return farOnGuest.get(t);
+    }
+
+    /**
+     * Whether the game has every tile's far view (covered or not): the planet shows whole by its
+     * own, so another picture of it (GalaxyStream's far planet, while it becomes complete) can go.
+     */
+    public boolean farViewHeld() {
+        return planet != null && farHeld.cardinality() >= PlanetLod.tileCount(planet);
     }
 
     /** Patch columns of the far view the game has for a tile (0: none yet; tests). */

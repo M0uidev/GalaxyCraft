@@ -665,6 +665,26 @@ class PlanetSessionTest {
         assertTrue(drain(s).stream().anyMatch(m -> m.type() == Layout.MSG_CHUNK && !far(m)));
     }
 
+    @Test void theFarViewIsHeldOnceEveryTileIsSentWhateverElseWaits() {
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        Vector3d top = onTop(s, 64);
+        assertFalse(s.farViewHeld(), "nothing sent yet");
+        s.update(3, 100, top);
+        // Its chunks go first, the far view after them: not held while tiles wait.
+        for (PlanetSession.Msg m; (m = s.peek()) != null && !far(m); ) s.sent();
+        assertFalse(s.farViewHeld(), "the tiles are still to send");
+        drain(s);
+        assertTrue(s.farViewHeld(), "every tile is in the game");
+        // Walking on: tiles change level and chunks come in, but the game still has every tile.
+        Vector3d other = new Vector3d(s.center()).add(0, 65 * 80, 0);
+        for (int i = 0; i < PlanetSession.RESIDENCY_UPDATES; i++) s.update(3, 100, other);
+        assertTrue(s.queued() > 0 && s.farViewHeld(), "held with " + s.queued() + " queued");
+        // Another planet in the same session: nothing of it is in the game.
+        s.spawn(64, MARIO, new Vector3d(0, 1, 0));
+        assertFalse(s.farViewHeld(), "a new planet");
+    }
+
     @Test void nearingAPlanetSendsItsChunksNotItsFarViewAgain() {
         // From afar the game has the planet's far view; Mario comes near: detail on.
         PlanetSession s = new PlanetSession(80);
