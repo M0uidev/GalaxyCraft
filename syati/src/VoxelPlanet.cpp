@@ -201,16 +201,87 @@ void Bury(void* p)
   gGraves.Bury(p, GRAVE_FRAMES, FreeHeap);
 }
 
-void BuryKcl(void* p)
+u8* Alloc32(u32 size);
+
+// A collision file is allocated with KCL_PREFIX bytes in front: the collision part made over it
+// (once it is) and its size. SMG2 keeps triangles as {part, index} and Mario's binder, the floor
+// and sound codes read their attributes through the part's server long after the part left the
+// zones: a triangle held across the file being freed read a header that is something else by
+// then (invalid reads in the thousands a minute, from garbage pointers). So just before the file
+// is freed its part's server is pointed at an empty one: the same read gets attribute 0.
+const u32 KCL_PREFIX = 32;
+const u32 EMPTY_KCL_PRISMS = 65536;  // a prism is 16 bytes: files of up to 1 MB are covered
+
+struct KclPrefix
 {
-  gKclGraves.Bury(p, GRAVE_FRAMES, FreeHeap);
+  void* part;
+  u32 size;
+};
+
+u8* gEmptyKcl = 0;
+
+u8* AllocKcl(u32 size)
+{
+  u8* base = Alloc32(size + KCL_PREFIX);
+  if (!base)
+    return 0;
+  KclPrefix* x = reinterpret_cast<KclPrefix*>(base);
+  x->part = 0;
+  x->size = size;
+  return base + KCL_PREFIX;
+}
+
+// A header (the four sections as addresses, as the game leaves a loaded file), one position at the
+// origin, one normal up, and prisms that are all zero: position 0, normal 0, attribute 0.
+u8* EmptyKcl()
+{
+  if (gEmptyKcl)
+    return gEmptyKcl;
+  const u32 HEADER = 64, POSITIONS = 16, NORMALS = 16;
+  const u32 total = HEADER + POSITIONS + NORMALS + EMPTY_KCL_PRISMS * 16;
+  u8* p = Alloc32(total);
+  if (!p)
+    return 0;
+  memset(p, 0, total);
+  u32* header = reinterpret_cast<u32*>(p);
+  f32* normal = reinterpret_cast<f32*>(p + HEADER + POSITIONS);
+  normal[1] = 1.f;
+  header[0] = reinterpret_cast<u32>(p + HEADER);
+  header[1] = reinterpret_cast<u32>(p + HEADER + POSITIONS);
+  header[2] = reinterpret_cast<u32>(p + HEADER + POSITIONS + NORMALS);
+  header[3] = header[2];
+  gEmptyKcl = p;
+  return p;
+}
+
+// The grave's free: the part (if one was made over it) stops reading this file, then it is freed.
+void FreeKcl(void* kcl)
+{
+  if (!kcl)
+    return;
+  u8* base = static_cast<u8*>(kcl) - KCL_PREFIX;
+  const KclPrefix* x = reinterpret_cast<const KclPrefix*>(base);
+  if (x->part && x->size <= EMPTY_KCL_PRISMS * 16)
+  {
+    u8* empty = EmptyKcl();
+    // The server's first word is the file it reads: only when it is this one.
+    void** server = reinterpret_cast<void**>(static_cast<CollisionParts*>(x->part)->mServer);
+    if (empty && server && *server == kcl)
+      *server = empty;
+  }
+  FreeHeap(base);
+}
+
+void BuryKcl(void* kcl)
+{
+  gKclGraves.Bury(kcl, GRAVE_FRAMES, FreeKcl);
 }
 
 void TickGraves()
 {
   gGraves.Tick(FreeHeap);
   if (gMarioMoved)
-    gKclGraves.Tick(FreeHeap);
+    gKclGraves.Tick(FreeKcl);
   gMarioMoved = false;
 }
 
@@ -1076,7 +1147,7 @@ public:
     u8* kcl = 0;
     u8* dl = Alloc32(c.dl_size);
     if (dl && c.kcl_size)
-      kcl = Alloc32(c.kcl_size);
+      kcl = AllocKcl(c.kcl_size);
     if (!dl || (c.kcl_size && !kcl))
     {
       gVoxelStats.alloc_failed++;
@@ -1093,7 +1164,7 @@ public:
     if (kcl && !MainZoneReady())
     {
       gVoxelStats.no_zone++;
-      Bury(kcl);
+      FreeKcl(kcl);
       kcl = 0;
     }
     if (kcl)
@@ -1108,6 +1179,7 @@ public:
       const long zone = getCurrentPlacementZoneId__2MRFv();
       setCurrentPlacementZoneId__2MRFl(0);
       s.parts->init(m, getSensor("body"), s.kcl, gPa, 0, false);
+      reinterpret_cast<KclPrefix*>(s.kcl - KCL_PREFIX)->part = s.parts;
       setCurrentPlacementZoneId__2MRFl(zone);
       validateCollisionParts__2MRFP14CollisionParts(s.parts);
       gVoxelStats.parts_made++;
@@ -1774,6 +1846,7 @@ void VoxelPlanetCreate(uint32_t* inbox_addr, uint32_t* inbox_size)
   gKclGraves.Reset();
   gVoxelStats.module_bytes = 0;
   gModHeap = 0;  // went with the old scene's heap
+  gEmptyKcl = 0;
   gInbox = static_cast<u8*>(operator new(INBOX_BYTES));
   memset(&gAtlas, 0, sizeof(gAtlas));  // the mod sends it again to every scene
   memset(gInbox, 0, sizeof(GxcInboxHeader));

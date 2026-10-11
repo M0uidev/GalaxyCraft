@@ -153,6 +153,11 @@ shares `/dev/shm/galaxycraft_v1` (`$GXC_SHM_DIR` moves it) with `gxplay.sh`, so 
 | `tools/` | Dev harness, routes through the game, Steve's model, test scripts |
 | `docs/` | Design notes and plans per phase (in Spanish) |
 
+## Community
+
+Join the [Discord server](https://discord.gg/NhKmT6cVM7) for devlogs, releases, questions and bug
+reports.
+
 ## License
 
 [MIT](LICENSE). *Super Mario Galaxy 2* is © Nintendo and Minecraft is © Mojang/Microsoft. This

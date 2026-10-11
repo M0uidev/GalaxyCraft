@@ -63,7 +63,11 @@ final class GalaxyStream {
     private final List<FarPlanet> farLeaving = new ArrayList<>();
     /** Planets being read or made off this thread: a PlanetStore.Saved or a VoxelPlanet. */
     private final Map<Integer, CompletableFuture<Object>> making = new HashMap<>();
-    /** Complete planets whose far view is still up until their own is all sent. */
+    /**
+     * Complete planets whose own far view is not all in the game yet: their far planet stays up
+     * until then (one not in focus gets one if it had none, so it shows while the planet in focus
+     * streams in ahead of it).
+     */
     private final Map<Integer, PlanetSession> promoting = new HashMap<>();
     private final Set<Integer> failed = new HashSet<>();
     /** Planets that were complete a moment ago, kept as they are: coming back to one is instant. */
@@ -235,7 +239,7 @@ final class GalaxyStream {
      */
     void tick(Vector3d from, int sceneId, int hostPid) {
         for (Map.Entry<Integer, PlanetSession> p : new ArrayList<>(promoting.entrySet()))
-            if (!p.getValue().active() || p.getValue().queued() == 0) {
+            if (!p.getValue().active() || p.getValue().farViewHeld()) {
                 dropFar(p.getKey());
                 promoting.remove(p.getKey());
             }
@@ -365,7 +369,7 @@ final class GalaxyStream {
                 s.spawnAt((VoxelPlanet) made, e.center());
                 s.clean(); // the same again from its recipe: saved only once edited
             }
-            if (far.containsKey(index)) promoting.put(index, s);
+            promoting.put(index, s);
             GalaxyCraft.LOG.info("Planet {} of the galaxy is complete", index);
         }
     }
@@ -447,7 +451,9 @@ final class GalaxyStream {
                 meshes.put(key, parts);
             }
             if (f == null) {
-                if (complete) continue; // promoting: its own far view is on its way
+                // Promoting with no far planet: the one Mario is on has its chunks coming (a far
+                // planet would be drawn over them); another shows as one until its own far view is in.
+                if (complete && PlanetClient.sessionOf(e.index()) == PlanetClient.focus()) continue;
                 f = new FarPlanet(e.center(), e.radius(), UNITS);
                 far.put(e.index(), f);
             }
@@ -552,13 +558,17 @@ final class GalaxyStream {
         farLeaving.add(f);
     }
 
-    /** The far planets' messages to the game, after the complete ones'. */
-    void send(dev.moui.galaxycraft.bridge.BridgeClient bridge, BooleanSupplier bulk) {
+    /**
+     * The far planets' messages to the game, after the complete ones'. They are built already and a
+     * few faces each, so room says when (not the tick's budget, which the planet in focus uses up
+     * while it streams in).
+     */
+    void send(dev.moui.galaxycraft.bridge.BridgeClient bridge, BooleanSupplier room) {
         for (FarPlanet f : farLeaving)
             for (PlanetSession.Msg m; (m = f.peek()) != null && bridge.send(m.type(), m.payload()); ) f.sent();
         farLeaving.removeIf(f -> f.queued() == 0);
         for (FarPlanet f : far.values())
-            for (PlanetSession.Msg m; bulk.getAsBoolean() && (m = f.peek()) != null && bridge.send(m.type(), m.payload()); ) f.sent();
+            for (PlanetSession.Msg m; room.getAsBoolean() && (m = f.peek()) != null && bridge.send(m.type(), m.payload()); ) f.sent();
     }
 
     /** The floating origin moved: far planets' records still queued are made again from it. */

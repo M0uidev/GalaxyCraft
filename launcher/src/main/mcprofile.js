@@ -28,8 +28,11 @@ function register({ installer, inst, paths, iconFile, minecraftDir, log = () => 
   if (!sys) return { ok: false, reason: 'no Dolphin for this system' };
   const gameDir = store.gameDirOf(inst, paths);
   // play.json and Dolphin's folder do not depend on the Minecraft Launcher being there.
+  // The game's settings as PLAY reads them (Picture Quality): '' if the game has not made its file.
+  let settingsText = '';
+  try { settingsText = fs.readFileSync(path.join(gameDir, 'config', 'galaxycraft.properties'), 'utf8'); } catch { /* none yet */ }
   const plan = gamepack.playerPlan({ paths, inst, lay: i.lay, dolphinExe: path.join(i.lay.dolphin, sys.exe),
-    mcCommand: { cmd: '', args: [] }, env: {} });
+    mcCommand: { cmd: '', args: [] }, env: {}, settingsText });
   seed(plan, log);
   installer.syncMods(i, gameDir);
   writeAtomic(path.join(paths.dataDir, 'play.json'), JSON.stringify(ml.playJson(plan), null, 2));

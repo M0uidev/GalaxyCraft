@@ -55,7 +55,7 @@ async function main() {
     version,
     released: new Date().toISOString().slice(0, 10),
     minecraft: { version: props.minecraft_version, fabricLoader: props.loader_version },
-    javaArgs: '-Xmx4G',
+    javaArgs: '-Xmx6G',
     gameId: 'SB4E01',
     module,
     mods: [mod, fabricApi],

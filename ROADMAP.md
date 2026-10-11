@@ -29,7 +29,7 @@ Last updated: 2026-10-11 (Now: Toad Starshroom, live video quality and cleaner m
 | Soundtrack player and space/planet music | now | User 2026-10-09: a music player based on Soundtrack Player; music follows space or planet with a crossfade, a dwell time and a cooldown (all settings, can be turned off); Music Source: both games, SMG2 only, Minecraft only or random; a Station Core option to pick a station's music. Built on `feat/soundtrack` (engine, player screen, settings, Minecraft songs working; probe passes), awaiting your listening test. Your sorting (18 space, 15 planet songs from the 96 on the disc) ships as the default list; the launcher copies the songs from the player's own disc once into a shared folder at install and PLAY. [Spec](docs/superpowers/specs/2026-10-09-galaxycraft-soundtrack-design.md) |
 | Toad Brigade ship (the Starshroom) | now | User 2026-10-11: a craftable, modular ship you build at a Ship Table and pilot (right click to board, Shift to leave), looking like SMG2's own Starshroom, the Toad Brigade's red mushroom ship. Built on `feat/toad-ship`: table, modules and tiers, seats, flying with the stats, real model from the disc; verified in the game. Missing: seats calibrated, a seated pose, your playtest. [Guide](docs/NAVE.md) [Spec](docs/superpowers/specs/2026-10-11-galaxycraft-toad-ship-design.md) |
 | Video quality while playing, cleaner menus | now | User 2026-10-11: changing the resolution, anti-aliasing and filtering in Super Minecraft Galaxy's settings applies at once (no restart). The pause menu loses the web, friends and reporting icons, the P key, Online and Telemetry; Minecraft's Video settings keeps only what matters here. Branch `feat/live-quality`, awaiting playtest. |
-| First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells; v0.1.3 pushed 2026-10-08 (fe6276a) with Export report and no empty Dolphin window, tested on Windows (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
+| First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells; v0.1.3 pushed 2026-10-08 (fe6276a) with Export report and no empty Dolphin window, tested on Windows; v0.1.4 published 2026-10-09 (1.7 terrain, far planets, swimming, soundtrack, station polish), not yet checked on Windows (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
 
 ## Next
 
@@ -139,7 +139,14 @@ Last updated: 2026-10-11 (Now: Toad Starshroom, live video quality and cleaner m
 | 2026-10-08 | Gravity shells only out in space (inside a gravity, only its own, fading); no fall or flight wind sounds and no snoring while Minecraft's movement carries Mario | 9089508 |
 | 2026-10-08 | Export report in the launcher: one button saves a zip with the logs, crash reports, settings and a system summary (home folders and tokens blanked, nothing uploaded) to send when something fails | c77618e |
 | 2026-10-08 | The game starts with only its own window: Dolphin's empty main window no longer opens behind it (Linux and Windows) | 1e18b8d |
-
+| 2026-10-09 | Stations: building outside the gravity box stretches its blue shell toward the new size instead of jumping (visual only) | a977f32 |
+| 2026-10-09 | Leave the world standing on a station and you come back on it, on the same column of blocks | 385c46a |
+| 2026-10-09 | Stations walk like planets: exact block collision, the player's box lined up with the blocks and as wide as Minecraft's (no sinking into walls, no step at corners when crouching) | d1d7aa1 |
+| 2026-10-09 | Walls on planets are flat where you stand: sliding along a straight wall no longer catches on the twist between columns | de552aa |
+| 2026-10-09 | The D-pad no longer opens SMG2's first-person look or plays its camera sounds; SMG2's own HUD stays hidden while Minecraft drives | 8ba1a10 |
+| 2026-10-09 | New title panorama (the 07:09 capture: the planet, small planets and a station's edge under the blue nebula) | c969072 |
+| 2026-10-11 | Entering a world: the planet you land on loses its far planet within seconds (was about a minute), and far planets get room of their own | 981ef82, 3ae5f0f |
+| 2026-10-11 | Less heat and lag: push-out queries a planet's boxes once, Minecraft gets 6 GB by default, Picture Quality kept when playing from the Minecraft Launcher | e42a315, 194634a, e41a32f |
 ---
 
 ## Inbox
