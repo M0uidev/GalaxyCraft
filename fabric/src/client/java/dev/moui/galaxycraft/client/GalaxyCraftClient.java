@@ -791,6 +791,29 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             abilities.flying = false;
             abilities.mayfly = false;
         }
+        if (!flying && ++abilitiesCheck >= 40) cleanServerFlight(player);
+    }
+
+    private static int abilitiesCheck;
+
+    /**
+     * A world can have creative flight saved on (a double tap of Space while a ship set the
+     * abilities): the server then closes every elytra as it opens. Only /fly is flight here, so
+     * with it off a flying flag on the server is switched off (once a couple of seconds).
+     */
+    private static void cleanServerFlight(LocalPlayer player) {
+        abilitiesCheck = 0;
+        var server = Minecraft.getInstance().getSingleplayerServer();
+        if (server == null) return;
+        java.util.UUID id = player.getUUID();
+        server.execute(() -> {
+            var sp = server.getPlayerList().getPlayer(id);
+            if (sp != null && sp.getAbilities().flying) {
+                sp.getAbilities().flying = false;
+                sp.onUpdateAbilities();
+                GalaxyCraft.LOG.info("Creative flight switched off in the server (only /fly is flight here)");
+            }
+        });
     }
 
     /** Freezes the player in place (no gravity, no momentum, no fall damage pending) or lets go. */
