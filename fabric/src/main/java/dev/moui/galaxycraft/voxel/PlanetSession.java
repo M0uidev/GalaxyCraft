@@ -160,15 +160,18 @@ public final class PlanetSession {
      * planet meanwhile); each is taken only as build would make it now (same collision and caves,
      * its chunk unchanged since), else made again.
      */
+    /** Half the cores, keeping two free for the game and Dolphin: meshing in bursts heats the machine, it is not worth every core. */
+    static final int MESH_THREADS = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors() / 2,
+            Runtime.getRuntime().availableProcessors() - 2));
     private static final java.util.concurrent.ForkJoinPool MESHERS = new java.util.concurrent.ForkJoinPool(
-            Math.max(1, Runtime.getRuntime().availableProcessors() - 2), pool -> {
+            MESH_THREADS, pool -> {
                 var w = java.util.concurrent.ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
                 w.setName("GalaxyCraft mesher " + w.getPoolIndex());
                 w.setDaemon(true);
                 w.setPriority(Thread.NORM_PRIORITY - 1);
                 return w;
             }, null, false);
-    static final int PREFETCH = 2 * Math.max(1, Runtime.getRuntime().availableProcessors() - 2);
+    static final int PREFETCH = 2 * MESH_THREADS;
     private record Premeshed(boolean kcl, boolean cullDark, PlanetMesher.ChunkMesh mesh) {}
     private final java.util.Map<Integer, Premeshed> premeshed = new java.util.HashMap<>();
     private boolean parallel = true;
