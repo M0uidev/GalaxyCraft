@@ -2,43 +2,73 @@ package dev.moui.galaxycraft.ship;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import dev.moui.galaxycraft.ship.ShipThrust.Controls;
 import org.joml.Vector3d;
 import org.junit.jupiter.api.Test;
 
 class ShipThrustTest {
     private static final ShipStats SLOW = ShipStats.of(new ShipModules(1, 1, 1, 1));
     private static final ShipStats FAST = ShipStats.of(new ShipModules(1, 3, 3, 1));
+    private static final Vector3d LOOK = new Vector3d(0, 0, 1);
+    private static final Controls W = new Controls(true, false, false, false, false, false);
 
-    @Test
-    void holdingForwardSpeedsUpAlongTheLookUpToTheTopSpeed() {
+    private static Vector3d run(Controls c, Vector3d look, ShipStats s, int ticks) {
         Vector3d v = new Vector3d();
-        Vector3d look = new Vector3d(0, 0, 1);
-        for (int i = 0; i < 400; i++) v = ShipThrust.step(v, look, true, SLOW);
-        assertEquals(ShipThrust.topSpeed(SLOW), v.length(), 1e-6);
-        assertTrue(v.z > 0 && Math.abs(v.x) < 1e-9);
+        for (int i = 0; i < ticks; i++) v = ShipThrust.step(v, look, c, s);
+        return v;
     }
 
     @Test
-    void aBetterEngineIsFaster() {
+    void holdingForwardReachesTheTopSpeedAlongTheLook() {
+        Vector3d v = run(W, LOOK, SLOW, 300);
+        assertEquals(ShipThrust.topSpeed(SLOW), v.length(), 1e-3);
+        assertTrue(v.z > 0 && Math.abs(v.x) < 1e-9 && Math.abs(v.y) < 1e-9);
+    }
+
+    @Test
+    void aBetterEngineIsFasterAndABetterRudderEasesQuicker() {
         assertTrue(ShipThrust.topSpeed(FAST) > ShipThrust.topSpeed(SLOW));
+        assertTrue(run(W, LOOK, FAST, 3).length() / ShipThrust.topSpeed(FAST)
+                > run(W, LOOK, SLOW, 3).length() / ShipThrust.topSpeed(SLOW));
     }
 
     @Test
-    void withNoThrustItDriftsAndSlowsDownButNeverStopsDead() {
-        Vector3d v = ShipThrust.step(new Vector3d(1, 0, 0), new Vector3d(0, 0, 1), false, SLOW);
-        assertTrue(v.length() < 1 && v.length() > 0.9);
+    void letGoItComesToAHaltRatherThanDrifting() {
+        Vector3d v = run(W, LOOK, SLOW, 100);
+        for (int i = 0; i < 100; i++) v = ShipThrust.step(v, LOOK, Controls.NONE, SLOW);
+        assertTrue(v.length() < 1e-3);
     }
 
     @Test
-    void aBetterRudderTurnsTheVelocityTowardTheLookFaster() {
-        Vector3d look = new Vector3d(0, 0, 1);
-        Vector3d a = ShipThrust.step(new Vector3d(1, 0, 0), look, false, SLOW);
-        Vector3d b = ShipThrust.step(new Vector3d(1, 0, 0), look, false, FAST);
-        assertTrue(b.z / b.length() > a.z / a.length());
+    void backGoesTheOtherWayAndSidesStrafe() {
+        assertTrue(run(new Controls(false, true, false, false, false, false), LOOK, SLOW, 100).z < 0);
+        Vector3d right = run(new Controls(false, false, false, true, false, false), LOOK, SLOW, 100);
+        Vector3d left = run(new Controls(false, false, true, false, false, false), LOOK, SLOW, 100);
+        assertTrue(right.x * left.x < 0 && Math.abs(right.z) < 1e-9, "D and A go to opposite sides, not along the look");
     }
 
     @Test
-    void standingStillWithoutThrustStaysStill() {
-        assertEquals(0, ShipThrust.step(new Vector3d(), new Vector3d(0, 0, 1), false, SLOW).length(), 0);
+    void spaceClimbsAndCtrlDescendsWhateverTheLook() {
+        Vector3d up = run(new Controls(false, false, false, false, true, false), new Vector3d(1, 0, 0), SLOW, 100);
+        Vector3d down = run(new Controls(false, false, false, false, false, true), new Vector3d(1, 0, 0), SLOW, 100);
+        assertTrue(up.y > 0 && down.y < 0 && Math.abs(up.x) < 1e-9);
+    }
+
+    @Test
+    void lookingStraightUpStillSteers() {
+        Vector3d v = run(W, new Vector3d(0, 1, 0), SLOW, 100);
+        assertTrue(v.y > 0 && Double.isFinite(v.x));
+        assertTrue(Double.isFinite(run(new Controls(false, false, false, true, false, false), new Vector3d(0, 1, 0), SLOW, 10).x));
+    }
+
+    @Test
+    void bothDirectionsAtOnceCancel() {
+        assertTrue(run(new Controls(true, true, false, false, false, false), LOOK, SLOW, 50).length() < 1e-9);
+    }
+
+    @Test
+    void diagonalIsNoFasterThanStraight() {
+        Vector3d v = run(new Controls(true, false, false, true, false, false), LOOK, SLOW, 300);
+        assertTrue(v.length() <= ShipThrust.topSpeed(SLOW) + 1e-6);
     }
 }

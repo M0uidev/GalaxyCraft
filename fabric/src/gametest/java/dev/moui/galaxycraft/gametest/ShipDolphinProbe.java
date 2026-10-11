@@ -82,7 +82,23 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             aimAt(ctx, center);
             shot(ctx, "ship-top");
 
-            // 3. Right click boards, W flies, Shift leaves.
+            Vector3d close = new Vector3d(center).fma(units(5), q.transform(new Vector3d(0.7, 0.3, 0.7)));
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(close));
+            ctx.waitTicks(40);
+            aimAt(ctx, center);
+            ctx.waitTicks(40);
+            aimAt(ctx, center);
+            shot(ctx, "ship-near");
+
+            // 3a. Solid: the galaxy's collision has boxes at the hull, and none far from it.
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(side));
+            ctx.waitTicks(40);
+            int solidNear = ctx.computeOnClient(mc -> boxesAround(center, 3));
+            int far = ctx.computeOnClient(mc -> boxesAround(new Vector3d(center).fma(units(40), q.transform(new Vector3d(1, 0, 0))), 3));
+            log("collision boxes within 3 blocks of the ship: " + solidNear + ", of empty space 40 blocks off: " + far);
+            check(solidNear > 10 && far == 0, "the ship is solid: its hull is in the collision");
+
+            // 3b. Right click boards, W flies, Shift leaves.
             Vector3d near = new Vector3d(center).fma(units(4), q.transform(new Vector3d(0, 0, -1)));
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(near));
             ctx.waitTicks(30);
@@ -98,9 +114,25 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             waitReal(ctx, 5000);
             Vector3d after = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
             log(String.format("flew %.1f blocks in 5 s", after.distance(before) * GravityFrame.SCALE));
-            check(after.distance(before) * GravityFrame.SCALE > 5, "W flies the ship");
-            shot(ctx, "ship-flying");
+            check(after.distance(before) * GravityFrame.SCALE > 20, "W flies the ship");
+            // Space climbs, S goes back, A strafes.
+            Vector3d up = ctx.computeOnClient(mc -> GalaxyCraftClient.frame().upGal().normalize());
+            Vector3d a0 = after;
             ctx.getInput().releaseKey(o -> o.keyUp);
+            ctx.getInput().holdKey(o -> o.keyJump);
+            waitReal(ctx, 2000);
+            ctx.getInput().releaseKey(o -> o.keyJump);
+            Vector3d a1 = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
+            double climbed = new Vector3d(a1).sub(a0).dot(up) * GravityFrame.SCALE;
+            log(String.format("Space climbed %.1f blocks in 2 s", climbed));
+            check(climbed > 4, "Space climbs");
+            ctx.getInput().holdKey(o -> o.keyLeft);
+            waitReal(ctx, 2000);
+            ctx.getInput().releaseKey(o -> o.keyLeft);
+            Vector3d a2 = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
+            log(String.format("A strafed %.1f blocks in 2 s", a2.distance(a1) * GravityFrame.SCALE));
+            check(a2.distance(a1) * GravityFrame.SCALE > 4, "A strafes");
+            shot(ctx, "ship-flying");
             waitReal(ctx, 300);
             ctx.getInput().holdKey(o -> o.keyShift);
             waitReal(ctx, 600);
@@ -117,6 +149,13 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
     }
 
     // ---- helpers ----
+
+    /** Collision boxes within r blocks of a galaxy point. */
+    private static int boxesAround(Vector3d gal, double r) {
+        GravityFrame f = GalaxyCraftClient.frame();
+        Vector3d mc = f.toMc(gal);
+        return dev.moui.galaxycraft.GalaxyCraft.FIELD.boxesFor(new double[] {mc.x - r, mc.y - r, mc.z - r, mc.x + r, mc.y + r, mc.z + r}).size();
+    }
 
     /** Looks at a galaxy point. */
     private static void aimAt(ClientGameTestContext ctx, Vector3d targetGal) {
