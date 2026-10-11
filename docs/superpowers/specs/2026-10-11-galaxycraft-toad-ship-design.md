@@ -60,27 +60,27 @@ cushion draws and can be sat on there with the entity pipeline (a probe, not par
 
 ### 1. Models: real SMG2 pieces without a new C++ message
 
-Conversion happens at install time (launcher), like the soundtrack:
+Players have no Python, so the conversion is in the mod:
 
-1. Extract the five arcs from the player's disc.
-2. Read each `.bdl` with an extended `j3d.py` (add MAT3/TEX1: material colors, texture images) and
-   write a compact **ship asset** (`ship/<piece>.gxship`): rigid pieces (vertices, UVs, a texture)
-   in the same shape `EntityCapture` already produces.
-3. The mod loads those assets and sends them through the existing MODEL/SKIN records. The module
-   (C++) is unchanged.
+1. At install and PLAY the launcher copies five arcs from the player's own disc (decompressed) to
+   `<data>/ship/` (`MiniPlayerRocket`, `MarioFaceShipJet`, `MarioFaceShipRudder`,
+   `MarioFaceShipChimney`, `SpaceShipStep`), as the soundtrack is copied.
+2. The mod reads them at run time with a Java RARC and BDL reader (vertices, UVs, textures) and
+   builds rigid pieces (quads and a skin) in the shape `EntityWire` already sends through the
+   existing MODEL/SKIN/ENTITIES records. The C++ module is unchanged.
 
-Fallback: if the assets are missing (no disc, unsupported model), the ship is drawn from tinted
-cubes in Java so the vehicle is never invisible.
+Fallback: if an arc is missing or unsupported, that module is drawn from tinted cubes in Java so
+the vehicle is never invisible.
 
-### 2. The ship entity
+### 2. The ship: a mod-managed object, not a Minecraft entity
 
-- A custom entity, saved with the world, holding its module list (`hull`, `engine`, `rudder`,
-  `cabin`, each a tier) and an owner.
-- Right click boards: the player's seat is the ship, Mario is sent `SEAT` with the cabin's seat
-  position, flying pose (riding 2) while it moves. Shift gets off and leaves the ship parked.
-- The player's controls drive the elytra flight with the ship's stats (speed, turn, pulse); stats
-  come only from `ShipStats.of(modules)`, a pure function.
-- Placing: the assembled ship is an item (like `PackedStationItem`) that becomes the entity.
+- Minecraft's entities live in the shadow dimension; drops and stations are objects of the mod
+  that `EntityClient` draws directly. A ship follows that precedent: a record saved per galaxy
+  (`ShipStore`: modules, position in galaxy units, yaw), drawn as pieces each frame.
+- Right click boards: the player is seated on the ship (seat message), Shift leaves it parked.
+- The elytra flight is driven with the ship's stats (speed, turn, pulse); stats come only from
+  `ShipStats.of(modules)`, a pure function.
+- Placing: the assembled ship is an item (like `PackedStationItem`) that becomes the record.
 
 ### 3. Ship Table and modules
 
@@ -113,7 +113,7 @@ the ship beside Steve and Mario in Dolphin; the value is recorded in the spec wh
 
 ## Risks
 
-- **Models:** J3D skeletons, multiple materials and TEV effects may not reduce to rigid textured
+- **Models:** `j3d.py` reads no textures; the Java reader adds TEX1 and maps one skin per model. J3D skeletons, multiple materials and TEV effects may not reduce to rigid textured
   pieces. First task of the plan is a spike on one arc (`MiniPlayerRocket`); the decision rule is
   that pieces missing a texture get a flat color, and a model that needs real TEV falls back to
   cubes for that piece.
