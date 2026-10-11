@@ -82,3 +82,21 @@ En el juego (`tools/gxplay.sh`), con planetas generados de radio 64 y 128, plant
   notan, probar con otra cosa del mismo parche en ese lugar en vez de nada.
 - Lianas y otros bloques que dependen de un vecino pueden quedar sin soporte donde una copa se
   cortó contra un cerro; Minecraft tampoco los pondría ahí.
+
+## Árboles enteros y hojas que caen (2026-10-11, rama `feat/planet-progression`)
+
+- Con el terreno 1.7 (voladizos, cuevas, agua) un tronco podía no caber: `place` omitía ese bloque
+  y plantaba la copa igual (tronco con un trozo faltante). Ahora el árbol se planta entero o no se
+  planta (`Vegetation.solidPart`). Prueba: `TreeIntegrityTest`.
+- Las hojas no caían porque `McVegetation` las forzaba a `persistent`. Ahora se plantan como
+  Minecraft las hizo; la sombra las espeja persistentes (no decaen allí) y la regla es una sola,
+  en `voxel/LeafDecay`: una hoja cae si ningún tronco está a 6 hojas o menos, en unos pocos ticks y
+  con los drops de Minecraft (a través de `ShadowWorld.decay`). Las hojas puestas por el jugador no caen.
+- Los planetas ya guardados conservan sus hojas persistentes (no caen).
+
+### A probar en el juego (el usuario)
+
+1. Un planeta nuevo con bosque: ningún árbol con un tronco cortado ni flotando sobre el pasto.
+2. Cortar todo el tronco de un roble: las hojas caen en unos segundos y suelta palos y brotes.
+3. Dos árboles con copas juntas: cortar uno deja las hojas que sostiene el otro.
+4. Una hoja puesta con la mano junto al árbol no cae.
