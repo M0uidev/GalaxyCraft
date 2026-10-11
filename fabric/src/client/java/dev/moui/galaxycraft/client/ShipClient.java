@@ -15,6 +15,7 @@ import dev.moui.galaxycraft.ship.ShipStore;
 import dev.moui.galaxycraft.ship.ShipThrust;
 import dev.moui.galaxycraft.ship.model.ShipModels;
 import dev.moui.galaxycraft.view.EntityWire;
+import dev.moui.galaxycraft.voxel.PlanetSession;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -44,12 +45,24 @@ public final class ShipClient {
     /** A ship is put down this far ahead of the player and this far below its feet, blocks. */
     private static final double AHEAD = 6, BELOW = 1;
     /** Where on the ship the aboard player's feet are, blocks above its middle (the cabin). */
-    private static final double SEAT_HEIGHT = 1;
+    private static final double SEAT_HEIGHT = -0.8;
     private static final int SAVE_TICKS = 100;
     /** Where a player who leaves stands: this far out to the side and this far below the ship's middle, blocks. */
     private static final double EXIT_SIDE = 3.8, EXIT_BELOW = 1.6;
+    /** A pad's half thickness and the ship's keel below its middle, blocks; a pad is found within this reach and above by this much. */
+    private static final double PAD_HALF = ShipModels.PAD_THICK / 32, KEEL = 2.0, PAD_REACH = 24, PAD_ABOVE = 14;
 
-    public static final ShipHooks HOOKS = ShipClient::place;
+    public static final ShipHooks HOOKS = new ShipHooks() {
+        @Override
+        public boolean place(Player player, InteractionHand hand, ShipModules modules) {
+            return ShipClient.place(player, hand, modules);
+        }
+
+        @Override
+        public boolean placePad(Player player, InteractionHand hand) {
+            return ShipClient.placePad(player, hand);
+        }
+    };
 
     private static ShipStore store;
     private static Path file;
@@ -99,6 +112,10 @@ public final class ShipClient {
         Vector3d up = new Vector3d(0, 1, 0).rotate(at.rotation());
         // The spot is a station's: this far ahead and 2 blocks below; a ship floats 1 below the feet.
         Vector3d center = new Vector3d(at.center()).fma((2 - BELOW) / GravityFrame.SCALE, up);
+        if (crowded(center, 5.5)) { // a ship put into another would leave the player inside two shells
+            player.sendOverlayMessage(Component.translatable("message.galaxycraft.ship.crowded"));
+            return false;
+        }
         Quaterniond q = at.rotation();
         store.put(new ShipRecord(UUID.randomUUID().toString(), modules, new double[] {center.x, center.y, center.z},
                 new double[] {q.x, q.y, q.z, q.w}, stageName()));
@@ -106,6 +123,55 @@ public final class ShipClient {
         StationClient.useUp(player, hand, ShipBlocks.TOAD_SHIP);
         GalaxyCraft.LOG.info("A ship {} is down at {}", modules, center);
         return true;
+    }
+
+    /** A Landing Pad item used: down on the ground the eye points at, flat on the planet there. */
+    static boolean placePad(Player player, InteractionHand hand) {
+        if (store == null) return false;
+        GravityFrame frame = GalaxyCraftClient.frame();
+        PlanetSession ground = PlanetClient.focus();
+        if (frame == null || ground == null || !ground.active()) {
+            player.sendOverlayMessage(Component.translatable("message.galaxycraft.pad.ground"));
+            return false;
+        }
+        Vector3d eye = frame.toGal(vec(player.getEyePosition()));
+        Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
+        Vector3d[] hit = ground.surfaceAt(eye, look);
+        if (hit == null) {
+            player.sendOverlayMessage(Component.translatable("message.galaxycraft.pad.ground"));
+            return false;
+        }
+        Vector3d up = hit[1];
+        Vector3d fwd = new Vector3d(look).fma(-look.dot(up), up);
+        if (fwd.lengthSquared() < 1e-6) fwd = new Vector3d(up).orthogonalize(new Vector3d(up.y, up.z, up.x));
+        fwd.normalize();
+        Vector3d right = new Vector3d(up).cross(fwd);
+        Quaterniond q = new Quaterniond().setFromNormalized(new Matrix3d(right, up, fwd));
+        Vector3d center = new Vector3d(hit[0]).fma(PAD_HALF / GravityFrame.SCALE, up);
+        store.put(new ShipRecord(ShipRecord.PAD_PREFIX + UUID.randomUUID(), new ShipModules(0, 1, 0, 1),
+                new double[] {center.x, center.y, center.z}, new double[] {q.x, q.y, q.z, q.w}, stageName()));
+        dirty = true;
+        StationClient.useUp(player, hand, ShipBlocks.LANDING_PAD);
+        syncHulls();
+        player.sendOverlayMessage(Component.translatable("message.galaxycraft.pad.placed"));
+        return true;
+    }
+
+    /** Another ship or pad of this stage has its middle within r blocks of a point. */
+    private static boolean crowded(Vector3d gal, double r) {
+        for (ShipRecord o : store.all()) {
+            if (!o.stage().equals(stageName())) continue;
+            if (new Vector3d(o.pos()[0], o.pos()[1], o.pos()[2]).distance(gal) * GravityFrame.SCALE < r) return true;
+        }
+        return false;
+    }
+
+    /** Takes every ship and pad out of the world (tests). */
+    public static void clearAll() {
+        if (store == null) return;
+        for (ShipRecord r : store.all()) store.remove(r.id());
+        dirty = true;
+        syncHulls();
     }
 
     private static String stageName() {
@@ -150,19 +216,28 @@ public final class ShipClient {
         List<ShipRecord> here = new ArrayList<>();
         List<double[]> centers = new ArrayList<>();
         for (ShipRecord s : store.all())
-            if (s.stage().equals(stageName())) {
+            if (!s.isPad() && s.stage().equals(stageName())) {
                 here.add(s);
                 centers.add(s.pos());
             }
         int i = ShipBoarding.nearest(eye, look.normalize(), centers, REACH / GravityFrame.SCALE, RADIUS / GravityFrame.SCALE);
         if (i < 0) return false;
-        board(player, here.get(i));
+        board(player, frame, here.get(i));
         return true;
     }
 
-    private static void board(LocalPlayer player, ShipRecord r) {
+    private static void board(LocalPlayer player, GravityFrame frame, ShipRecord r) {
         boarded = r.id();
         velocity = new Vector3d();
+        docked = null;
+        tiltRoll = tiltPitch = 0;
+        // Into the seat: the player's feet where the ship puts them (the cabin's middle).
+        Vector3d up = new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]).transform(new Vector3d(0, 1, 0));
+        Vector3d feet = new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]).fma(SEAT_HEIGHT / GravityFrame.SCALE, up);
+        Vector3d mc = frame.toMc(feet);
+        player.setPos(mc.x, mc.y, mc.z);
+        player.setOldPosAndRot();
+        player.setDeltaMovement(Vec3.ZERO);
         ShipStats stats = ShipStats.of(r.modules());
         GalaxyCraft.LOG.info("Aboard ship {} ({} seats, speed {})", r.id(), stats.seats(), stats.speed());
         syncHulls();
@@ -179,10 +254,87 @@ public final class ShipClient {
         player.setNoGravity(true);
         player.resetFallDistance();
         if (player.isFallFlying()) player.stopFallFlying();
-        velocity = ShipThrust.step(velocity, vec(player.getLookAngle()), c, ShipStats.of(r.modules()));
+        ShipThrust.Controls keys = docked != null && !c.up() ? ShipThrust.Controls.NONE : c;
+        if (docked != null && c.up()) docked = null; // Space lifts off
+        velocity = ShipThrust.step(velocity, vec(player.getLookAngle()), keys, ShipStats.of(r.modules()));
+        landingAssist(player, frame, c);
         // The move itself waits for the player's own tick (onPlayerTick), after Minecraft has
         // saved the old position: moved before that, the view would not be drawn between the two
         // and the flight would step at 20 Hz.
+    }
+
+    /** A landing pad put down at a place (tests). */
+    public static String addPad(Vector3d center, Quaterniond q) {
+        String id = ShipRecord.PAD_PREFIX + UUID.randomUUID();
+        store.put(new ShipRecord(id, new ShipModules(0, 1, 0, 1), new double[] {center.x, center.y, center.z},
+                new double[] {q.x, q.y, q.z, q.w}, stageName()));
+        dirty = true;
+        syncHulls();
+        return id;
+    }
+
+    /** The pad id the ship is docked on, or null. */
+    private static String docked;
+    private static int padHint;
+    /** Tilt of the ship from its acceleration, radians (drawn, not felt). */
+    private static double tiltRoll, tiltPitch;
+    /** For tests: the descend key held. */
+    private static boolean forceDown;
+
+    /** Tests hold the descend key with this (keys do not reach the mod through Dolphin's test control). */
+    public static void forceDescend(boolean on) {
+        forceDown = on;
+    }
+
+    /** The pad the ship is docked on, if any (tests). */
+    public static String dockedPad() {
+        return docked;
+    }
+
+    /**
+     * Near a landing pad (above it, within reach) the player is told so, and holding the descend key
+     * flies the ship down onto it by itself: slowing as it nears, and docked once it rests there.
+     */
+    private static void landingAssist(LocalPlayer player, GravityFrame frame, ShipThrust.Controls c) {
+        if (docked != null) {
+            velocity.set(0, 0, 0);
+            return;
+        }
+        Vector3d feet = frame.toGal(vec(player.position()));
+        ShipRecord pad = null;
+        double best = Double.MAX_VALUE;
+        for (ShipRecord p : store.all()) {
+            if (!p.isPad() || !p.stage().equals(stageName())) continue;
+            Vector3d up = new Quaterniond(p.rot()[0], p.rot()[1], p.rot()[2], p.rot()[3]).transform(new Vector3d(0, 1, 0));
+            Vector3d d = new Vector3d(feet).sub(p.pos()[0], p.pos()[1], p.pos()[2]);
+            double high = d.dot(up) * GravityFrame.SCALE;
+            double lateral = new Vector3d(d).fma(-d.dot(up), up).length() * GravityFrame.SCALE;
+            if (high < -1 || high > PAD_ABOVE || lateral > PAD_REACH) continue;
+            if (lateral < best) {
+                best = lateral;
+                pad = p;
+            }
+        }
+        if (pad == null) return;
+        if (!c.down() && !forceDown) {
+            if (++padHint % 40 == 1) Minecraft.getInstance().gui.hud.setOverlayMessage(Component.translatable("message.galaxycraft.pad.near"), false);
+            return;
+        }
+        // Down onto it: toward the point the ship rests at, the speed easing off with the distance.
+        Vector3d up = new Quaterniond(pad.rot()[0], pad.rot()[1], pad.rot()[2], pad.rot()[3]).transform(new Vector3d(0, 1, 0));
+        Vector3d target = new Vector3d(pad.pos()[0], pad.pos()[1], pad.pos()[2])
+                .fma((PAD_HALF + KEEL + SEAT_HEIGHT) / GravityFrame.SCALE, up);
+        Vector3d want = frame.toMc(target).sub(vec(player.position()));
+        double dist = want.length();
+        if (dist < 0.12 && velocity.length() < 0.08) {
+            docked = pad.id();
+            velocity.set(0, 0, 0);
+            Minecraft.getInstance().gui.hud.setOverlayMessage(Component.translatable("message.galaxycraft.pad.docked"), false);
+            return;
+        }
+        double speed = Math.min(0.5, 0.04 + dist * 0.12);
+        if (dist > 1e-6) want.mul(Math.min(speed, dist) / dist);
+        velocity.lerp(want, 0.4);
     }
 
     /**
@@ -200,6 +352,11 @@ public final class ShipClient {
         // Held against a wall or the ground it does not build up speed it cannot use.
         if (player.horizontalCollision) velocity.x = velocity.z = 0;
         if (player.verticalCollision) velocity.y = 0;
+        double yaw = Math.toRadians(player.getYRot());
+        double f = velocity.x * -Math.sin(yaw) + velocity.z * Math.cos(yaw), sd = velocity.x * -Math.cos(yaw) + velocity.z * -Math.sin(yaw);
+        double wantRoll = -Math.max(-0.38, Math.min(0.38, sd * 0.40)), wantPitch = Math.max(-0.30, Math.min(0.30, f * 0.28));
+        tiltRoll += (wantRoll - tiltRoll) * 0.2;
+        tiltPitch += (wantPitch - tiltPitch) * 0.2;
         store.put(placed(r.get(), frame, player, 1f));
         dirty = true;
     }
@@ -213,7 +370,7 @@ public final class ShipClient {
         if (flat.lengthSquared() < 1e-6) flat = new Vector3d(up).orthogonalize(new Vector3d(up.y, up.z, up.x));
         flat.normalize();
         Vector3d right = new Vector3d(up).cross(flat);
-        Quaterniond q = new Quaterniond().setFromNormalized(new Matrix3d(right, up, flat));
+        Quaterniond q = new Quaterniond().setFromNormalized(new Matrix3d(right, up, flat)).rotateZ(tiltRoll).rotateX(tiltPitch);
         Vector3d pos = feet.fma(-SEAT_HEIGHT / GravityFrame.SCALE, up);
         return new ShipRecord(r.id(), r.modules(), new double[] {pos.x, pos.y, pos.z}, new double[] {q.x, q.y, q.z, q.w}, r.stage());
     }
@@ -224,7 +381,13 @@ public final class ShipClient {
         Optional<ShipRecord> was = aboard();
         boarded = null;
         velocity = new Vector3d();
-        if (player != null && was.isPresent()) stepOut(player, was.get());
+        tiltRoll = tiltPitch = 0;
+        docked = null;
+        if (player != null && was.isPresent()) {
+            GravityFrame fr = GalaxyCraftClient.frame();
+            if (fr != null && store != null) store.put(placed(was.get(), fr, player, 1f)); // parked level
+            stepOut(player, was.get());
+        }
         if (player != null) {
             player.setNoGravity(false);
             player.getAbilities().mayfly = player.getAbilities().instabuild;
@@ -309,7 +472,7 @@ public final class ShipClient {
         Matrix4d m = new Matrix4d().translation(r.pos()[0], r.pos()[1], r.pos()[2])
                 .rotate(new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3])).scale(unitsPerPixel);
         List<dev.moui.galaxycraft.geom.Tri> out = new ArrayList<>();
-        for (float[] f : ShipModels.hullTriangles(Math.max(1, r.modules().hull()))) {
+        for (float[] f : r.isPad() ? ShipModels.padTriangles() : ShipModels.hullTriangles(Math.max(1, r.modules().hull()))) {
             Vector3d a = m.transformPosition(new Vector3d(f[0], f[1], f[2]));
             Vector3d b = m.transformPosition(new Vector3d(f[3], f[4], f[5]));
             Vector3d c = m.transformPosition(new Vector3d(f[6], f[7], f[8]));
@@ -327,6 +490,17 @@ public final class ShipClient {
         double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);
         for (ShipRecord r : store.all()) {
             if (!r.stage().equals(stage)) continue;
+            if (r.isPad()) {
+                ShipModels.PartModel pad = ShipModels.pad();
+                int model = ec.shipModel(pad, pad.quads());
+                int skin = ec.shipSkin(pad.skin(), pad.skin().width(), pad.skin().height(), pad.skin().argb());
+                if (model >= 0 && skin >= 0) {
+                    Matrix4d pm = new Matrix4d().translation(r.pos()[0], r.pos()[1], r.pos()[2])
+                            .rotate(new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3])).scale(unitsPerPixel);
+                    out.add(new EntityWire.Piece(model, skin, 0, 0xFFFFFFFF, rows(pm)));
+                }
+                continue;
+            }
             // The aboard ship follows the player as drawn between ticks (not as the tick left it),
             // so it moves as smoothly as the view does.
             LocalPlayer me = Minecraft.getInstance().player;

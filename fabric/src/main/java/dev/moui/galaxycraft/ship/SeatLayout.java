@@ -5,7 +5,7 @@ import java.util.List;
 
 /** Where the cabin's cushions are, in pixels from the cabin's middle (nose +z): the driver first, then behind. */
 public final class SeatLayout {
-    private static final float[][] SLOTS = {{0, 0, 8}, {-14, 0, -8}, {14, 0, -8}, {0, 0, -22}};
+    private static final float[][] SLOTS = {{0, 0, 0}, {-14, 0, -8}, {14, 0, -8}, {0, 0, -22}};
 
     private SeatLayout() {}
 

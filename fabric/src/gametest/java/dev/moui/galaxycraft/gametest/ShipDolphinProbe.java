@@ -50,6 +50,7 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             ctx.waitTicks(60);
             check(ctx.computeOnClient(mc -> GalaxyCraftClient.inVoid()), "far above the stage is space");
 
+            ctx.runOnClient(mc -> ShipClient.clearAll());
             // 1. A full ship goes down ahead of the player.
             boolean placed = ctx.computeOnClient(mc ->
                     ShipHooks.get().place(mc.player, InteractionHand.MAIN_HAND, new ShipModules(2, 2, 2, 2)));
@@ -123,9 +124,22 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             log(String.format("last tick's step, seen between ticks: %.3f blocks", stride));
             check(stride > 0.05, "the flight is drawn between ticks (old position kept)");
             ctx.getInput().releaseKey(o -> o.keyUp);
+            // Turbo: Ctrl with W is faster than W alone.
+            Vector3d t0 = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
+            ctx.getInput().holdKey(o -> o.keyUp);
+            waitReal(ctx, 3000);
+            Vector3d t1 = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
+            ctx.getInput().holdKey(o -> o.keySprint);
+            waitReal(ctx, 3000);
+            Vector3d t2 = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
+            ctx.getInput().releaseKey(o -> o.keySprint);
+            ctx.getInput().releaseKey(o -> o.keyUp);
+            double plain = t1.distance(t0) * GravityFrame.SCALE, turbo = t2.distance(t1) * GravityFrame.SCALE;
+            log(String.format("3 s of W: %.1f blocks; 3 s with the turbo: %.1f", plain, turbo));
+            check(turbo > plain * 1.3, "the turbo is faster");
             // Space climbs, S goes back, A strafes.
             Vector3d up = ctx.computeOnClient(mc -> GalaxyCraftClient.frame().upGal().normalize());
-            Vector3d a0 = after;
+            Vector3d a0 = t2;
             ctx.getInput().releaseKey(o -> o.keyUp);
             ctx.getInput().holdKey(o -> o.keyJump);
             waitReal(ctx, 2000);
@@ -154,6 +168,50 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             log(String.format("after leaving: %.1f blocks from the ship's middle", gap));
             check(gap > 3.0, "leaving puts the player outside the hull");
 
+            // 5. A landing pad: board again, fly to 7 blocks above it, hold descend: docked on it.
+            Vector3d padAt = new Vector3d(outside).fma(units(30), q.transform(new Vector3d(1, 0, 0)));
+            ctx.runOnClient(mc -> ShipClient.addPad(padAt, q));
+            ctx.waitTicks(20);
+            Vector3d lookPad = new Vector3d(padAt).fma(units(10), q.transform(new Vector3d(0.5, 0.5, -1)));
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(lookPad));
+            ctx.waitTicks(40);
+            aimAt(ctx, padAt);
+            ctx.waitTicks(40);
+            aimAt(ctx, padAt);
+            shot(ctx, "pad-placed");
+            Vector3d aboveIt = new Vector3d(padAt).fma(units(7), q.transform(new Vector3d(0, 1, 0)));
+            Vector3d ship0 = ctx.computeOnClient(mc -> {
+                ShipRecord s0 = ShipClient.ships().stream().filter(x -> x.id().equals(aboardId)).findFirst().orElseThrow();
+                return new Vector3d(s0.pos()[0], s0.pos()[1], s0.pos()[2]);
+            });
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(new Vector3d(ship0).fma(units(1.5), q.transform(new Vector3d(1, 0, 0)))));
+            ctx.waitTicks(20);
+            aimAt(ctx, ship0);
+            ctx.waitTicks(5);
+            gxdev("ctl", "keys rmb");
+            waitReal(ctx, 300);
+            gxdev("ctl", "keys");
+            waitReal(ctx, 500);
+            check(ctx.computeOnClient(mc -> ShipClient.aboard().isPresent()), "boarded again for the pad");
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(aboveIt));
+            waitReal(ctx, 800);
+            ctx.runOnClient(mc -> ShipClient.forceDescend(true));
+            boolean docked = waitUntilReal(ctx, 15000, () -> ctx.computeOnClient(mc -> ShipClient.dockedPad() != null));
+            ctx.runOnClient(mc -> ShipClient.forceDescend(false));
+            check(docked, "holding descend over the pad docks the ship on it");
+            shot(ctx, "pad-docked");
+            ctx.runOnClient(mc -> mc.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK));
+            ctx.waitTicks(40);
+            shot(ctx, "pad-docked-3p");
+            ctx.runOnClient(mc -> mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON));
+            Vector3d at = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
+            log(String.format("docked: %.2f blocks from the point above the pad's centre", at.distance(new Vector3d(padAt).fma(units(1.325), q.transform(new Vector3d(0, 1, 0)))) * GravityFrame.SCALE));
+            ctx.getInput().holdKey(o -> o.keyJump);
+            waitReal(ctx, 1200);
+            ctx.getInput().releaseKey(o -> o.keyJump);
+            check(ctx.computeOnClient(mc -> ShipClient.dockedPad() == null), "Space lifts off from the pad");
+            ctx.runOnClient(mc -> ShipClient.leave());
+
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(home));
             ctx.waitTicks(100);
             ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MARIO));
@@ -180,6 +238,15 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             mc.player.setYRot((float) Math.toDegrees(Math.atan2(-d.x, d.z)));
             mc.player.setXRot((float) Math.toDegrees(-Math.asin(Math.max(-1, Math.min(1, d.y)))));
         });
+    }
+
+    private static boolean waitUntilReal(ClientGameTestContext ctx, long ms, java.util.function.BooleanSupplier ok) {
+        long end = System.currentTimeMillis() + ms;
+        while (System.currentTimeMillis() < end) {
+            if (ok.getAsBoolean()) return true;
+            ctx.waitTicks(1);
+        }
+        return ok.getAsBoolean();
     }
 
     private static void waitReal(ClientGameTestContext ctx, long ms) {

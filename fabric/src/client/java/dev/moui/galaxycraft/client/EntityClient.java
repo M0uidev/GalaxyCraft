@@ -690,6 +690,11 @@ final class EntityClient {
         try {
             EntityRenderer r = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(player);
             EntityRenderState st = r.createRenderState(player, pt);
+            if (ShipClient.aboard().isPresent() && st instanceof net.minecraft.client.renderer.entity.state.HumanoidRenderState h) {
+                h.isPassenger = true; // seated on the ship's cushion
+                h.isFallFlying = false;
+                h.walkAnimationSpeed = 0;
+            }
             Vector3d o = frame.toGal(new Vector3d(st.x, st.y, st.z));
             Vector3d x = frame.toGal(new Vector3d(st.x + 1, st.y, st.z)).sub(o);
             Vector3d y = frame.toGal(new Vector3d(st.x, st.y + 1, st.z)).sub(o);

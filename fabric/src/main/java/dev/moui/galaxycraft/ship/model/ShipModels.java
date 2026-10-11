@@ -290,6 +290,81 @@ public final class ShipModels {
         return true;
     }
 
+    // ---- the landing pad ----
+
+    /** A pad's radius and thickness, pixels (16 a block). */
+    public static final float PAD_RADIUS = 40f, PAD_THICK = 4f;
+    private static final int PAD_SIDES = 16;
+    private static volatile PartModel padPart;
+
+    /** The pad: a flat disc, its top marked with a ring, an H and lights; centred, y up, its top at +y. */
+    public static PartModel pad() {
+        PartModel p = padPart;
+        if (p == null) padPart = p = buildPad();
+        return p;
+    }
+
+    /** The pad's solid skin as triangles (nine floats each, pixels). */
+    public static List<float[]> padTriangles() {
+        List<float[]> out = new ArrayList<>();
+        float top = PAD_THICK / 2, bottom = -PAD_THICK / 2;
+        for (int i = 0; i < PAD_SIDES; i++) {
+            float a0 = (float) (2 * Math.PI * i / PAD_SIDES), a1 = (float) (2 * Math.PI * (i + 1) / PAD_SIDES);
+            float x0 = PAD_RADIUS * (float) Math.cos(a0), z0 = PAD_RADIUS * (float) Math.sin(a0);
+            float x1 = PAD_RADIUS * (float) Math.cos(a1), z1 = PAD_RADIUS * (float) Math.sin(a1);
+            out.add(new float[] {0, top, 0, x0, top, z0, x1, top, z1});
+            out.add(new float[] {0, bottom, 0, x1, bottom, z1, x0, bottom, z0});
+            out.add(new float[] {x0, top, z0, x0, bottom, z0, x1, bottom, z1});
+            out.add(new float[] {x0, top, z0, x1, bottom, z1, x1, top, z1});
+        }
+        return out;
+    }
+
+    private static PartModel buildPad() {
+        int size = 64;
+        int[] px = new int[size * size];
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++) {
+                double dx = (x + 0.5 - size / 2.0) / (size / 2.0), dz = (y + 0.5 - size / 2.0) / (size / 2.0);
+                double r = Math.sqrt(dx * dx + dz * dz);
+                int c = 0xFF3C424F; // steel
+                if (((x / 4) + (y / 4)) % 2 == 0) c = 0xFF444B5A;
+                if (r > 0.8 && r < 0.9) c = 0xFFF2C230; // the ring
+                if (r >= 0.9) c = 0xFF2A2F3A;
+                // the H: two bars and a crossbar
+                boolean bar = (Math.abs(dx) > 0.26 && Math.abs(dx) < 0.4 && Math.abs(dz) < 0.5)
+                        || (Math.abs(dx) <= 0.4 && Math.abs(dz) < 0.07);
+                if (bar && r < 0.75) c = 0xFFF5F5F0;
+                // lights on the ring
+                for (int k = 0; k < 8; k++) {
+                    double a = Math.PI * k / 4, lx = 0.85 * Math.cos(a), lz = 0.85 * Math.sin(a);
+                    if (Math.abs(dx - lx) < 0.06 && Math.abs(dz - lz) < 0.06) c = 0xFF66E0FF;
+                }
+                px[y * size + x] = c;
+            }
+        List<EntityWire.Quad> quads = new ArrayList<>();
+        float top = PAD_THICK / 2, bottom = -PAD_THICK / 2;
+        float edgeU = 0.02f, edgeV = 0.02f;
+        for (int i = 0; i < PAD_SIDES; i++) {
+            float a0 = (float) (2 * Math.PI * i / PAD_SIDES), a1 = (float) (2 * Math.PI * (i + 1) / PAD_SIDES);
+            float x0 = PAD_RADIUS * (float) Math.cos(a0), z0 = PAD_RADIUS * (float) Math.sin(a0);
+            float x1 = PAD_RADIUS * (float) Math.cos(a1), z1 = PAD_RADIUS * (float) Math.sin(a1);
+            float[][] c = {{0, top, 0}, {x0, top, z0}, {x1, top, z1}, {x1, top, z1}};
+            float[][] uv = {{0.5f, 0.5f}, {0.5f + x0 / (2 * PAD_RADIUS), 0.5f + z0 / (2 * PAD_RADIUS)},
+                    {0.5f + x1 / (2 * PAD_RADIUS), 0.5f + z1 / (2 * PAD_RADIUS)}, {0.5f + x1 / (2 * PAD_RADIUS), 0.5f + z1 / (2 * PAD_RADIUS)}};
+            quads.add(new EntityWire.Quad(c, uv, 0xFFFFFFFF));
+            quads.add(new EntityWire.Quad(new float[][] {c[0], c[2], c[1], c[1]}, new float[][] {uv[0], uv[2], uv[1], uv[1]}, 0xFFFFFFFF));
+            float[][] s = {{x0, top, z0}, {x0, bottom, z0}, {x1, bottom, z1}, {x1, top, z1}};
+            float[][] su = {{edgeU, edgeV}, {edgeU, edgeV}, {edgeU, edgeV}, {edgeU, edgeV}};
+            quads.add(new EntityWire.Quad(s, su, 0xC8C8D0FF));
+            quads.add(new EntityWire.Quad(new float[][] {s[3], s[2], s[1], s[0]}, su, 0xC8C8D0FF));
+            float[][] b = {{0, bottom, 0}, {x1, bottom, z1}, {x0, bottom, z0}, {x0, bottom, z0}};
+            quads.add(new EntityWire.Quad(b, new float[][] {{edgeU, edgeV}, {edgeU, edgeV}, {edgeU, edgeV}, {edgeU, edgeV}}, 0x909098FF));
+            quads.add(new EntityWire.Quad(new float[][] {b[0], b[2], b[1], b[1]}, new float[][] {{edgeU, edgeV}, {edgeU, edgeV}, {edgeU, edgeV}, {edgeU, edgeV}}, 0x909098FF));
+        }
+        return new PartModel(quads, new Skin(size, size, px), 0xFFFFFFFF);
+    }
+
     /** The Starshroom's red (its ColorChange.brk's first colour at frame 0). */
     static final int RED = 0xFFDC321E;
 
