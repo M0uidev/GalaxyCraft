@@ -554,6 +554,34 @@ class PlanetSessionTest {
         assertEquals(Material.DIRT, s.planet().material(hit));
     }
 
+    @Test void breakingTheLogLetsItsLeavesFallOverSomeTicks() {
+        Blocks c = CubeBlocks.INSTANCE;
+        Blocks b = new Blocks() {
+            @Override public BlockInfo info(int id) { return c.info(id); }
+            @Override public int id(Material m) { return c.id(m); }
+            @Override public Material material(int id) { return c.material(id); }
+            @Override public int fluidState(int fluid, int level) { return c.fluidState(fluid, level); }
+            @Override public boolean faceVisible(int id, int n, int side) { return c.faceVisible(id, n, side); }
+            @Override public String name(int id) { return c.name(id); }
+            @Override public int parse(String name) { return c.parse(name); }
+            @Override public int atlasColumns() { return c.atlasColumns(); }
+            @Override public int atlasRows() { return c.atlasRows(); }
+            @Override public boolean leaves(int id) { return id == CubeBlocks.GLASS; }
+            @Override public boolean log(int id) { return id == c.id(Material.OBSIDIAN); }
+        };
+        PlanetSession s = new PlanetSession(80);
+        s.spawn(VoxelPlanet.ofRadius(16, b), MARIO, new Vector3d(0, 1, 0));
+        VoxelPlanet p = s.planet();
+        int log = b.id(Material.OBSIDIAN), leaf = CubeBlocks.GLASS;
+        int base = p.grid.cellAt(new Vector3d(0, 18.5, 0));
+        p.set(base, log);
+        for (int k = 1; k <= 3; k++) p.set(base + k, leaf);
+        p.set(base, Blocks.AIR);
+        s.touchLeaves(base);
+        for (int t = 0; t < 80; t++) s.update(3, 100, MARIO);
+        for (int k = 1; k <= 3; k++) assertEquals(Blocks.AIR, p.get(base + k), "leaf " + k);
+    }
+
     @Test void dugIntoChunkUnderMarioComesWithCollision() {
         PlanetSession s = new PlanetSession(80);
         s.spawn(16, MARIO, new Vector3d(0, 1, 0));

@@ -301,6 +301,19 @@ public final class ShadowWorld {
         catchThrown = on;
     }
 
+    /** A leaf the planet says no log holds: out, with the drops Minecraft gives a decayed leaf (saplings, sticks, apples). */
+    public static void decay(VoxelPlanet p, int cell) {
+        ops.add(level -> {
+            if (p != planet || map == null) return;
+            BlockPos pos = new BlockPos(map.x(cell), map.y(cell), map.z(cell));
+            mirrorNow(level, pos);
+            BlockState state = level.getBlockState(pos);
+            if (!(state.getBlock() instanceof net.minecraft.world.level.block.LeavesBlock)) return;
+            Block.dropResources(state, level, pos);
+            level.removeBlock(pos, false);
+        });
+    }
+
     /**
      * The player breaks cell, as ServerPlayerGameMode.destroyBlock does: the block's own breaking
      * (a door's other half, ice to water), the tool worn, and outside creative its drops.

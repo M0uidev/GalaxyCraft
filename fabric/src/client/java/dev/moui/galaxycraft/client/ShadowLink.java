@@ -47,6 +47,7 @@ public final class ShadowLink {
             sinceFollow = FOLLOW_TICKS;
             if (p != null) p.setListener(this::changed);
             ShadowWorld.attach(p, stage);
+            session().setLeafRemover(p == null ? null : cell -> ShadowWorld.decay(p, cell));
         }
         for (ShadowWorld.Change c; (c = ShadowWorld.pollChange()) != null; ) {
             Integer mine = pending.get(c.cell());
