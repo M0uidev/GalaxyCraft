@@ -573,6 +573,16 @@ public final class McBlocks implements Blocks {
         return state(id).getBlock() instanceof net.minecraft.world.level.block.LeavesBlock;
     }
 
+    @Override public boolean log(int id) {
+        return state(id).is(net.minecraft.tags.BlockTags.LOGS);
+    }
+
+    @Override public boolean persistentLeaves(int id) {
+        BlockState s = state(id);
+        return s.getBlock() instanceof net.minecraft.world.level.block.LeavesBlock
+                && s.hasProperty(BlockStateProperties.PERSISTENT) && s.getValue(BlockStateProperties.PERSISTENT);
+    }
+
     @Override public String name(int id) {
         return BlockStateParser.serialize(state(id));
     }

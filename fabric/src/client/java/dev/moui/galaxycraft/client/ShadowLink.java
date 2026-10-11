@@ -22,6 +22,8 @@ public final class ShadowLink {
     /** The planet in focus (the one nearest Mario): it can change from one tick to the next. */
     private final java.util.function.Supplier<PlanetSession> focus;
     private VoxelPlanet attached;
+    /** The session holding our leaf remover: it must not keep one that no longer reaches its planet. */
+    private PlanetSession remover;
     private String stage = "";
     private int seq, sinceFollow;
     /** Cells the client changed: the number of its last change, until the server has applied it. */
@@ -31,13 +33,23 @@ public final class ShadowLink {
         this.focus = focus;
     }
 
+    /** Falling leaves go out through the shadow of p; any other session removes them from its planet. */
+    private void setRemover(PlanetSession owner, VoxelPlanet p) {
+        if (remover != null && remover != owner) remover.setLeafRemover(null);
+        remover = owner;
+        if (owner != null) owner.setLeafRemover(p == null ? null : cell -> ShadowWorld.decay(p, cell));
+    }
+
     public boolean available() {
         return ShadowWorld.available() && attached != null;
     }
 
     /** Client tick: Mario at marioGal in the galaxy. */
     public void tick(String stage, Vector3d marioGal) {
-        if (!ShadowWorld.available()) return;
+        if (!ShadowWorld.available()) {
+            setRemover(null, null);
+            return;
+        }
         VoxelPlanet p = session().active() ? session().planet() : null;
         if (p != attached || !stage.equals(this.stage)) {
             if (attached != null) attached.setListener(null);
@@ -47,6 +59,7 @@ public final class ShadowLink {
             sinceFollow = FOLLOW_TICKS;
             if (p != null) p.setListener(this::changed);
             ShadowWorld.attach(p, stage);
+            setRemover(session(), p);
         }
         for (ShadowWorld.Change c; (c = ShadowWorld.pollChange()) != null; ) {
             Integer mine = pending.get(c.cell());
