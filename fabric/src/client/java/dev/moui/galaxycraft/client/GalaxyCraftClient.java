@@ -808,6 +808,25 @@ public final class GalaxyCraftClient implements ClientModInitializer {
 
     private static void afterTick(Minecraft client) {
         sendPose(client);
+        elytraDiagnosis(client);
+    }
+
+    private static int diagCooldown;
+
+    /**
+     * A jump pressed in the air that does not open an elytra: once a second at most, why not
+     * (what Minecraft checks), logged so a playtest's log says what stopped it.
+     */
+    private static void elytraDiagnosis(Minecraft mc) {
+        LocalPlayer p = mc.player;
+        if (p == null || diagCooldown-- > 0) return;
+        if (!mc.options.keyJump.isDown() || p.isFallFlying()) return;
+        diagCooldown = 20;
+        var chest = p.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST);
+        GalaxyCraft.LOG.info("elytra-diag: jump pressed, not gliding: chest={} onGround={} inWater={} passenger={} "
+                + "levitation={} mayfly={} flying={} noGravity={} ship={} screen={}", chest.getItem(), p.onGround(), p.isInWater(),
+                p.isPassenger(), p.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION), p.getAbilities().mayfly,
+                p.getAbilities().flying, p.isNoGravity(), ShipClient.aboard().isPresent(), mc.gui.screen());
     }
 
     /** Start of the local player's own tick: Mario mode moves the player here. */
