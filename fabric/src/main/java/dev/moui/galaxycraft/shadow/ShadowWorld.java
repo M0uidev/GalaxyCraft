@@ -936,7 +936,22 @@ public final class ShadowWorld {
 
     private static BlockState state(int id) {
         BlockState s = Block.stateById(id);
-        return s == null ? Blocks.AIR.defaultBlockState() : s;
+        if (s == null) return Blocks.AIR.defaultBlockState();
+        // The planet decides when a leaf falls (voxel/LeafDecay): here none does by itself.
+        if (s.getBlock() instanceof net.minecraft.world.level.block.LeavesBlock
+                && s.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT))
+            return s.setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT, true);
+        return s;
+    }
+
+    /** The shadow holds every leaf persistent: one the planet holds natural (not persistent) goes back natural. */
+    private static BlockState naturalLeaf(int planetId, BlockState now) {
+        var persistent = net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT;
+        if (!(now.getBlock() instanceof net.minecraft.world.level.block.LeavesBlock) || !now.hasProperty(persistent)) return now;
+        BlockState was = Block.stateById(planetId);
+        if (was != null && was.getBlock() == now.getBlock() && was.hasProperty(persistent) && !was.getValue(persistent))
+            return now.setValue(persistent, false);
+        return now;
     }
 
     // ---- hooks (server thread, from the mixins) ----
@@ -970,7 +985,7 @@ public final class ShadowWorld {
         if (map == null || pos.equals(writingPos)) return;
         int cell = map.cell(pos.getX(), pos.getY(), pos.getZ());
         if (cell < 0) return;
-        changes.add(new Change(planet, cell, Block.getId(now), applied));
+        changes.add(new Change(planet, cell, Block.getId(naturalLeaf(planet.get(cell), now)), applied));
         if (map.onEdge(cell)) edgeChanged.add(cell);
     }
 

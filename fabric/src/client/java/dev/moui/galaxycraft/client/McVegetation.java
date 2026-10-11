@@ -23,7 +23,6 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.world.level.levelgen.placement.BiomeFilter;
@@ -103,8 +102,8 @@ final class McVegetation implements Vegetation.Library {
 
     /**
      * What grew above the floor (and the floor it changed), as things: {@link Vegetation#things}
-     * splits it. Leaves stay: on the planet only the blocks near Mario are mirrored, and leaves
-     * whose log is past that edge would decay.
+     * splits it. Leaves stay with the state Minecraft grew them in; the shadow mirrors them
+     * persistent, and the planet's own rule ({@link dev.moui.galaxycraft.voxel.LeafDecay}) lets them fall.
      */
     private static List<Vegetation.Thing> things(ServerLevel level, int x0, int z0, BlockState top, String biome) {
         int w = 16 + 2 * MARGIN;
@@ -116,7 +115,6 @@ final class McVegetation implements Vegetation.Library {
                 for (int y = 0; y <= HEIGHT; y++) {
                     BlockState s = level.getBlockState(at.set(x0 - MARGIN + x, FLOOR_Y + y, z0 - MARGIN + z));
                     if (s.isAir() || y == 0 && s.equals(top)) continue;
-                    if (s.hasProperty(BlockStateProperties.PERSISTENT)) s = s.setValue(BlockStateProperties.PERSISTENT, true);
                     grown[x][y][z] = BlockStateParser.serialize(s);
                     if (y > 0 && (x == 0 || z == 0 || x == w - 1 || z == w - 1 || y == HEIGHT)) clipped++;
                 }
