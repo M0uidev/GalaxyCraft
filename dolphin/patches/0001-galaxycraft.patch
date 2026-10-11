@@ -1164,7 +1164,7 @@ index 478454ed5a..d8fcedda43 100644
  
        if (IsHotkey(HK_PREV_WIIMOTE_PROFILE_1))
 diff --git a/Source/Core/DolphinQt/RenderWidget.cpp b/Source/Core/DolphinQt/RenderWidget.cpp
-index 49680b8482..0998663a36 100644
+index 49680b8482..4bbbf80cce 100644
 --- a/Source/Core/DolphinQt/RenderWidget.cpp
 +++ b/Source/Core/DolphinQt/RenderWidget.cpp
 @@ -12,13 +12,17 @@
@@ -1194,11 +1194,24 @@ index 49680b8482..0998663a36 100644
      return;
    if ((!Settings::Instance().GetLockCursor() || m_cursor_locked) &&
        Settings::Instance().GetCursorVisibility() == Config::ShowCursor::OnMovement)
-@@ -358,6 +362,11 @@ void RenderWidget::SetWaitingForMessageBox(bool waiting_for_message_box)
+@@ -358,6 +362,24 @@ void RenderWidget::SetWaitingForMessageBox(bool waiting_for_message_box)
  
  bool RenderWidget::event(QEvent* event)
  {
 +  // Dolphin's own handling below (focus changes, the hide-on-idle cursor) sets the cursor too.
++  // A new native window (fullscreen remakes it) has no cursor though Qt still holds the old one.
++  switch (event->type())
++  {
++  case QEvent::Show:
++  case QEvent::ParentChange:
++  case QEvent::WindowStateChange:
++  case QEvent::PlatformSurface:
++  case QEvent::Enter:
++    m_galaxycraft_reapply_cursor = true;
++    break;
++  default:
++    break;
++  }
 +  const auto galaxycraft_cursor = qScopeGuard([this] { UpdateGalaxyCraftCursor(); });
 +  if (PassEventToGalaxyCraft(event))
 +    return true;
@@ -1206,7 +1219,7 @@ index 49680b8482..0998663a36 100644
    PassEventToPresenter(event);
  
    switch (event->type())
-@@ -511,6 +520,64 @@ bool RenderWidget::event(QEvent* event)
+@@ -511,6 +533,68 @@ bool RenderWidget::event(QEvent* event)
    return QWidget::event(event);
  }
  
@@ -1264,7 +1277,11 @@ index 49680b8482..0998663a36 100644
 +  }
 +  m_galaxycraft_input = true;
 +  const Qt::CursorShape shape = GalaxyCraft::MouseCaptured() ? Qt::BlankCursor : Qt::ArrowCursor;
-+  if (cursor().shape() != shape)
++  // setCursor sends this widget a CursorChange event, which comes back here before it returns:
++  // the flag is cleared first, or that nested call sets the cursor again, without end.
++  const bool reapply = m_galaxycraft_reapply_cursor;
++  m_galaxycraft_reapply_cursor = false;
++  if (cursor().shape() != shape || reapply)
 +    setCursor(shape);
 +}
 +
@@ -1272,16 +1289,17 @@ index 49680b8482..0998663a36 100644
  {
    if (!Core::IsRunning(Core::System::GetInstance()))
 diff --git a/Source/Core/DolphinQt/RenderWidget.h b/Source/Core/DolphinQt/RenderWidget.h
-index d828bf36d1..617ba3f7da 100644
+index d828bf36d1..60a26e4482 100644
 --- a/Source/Core/DolphinQt/RenderWidget.h
 +++ b/Source/Core/DolphinQt/RenderWidget.h
-@@ -41,6 +41,9 @@ private:
+@@ -41,6 +41,10 @@ private:
    void OnKeepOnTopChanged(bool top);
    void UpdateCursor();
    void PassEventToPresenter(const QEvent* event);
 +  bool PassEventToGalaxyCraft(QEvent* event);
 +  void UpdateGalaxyCraftCursor();
 +  bool m_galaxycraft_input = false;
++  bool m_galaxycraft_reapply_cursor = true;
    void SetPresenterKeyMap();
    void dragEnterEvent(QDragEnterEvent* event) override;
    void dropEvent(QDropEvent* event) override;
