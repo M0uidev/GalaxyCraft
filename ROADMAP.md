@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-11 (Toad ship feedback: Inbox landing pads, 3D map, orbit)
+Last updated: 2026-10-11 (Toad ship: landing pads, turbo, seated pilot built)
 
 ---
 
@@ -27,7 +27,7 @@ Last updated: 2026-10-11 (Toad ship feedback: Inbox landing pads, 3D map, orbit)
 | Swimming and water look | now | User 2026-10-08: swim like Minecraft, characters in water drawn over it, Minecraft's underwater view. Built on `feat/swimming` (water draw order, underwater fog, Minecraft's swimming in F6), awaiting playtest. [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-swimming-water-design.md) |
 | Panorama screenshots, and F2 that works | now | User 2026-10-08: F2 saved a blank blue picture (Dolphin draws the game): now Dolphin takes it. Ctrl+F2 or /panorama takes six 90° shots from the eyes (panorama_0..5 + one equirectangular picture); tools/set_panorama.py makes a capture the title screen's background. Branch feat/panorama, awaiting playtest. |
 | Soundtrack player and space/planet music | now | User 2026-10-09: a music player based on Soundtrack Player; music follows space or planet with a crossfade, a dwell time and a cooldown (all settings, can be turned off); Music Source: both games, SMG2 only, Minecraft only or random; a Station Core option to pick a station's music. Built on `feat/soundtrack` (engine, player screen, settings, Minecraft songs working; probe passes), awaiting your listening test. Your sorting (18 space, 15 planet songs from the 96 on the disc) ships as the default list; the launcher copies the songs from the player's own disc once into a shared folder at install and PLAY. [Spec](docs/superpowers/specs/2026-10-09-galaxycraft-soundtrack-design.md) |
-| Toad Brigade ship (the Starshroom) | now | User 2026-10-11: a craftable, modular ship you build at a Ship Table and pilot (right click to board, Shift to leave), looking like SMG2's own Starshroom, the Toad Brigade's red mushroom ship. Built on `feat/toad-ship`: table, modules and tiers, seats, flying with the stats, real model from the disc; verified in the game. Missing: seats calibrated, a seated pose, your playtest. [Guide](docs/NAVE.md) [Spec](docs/superpowers/specs/2026-10-11-galaxycraft-toad-ship-design.md) |
+| Toad Brigade ship (the Starshroom) | now | User 2026-10-11: a craftable, modular ship you build at a Ship Table and pilot (right click to board, Shift to leave), looking like SMG2's own Starshroom, the Toad Brigade's red mushroom ship. Built on `feat/toad-ship`: table, modules and tiers, seats, flying with the stats, real model from the disc; verified in the game. Landing pads and the turbo are in. Missing: seats calibrated, your playtest. [Guide](docs/NAVE.md) [Spec](docs/superpowers/specs/2026-10-11-galaxycraft-toad-ship-design.md) |
 | Video quality while playing, cleaner menus | now | User 2026-10-11: changing the resolution, anti-aliasing and filtering in Super Minecraft Galaxy's settings applies at once (no restart). The pause menu loses the web, friends and reporting icons, the P key, Online and Telemetry; Minecraft's Video settings keeps only what matters here. Branch `feat/live-quality`, awaiting playtest. |
 | First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells; v0.1.3 pushed 2026-10-08 (fe6276a) with Export report and no empty Dolphin window, tested on Windows; v0.1.4 published 2026-10-09 (1.7 terrain, far planets, swimming, soundtrack, station polish), not yet checked on Windows (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
 
@@ -153,13 +153,11 @@ Last updated: 2026-10-11 (Toad ship feedback: Inbox landing pads, 3D map, orbit)
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
-- 2026-10-11: Toad ship, next steps (user, after the first playtest): **landing pads** (bases a ship lands on
-  more easily, placed on a planet or station); a **3D map** (from a mod, if one fits) to see the world and send the
-  ship by remote, leave it **orbiting**, and choose between landing by hand or landing on a pad, done well;
-  more **interactive items and Ship Table** (tooltips with a module's stats and tier, a table screen that
-  shows the ship being built, not just an automatic assemble); polish the ship's **flight feel** further.
-  Done in the first round: solid hull, open portholes, hover flight (WASD, Space, Ctrl), smooth drawing, new
-  item art.
+- 2026-10-11: Toad ship, next steps (user, after the playtest): a **3D map** (from a mod, if one fits) to see the
+  world and send the ship by remote, leave it **orbiting**, and choose between landing by hand or on a pad,
+  done well; more **interactive items and Ship Table** (tooltips with a module's stats and tier, a table
+  screen that shows the ship being built). Done since: solid hull, open portholes with Minecraft's glass,
+  hover flight with turbo (Ctrl) and tilt, seated pilot, landing pads (docking assist: hold C over a pad).
 
 - 2026-10-09: Soundtrack follow-ups (user/Claude): biome music (Slipsand Galaxy is tagged desert), more moods later (night, underwater, danger), layered `*_multi` songs mixing their layers, mp3/flac custom songs.
 - 2026-10-08: Swimming matters (user): Minecraft's swimming, or Mario's body swimming, undecided. Water look: a
