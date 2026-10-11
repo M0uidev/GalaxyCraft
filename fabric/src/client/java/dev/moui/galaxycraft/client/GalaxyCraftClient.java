@@ -823,6 +823,16 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         if (!mc.options.keyJump.isDown() || p.isFallFlying()) return;
         diagCooldown = 20;
         var chest = p.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST);
+        boolean canGlide = false;
+        try {
+            var m = net.minecraft.world.entity.player.Player.class.getDeclaredMethod("canGlide");
+            m.setAccessible(true);
+            canGlide = (boolean) m.invoke(p);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // the diagnosis only
+        }
+        GalaxyCraft.LOG.info("elytra-diag: wear {}/{} willBreak={} canGlide={}", chest.getDamageValue(), chest.getMaxDamage(),
+                chest.nextDamageWillBreak(), canGlide);
         GalaxyCraft.LOG.info("elytra-diag: jump pressed, not gliding: chest={} onGround={} inWater={} passenger={} "
                 + "levitation={} mayfly={} flying={} noGravity={} ship={} screen={}", chest.getItem(), p.onGround(), p.isInWater(),
                 p.isPassenger(), p.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION), p.getAbilities().mayfly,
