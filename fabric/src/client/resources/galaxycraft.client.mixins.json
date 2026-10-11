@@ -16,6 +16,7 @@
 		"MinecraftMixin",
 		"ModelPartAccessor",
 		"OptionsMixin",
+		"VideoSettingsScreenMixin",
 		"WindowHiddenMixin"
 	],
 	"injectors": {

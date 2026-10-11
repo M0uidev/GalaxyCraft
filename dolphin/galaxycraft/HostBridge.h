@@ -37,6 +37,10 @@ public:
 
   void Tick(GuestMemory& mem);
 
+  // Picture Quality told by the mod while playing (GXC_MSG_QUALITY): internal resolution scale, MSAA
+  // samples and anisotropy level (0..4), already checked. The emulator applies them to its video.
+  void SetQualityHandler(std::function<void(u32 scale, u32 msaa, u32 aniso)> f) { m_on_quality = std::move(f); }
+
   bool HasMailbox() const { return m_mailbox.has_value(); }
   std::optional<u32> MailboxAddress() const { return m_mailbox; }
 
@@ -178,6 +182,7 @@ private:
   bool m_state_loaded = false;
   std::optional<u32> m_last_scene;  // the newest scene id seen, kept across mailbox losses
   MarioSkin m_skin;
+  std::function<void(u32, u32, u32)> m_on_quality;
   int m_skin_tries = 0;     // scans left to find Mario's texture in this scene
   int m_skin_cooldown = 0;  // ticks to the next scan
   int m_skin_writes = 0;

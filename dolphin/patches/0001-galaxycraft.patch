@@ -1,5 +1,5 @@
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index 56c8dba3de..c99982b01b 100644
+index 56c8dba..c99982b 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
 @@ -57,6 +57,8 @@ add_library(core
@@ -26,7 +26,7 @@ index 56c8dba3de..c99982b01b 100644
    common
    discio
 diff --git a/Source/Core/Core/Core.cpp b/Source/Core/Core/Core.cpp
-index fc614fd24c..7a29ab02f7 100644
+index fc614fd..7a29ab0 100644
 --- a/Source/Core/Core/Core.cpp
 +++ b/Source/Core/Core/Core.cpp
 @@ -2,6 +2,7 @@
@@ -49,10 +49,10 @@ index fc614fd24c..7a29ab02f7 100644
    const auto video_guard = GetInitializedVideoGuard(system, wsi);
 diff --git a/Source/Core/Core/GalaxyCraft.cpp b/Source/Core/Core/GalaxyCraft.cpp
 new file mode 100644
-index 0000000000..3c2fb2997a
+index 0000000..a16d99f
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.cpp
-@@ -0,0 +1,730 @@
+@@ -0,0 +1,742 @@
 +// Copyright 2026 GalaxyCraft contributors
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -77,6 +77,7 @@ index 0000000000..3c2fb2997a
 +#include "Common/FileUtil.h"
 +#include "Common/IOFile.h"
 +#include "Common/HookableEvent.h"
++#include "Core/Config/GraphicsSettings.h"
 +#include "Core/Config/MainSettings.h"
 +#include "Common/Logging/Log.h"
 +#include "Core/Core.h"
@@ -93,6 +94,7 @@ index 0000000000..3c2fb2997a
 +#include "InputCommon/ControllerEmu/ControlGroup/Attachments.h"
 +#include "VideoCommon/OnScreenDisplay.h"
 +#include "VideoCommon/PerformanceMetrics.h"
++#include "VideoCommon/VideoConfig.h"
 +#include "VideoCommon/VideoEvents.h"
 +
 +#include "DevControl.h"
@@ -523,6 +525,16 @@ index 0000000000..3c2fb2997a
 +    return;
 +  }
 +  state->bridge = std::make_unique<gxc::HostBridge>(*state->shm, NowMs);
++  // Picture Quality changed in the mod's settings: the internal resolution, MSAA and anisotropy, for this
++  // run only (the current-run layer wins over -C and the saved settings, and is not written to disk).
++  state->bridge->SetQualityHandler([](u32 scale, u32 msaa, u32 aniso) {
++    Config::SetCurrent(Config::GFX_EFB_SCALE, static_cast<int>(scale));
++    Config::SetCurrent(Config::GFX_MSAA, msaa);
++    Config::SetCurrent(Config::GFX_ENHANCE_MAX_ANISOTROPY, static_cast<AnisotropicFilteringMode>(aniso));
++    Log(fmt::format("picture quality: internal resolution {}x, MSAA {}x, anisotropy level {}",
++                    Config::Get(Config::GFX_EFB_SCALE), Config::Get(Config::GFX_MSAA),
++                    static_cast<int>(Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY))));
++  });
 +  // Start on the Wii Remote (menus), the player links with the hotkey in a level.
 +  if (const char* unlinked = std::getenv("GALAXYCRAFT_START_UNLINKED"); unlinked && *unlinked == '1')
 +    state->bridge->SetMinecraftMode(false);
@@ -785,7 +797,7 @@ index 0000000000..3c2fb2997a
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/GalaxyCraft.h b/Source/Core/Core/GalaxyCraft.h
 new file mode 100644
-index 0000000000..dd7ef076d5
+index 0000000..dd7ef07
 --- /dev/null
 +++ b/Source/Core/Core/GalaxyCraft.h
 @@ -0,0 +1,92 @@
@@ -882,7 +894,7 @@ index 0000000000..dd7ef076d5
 +void WithOverlay(const std::function<void(u32, u32, u32, const u8*)>& fn);
 +}  // namespace GalaxyCraft
 diff --git a/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp b/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp
-index ebf24f735c..e580a9ba44 100644
+index ebf24f7..e580a9b 100644
 --- a/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp
 +++ b/Source/Core/Core/HW/WiimoteEmu/Dynamics.cpp
 @@ -80,9 +80,17 @@ Common::Quaternion ComplementaryFilter(const Common::Quaternion& gyroscope,
@@ -906,7 +918,7 @@ index ebf24f735c..e580a9ba44 100644
    {
      if (state->velocity.data[i] * std::copysign(1.f, target_position.data[i]) < 0 ||
 diff --git a/Source/Core/Core/HW/WiimoteEmu/Dynamics.h b/Source/Core/Core/HW/WiimoteEmu/Dynamics.h
-index 8f35c306da..9c07dad72e 100644
+index 8f35c30..9c07dad 100644
 --- a/Source/Core/Core/HW/WiimoteEmu/Dynamics.h
 +++ b/Source/Core/Core/HW/WiimoteEmu/Dynamics.h
 @@ -75,7 +75,9 @@ void ApproachPositionWithJerk(PositionalState* state, const Common::Vec3& target
@@ -921,7 +933,7 @@ index 8f35c306da..9c07dad72e 100644
  void EmulateSwing(MotionState* state, ControllerEmu::Force* swing_group, float time_elapsed);
  void EmulatePoint(MotionState* state, ControllerEmu::Cursor* ir_group,
 diff --git a/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp b/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp
-index 67456021af..b365d0af0c 100644
+index 6745602..b365d0a 100644
 --- a/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp
 +++ b/Source/Core/Core/HW/WiimoteEmu/Extension/Nunchuk.cpp
 @@ -77,7 +77,7 @@ void Nunchuk::BuildDesiredExtensionState(DesiredExtensionState* target_state)
@@ -934,7 +946,7 @@ index 67456021af..b365d0af0c 100644
    const auto transformation =
        GetRotationalMatrix(-m_tilt_state.angle) * GetRotationalMatrix(-m_swing_state.angle);
 diff --git a/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp b/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp
-index bbbea66e37..bbe14cd58a 100644
+index bbbea66..bbe14cd 100644
 --- a/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp
 +++ b/Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp
 @@ -837,7 +837,7 @@ void Wiimote::StepDynamics()
@@ -947,7 +959,7 @@ index bbbea66e37..bbe14cd58a 100644
                     1.f / ::Wiimote::UPDATE_FREQ);
  }
 diff --git a/Source/Core/Core/HotkeyManager.cpp b/Source/Core/Core/HotkeyManager.cpp
-index 915dc0d6d7..2f0b52d4a2 100644
+index 915dc0d..2f0b52d 100644
 --- a/Source/Core/Core/HotkeyManager.cpp
 +++ b/Source/Core/Core/HotkeyManager.cpp
 @@ -86,6 +86,7 @@ constexpr std::array<const char*, NUM_HOTKEYS> s_hotkey_labels{{
@@ -976,7 +988,7 @@ index 915dc0d6d7..2f0b52d4a2 100644
 +  set_key_expression(HK_GALAXYCRAFT_LINK, hotkey_string({"Ctrl", "G"}));
  }
 diff --git a/Source/Core/Core/HotkeyManager.h b/Source/Core/Core/HotkeyManager.h
-index 6a1b75458f..662cd8fd4d 100644
+index 6a1b754..662cd8f 100644
 --- a/Source/Core/Core/HotkeyManager.h
 +++ b/Source/Core/Core/HotkeyManager.h
 @@ -74,6 +74,7 @@ enum Hotkey
@@ -988,7 +1000,7 @@ index 6a1b75458f..662cd8fd4d 100644
    HK_NEXT_WIIMOTE_PROFILE_1,
    HK_PREV_WIIMOTE_PROFILE_1,
 diff --git a/Source/Core/Core/PowerPC/MMU.cpp b/Source/Core/Core/PowerPC/MMU.cpp
-index 940e93c7ea..925153c36f 100644
+index 940e93c..925153c 100644
 --- a/Source/Core/Core/PowerPC/MMU.cpp
 +++ b/Source/Core/Core/PowerPC/MMU.cpp
 @@ -25,6 +25,8 @@
@@ -1011,7 +1023,7 @@ index 940e93c7ea..925153c36f 100644
      {
        PanicAlertFmtT(
 diff --git a/Source/Core/Core/State.cpp b/Source/Core/Core/State.cpp
-index 2dcd2cae2b..5756c52036 100644
+index 2dcd2ca..5756c52 100644
 --- a/Source/Core/Core/State.cpp
 +++ b/Source/Core/Core/State.cpp
 @@ -39,6 +39,7 @@
@@ -1089,7 +1101,7 @@ index 2dcd2cae2b..5756c52036 100644
      return;
  
 diff --git a/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp b/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp
-index b0ebaacca1..a091c69dd8 100644
+index b0ebaac..a091c69 100644
 --- a/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp
 +++ b/Source/Core/DolphinQt/Config/Mapping/MappingIndicator.cpp
 @@ -628,7 +628,7 @@ void SwingIndicator::Draw()
@@ -1102,7 +1114,7 @@ index b0ebaacca1..a091c69dd8 100644
    for (auto& sample : m_position_samples)
      sample.age += elapsed_seconds;
 diff --git a/Source/Core/DolphinQt/Host.cpp b/Source/Core/DolphinQt/Host.cpp
-index e2f1b21884..3075bed50a 100644
+index e2f1b21..3075bed 100644
 --- a/Source/Core/DolphinQt/Host.cpp
 +++ b/Source/Core/DolphinQt/Host.cpp
 @@ -19,6 +19,7 @@
@@ -1122,7 +1134,7 @@ index e2f1b21884..3075bed50a 100644
    if (g_gfx && m_render_fullscreen && g_ActiveConfig.ExclusiveFullscreenEnabled())
    {
 diff --git a/Source/Core/DolphinQt/HotkeyScheduler.cpp b/Source/Core/DolphinQt/HotkeyScheduler.cpp
-index 478454ed5a..d8fcedda43 100644
+index 478454e..d8fcedd 100644
 --- a/Source/Core/DolphinQt/HotkeyScheduler.cpp
 +++ b/Source/Core/DolphinQt/HotkeyScheduler.cpp
 @@ -35,6 +35,7 @@
@@ -1164,7 +1176,7 @@ index 478454ed5a..d8fcedda43 100644
  
        if (IsHotkey(HK_PREV_WIIMOTE_PROFILE_1))
 diff --git a/Source/Core/DolphinQt/RenderWidget.cpp b/Source/Core/DolphinQt/RenderWidget.cpp
-index 49680b8482..4bbbf80cce 100644
+index 49680b8..4bbbf80 100644
 --- a/Source/Core/DolphinQt/RenderWidget.cpp
 +++ b/Source/Core/DolphinQt/RenderWidget.cpp
 @@ -12,13 +12,17 @@
@@ -1289,7 +1301,7 @@ index 49680b8482..4bbbf80cce 100644
  {
    if (!Core::IsRunning(Core::System::GetInstance()))
 diff --git a/Source/Core/DolphinQt/RenderWidget.h b/Source/Core/DolphinQt/RenderWidget.h
-index d828bf36d1..60a26e4482 100644
+index d828bf3..60a26e4 100644
 --- a/Source/Core/DolphinQt/RenderWidget.h
 +++ b/Source/Core/DolphinQt/RenderWidget.h
 @@ -41,6 +41,10 @@ private:
@@ -1304,7 +1316,7 @@ index d828bf36d1..60a26e4482 100644
    void dragEnterEvent(QDragEnterEvent* event) override;
    void dropEvent(QDropEvent* event) override;
 diff --git a/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.cpp b/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.cpp
-index 92ebf355fc..7e933b8231 100644
+index 92ebf35..7e933b8 100644
 --- a/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.cpp
 +++ b/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.cpp
 @@ -8,6 +8,7 @@
@@ -1409,7 +1421,7 @@ index 92ebf355fc..7e933b8231 100644
  {
    return "Keyboard Mouse";
 diff --git a/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.h b/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.h
-index 67721e3301..9115fa08ca 100644
+index 67721e3..9115fa0 100644
 --- a/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.h
 +++ b/Source/Core/InputCommon/ControllerInterface/DInput/DInputKeyboardMouse.h
 @@ -106,11 +106,15 @@ public:
@@ -1429,7 +1441,7 @@ index 67721e3301..9115fa08ca 100644
  };
  }  // namespace ciface::DInput
 diff --git a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
-index 309ed701cb..10651247c4 100644
+index 309ed70..1065124 100644
 --- a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
 +++ b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
 @@ -15,6 +15,7 @@
@@ -1534,7 +1546,7 @@ index 309ed701cb..10651247c4 100644
  {
    // This is the name string we got from the X server for this master
 diff --git a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
-index 414480584f..e283734965 100644
+index 4144805..e283734 100644
 --- a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
 +++ b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
 @@ -117,6 +117,7 @@ private:
@@ -1557,7 +1569,7 @@ index 414480584f..e283734965 100644
    const int pointer_deviceid;
    const int keyboard_deviceid;
 diff --git a/Source/Core/VideoCommon/OnScreenUI.cpp b/Source/Core/VideoCommon/OnScreenUI.cpp
-index 209e96c9b2..8c22970f58 100644
+index 209e96c..8c22970 100644
 --- a/Source/Core/VideoCommon/OnScreenUI.cpp
 +++ b/Source/Core/VideoCommon/OnScreenUI.cpp
 @@ -3,6 +3,10 @@
@@ -1630,7 +1642,7 @@ index 209e96c9b2..8c22970f58 100644
    perf_metrics.DrawImGuiStats(m_backbuffer_scale);
    DrawDebugText();
 diff --git a/Source/Core/VideoCommon/OnScreenUI.h b/Source/Core/VideoCommon/OnScreenUI.h
-index e9a14e02ba..7c236c234c 100644
+index e9a14e0..7c236c2 100644
 --- a/Source/Core/VideoCommon/OnScreenUI.h
 +++ b/Source/Core/VideoCommon/OnScreenUI.h
 @@ -68,6 +68,10 @@ private:

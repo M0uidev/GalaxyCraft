@@ -228,6 +228,9 @@ enum {
   GXC_MSG_STARS = 117,     /* the other solar systems, drawn as points of light on the sky around the camera:
                               u32 count (<= GXC_STARS_MAX), then count x {f32 dir[3] (unit, galaxy space),
                               f32 size (pixels), u32 rgba}; big-endian. Replaces the last one */
+  GXC_MSG_QUALITY = 118,   /* M -> S, for the host itself: Picture Quality changed while playing: u32 efb_scale
+                              (1..6, the internal resolution), u32 msaa (1, 2, 4 or 8), u32 anisotropy (0..4: 1x to
+                              16x), big-endian. The host sets them for the run; values outside are ignored */
   GXC_MSG_PAD = 0xFFFF,
 };
 

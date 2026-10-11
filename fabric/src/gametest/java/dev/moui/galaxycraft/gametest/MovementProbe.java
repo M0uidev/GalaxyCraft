@@ -78,9 +78,13 @@ public final class MovementProbe implements FabricClientGameTest {
         ctx.runOnClient(mc -> mc.gui.setScreen(new PauseScreen(true)));
         ctx.waitTicks(10);
         List<String> labels = ctx.computeOnClient(mc -> Screens.getWidgets(mc.gui.screen()).stream()
-                .map(w -> w.getMessage().getString()).toList());
+                .filter(w -> w.visible).map(w -> w.getMessage().getString()).toList());
         log("pause menu: " + labels);
-        check(labels.contains("Super Minecraft Galaxy...") && labels.contains("SMG2 Menu"), "the pause menu has GalaxyCraft's buttons");
+        check(labels.contains("Super Minecraft Galaxy..."), "the pause menu has GalaxyCraft's button");
+        check(!labels.contains("Friends") && !labels.contains("Player Reporting") && !labels.contains("Report Bugs")
+                && !labels.contains("Give Feedback"), "the pause menu has no web, friends or reporting icons");
+        check(ctx.computeOnClient(mc -> mc.options.keyFriends.isUnbound() && mc.options.keySocialInteractions.isUnbound()),
+                "the friends and social interactions keys (P) are unbound");
         gxdev("ctl", "shot move-pause");
         ctx.takeScreenshot("move-pause-menu");
         ctx.waitTicks(10);
@@ -94,21 +98,37 @@ public final class MovementProbe implements FabricClientGameTest {
         ctx.waitTicks(5);
         check(ctx.computeOnClient(mc -> mc.gui.screen() instanceof PauseScreen), "Done goes back to the pause menu");
 
-        String before = status();
-        click(ctx, "SMG2 Menu");
-        ctx.waitTicks(60);
-        check(ctx.computeOnClient(mc -> mc.gui.screen() == null), "SMG2 Menu closes Minecraft's menu");
-        String after = status();
-        gxdev("ctl", "shot move-smg2-menu");
-        log("SMG2 Menu: in_game " + group(IN_GAME, before) + " -> " + group(IN_GAME, after));
-        check("true".equals(group(IN_GAME, before)) && !"true".equals(group(IN_GAME, after)),
-                "SMG2's pause menu opened (the game stopped)");
-        // Close it: in SMG2's menus Escape is its + button.
-        gxdev("ctl", "keys esc");
-        ctx.waitTicks(4);
-        gxdev("ctl", "keys");
-        ctx.waitTicks(60);
-        log("closed SMG2's menu: in_game " + group(IN_GAME, status()));
+        // Video settings: only what matters here (Dolphin draws the world).
+        ctx.runOnClient(mc -> mc.gui.setScreen(new net.minecraft.client.gui.screens.options.VideoSettingsScreen(
+                mc.gui.screen(), mc, mc.options)));
+        ctx.waitTicks(10);
+        check(ctx.computeOnClient(mc -> {
+            var list = optionsList(mc.gui.screen());
+            return list.findOption(mc.options.ambientOcclusion()) == null && list.findOption(mc.options.mipmapLevels()) == null
+                    && list.findOption(mc.options.gamma()) == null && list.findOption(mc.options.enableVsync()) == null;
+        }), "Video settings has no options that change nothing here");
+        check(ctx.computeOnClient(mc -> {
+            var list = optionsList(mc.gui.screen());
+            return list.findOption(mc.options.framerateLimit()) != null && list.findOption(mc.options.renderDistance()) != null;
+        }), "Video settings keeps the frame rate limit and render distance");
+        ctx.runOnClient(mc -> mc.gui.screen().onClose());
+        ctx.waitTicks(5);
+
+        // Esc closes the menu: Mario plays on.
+        ctx.runOnClient(mc -> mc.gui.setScreen(null));
+        ctx.waitTicks(30);
+        check("true".equals(group(IN_GAME, status())), "back in the game after the menu");
+    }
+
+    /** An options screen's list (a protected field). */
+    private static net.minecraft.client.gui.components.OptionsList optionsList(net.minecraft.client.gui.screens.Screen screen) {
+        try {
+            var f = net.minecraft.client.gui.screens.options.OptionsSubScreen.class.getDeclaredField("list");
+            f.setAccessible(true);
+            return (net.minecraft.client.gui.components.OptionsList) f.get(screen);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
     }
 
     private static void click(ClientGameTestContext ctx, String label) {

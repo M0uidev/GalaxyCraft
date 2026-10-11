@@ -1051,6 +1051,31 @@ TEST(walking_hides_mario_and_takes_his_keys)
   CHECK((f.mem.GetU32(MBX + 52) & GXC_MBX_THIRD_PERSON) != 0);
 }
 
+TEST(quality_from_the_mod_reaches_the_emulator_and_bad_values_do_not)
+{
+  Fixture f;
+  std::vector<std::array<u32, 3>> got;
+  f.bridge.SetQualityHandler([&](u32 a, u32 b, u32 c) { got.push_back({a, b, c}); });
+  auto send = [&](u32 scale, u32 msaa, u32 aniso) {
+    u8 w[12];
+    const u32 v[3] = {scale, msaa, aniso};
+    for (int i = 0; i < 3; i++)
+      for (int j = 0; j < 4; j++)
+        w[i * 4 + j] = static_cast<u8>(v[i] >> (24 - 8 * j));
+    Ring(*f.shm, GXC_OFF_RING_M2S).Push(GXC_MSG_QUALITY, w, sizeof(w));
+    f.Tick();
+  };
+  send(2, 2, 2);
+  CHECK(got.size() == 1 && got[0][0] == 2 && got[0][1] == 2 && got[0][2] == 2);
+  send(1, 1, 0);
+  CHECK(got.size() == 2 && got[1][0] == 1 && got[1][1] == 1 && got[1][2] == 0);
+  send(0, 2, 2);   // no resolution scale 0
+  send(2, 3, 2);   // MSAA 3 does not exist
+  send(2, 2, 5);   // anisotropy past 16x
+  send(99, 2, 2);
+  CHECK(got.size() == 2);
+}
+
 TEST(mario_skin_goes_onto_his_texture_and_again_in_a_new_scene)
 {
   Fixture f;

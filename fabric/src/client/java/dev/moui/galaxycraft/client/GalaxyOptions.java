@@ -44,7 +44,7 @@ public final class GalaxyOptions {
             MarioModel.class, MarioModel.STEVE, MarioModel::label));
     public static final Setting.Choice<VideoQuality> VIDEO_QUALITY = SETTINGS.add(new Setting.Choice<>("videoQuality", "Picture Quality",
             "How sharp the game is drawn: Dolphin's internal resolution, anti-aliasing and texture filtering.\n"
-                    + "Higher looks smoother, and asks more of the graphics card. It takes effect the next time the game starts.",
+                    + "Higher looks smoother, and asks more of the graphics card. It takes effect at once.",
             VideoQuality.class, VideoQuality.HIGH, VideoQuality::label));
     public static final Setting.Text SKIN = SETTINGS.add(new Setting.Text("skin", "Skin",
             "A Minecraft account's name: its skin goes on your character (also /skin <name>). Empty: Steve.", "", 16));

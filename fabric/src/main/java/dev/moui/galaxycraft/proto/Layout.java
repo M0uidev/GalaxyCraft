@@ -67,6 +67,7 @@ public final class Layout {
     public static final int MSG_SKIN = 108, MSG_MODEL = 109, MSG_ENTITIES = 110, MSG_HURT = 111, MSG_SEAT = 112, MSG_SKY = 113;
     /** The skin of Mario's model (Steve), M -> S for the host: a 64x64 GXC_MSG_SKIN payload. */
     public static final int MSG_MARIO_SKIN = 114;
+    public static final int MSG_QUALITY = 118;
     /** The block being broken, M -> S: GxcCrack, Minecraft's cracks at stage 0..CRACK_STAGES - 1. */
     public static final int MSG_CRACK = 115, CRACK_STAGES = 10;
     /** The floating origin moves, M -> S: u32 epoch, i32 shift[3] in cells of ORIGIN_CELL units, big-endian. */

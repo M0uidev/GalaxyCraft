@@ -319,6 +319,19 @@ bool HostBridge::PopMessages(size_t limit)
       if (m_skin.Set(msg->payload))
         m_skin_tries = SKIN_TRIES, m_skin_cooldown = 0;
     }
+    else if (msg->type == GXC_MSG_QUALITY)
+    {
+      if (msg->payload.size() >= 12 && m_on_quality)
+      {
+        auto be = [&](size_t i) {
+          return static_cast<u32>(msg->payload[i]) << 24 | static_cast<u32>(msg->payload[i + 1]) << 16 |
+                 static_cast<u32>(msg->payload[i + 2]) << 8 | msg->payload[i + 3];
+        };
+        const u32 scale = be(0), msaa = be(4), aniso = be(8);
+        if (scale >= 1 && scale <= 6 && (msaa == 1 || msaa == 2 || msaa == 4 || msaa == 8) && aniso <= 4)
+          m_on_quality(scale, msaa, aniso);
+      }
+    }
     else
       QueueInbox(*msg);
   }

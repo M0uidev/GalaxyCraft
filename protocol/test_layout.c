@@ -88,6 +88,7 @@ _Static_assert(sizeof(GxcTextState) == 264 && GXC_OFF_TEXT >= GXC_OFF_GAMECAM + 
 _Static_assert(GXC_PLAYER_SCREEN == 4u && GXC_PLAYER_FLYING == 8u && GXC_PLAYER_HITBOXES == 16u &&
                GXC_PLAYER_WALKING == 32u && GXC_PLAYER_PLUS == 64u, "player flags");
 _Static_assert(GXC_MSG_MARIO_SKIN == 114, "mario skin");
+_Static_assert(GXC_MSG_QUALITY == 118, "quality");
 _Static_assert(GXC_MSG_ORIGIN == 116 && GXC_MSG_STARS == 117 && GXC_ORIGIN_CELL == 65536 && GXC_STAR_BYTES == 20, "universe");
 
 int main(void) { puts("OK"); return 0; }

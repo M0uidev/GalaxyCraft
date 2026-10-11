@@ -281,6 +281,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt)), pt) : null,
                 walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
         SkinClient.frame(bridge);
+        QualityClient.frame(bridge);
         bridge.input().ifPresentOrElse(in -> {
             if (PanoramaCapture.active()) input.reset(); // standing still for the six shots
             else input.apply(Minecraft.getInstance(), in);
