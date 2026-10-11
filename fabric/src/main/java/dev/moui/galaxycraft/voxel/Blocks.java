@@ -43,6 +43,16 @@ public interface Blocks {
         return false;
     }
 
+    /** Whether it is a log (or wood, stem): what holds leaves up. */
+    default boolean log(int id) {
+        return false;
+    }
+
+    /** Whether it is leaves a player placed (Minecraft's persistent = true): they never fall. */
+    default boolean persistentLeaves(int id) {
+        return false;
+    }
+
     /**
      * A biome's color of one kind ({@link PlanetBiomes#GRASS} ...) at (x, z) blocks (swamp grass
      * varies across), 0xRRGGBB; -1 if unknown (the tint's own color is kept).
