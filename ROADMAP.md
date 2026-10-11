@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-09 (v0.1.4 published: station polish done; terrain, swimming and soundtrack ship in it, awaiting the Windows check)
+Last updated: 2026-10-11 (far planet over the blocks after entering a world: fixed on `fix/lod-over-chunks`, awaiting merge)
 
 ---
 
@@ -89,6 +89,7 @@ Last updated: 2026-10-09 (v0.1.4 published: station polish done; terrain, swimmi
 | `gxroute.py sky` route broken | planned | Can't regenerate `sky.sav`, so `MarioPerspectivesTest` / `gxe2e.sh` fail. |
 | Far view at ~40 blocks still draws chunks | planned | Costs speed (~123%). |
 | Rare LodProbe send stall | planned | Not reproduced. |
+| Far planet drawn over the blocks after entering a world | now | User 2026-10-11: coarse slabs over the real blocks for about a minute after entering an existing world. The planet Mario lands on kept its far planet until its last chunk was out; now its own far view goes ahead of the chunks, so the far planet leaves within seconds. On `fix/lod-over-chunks`, checked in the Windows game, awaiting merge. |
 | Non-cube blocks never checked visually in SMG2 | planned | Slabs, stairs, flowers on a planet: needs a screenshot pass. |
 
 ---

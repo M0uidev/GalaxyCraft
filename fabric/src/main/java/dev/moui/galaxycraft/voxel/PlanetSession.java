@@ -140,7 +140,9 @@ public final class PlanetSession {
      * Tiles in farPending whose chunks are going out: their far view must reach the game before the
      * chunks go, or a hole shows. The other far views wait for the chunks to send (what stands near
      * Mario, and the covering of its far view, come first): else the far view keeps drawing over
-     * chunks the game has already.
+     * chunks the game has already. A planet new to the game sends them all this way, after Mario's
+     * collision only: it shows whole by its own within seconds, so the far planet that stood for it
+     * (GalaxyStream) goes instead of being drawn over its blocks while they all stream in.
      */
     private final BitSet farBlocking = new BitSet();
     private int[] farVersion = new int[0];
@@ -624,10 +626,11 @@ public final class PlanetSession {
             int t = nextFar();
             if (t < 0) break;
             builtTile = t;
-            // A tile of chunks gets it too, covered: the game draws it only from afar.
-            builtFarShows = !shown.get(t);
+            // A tile of chunks gets it too, covered: the game draws it only from afar. One whose
+            // chunks are all still to come shows it meanwhile, and is covered after them.
+            builtFarShows = !shown.get(t) || awaitsChunks(t);
             // A tile of chunks is drawn only from afar: coarse. Else as fine as its level.
-            builtCols = builtFarShows && t < farWant.length && farWant[t] > 0 ? farWant[t] : PlanetLod.tilePatchColumns(planet.grid.n);
+            builtCols = !shown.get(t) && t < farWant.length && farWant[t] > 0 ? farWant[t] : PlanetLod.tilePatchColumns(planet.grid.n);
             built = farMsg(t, PlanetLod.tile(planet, t, builtCols, unitsPerBlock), !builtFarShows);
             builtFar = true;
         }
@@ -759,7 +762,8 @@ public final class PlanetSession {
             farOnGuest.set(t, builtFarShows); // what it carried, whatever the tile is by now
             farHeld.set(t);
             if (t < farCols.length) farCols[t] = builtCols;
-            if (builtFarShows && shown.get(t)) pending.add(HIDE_MARK - t); // chunks there since: hidden after them
+            // Chunks there since (or on their way): hidden after them.
+            if (builtFarShows && shown.get(t) && !pending.contains(HIDE_MARK - t)) pending.add(HIDE_MARK - t);
             return;
         }
         if (builtFarMark) {
@@ -1211,12 +1215,16 @@ public final class PlanetSession {
             farOnGuest = (BitSet) keptOnGuest.clone();
             farHeld = (BitSet) keptHeld.clone();
             for (int t = 0; t < tileCount; t++)
-                if (keptStale.get(t) || !farHeld.get(t) || !shown.get(t) && !farOnGuest.get(t)) queueFar(t);
+                if (keptStale.get(t) || !farHeld.get(t) || !shown.get(t) && !farOnGuest.get(t)) {
+                    queueFar(t);
+                    if (!farHeld.get(t)) farBlocking.set(t); // never sent: the planet whole first, as below
+                }
                 else if (!shown.get(t) && farCols[t] != farWant[t]) farLater.add(t);
         } else {
             farHeld = new BitSet();
             farCols = new int[tileCount];
             for (int t = 0; t < tileCount; t++) queueFar(t);
+            farBlocking.set(0, tileCount); // ahead of the chunks: the planet whole first
         }
         guestHasIt = false;
         if (tpQueued) { // after the planet, Mario's landing ground, then the teleport, as teleportToward queued them
@@ -1354,6 +1362,16 @@ public final class PlanetSession {
     private int nextFar() {
         if (!farBlocking.isEmpty()) for (int t : farPending) if (farBlocking.get(t)) return t;
         return pending.isEmpty() && urgent.isEmpty() ? farPending.peek() : -1;
+    }
+
+    /**
+     * Whether a tile of chunks has none of them in the game yet, its covering still waiting behind
+     * them: its far view is what the game draws there until they are out.
+     */
+    private boolean awaitsChunks(int t) {
+        if (!pending.contains(HIDE_MARK - t)) return false;
+        for (int c : PlanetLod.chunksOfTile(planet, t)) if (onGuest.get(c)) return false;
+        return true;
     }
 
     /** A tile's far view to send (or hide, if it is chunks by then). */
