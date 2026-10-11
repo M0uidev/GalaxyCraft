@@ -26,5 +26,18 @@
   "key.galaxycraft.music.play_pause": "Play / Pause Music",
   "key.galaxycraft.music.next": "Next Song",
   "key.galaxycraft.music.previous": "Previous Song",
-  "key.category.galaxycraft.music": "Soundtrack"
+  "key.category.galaxycraft.music": "Soundtrack",
+  "block.galaxycraft.ship_table": "Ship Table",
+  "item.galaxycraft.ship_hull": "Ship Hull",
+  "item.galaxycraft.ship_engine": "Ship Engine",
+  "item.galaxycraft.ship_rudder": "Ship Rudder",
+  "item.galaxycraft.ship_cabin": "Ship Cabin",
+  "item.galaxycraft.toad_core": "Toad Core",
+  "item.galaxycraft.toad_ship": "Toad Ship",
+  "message.galaxycraft.ship.assembled": "Ship assembled",
+  "message.galaxycraft.ship.needs_engine_cabin": "A ship needs an engine and a cabin",
+  "advancements.galaxycraft.ship.root.title": "Shipwright",
+  "advancements.galaxycraft.ship.root.description": "Make a Ship Table",
+  "advancements.galaxycraft.ship.toad_core.title": "Toad Core",
+  "advancements.galaxycraft.ship.toad_core.description": "Make the rare core of a Toad ship"
 }
