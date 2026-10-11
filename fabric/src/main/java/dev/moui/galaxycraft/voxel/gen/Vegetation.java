@@ -196,6 +196,8 @@ public final class Vegetation {
 
     /** A log, wood, stem or hyphae block: what a tree's body is made of (leaves, vines and the rest may be cut). */
     static boolean solidPart(String block) {
+        int props = block.indexOf('['); // the game's names carry their state: minecraft:oak_log[axis=y]
+        if (props >= 0) block = block.substring(0, props);
         return block.endsWith("_log") || block.endsWith("_wood") || block.endsWith("_stem") || block.endsWith("_hyphae");
     }
 

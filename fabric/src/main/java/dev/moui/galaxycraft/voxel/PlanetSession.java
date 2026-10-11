@@ -187,6 +187,7 @@ public final class PlanetSession {
     private int sinceResidency;
     private boolean unsaved;
     private final LeafDecay.Queue leaves = new LeafDecay.Queue();
+    private final java.util.Set<Integer> touched = new java.util.LinkedHashSet<>(); // searched once per tick, not per change
     private java.util.function.IntConsumer leafRemover;
     private int outline = -1; // the cell outlined in the game, -1 none
     private int outlineId = -1; // the block that was in it then: a door opening changes its outline
@@ -363,10 +364,10 @@ public final class PlanetSession {
         unsaved = false;
     }
 
-    /** Edited (or new) since the last {@link #save()}. */
     /** Cells changed (a log broken, a leaf removed): the leaves they no longer hold start to fall. */
     public void touchLeaves(int... cells) {
-        if (planet != null) leaves.touch(planet, cells);
+        if (planet == null) return;
+        for (int c : cells) touched.add(c);
     }
 
     /** How a falling leaf is taken out (the shadow, so Minecraft drops what it drops); null: straight from the planet. */
@@ -374,6 +375,7 @@ public final class PlanetSession {
         leafRemover = remover;
     }
 
+    /** Edited (or new) since the last {@link #save()}. */
     public boolean unsaved() {
         return planet != null && unsaved;
     }
@@ -382,6 +384,7 @@ public final class PlanetSession {
     public void remove() {
         if (planet == null) return;
         planet = null;
+        touched.clear();
         tpQueued = false;
         clearQueues();
         release();
@@ -552,13 +555,16 @@ public final class PlanetSession {
             sendAll();
         }
         if (planet.fluids().tick()) unsaved = true;
+        if (!touched.isEmpty()) {
+            leaves.touch(planet, touched.stream().mapToInt(Integer::intValue).toArray());
+            touched.clear();
+        }
         for (int cell : leaves.tick(planet)) {
             if (leafRemover != null) leafRemover.accept(cell);
             else {
                 planet.set(cell, Blocks.AIR);
                 planet.settle(cell);
                 unsaved = true;
-                leaves.touch(planet, cell); // its neighbors may have held on through it
             }
         }
         for (int c : planet.takeDirty()) {
@@ -874,7 +880,7 @@ public final class PlanetSession {
         boolean melts = !creative && planet.material(h.hit()) == Material.ICE;
         planet.set(h.hit(), melts ? planet.blocks.fluidState(Blocks.WATER, Fluids.SOURCE) : Blocks.AIR);
         planet.settle(h.hit());
-        leaves.touch(planet, h.hit());
+        touchLeaves(h.hit());
         unsaved = true;
         return true;
     }
@@ -966,7 +972,7 @@ public final class PlanetSession {
     public void applyExternal(int cell, int id) {
         if (planet == null) return;
         planet.setQuietly(cell, id);
-        leaves.touch(planet, cell);
+        touchLeaves(cell);
         unsaved = true;
     }
 

@@ -28,7 +28,7 @@ class TreeIntegrityTest {
         names.add("minecraft:dirt");
         for (int y = 1; y <= LOGS; y++) {
             at.add(new int[] {0, y, 0});
-            names.add("minecraft:oak_log");
+            names.add("minecraft:oak_log[axis=y]");
         }
         for (int y = 4; y <= 6; y++)
             for (int x = -1; x <= 1; x++)
@@ -54,7 +54,7 @@ class TreeIntegrityTest {
     /** For every column holding logs: its logs are a run of LOGS, and under the run is solid ground. */
     static Tally scan(PlanetGenerator.Cells c) {
         CubeSphere g = c.grid();
-        char log = (char) id("minecraft:oak_log");
+        char log = (char) id("minecraft:oak_log[axis=y]");
         int trees = 0, gaps = 0, floating = 0;
         for (int col = 0; col < g.cellCount() / g.layers; col++) {
             int base = col * g.layers, first = -1, count = 0;
