@@ -634,6 +634,7 @@ public final class PlanetClient {
             if (FIXED_DIR) {
                 StationClient.enterWorld(planetDir());
                 ShipClient.enterWorld(planetDir());
+                ToadClient.enterWorld(planetDir());
             }
             blocks = McBlocks.create(Minecraft.getInstance());
             atlasLink = new AtlasLink(blocks.atlas, 1);
@@ -709,6 +710,8 @@ public final class PlanetClient {
                                 key(in, SC_A) || Minecraft.getInstance().options.keyLeft.isDown(), key(in, SC_D) || Minecraft.getInstance().options.keyRight.isDown(),
                                 key(in, SC_SPACE) || Minecraft.getInstance().options.keyJump.isDown(), key(in, SC_C),
                                 key(in, SC_LCTRL) || Minecraft.getInstance().options.keySprint.isDown())))
+            buttons &= ~MOUSE_RIGHT;
+        else if (frame != null && player != null && !screen && ToadClient.tick(player, frame, pressed(buttons, MOUSE_RIGHT)))
             buttons &= ~MOUSE_RIGHT;
         PlanetSession was = focus;
         focus = nearest(world.queryPos());
@@ -1094,6 +1097,7 @@ public final class PlanetClient {
         store = new PlanetStore(g.planets());
         StationClient.enterWorld(g.planets());
         ShipClient.enterWorld(g.planets());
+        ToadClient.enterWorld(g.planets());
         landOn = resolved(g.spot().orElse(null));
         landPending = true;
         homeAsked = false;
@@ -1113,6 +1117,7 @@ public final class PlanetClient {
         saveNow();
         StationClient.enterWorld(null); // saved, dropped with the galaxy
         ShipClient.enterWorld(null);
+        ToadClient.enterWorld(null);
         if (stream != null) stream.clear();
         stream = null;
         session.unload();

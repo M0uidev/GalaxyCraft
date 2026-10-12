@@ -195,6 +195,23 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             toggleFlying();
             return 1;
         })));
+        // /toad <guide|miner|explorer|technician|mailman>: puts a Toad down on the ground ahead (until the world places them).
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("toad")
+                .then(argument("type", StringArgumentType.word()).executes(c -> {
+                    String id = StringArgumentType.getString(c, "type");
+                    dev.moui.galaxycraft.toad.ToadType type = null;
+                    for (dev.moui.galaxycraft.toad.ToadType t : dev.moui.galaxycraft.toad.ToadType.values())
+                        if (t.id().equals(id)) type = t;
+                    if (type == null) {
+                        c.getSource().sendFeedback(Component.literal("Super Minecraft Galaxy: no Toad called " + id
+                                + " (guide, miner, explorer, technician, mailman)"));
+                        return 0;
+                    }
+                    var me = Minecraft.getInstance().player;
+                    String problem = me == null ? "message.galaxycraft.toad.no_world" : ToadClient.place(me, type);
+                    if (problem != null) c.getSource().sendFeedback(Component.translatable(problem));
+                    return problem == null ? 1 : 0;
+                }))));
         // /skin <account>: that account's skin on the character; /skin alone: Steve's again.
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("skin")
                 .executes(c -> {

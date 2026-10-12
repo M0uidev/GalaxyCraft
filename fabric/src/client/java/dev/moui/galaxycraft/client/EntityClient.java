@@ -269,6 +269,7 @@ final class EntityClient {
                 for (ParticleClient.Live l : particles.all()) particle(l, mario, pt, pieces);
         }
         ShipClient.pieces(this, pt, pieces);
+        ToadClient.pieces(this, pieces);
         if (self != null) self(self, pt, pieces);
         else if (session().active() && marioFeetGal != null) heldPieces(session().cellAt(marioFeetGal), pieces);
         if (pieces.isEmpty() && wasEmpty) return;

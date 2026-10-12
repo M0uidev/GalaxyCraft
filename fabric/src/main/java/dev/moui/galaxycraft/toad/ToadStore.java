@@ -32,9 +32,12 @@ public final class ToadStore {
                     if (t.id().equals(o.get("type").getAsString())) type = t;
                 if (type == null) continue; // a type this version does not know is skipped
                 JsonArray p = o.getAsJsonArray("pos");
+                JsonArray q = o.has("rot") ? o.getAsJsonArray("rot") : null;
+                double[] rot = q == null || q.size() != 4 ? new double[] {0, 0, 0, 1}
+                        : new double[] {q.get(0).getAsDouble(), q.get(1).getAsDouble(), q.get(2).getAsDouble(), q.get(3).getAsDouble()};
                 s.toads.add(new ToadRecord(o.get("id").getAsString(), type,
                         new double[] {p.get(0).getAsDouble(), p.get(1).getAsDouble(), p.get(2).getAsDouble()},
-                        o.get("yaw").getAsDouble(), o.has("stage") ? o.get("stage").getAsString() : ""));
+                        rot, o.has("stage") ? o.get("stage").getAsString() : ""));
             }
         } catch (IOException | RuntimeException e) {
             s.toads.clear(); // a damaged file loses its Toads, not the world
@@ -69,7 +72,9 @@ public final class ToadStore {
             JsonArray p = new JsonArray();
             for (double v : r.pos()) p.add(v);
             o.add("pos", p);
-            o.addProperty("yaw", r.yaw());
+            JsonArray q = new JsonArray();
+            for (double v : r.rot()) q.add(v);
+            o.add("rot", q);
             o.addProperty("stage", r.stage());
             a.add(o);
         }
