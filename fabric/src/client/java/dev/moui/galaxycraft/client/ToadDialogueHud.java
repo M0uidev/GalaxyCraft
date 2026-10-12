@@ -43,7 +43,7 @@ final class ToadDialogueHud {
         List<FormattedText> lines = font.splitIgnoringLanguage(FormattedText.of(v.text()), textW);
         int rows = v.choosing() ? v.choices().size() : Math.min(4, lines.size());
         int h = Math.max(PORTRAIT + 12, 22 + rows * LINE + 14);
-        int y = sh - 32 - h; // above the hotbar
+        int y = sh - 62 - h; // above the hotbar, the health and the food bars
         g.fill(x, y, x + w, y + h, 0xD0101018);
         g.fill(x, y, x + w, y + 1, 0xFFE8E8F0);
         g.fill(x, y + h - 1, x + w, y + h, 0xFFE8E8F0);

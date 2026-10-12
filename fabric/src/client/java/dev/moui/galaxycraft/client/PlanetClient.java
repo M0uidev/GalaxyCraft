@@ -717,6 +717,7 @@ public final class PlanetClient {
         }
         Optional<Seqlock.InputState> in = bridge.input();
         int buttons = in.map(Seqlock.InputState::buttons).orElse(0);
+        boolean toadClick = false;
         boolean p = in.map(i -> (i.keys()[SC_P / 8] >> (SC_P % 8) & 1) != 0).orElse(false);
         boolean screen = Minecraft.getInstance().gui.screen() != null; // the clicks are the screen's
         // As Minecraft: a button pressed on a screen (Done on a sign's editor) is not the game's
@@ -736,8 +737,10 @@ public final class PlanetClient {
                                 key(in, SC_SPACE) || Minecraft.getInstance().options.keyJump.isDown(), key(in, SC_C),
                                 key(in, SC_LCTRL) || Minecraft.getInstance().options.keySprint.isDown())))
             buttons &= ~MOUSE_RIGHT;
-        else if (frame != null && player != null && !screen && ToadClient.tick(player, frame, pressed(buttons, MOUSE_RIGHT)))
+        else if (frame != null && player != null && !screen && ToadClient.tick(player, frame, pressed(buttons, MOUSE_RIGHT))) {
             buttons &= ~MOUSE_RIGHT;
+            toadClick = true; // still held next tick: not a new press (the box's "go on" is one per click)
+        }
         PlanetSession was = focus;
         focus = nearest(world.queryPos());
         if (focus != was) {
@@ -843,7 +846,7 @@ public final class PlanetClient {
             }
         SwimClient.tick(session, frame);
         sendSky(Minecraft.getInstance(), bridge, waterFog(Minecraft.getInstance(), session, frame, player));
-        lastButtons = buttons;
+        lastButtons = toadClick ? buttons | MOUSE_RIGHT : buttons;
         lastP = p;
         // The planet in focus first: its chunks before the others' when the ring is full. Mario's
         // collision goes whatever it costs; the rest only within this tick's budget, and while the
