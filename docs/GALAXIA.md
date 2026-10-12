@@ -11,7 +11,7 @@ galaxia y van ganando detalle a medida que te acercas.
 | Opción | Qué hace |
 |---|---|
 | **Planets** | Cuántos planetas tiene la galaxia: de 1 a 64 (8 por defecto). |
-| **Spacing** | La distancia entre planetas: *Near*, *Normal* o *Far* (24, 96 o 300 bloques entre sus gravedades). |
+| **Spacing** | La distancia entre planetas: *Near*, *Normal* o *Far* (600, 1.600 o 2.400 bloques entre sus gravedades en mundos nuevos; los mundos de antes conservan 24, 96 o 300, o 150, 600 o 1.500). |
 | **Others from / to** | El radio mínimo y máximo de los demás planetas, de 16 a 256 bloques. |
 | **First planet** | El planeta donde empiezas: *Generated* (con un bioma) o *Blueprint* (uno de tus planos del editor). |
 | **First's radius** | El radio del primero, si es generado (un plano mantiene su propio tamaño). |
@@ -41,6 +41,27 @@ por cara del cubo).
 - Desde lejos, un planeta que todavía no visitaste se ve según su receta (su bioma, o la capa de
   arriba de su plano). Uno que ya visitaste se ve como lo dejaste.
 
+## Niveles y estrellas
+
+Cada sistema solar tiene un **nivel** (0 a 5) y un **tipo de estrella**, ambos derivados de la
+semilla (no se guarda nada): la misma semilla da el mismo universo.
+
+- El nivel sale del anillo de distancia al hogar, con un escalón de ruido (-1, 0 o +1): hasta 12.000
+  bloques nivel 0; luego 20.000, 40.000, 70.000 y 110.000; más allá, nivel 5. El hogar es siempre
+  nivel 0 y amarillo.
+- Estrella: amarilla; enana roja y de lava desde el nivel 1; azul desde el nivel 3.
+- **Warp Core**: un sistema que todavía no visitaste solo se abre si su nivel no pasa del alcance del
+  Warp Core (núcleo 0 a 3: alcanza nivel 1, 2, 4 o 5). Los visitados y el hogar se abren siempre. Hasta
+  que exista el módulo de la nave, el ajuste **Warp Core Tier** hace de núcleo (3 = sin límite, como
+  hasta ahora).
+- El **Pulse** solo funciona dentro del alcance de un sistema; entre sistemas queda apagado.
+- Los sistemas visitados se anotan en `visited.json`, junto a los planetas de la galaxia.
+
+Para probarlo en el juego: pon *Warp Core Tier* en 0, apunta a una estrella lejana y pulsa K (el chat
+dice su nivel y que tu Warp Core no alcanza); ponlo en 3 y pulsa K otra vez: viaja. En el vacío entre
+sistemas, planear con sprint ya no acelera el Pulse. Las etiquetas de las estrellas muestran
+«tier N, tipo de estrella».
+
 ## Mundos de antes
 
 Un mundo creado antes de esta función conserva sus planetas: la primera vez que entras se arma su
@@ -53,7 +74,7 @@ En la carpeta del mundo, `saves/<mundo>/galaxycraft/`:
 
 - `galaxy.json`: las opciones y la lista de planetas (dónde está cada uno, su radio, su bioma o plano, su
   semilla).
-- `planets/`: los planetas visitados y cambiados, uno por archivo, como siempre.
+- `planets/`: los planetas visitados y cambiados, uno por archivo, como siempre, y `visited.json` (los sistemas donde estuviste).
 - `player.json`: el planeta donde estás y en qué punto.
 
 ## Cómo se prueba
