@@ -15,10 +15,10 @@ import net.minecraft.network.chat.Component;
 import org.joml.Vector3d;
 
 /**
- * Warp to another solar system, free: aim at its star on the sky and press K, or pick it on the
- * galaxy map (its key, or the warp key with no star in the crosshair; both in Controls). The screen goes dark, Mario lands on the
- * system's first planet (the floating origin moves there first) and the camera zooms in from
- * space, as entering a world.
+ * Warp to another solar system: pick it on the galaxy map (its key, or the warp key; both in Controls). For now only in creative mode
+ * or with cheats on (WarpPermission), and then only as far as the Warp Core reaches (WarpGate).
+ * The screen goes dark, Mario lands on the system's first planet (the floating origin moves there
+ * first) and the camera zooms in from space, as entering a world.
  */
 public final class Warp {
     /** A star counts as aimed at within this many degrees of the crosshair. */
@@ -86,12 +86,19 @@ public final class Warp {
         return String.format("%s: %d planets, %,d blocks%s", name, s.planets(), blocks, kind);
     }
 
-    /** K: to the star in the crosshair, or the map when there is none. */
+    /** Whether this player may warp now: creative mode, or cheats on (permission level 2 or more). */
+    public static boolean allowed(Minecraft mc) {
+        LocalPlayer p = mc.player;
+        if (p == null) return false;
+        boolean creative = mc.gameMode != null && mc.gameMode.getPlayerMode().isCreative();
+        boolean cheats = p.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
+        return dev.moui.galaxycraft.universe.WarpPermission.allowed(creative, cheats);
+    }
+
+    /** K: the map (the star in the crosshair is no longer warped to by aiming). */
     static void key(Minecraft mc) {
         if (mc.player == null || UniverseClient.universe() == null || PlanetClient.waitingToLand()) return;
-        Optional<Universe.Star> s = aimed(mc.player);
-        if (s.isPresent()) to(mc, s.get());
-        else map(mc);
+        map(mc);
     }
 
     static void map(Minecraft mc) {
@@ -101,6 +108,10 @@ public final class Warp {
 
     /** Off to that system's first planet. */
     public static void to(Minecraft mc, Universe.Star s) {
+        if (!allowed(mc)) {
+            GalaxyCraftClient.say(dev.moui.galaxycraft.universe.WarpPermission.refusal());
+            return;
+        }
         Universe u = UniverseClient.universe();
         Visited seen = visited();
         if (u != null && seen != null && !WarpGate.allowed(u, s, seen, GalaxyOptions.WARP_CORE.get())) {
@@ -132,6 +143,6 @@ public final class Warp {
         }
         if (mc.player == null || mc.gui.screen() != null || !GalaxyCraftClient.inVoid() || ++hintTicks < 10) return;
         hintTicks = 0;
-        aimed(mc.player).ifPresent(s -> mc.gui.hud.setOverlayMessage(Component.literal(label(s) + " - " + ModKeys.label(ModKeys.WARP) + " to warp"), false));
+        aimed(mc.player).ifPresent(s -> mc.gui.hud.setOverlayMessage(Component.literal(label(s) + " - " + ModKeys.label(ModKeys.WARP) + " for the map"), false));
     }
 }

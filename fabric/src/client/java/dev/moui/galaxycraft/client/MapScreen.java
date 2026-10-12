@@ -1,5 +1,6 @@
 package dev.moui.galaxycraft.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.map.MapShips;
 import dev.moui.galaxycraft.map.MapView;
@@ -134,10 +135,12 @@ final class MapScreen extends Screen {
         if (selected < 0) return;
         Item it = items.get(selected);
         if (inside == null && it.star() != null) {
-            addRenderableWidget(Button.builder(Component.literal("Warp"), b -> {
+            Button warp = Button.builder(Component.literal("Warp"), b -> {
                 onClose();
                 Warp.to(minecraft, it.star());
-            }).bounds(x, y, 160, 20).build());
+            }).bounds(x, y, 160, 20).build();
+            warp.active = Warp.allowed(minecraft); // else the lines under the buttons say why
+            addRenderableWidget(warp);
             y += 24;
             addRenderableWidget(Button.builder(Component.literal("Enter system"), b -> {
                 systemLevel(it.star());
@@ -165,7 +168,7 @@ final class MapScreen extends Screen {
     @Override
     public boolean mouseClicked(MouseButtonEvent ev, boolean doubled) {
         if (super.mouseClicked(ev, doubled)) return true;
-        if (ev.button() != 0) return false;
+        if (ev.button() != InputConstants.MOUSE_BUTTON_LEFT) return false; // 26.x: SDL numbers, left is 1
         lastDragX = ev.x();
         int i = pickAt(ev.x(), ev.y());
         if (i < 0 && doubled && selected >= 0) i = selected; // the first click moved the focus: the second is on the same item
@@ -194,7 +197,7 @@ final class MapScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent ev, double dx, double dy) {
-        if (ev.button() == 0 && ev.x() < width - PANEL_W) {
+        if (ev.button() == InputConstants.MOUSE_BUTTON_LEFT && ev.x() < width - PANEL_W) {
             view.orbit(-dx * 0.01, dy * 0.01);
             return true;
         }
@@ -226,6 +229,7 @@ final class MapScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
         g.fill(0, 0, width, height, 0xFF05060C);
+        if (inside == null) MapSprites.dust(g, 0, TOP, width - PANEL_W, height - TOP, 0xFFB0C0E8);
         view.width = width - PANEL_W;
         view.height = height;
         taken.clear();
@@ -260,13 +264,23 @@ final class MapScreen extends Screen {
         hovered = pickAt(mouseX, mouseY);
         if (hovered >= 0) labelled.add(hovered);
         if (inside != null) systemFrame(g, order, hovered); // under the planets
+        double near0 = Double.MAX_VALUE, far0 = 0;
+        for (int i : order) {
+            near0 = Math.min(near0, depth[i]);
+            far0 = Math.max(far0, depth[i]);
+        }
         for (int i : order) {
             Item it = items.get(i);
+            int x = (int) sx[i], y = (int) sy[i];
             int r = (int) Math.max(2, Math.min(24, it.size() / depth[i] * (height / 2.0) / Math.tan(Math.toRadians(30))));
-            if (it.ring() != 0) disc(g, (int) sx[i], (int) sy[i], r + 2, it.ring());
-            disc(g, (int) sx[i], (int) sy[i], r, it.color());
-            if (i == selected) ring(g, (int) sx[i], (int) sy[i], r + 4, WHITE);
-            else if (i == hovered) ring(g, (int) sx[i], (int) sy[i], r + 4, HOVER);
+            if (inside == null) {
+                double near = far0 > near0 ? 1 - (depth[i] - near0) / (far0 - near0) : 1; // 1 nearest drawn, 0 farthest
+                star(g, x, y, r, it, near);
+            } else {
+                MapSprites.sphere(g, x, y, 2 * r + 1, it.color());
+            }
+            if (i == selected) MapSprites.ring(g, x, y, 2 * (r + 7), WHITE);
+            else if (i == hovered) MapSprites.ring(g, x, y, 2 * (r + 7), HOVER);
         }
         you(g);
         // Labels, most wanted first (the pick and the hovered always win), none that covers another.
@@ -296,8 +310,14 @@ final class MapScreen extends Screen {
                 g.text(font, "" + t, width - 168 + t * 26 + 11, height - 28, GRAY);
             }
         }
-        if (selected >= 0) info(g, items.get(selected));
-        else overview(g);
+        if (selected >= 0) {
+            info(g, items.get(selected));
+            if (inside == null && items.get(selected).star() != null && !Warp.allowed(minecraft)) {
+                int wy = panelEnd(items.get(selected)) + 52;
+                g.text(font, "Warp needs creative mode", width - 168, wy, GRAY);
+                g.text(font, "or cheats on.", width - 168, wy + 11, GRAY);
+            }
+        } else overview(g);
         g.text(font, "Click: select   Drag: turn   Wheel: zoom", 8, height - 26, GRAY);
         g.text(font, inside == null ? "Double click or Enter: enter the system" : "Backspace: back to the galaxy", 8, height - 14, GRAY);
         super.extractRenderState(g, mouseX, mouseY, a);
@@ -326,10 +346,13 @@ final class MapScreen extends Screen {
         Vector3d c = inside.center().minus(origin);
         var sp = view.project(c);
         if (sp.isPresent()) {
-            int r = (int) Math.max(3, Math.min(12, 400 * UNITS / sp.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
-            disc(g, (int) sp.get().x(), (int) sp.get().y(), r, SystemInfo.of(UniverseClient.universe(), inside).star().argb);
+            int r = (int) Math.max(4, Math.min(12, 400 * UNITS / sp.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
+            int sc = SystemInfo.of(UniverseClient.universe(), inside).star().argb;
+            MapSprites.glow(g, (int) sp.get().x(), (int) sp.get().y(), 2 * r * 3, MapSprites.tint(sc, 0.75));
+            MapSprites.disc(g, (int) sp.get().x(), (int) sp.get().y(), 2 * r + 1, sc);
             label(g, inside.home() ? "Home star" : "Star", (int) sp.get().x() + r + 3, (int) sp.get().y() - 4, GRAY, true);
         }
+        plate(g, c, order);
         boolean all = order.size() <= 10;
         for (int i : order) {
             if (!(all || i == selected || i == hover)) continue;
@@ -456,7 +479,7 @@ final class MapScreen extends Screen {
             UPos at = t == null ? s.position() : t.positionAt(now);
             var p = view.project(at.minus(m));
             if (p.isEmpty()) continue;
-            ring(g, (int) p.get().x(), (int) p.get().y(), 4, RING);
+            MapSprites.ring(g, (int) p.get().x(), (int) p.get().y(), 11, RING);
             g.text(font, s.name() + (t == null ? "" : t.arrived(now) ? " (orbiting)" : " (en route)"), (int) p.get().x() + 7, (int) p.get().y() - 4, RING);
             if (t != null && !t.arrived(now)) {
                 var d = view.project(t.course().to().minus(m));
@@ -465,21 +488,45 @@ final class MapScreen extends Screen {
         }
     }
 
-    /** A round-looking disc in at most three rectangles (see MAX_DRAWN: every fill is a cost). */
-    private static void disc(GuiGraphicsExtractor g, int cx, int cy, int r, int color) {
-        if (r <= 2) {
-            g.fill(cx - r, cy - r, cx + r + 1, cy + r + 1, color);
-            return;
-        }
-        int a = Math.max(1, r * 6 / 10), b = Math.max(1, r * 8 / 10);
-        g.fill(cx - r, cy - a, cx + r + 1, cy + a + 1, color);
-        g.fill(cx - b, cy - b, cx + b + 1, cy + b + 1, color);
-        g.fill(cx - a, cy - r, cx + a + 1, cy + r + 1, color);
+    /** A star of the universe level: a halo that fades with distance, a lit core, the tier's ring (home: a green one more). */
+    private static void star(GuiGraphicsExtractor g, int x, int y, int r, Item it, double near) {
+        int c = it.color();
+        MapSprites.glow(g, x, y, 2 * (r * 3 + 5), MapSprites.tint(c, 0.25 + 0.5 * near));
+        MapSprites.disc(g, x, y, 2 * r + 1, MapSprites.tint(c, 0.55 + 0.45 * near)); // a star is lit by itself: no shading
+        if (it.ring() != 0) MapSprites.ring(g, x, y, 2 * (r + 4), MapSprites.tint(it.ring(), 0.35 + 0.65 * near));
+        if (it.star() != null && it.star().home()) MapSprites.ring(g, x, y, 2 * (r + 10), 0xFF7CFF7C);
     }
 
-    private static void ring(GuiGraphicsExtractor g, int cx, int cy, int r, int color) {
-        for (int a = 0; a < 48; a++) {
-            int x = cx + (int) Math.round(r * Math.cos(a * Math.PI / 24)), y = cy + (int) Math.round(r * Math.sin(a * Math.PI / 24));
+    /** Inside a system: the plate the orbits lie on (spokes out to the farthest orbit) and a stem from each planet down to it. */
+    private void plate(GuiGraphicsExtractor g, Vector3d c, List<Integer> order) {
+        double far = 0;
+        for (int i : order) {
+            Vector3d off = new Vector3d(items.get(i).pos()).sub(c);
+            far = Math.max(far, Math.hypot(off.x, off.z));
+        }
+        if (far <= 0) return;
+        far *= 1.15;
+        for (int s = 0; s < 8; s++) {
+            double a = s * Math.PI / 4;
+            var p = view.project(new Vector3d(c.x + far * Math.cos(a), c.y, c.z + far * Math.sin(a)));
+            var q = view.project(c);
+            if (p.isPresent() && q.isPresent()) dots(g, (int) q.get().x(), (int) q.get().y(), (int) p.get().x(), (int) p.get().y(), 14, 0xFF1D2A48);
+        }
+        int n = 0;
+        for (int k = order.size() - 1; k >= 0 && n < 16; k--, n++) { // the nearest 16
+            Vector3d pos = items.get(order.get(k)).pos();
+            var p = view.project(pos);
+            var base = view.project(new Vector3d(pos.x, c.y, pos.z));
+            if (p.isPresent() && base.isPresent())
+                dots(g, (int) p.get().x(), (int) p.get().y(), (int) base.get().x(), (int) base.get().y(), 8, pos.y >= c.y ? 0xFF3A6EA8 : 0xFFC8803A);
+        }
+    }
+
+    /** A dotted segment of at most `count` dots (each rectangle is a cost). */
+    private static void dots(GuiGraphicsExtractor g, int x0, int y0, int x1, int y1, int count, int color) {
+        if (Math.abs(x1 - x0) + Math.abs(y1 - y0) > 4000) return;
+        for (int i = 0; i <= count; i++) {
+            int x = x0 + (x1 - x0) * i / count, y = y0 + (y1 - y0) * i / count;
             g.fill(x, y, x + 1, y + 1, color);
         }
     }
