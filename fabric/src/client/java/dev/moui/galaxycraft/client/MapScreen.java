@@ -43,11 +43,12 @@ final class MapScreen extends Screen {
     private static final int HOVER = 0xFFFFE066, TIP = 0xF0181A28;
 
     /** Something on the map: where (units from Mario), size (units), color, label. */
-    private record Item(String label, Vector3d pos, double size, int color, Universe.Star star, UPos center, double radiusBlocks, int ring) {}
+    private record Item(String label, Vector3d pos, double size, int color, Universe.Star star, UPos center, double radiusBlocks, int ring, String biome) {}
 
     private final MapView view = new MapView();
     private final List<Item> items = new ArrayList<>();
     private Universe.Star inside; // null: the universe level
+    private UPos origin = UPos.ZERO; // where Mario was when the items were made: their positions are relative to it
     private int selected = -1;
     private int hovered = -1;
     private double lastDragX;
@@ -64,6 +65,23 @@ final class MapScreen extends Screen {
         rebuildButtons();
     }
 
+    private static String prettyBiome(String id) {
+        String n = id == null ? "random" : id.substring(id.indexOf(':') + 1);
+        return n.replace('_', ' ');
+    }
+
+    /** A planet's color from its biome (blueprints: violet). */
+    private static int biomeColor(GalaxyCatalog.Entry e) {
+        if (e.kind() == GalaxyCatalog.Kind.BLUEPRINT || e.biome() == null) return 0xFFC080FF;
+        String b = e.biome();
+        String[][] table = {{"ocean", "0xFF3A6FD8"}, {"river", "0xFF4F8AE0"}, {"desert", "0xFFE0C878"}, {"badlands", "0xFFC8643C"},
+                {"savanna", "0xFFBDB35A"}, {"jungle", "0xFF2FA23A"}, {"swamp", "0xFF5F7F4F"}, {"dark_forest", "0xFF2F5F2F"},
+                {"birch", "0xFF7DB86A"}, {"forest", "0xFF4F9A4A"}, {"windswept", "0xFF8A9A8A"}, {"taiga", "0xFF4F8A6A"},
+                {"snowy", "0xFFEAF2F8"}, {"beach", "0xFFE8DCA0"}};
+        for (String[] row : table) if (b.contains(row[0])) return (int) Long.decode(row[1]).longValue();
+        return 0xFF8FD16B; // plains and the rest
+    }
+
     private UPos mario() {
         Vector3d m = PlanetClient.marioUniverse();
         return m == null ? UPos.ZERO : UPos.of(m);
@@ -76,11 +94,12 @@ final class MapScreen extends Screen {
         Universe u = UniverseClient.universe();
         if (u == null) return;
         UPos m = mario();
+        origin = m;
         for (Universe.Star s : u.around(m, UniverseClient.STAR_SECTORS)) {
             SystemInfo info = SystemInfo.of(s);
             String label = (s.home() ? "Home" : "System " + SystemIndex.name(s.sector())) + "  T" + info.tier();
             int color = SystemInfo.visited(s) ? info.star().argb : dim(info.star().argb);
-            items.add(new Item(label, s.center().minus(m), (150 + 25 * s.planets()) * UNITS, color, s, s.center(), 0, TIER[Math.min(5, info.tier())]));
+            items.add(new Item(label, s.center().minus(m), (150 + 25 * s.planets()) * UNITS, color, s, s.center(), 0, TIER[Math.min(5, info.tier())], null));
         }
         view.focusOn(new Vector3d(), Math.max(1, UNITS * 6000));
     }
@@ -92,12 +111,14 @@ final class MapScreen extends Screen {
         items.clear();
         selected = -1;
         UPos m = mario();
+        origin = m;
         List<GalaxyCatalog.Entry> planets;
         if (star.home()) planets = PlanetClient.catalog();
         else planets = u.system(star, LegacyBiome.land()).entries();
         for (GalaxyCatalog.Entry e : planets) {
             UPos at = star.home() ? UPos.of(new Vector3d(e.x(), e.y(), e.z())) : star.center().plus(new Vector3d(e.x(), e.y(), e.z()));
-            items.add(new Item("Planet " + e.index() + "  r" + e.radius(), at.minus(m), e.radius() * UNITS, 0xFF8FD16B, star, at, e.radius(), 0));
+            String kind = e.kind() == GalaxyCatalog.Kind.BLUEPRINT ? "blueprint" : prettyBiome(e.biome());
+            items.add(new Item("Planet " + e.index() + "  " + kind, at.minus(m), e.radius() * UNITS, biomeColor(e), star, at, e.radius(), 0, kind));
         }
         view.focusOn(star.center().minus(m), Math.max(1, UNITS * 3000));
     }
@@ -240,6 +261,8 @@ final class MapScreen extends Screen {
             if (i == selected) ring(g, (int) sx[i], (int) sy[i], r + 4, WHITE);
             else if (i == hovered) ring(g, (int) sx[i], (int) sy[i], r + 4, HOVER);
         }
+        if (inside != null) systemFrame(g, order, hovered);
+        you(g);
         for (int i : order) {
             if (!labelled.contains(i)) continue;
             Item it = items.get(i);
@@ -276,9 +299,54 @@ final class MapScreen extends Screen {
             out.add(String.format("%,d blocks away", Math.round(it.pos().length() / UNITS)));
         } else {
             out.add("Radius " + (int) it.radiusBlocks() + " blocks");
+            if (it.biome() != null) out.add(it.biome());
             out.add(String.format("%,d blocks away", Math.round(it.pos().length() / UNITS)));
         }
         return out;
+    }
+
+    /** Inside a system: the star at its center and the orbits (the selected and hovered planet's; all when there are few). */
+    private void systemFrame(GuiGraphicsExtractor g, List<Integer> order, int hover) {
+        Vector3d c = inside.center().minus(origin);
+        var sp = view.project(c);
+        if (sp.isPresent()) {
+            int r = (int) Math.max(3, Math.min(20, 400 * UNITS / sp.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
+            disc(g, (int) sp.get().x(), (int) sp.get().y(), r, SystemInfo.of(inside).star().argb);
+            g.text(font, inside.home() ? "Home star" : "Star", (int) sp.get().x() + r + 3, (int) sp.get().y() - 4, GRAY);
+        }
+        boolean all = order.size() <= 10;
+        for (int i : order) {
+            if (!(all || i == selected || i == hover)) continue;
+            Vector3d off = new Vector3d(items.get(i).pos()).sub(c);
+            double rad = Math.hypot(off.x, off.z);
+            if (rad < 1e-9) continue;
+            int col = i == selected ? WHITE : i == hover ? HOVER : 0xFF3C4468;
+            int prevX = 0, prevY = 0;
+            boolean prev = false;
+            for (int k = 0; k <= 48; k++) {
+                double a = k * Math.PI / 24;
+                var p = view.project(new Vector3d(c.x + rad * Math.cos(a), c.y + off.y, c.z + rad * Math.sin(a)));
+                if (p.isEmpty()) {
+                    prev = false;
+                    continue;
+                }
+                int x = (int) p.get().x(), y = (int) p.get().y();
+                if (prev && (k & 1) == 0) line(g, prevX, prevY, x, y, col);
+                prevX = x;
+                prevY = y;
+                prev = true;
+            }
+        }
+    }
+
+    /** Where the player is: a green cross with its label. */
+    private void you(GuiGraphicsExtractor g) {
+        var p = view.project(mario().minus(origin));
+        if (p.isEmpty()) return;
+        int x = (int) p.get().x(), y = (int) p.get().y();
+        g.fill(x - 5, y, x + 6, y + 1, 0xFF7CFF7C);
+        g.fill(x, y - 5, x + 1, y + 6, 0xFF7CFF7C);
+        g.text(font, "You", x + 7, y + 3, 0xFF7CFF7C);
     }
 
     private static int dim(int argb) {
