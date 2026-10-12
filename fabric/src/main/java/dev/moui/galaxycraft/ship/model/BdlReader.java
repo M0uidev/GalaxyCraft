@@ -93,7 +93,8 @@ public final class BdlReader {
         int[] drw = drawMatrices(b, ch.get("DRW1"));
         int[] materialTexture = materials(b, ch.get("MAT3"), textures.size());
         List<List<Integer>> joints = rig ? new ArrayList<>() : null;
-        List<Shape> shapes = shapes(b, ch.get("VTX1"), ch.get("SHP1"), world, drw, shapeMaterial, materialTexture, joints);
+        textures = new ArrayList<>(textures);
+        List<Shape> shapes = shapes(b, ch.get("VTX1"), ch.get("SHP1"), world, drw, shapeMaterial, materialTexture, joints, textures);
         if (!rig) return new Parsed(new Model(shapes, textures), null);
         List<Part> parts = new ArrayList<>();
         for (int si = 0; si < shapes.size(); si++) {
@@ -194,9 +195,11 @@ public final class BdlReader {
     }
 
     private static List<Shape> shapes(ByteBuffer b, int v, int s, Matrix4f[] world, int[] drw, int[] shapeMaterial, int[] materialTexture,
-            List<List<Integer>> jointsOut) {
+            List<List<Integer>> jointsOut, List<Texture> textures) {
         float[][] pos = vertexArray(b, v, 9, 0, 3, 2);
-        float[][] uv = vertexArray(b, v, 13, 5, 2, 1);
+        boolean hasUv = hasAttribute(b, v, 13);
+        float[][] uv = hasUv ? vertexArray(b, v, 13, 5, 2, 1) : null;
+        int[] colors = hasUv ? null : colorArray(b, v);
         int ns = b.getShort(s + 8) & 0xFFFF;
         int init = s + b.getInt(s + 0x0C), descs = s + b.getInt(s + 0x18), mtxtab = s + b.getInt(s + 0x1C),
                 dl = s + b.getInt(s + 0x20), mtxdata = s + b.getInt(s + 0x24), pkt = s + b.getInt(s + 0x28);
@@ -226,7 +229,7 @@ public final class BdlReader {
                     float[][] pv = new float[cnt][], tv = new float[cnt][];
                     int[] vj = new int[cnt];
                     for (int i = 0; i < cnt; i++) {
-                        int mtx = 0, pi = 0, ti = -1;
+                        int mtx = 0, pi = 0, ti = -1, ci = -1;
                         for (int[] a : desc) {
                             int val;
                             if (a[1] == 1) {
@@ -240,6 +243,7 @@ public final class BdlReader {
                             if (a[0] == 0) mtx = val / 3;
                             else if (a[0] == 9) pi = val;
                             else if (a[0] == 13) ti = val;
+                            else if (a[0] == 11) ci = val;
                         }
                         int draw = b.getShort(mtxtab + 2 * (first + mtx)) & 0xFFFF;
                         vj[i] = drw[draw];
@@ -247,7 +251,9 @@ public final class BdlReader {
                             world[drw[draw]].transformPosition(tmp.set(pos[pi][0], pos[pi][1], pos[pi][2]));
                             pv[i] = new float[] {tmp.x, tmp.y, tmp.z};
                         } else pv[i] = new float[] {pos[pi][0], pos[pi][1], pos[pi][2]};
-                        tv[i] = ti < 0 ? new float[] {0, 0} : new float[] {uv[ti][0], uv[ti][1]};
+                        if (uv != null) tv[i] = ti < 0 ? new float[] {0, 0} : new float[] {uv[ti][0], uv[ti][1]};
+                        else // no texture coordinates: the vertex colour rides in the third float (split out below)
+                            tv[i] = new float[] {0, 0, Float.intBitsToFloat(colors != null && ci >= 0 && ci < colors.length ? colors[ci] : 0xFFFFFFFF)};
                     }
                     int before = tris.size();
                     triangles(op & 0xF8, pv, tv, tris);
@@ -276,8 +282,29 @@ public final class BdlReader {
                 }
             }
             int mat = si < shapeMaterial.length ? shapeMaterial[si] : -1;
-            out.add(new Shape(mat >= 0 && mat < materialTexture.length ? materialTexture[mat] : -1, tris));
-            if (jointsOut != null) jointsOut.add(triJoints);
+            if (uv != null) {
+                out.add(new Shape(mat >= 0 && mat < materialTexture.length ? materialTexture[mat] : -1, tris));
+                if (jointsOut != null) jointsOut.add(triJoints);
+                continue;
+            }
+            // One shape per colour, each with a flat texture of it (the models with colours and no texture).
+            java.util.Map<Integer, List<Integer>> byColor = new java.util.LinkedHashMap<>();
+            for (int t = 0; t < tris.size(); t++)
+                byColor.computeIfAbsent(Float.floatToRawIntBits(tris.get(t).uv()[0][2]), k -> new ArrayList<>()).add(t);
+            for (var ent : byColor.entrySet()) {
+                int[] px = new int[16];
+                java.util.Arrays.fill(px, ent.getKey());
+                textures.add(new Texture(4, 4, px));
+                List<Tri> part = new ArrayList<>();
+                List<Integer> pj = jointsOut == null ? null : new ArrayList<>();
+                for (int t : ent.getValue()) {
+                    Tri tr = tris.get(t);
+                    part.add(new Tri(tr.pos(), new float[][] {{0, 0}, {0, 0}, {0, 0}}));
+                    if (pj != null) pj.add(triJoints.get(t));
+                }
+                out.add(new Shape(textures.size() - 1, part));
+                if (jointsOut != null) jointsOut.add(pj);
+            }
         }
         return out;
     }
@@ -306,6 +333,39 @@ public final class BdlReader {
 
     private static Tri tri(float[][] p, float[][] t, int a, int b, int c) {
         return new Tri(new float[][] {p[a], p[b], p[c]}, new float[][] {t[a], t[b], t[c]});
+    }
+
+    private static boolean hasAttribute(ByteBuffer b, int v, int attr) {
+        for (int o = v + b.getInt(v + 8); ; o += 16) {
+            int a = b.getInt(o);
+            if (a == 0xFF) return false;
+            if (a == attr) return true;
+        }
+    }
+
+    /** VTX1's colour 0 array as 0xAARRGGBB, or null (none, or a format not read). */
+    private static int[] colorArray(ByteBuffer b, int v) {
+        int secSize = b.getInt(v + 4), fmt = v + b.getInt(v + 8);
+        int[] offs = new int[13];
+        for (int i = 0; i < 13; i++) offs[i] = b.getInt(v + 0x0C + 4 * i);
+        for (int o = fmt; ; o += 16) {
+            int a = b.getInt(o);
+            if (a == 0xFF) return null;
+            if (a != 11) continue;
+            int ctype = b.getInt(o + 8);
+            int size = ctype == 1 ? 3 : (ctype == 2 || ctype == 5) ? 4 : -1;
+            if (size < 0) return null;
+            int start = offs[3], next = secSize;
+            for (int x : offs) if (x > start && x < next) next = x;
+            int[] out = new int[(next - start) / size];
+            for (int i = 0; i < out.length; i++) {
+                int at = v + start + i * size;
+                int r = b.get(at) & 0xFF, g = b.get(at + 1) & 0xFF, bl = b.get(at + 2) & 0xFF;
+                int al = ctype == 5 ? b.get(at + 3) & 0xFF : 0xFF;
+                out[i] = al << 24 | r << 16 | g << 8 | bl;
+            }
+            return out;
+        }
     }
 
     /** VTX1's array for attribute attr: offsets[offsetIndex]; comps when the format's count is 1, else comps0. */

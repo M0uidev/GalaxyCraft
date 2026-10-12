@@ -76,6 +76,39 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
             waitReal(ctx, 1200);
             shot(ctx, "toad-front-later"); // animated: not the same frame
 
+            // 1b. Each type close up, from the front, at its head's height.
+            for (int i = 0; i < row.length; i++) {
+                final int k = i;
+                Vector3d spot = ctx.computeOnClient(mc -> {
+                    GravityFrame f = GalaxyCraftClient.frame();
+                    Vector3d up = f.upGal().normalize();
+                    Vector3d toPlayer = new Vector3d(centre).sub(feet);
+                    Vector3d eye = f.toGal(new Vector3d(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ()));
+                    Vector3d flat = new Vector3d(eye).sub(centre);
+                    flat.fma(-flat.dot(up), up).normalize();
+                    Vector3d right = new Vector3d(up).cross(flat).negate();
+                    Vector3d toadFeet = new Vector3d(feet).fma(units((k - 2) * 1.5), right);
+                    return new Vector3d(toadFeet).fma(units(2.2), flat).fma(units(1.0), up);
+                });
+                Vector3d head = ctx.computeOnClient(mc -> {
+                    GravityFrame f = GalaxyCraftClient.frame();
+                    Vector3d up = f.upGal().normalize();
+                    Vector3d eye = f.toGal(new Vector3d(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ()));
+                    Vector3d flat = new Vector3d(eye).sub(centre);
+                    flat.fma(-flat.dot(up), up).normalize();
+                    Vector3d right = new Vector3d(up).cross(flat).negate();
+                    return new Vector3d(feet).fma(units((k - 2) * 1.5), right).fma(units(0.8), up);
+                });
+                ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(spot));
+                ctx.waitTicks(30);
+                aimAt(ctx, head);
+                ctx.waitTicks(40);
+                aimAt(ctx, head);
+                shot(ctx, "toad-" + row[i].id());
+            }
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(space));
+            ctx.waitTicks(30);
+
             // 2. From its side, 3 blocks off.
             Vector3d side = ctx.computeOnClient(mc -> {
                 GravityFrame f = GalaxyCraftClient.frame();
