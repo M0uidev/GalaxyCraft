@@ -27,6 +27,17 @@ public final class BdlReader {
 
     public record Model(List<Shape> shapes, List<Texture> textures) {}
 
+    /**
+     * A model with its skeleton: joints (parent, -1 for the root, and the rest pose's local transform
+     * as sx, sy, sz, rx, ry, rz in radians, tx, ty, tz) and its triangles split by joint, in each
+     * joint's own space (rigid binding only). Posing it is worlds(local transforms) then each part
+     * by its joint's world matrix.
+     */
+    public record Rig(int[] parent, float[][] rest, List<Part> parts, List<Texture> textures) {}
+
+    /** The triangles of one shape bound to one joint, in that joint's space. */
+    public record Part(int joint, int texture, List<Tri> tris) {}
+
     private static final int MATERIAL_SIZE = 0x14C, MATERIAL_TEX0 = 0x84;
 
     private BdlReader() {}
@@ -39,7 +50,23 @@ public final class BdlReader {
         }
     }
 
+    /** The model with its skeleton; weighted vertices, or a triangle across joints, are unsupported. */
+    public static Rig readRig(byte[] data) {
+        try {
+            Parsed p = parse(data, true);
+            return p.rig;
+        } catch (IndexOutOfBoundsException | java.nio.BufferUnderflowException | NegativeArraySizeException e) {
+            throw new IllegalArgumentException("damaged or unsupported J3D model", e);
+        }
+    }
+
+    private record Parsed(Model model, Rig rig) {}
+
     private static Model parse(byte[] data) {
+        return parse(data, false).model;
+    }
+
+    private static Parsed parse(byte[] data, boolean rig) {
         if (data.length < 0x20 || data[0] != 'J' || data[1] != '3' || data[2] != 'D' || data[3] != '2')
             throw new IllegalArgumentException("not a J3D model");
         String kind = new String(data, 4, 4, java.nio.charset.StandardCharsets.US_ASCII);
@@ -60,19 +87,35 @@ public final class BdlReader {
 
         List<Texture> textures = textures(b, ch.get("TEX1"));
         Matrix4f[] world = new Matrix4f[b.getShort(ch.get("JNT1") + 8) & 0xFFFF];
-        int[] shapeMaterial = hierarchy(b, ch.get("INF1"), ch.get("JNT1"), world);
+        int[] parent = new int[world.length];
+        float[][] rest = new float[world.length][];
+        int[] shapeMaterial = hierarchy(b, ch.get("INF1"), ch.get("JNT1"), world, parent, rest);
         int[] drw = drawMatrices(b, ch.get("DRW1"));
         int[] materialTexture = materials(b, ch.get("MAT3"), textures.size());
-        return new Model(shapes(b, ch.get("VTX1"), ch.get("SHP1"), world, drw, shapeMaterial, materialTexture), textures);
+        List<List<Integer>> joints = rig ? new ArrayList<>() : null;
+        List<Shape> shapes = shapes(b, ch.get("VTX1"), ch.get("SHP1"), world, drw, shapeMaterial, materialTexture, joints);
+        if (!rig) return new Parsed(new Model(shapes, textures), null);
+        List<Part> parts = new ArrayList<>();
+        for (int si = 0; si < shapes.size(); si++) {
+            Shape sh = shapes.get(si);
+            Map<Integer, List<Tri>> byJoint = new java.util.TreeMap<>();
+            for (int t = 0; t < sh.tris().size(); t++)
+                byJoint.computeIfAbsent(joints.get(si).get(t), k -> new ArrayList<>()).add(sh.tris().get(t));
+            byJoint.forEach((j, tris) -> parts.add(new Part(j, sh.texture(), tris)));
+        }
+        return new Parsed(null, new Rig(parent, rest, parts, textures));
     }
 
     /** INF1's tree: joints' world matrices into world[], and the material each shape is under. */
-    private static int[] hierarchy(ByteBuffer b, int inf, int jnt, Matrix4f[] world) {
+    private static int[] hierarchy(ByteBuffer b, int inf, int jnt, Matrix4f[] world, int[] parent, float[][] rest) {
         int n = world.length, eo = jnt + b.getInt(jnt + 0x0C);
         Matrix4f[] local = new Matrix4f[n];
         for (int i = 0; i < n; i++) {
             int e = eo + i * 0x40;
             float k = (float) (Math.PI / 32768.0);
+            rest[i] = new float[] {b.getFloat(e + 4), b.getFloat(e + 8), b.getFloat(e + 12),
+                    b.getShort(e + 0x10) * k, b.getShort(e + 0x12) * k, b.getShort(e + 0x14) * k,
+                    b.getFloat(e + 0x18), b.getFloat(e + 0x1C), b.getFloat(e + 0x20)};
             local[i] = new Matrix4f()
                     .translate(b.getFloat(e + 0x18), b.getFloat(e + 0x1C), b.getFloat(e + 0x20))
                     .rotateZYX((b.getShort(e + 0x14)) * k, (b.getShort(e + 0x12)) * k, (b.getShort(e + 0x10)) * k)
@@ -81,28 +124,39 @@ public final class BdlReader {
         }
         Map<Integer, Integer> mat = new HashMap<>();
         Deque<Matrix4f> stack = new ArrayDeque<>();
+        Deque<Integer> parents = new ArrayDeque<>();
         Matrix4f cur = new Matrix4f(), last = cur;
-        int material = -1;
+        int material = -1, curParent = -1, lastJoint = -1;
+        java.util.Arrays.fill(parent, -1);
         for (int p = inf + b.getInt(inf + 0x14); ; p += 4) {
             int type = b.getShort(p) & 0xFFFF, idx = b.getShort(p + 2) & 0xFFFF;
             if (type == 0) break;
             switch (type) {
                 case 0x01 -> {
                     stack.push(cur);
+                    parents.push(curParent);
                     cur = last;
+                    curParent = lastJoint;
                 }
-                case 0x02 -> cur = stack.pop();
+                case 0x02 -> {
+                    cur = stack.pop();
+                    curParent = parents.pop();
+                }
                 case 0x10 -> {
                     last = new Matrix4f(cur).mul(local[idx]);
                     world[idx] = last;
+                    parent[idx] = curParent;
+                    lastJoint = idx;
                 }
                 case 0x11 -> {
                     material = idx;
                     last = cur;
+                    lastJoint = curParent;
                 }
                 case 0x12 -> {
                     mat.put(idx, material);
                     last = cur;
+                    lastJoint = curParent;
                 }
                 default -> throw new IllegalArgumentException("J3D hierarchy node " + type);
             }
@@ -139,7 +193,8 @@ public final class BdlReader {
         return out;
     }
 
-    private static List<Shape> shapes(ByteBuffer b, int v, int s, Matrix4f[] world, int[] drw, int[] shapeMaterial, int[] materialTexture) {
+    private static List<Shape> shapes(ByteBuffer b, int v, int s, Matrix4f[] world, int[] drw, int[] shapeMaterial, int[] materialTexture,
+            List<List<Integer>> jointsOut) {
         float[][] pos = vertexArray(b, v, 9, 0, 3, 2);
         float[][] uv = vertexArray(b, v, 13, 5, 2, 1);
         int ns = b.getShort(s + 8) & 0xFFFF;
@@ -158,6 +213,7 @@ public final class BdlReader {
                 desc.add(new int[] {attr, type});
             }
             List<Tri> tris = new ArrayList<>();
+            List<Integer> triJoints = jointsOut == null ? null : new ArrayList<>();
             for (int g = 0; g < groups; g++) {
                 int first = b.getInt(mtxdata + (firstMd + g) * 8 + 4);
                 int size = b.getInt(pkt + (firstPkt + g) * 8), off = b.getInt(pkt + (firstPkt + g) * 8 + 4);
@@ -168,6 +224,7 @@ public final class BdlReader {
                     int cnt = b.getShort(p) & 0xFFFF;
                     p += 2;
                     float[][] pv = new float[cnt][], tv = new float[cnt][];
+                    int[] vj = new int[cnt];
                     for (int i = 0; i < cnt; i++) {
                         int mtx = 0, pi = 0, ti = -1;
                         for (int[] a : desc) {
@@ -185,16 +242,42 @@ public final class BdlReader {
                             else if (a[0] == 13) ti = val;
                         }
                         int draw = b.getShort(mtxtab + 2 * (first + mtx)) & 0xFFFF;
-                        Matrix4f w = world[drw[draw]];
-                        w.transformPosition(tmp.set(pos[pi][0], pos[pi][1], pos[pi][2]));
-                        pv[i] = new float[] {tmp.x, tmp.y, tmp.z};
+                        vj[i] = drw[draw];
+                        if (jointsOut == null) {
+                            world[drw[draw]].transformPosition(tmp.set(pos[pi][0], pos[pi][1], pos[pi][2]));
+                            pv[i] = new float[] {tmp.x, tmp.y, tmp.z};
+                        } else pv[i] = new float[] {pos[pi][0], pos[pi][1], pos[pi][2]};
                         tv[i] = ti < 0 ? new float[] {0, 0} : new float[] {uv[ti][0], uv[ti][1]};
                     }
+                    int before = tris.size();
                     triangles(op & 0xF8, pv, tv, tris);
+                    if (triJoints != null) {
+                        // Each triangle goes to its first vertex's joint; a vertex of another joint is moved into
+                        // that joint's space at rest (exact in the rest pose, it follows one joint when animated).
+                        java.util.IdentityHashMap<float[], Integer> of = new java.util.IdentityHashMap<>();
+                        for (int i = 0; i < cnt; i++) of.put(pv[i], vj[i]);
+                        for (int t = before; t < tris.size(); t++) {
+                            Tri tr = tris.get(t);
+                            int ref = of.get(tr.pos()[0]);
+                            float[][] np = new float[3][];
+                            for (int c = 0; c < 3; c++) {
+                                int jc = of.get(tr.pos()[c]);
+                                if (jc == ref) np[c] = tr.pos()[c];
+                                else {
+                                    Matrix4f m = new Matrix4f(world[ref]).invert().mul(world[jc]);
+                                    m.transformPosition(tmp.set(tr.pos()[c][0], tr.pos()[c][1], tr.pos()[c][2]));
+                                    np[c] = new float[] {tmp.x, tmp.y, tmp.z};
+                                }
+                            }
+                            tris.set(t, new Tri(np, tr.uv()));
+                            triJoints.add(ref);
+                        }
+                    }
                 }
             }
             int mat = si < shapeMaterial.length ? shapeMaterial[si] : -1;
             out.add(new Shape(mat >= 0 && mat < materialTexture.length ? materialTexture[mat] : -1, tris));
+            if (jointsOut != null) jointsOut.add(triJoints);
         }
         return out;
     }

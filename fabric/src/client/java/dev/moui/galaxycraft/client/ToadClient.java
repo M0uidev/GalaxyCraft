@@ -4,8 +4,11 @@ import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.gravity.LookMath;
 import dev.moui.galaxycraft.ship.ShipBoarding;
+import dev.moui.galaxycraft.ship.model.BckReader;
 import dev.moui.galaxycraft.ship.model.ShipModels;
+import dev.moui.galaxycraft.toad.ToadLook;
 import dev.moui.galaxycraft.toad.ToadModels;
+import dev.moui.galaxycraft.toad.ToadPose;
 import dev.moui.galaxycraft.toad.ToadRecord;
 import dev.moui.galaxycraft.toad.ToadStore;
 import dev.moui.galaxycraft.toad.ToadType;
@@ -77,7 +80,7 @@ public final class ToadClient {
 
     private static Vector3d centreOf(ToadRecord r) {
         Vector3d up = new Vector3d(0, 1, 0).rotate(new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]));
-        double half = ToadModels.HEIGHT_PX / 16.0 / 2 / GravityFrame.SCALE;
+        double half = ToadModels.HEIGHT_PX / 16.0 / 2 / GravityFrame.SCALE; // the model stands from its feet up
         return new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]).fma(half, up);
     }
 
@@ -104,6 +107,7 @@ public final class ToadClient {
         ToadRecord t = aimed(player, frame);
         if (t == null) return false;
         talks++;
+        talked(t);
         ToadTalk.talk(player, t);
         return true;
     }
@@ -185,22 +189,105 @@ public final class ToadClient {
         saveNow();
     }
 
+    // ---- drawing: each Toad posed from its animation, turned to the player ----
+
+    /** What a Toad does between frames (never saved): the way it has turned from its spot, when it stops talking. */
+    private static final class State {
+        double yaw;
+        long talkUntil, last;
+        final double phase = Math.random();
+    }
+
+    private static final java.util.Map<String, State> STATES = new java.util.HashMap<>();
+    /** Blocks within which a Toad turns to the player, radians a second it turns at, how long (ns) a talk animates. */
+    private static final double LOOK_RANGE = 8, TURN = 4;
+    private static final long TALK_NS = 4_000_000_000L;
+    private static final double FPS = 30;
+    private static final long EPOCH = System.nanoTime();
+    private static final java.util.Map<Integer, ShipModels.Skin> FLAT = new java.util.HashMap<>();
+
+    /** A Toad was talked to: it animates its Talk for a few seconds. */
+    static void talked(ToadRecord r) {
+        STATES.computeIfAbsent(r.id(), k -> new State()).talkUntil = System.nanoTime() + TALK_NS;
+    }
+
+    private static ShipModels.Skin flat(int rgb) {
+        return FLAT.computeIfAbsent(rgb, c -> {
+            int[] px = new int[16];
+            java.util.Arrays.fill(px, 0xFF000000 | c);
+            return new ShipModels.Skin(4, 4, px);
+        });
+    }
+
+    private static double wrap(double a) {
+        while (a > Math.PI) a -= 2 * Math.PI;
+        while (a < -Math.PI) a += 2 * Math.PI;
+        return a;
+    }
+
     /** The pieces of this stage's Toads, universe units, for EntityClient's frame. */
     static void pieces(EntityClient ec, List<EntityWire.Piece> out) {
         if (store == null) return;
         String stage = stageName();
         double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);
+        long now = System.nanoTime();
+        LocalPlayer me = Minecraft.getInstance().player;
+        GravityFrame fr = GalaxyCraftClient.frame();
+        Vector3d eye = me != null && fr != null ? fr.toGal(vec(me.getEyePosition())) : null;
+        ToadModels.Loaded model = ToadModels.get();
+        float[][] srt = new float[model.rest().length][];
+        float[] sample = new float[9];
         for (ToadRecord r : store.all()) {
             if (!r.stage().equals(stage)) continue;
-            Matrix4d m = new Matrix4d().translation(r.pos()[0], r.pos()[1], r.pos()[2])
-                    .rotate(new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]))
-                    .scale(unitsPerPixel).translate(0, ToadModels.HEIGHT_PX / 2, 0);
-            for (ShipModels.PartModel part : ToadModels.parts()) {
-                int model = ec.shipModel(part, part.quads());
-                int skin = ec.shipSkin(part.skin(), part.skin().width(), part.skin().height(), part.skin().argb());
-                if (model < 0 || skin < 0) continue;
-                out.add(new EntityWire.Piece(model, skin, 0, part.tint(), ShipClient.rows(m)));
+            ToadLook look = ToadLook.of(r.type());
+            State st = STATES.computeIfAbsent(r.id(), k -> new State());
+            double dt = st.last == 0 ? 0 : Math.min(0.1, (now - st.last) / 1e9);
+            st.last = now;
+            Quaterniond q = new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]);
+            Vector3d pos = new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]);
+            // Turn to the player when near (about its up, from the way it was put down), else back.
+            double target = 0;
+            if (eye != null) {
+                Vector3d to = new Vector3d(eye).sub(pos);
+                double x = to.dot(new Vector3d(1, 0, 0).rotate(q)), z = to.dot(new Vector3d(0, 0, 1).rotate(q));
+                if (to.length() * GravityFrame.SCALE < LOOK_RANGE && x * x + z * z > 1e-12) target = Math.atan2(x, z);
             }
+            double diff = wrap(target - st.yaw), step = TURN * dt;
+            st.yaw = wrap(st.yaw + Math.max(-step, Math.min(step, diff)));
+            Matrix4d base = new Matrix4d().translation(pos.x, pos.y, pos.z).rotate(q).rotateY(st.yaw).scale(unitsPerPixel);
+            // The pose: the animation's frame on every joint it has, the rest pose for the others.
+            boolean talking = now < st.talkUntil;
+            BckReader.Anim anim = model.anims().get(talking ? look.talk() : look.idle());
+            if (anim == null) anim = model.anims().get(talking ? "Talk" : "Wait");
+            double frame = (now - EPOCH) / 1e9 * FPS + (anim == null ? 0 : st.phase * anim.duration());
+            for (int j = 0; j < srt.length; j++) {
+                if (anim != null && anim.joints() == srt.length) {
+                    anim.sample(j, (float) frame, sample);
+                    srt[j] = sample.clone();
+                } else srt[j] = model.rest()[j];
+            }
+            org.joml.Matrix4f[] world = ToadPose.worlds(model.parent(), srt);
+            for (ToadModels.RigPart rp : model.parts()) {
+                ShipModels.PartModel part = rp.part();
+                ShipModels.Skin skin = part.skin();
+                int tint = part.tint();
+                if (rp.texture() == ToadModels.CAP_TEXTURE && rp.joint() == ToadModels.HEAD_JOINT) tint = look.cap();
+                for (int vt : ToadModels.VEST_TEXTURES) if (rp.texture() == vt) skin = flat(look.vest());
+                int mdl = ec.shipModel(part, part.quads());
+                int skn = ec.shipSkin(skin == part.skin() ? skin : "toad-flat-" + look.vest(), skin.width(), skin.height(), skin.argb());
+                if (mdl < 0 || skn < 0) continue;
+                Matrix4d m = new Matrix4d(base).mul(new Matrix4d(ToadModels.pieceMatrix(model, world[rp.joint()])));
+                out.add(new EntityWire.Piece(mdl, skn, 0, tint, ShipClient.rows(m)));
+            }
+            // What it carries, on its joint.
+            if (look.joint() < world.length)
+                for (ShipModels.PartModel g : ToadModels.goods(look.goods())) {
+                    int mdl = ec.shipModel(g, g.quads());
+                    int skn = ec.shipSkin(g.skin(), g.skin().width(), g.skin().height(), g.skin().argb());
+                    if (mdl < 0 || skn < 0) continue;
+                    Matrix4d m = new Matrix4d(base).mul(new Matrix4d(ToadModels.pieceMatrix(model, world[look.joint()])));
+                    out.add(new EntityWire.Piece(mdl, skn, 0, g.tint(), ShipClient.rows(m)));
+                }
         }
     }
 }

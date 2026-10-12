@@ -50,7 +50,8 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
             check(ctx.computeOnClient(mc -> GalaxyCraftClient.inVoid()), "far above the stage is space");
 
             ctx.runOnClient(mc -> ToadClient.clearAll());
-            // 1. A Toad goes down 4 blocks ahead, its feet there, facing the player.
+            // 1. The five types go down in a row 4 blocks ahead, the Guide in the middle, facing the player.
+            ToadType[] row = {ToadType.MINER, ToadType.EXPLORER, ToadType.GUIDE, ToadType.TECHNICIAN, ToadType.MAILMAN};
             Vector3d feet = ctx.computeOnClient(mc -> {
                 GravityFrame f = GalaxyCraftClient.frame();
                 Vector3d eye = f.toGal(new Vector3d(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ()));
@@ -58,17 +59,22 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
                 Vector3d up = f.upGal().normalize();
                 Vector3d flat = new Vector3d(look).fma(-look.dot(up), up).normalize();
                 Vector3d at = new Vector3d(eye).fma(units(4), flat).fma(-units(1.6), up);
-                Vector3d right = new Vector3d(up).cross(new Vector3d(flat).negate());
-                ToadClient.put(ToadType.GUIDE, at, new Quaterniond().setFromNormalized(new Matrix3d(right, up, new Vector3d(flat).negate())));
+                Vector3d back = new Vector3d(flat).negate();
+                Vector3d right = new Vector3d(up).cross(back);
+                Quaterniond q = new Quaterniond().setFromNormalized(new Matrix3d(right, up, back));
+                for (int i = 0; i < row.length; i++)
+                    ToadClient.put(row[i], new Vector3d(at).fma(units((i - 2) * 1.5), right), q);
                 return at;
             });
-            check(ctx.computeOnClient(mc -> ToadClient.toads().size()) == 1, "the Toad is in the world");
+            check(ctx.computeOnClient(mc -> ToadClient.toads().size()) == 5, "five Toads are in the world");
             ctx.waitTicks(40);
             Vector3d centre = ctx.computeOnClient(mc -> new Vector3d(feet).fma(units(0.75), GalaxyCraftClient.frame().upGal().normalize()));
             aimAt(ctx, centre);
             ctx.waitTicks(60);
             aimAt(ctx, centre);
             shot(ctx, "toad-front");
+            waitReal(ctx, 1200);
+            shot(ctx, "toad-front-later"); // animated: not the same frame
 
             // 2. From its side, 3 blocks off.
             Vector3d side = ctx.computeOnClient(mc -> {
