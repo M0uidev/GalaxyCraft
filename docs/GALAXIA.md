@@ -57,8 +57,10 @@ semilla (no se guarda nada): la misma semilla da el mismo universo.
 - El **Pulse** solo funciona dentro del alcance de un sistema; entre sistemas queda apagado.
 - Los sistemas visitados se anotan en `visited.json`, junto a los planetas de la galaxia.
 
-Para probarlo en el juego: pon *Warp Core Tier* en 0, apunta a una estrella lejana y pulsa K (el chat
-dice su nivel y que tu Warp Core no alcanza); ponlo en 3 y pulsa K otra vez: viaja. En el vacío entre
+Por ahora solo se puede hacer warp desde el mapa (K o N) y solo en modo creativo o con trucos
+(cheats) activados; si no, el chat lo dice. Para probarlo en el juego: pon *Warp Core Tier* en 0,
+abre el mapa y elige una estrella lejana (el chat dice su nivel y que tu Warp Core no alcanza); ponlo
+en 3 y elígela otra vez: viaja. En el vacío entre
 sistemas, planear con sprint ya no acelera el Pulse. Las etiquetas de las estrellas muestran
 «tier N, tipo de estrella».
 
