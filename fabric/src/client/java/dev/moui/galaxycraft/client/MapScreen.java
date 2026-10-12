@@ -96,7 +96,7 @@ final class MapScreen extends Screen {
         UPos m = mario();
         origin = m;
         for (Universe.Star s : u.around(m, UniverseClient.STAR_SECTORS)) {
-            SystemInfo info = SystemInfo.of(s);
+            SystemInfo info = SystemInfo.of(u, s);
             String label = (s.home() ? "Home" : "System " + SystemIndex.name(s.sector())) + "  T" + info.tier();
             int color = SystemInfo.visited(s) ? info.star().argb : dim(info.star().argb);
             items.add(new Item(label, s.center().minus(m), (150 + 25 * s.planets()) * UNITS, color, s, s.center(), 0, TIER[Math.min(5, info.tier())], null));
@@ -292,7 +292,7 @@ final class MapScreen extends Screen {
     private List<String> describe(Item it) {
         List<String> out = new ArrayList<>();
         if (it.star() != null && inside == null) {
-            SystemInfo info = SystemInfo.of(it.star());
+            SystemInfo info = SystemInfo.of(UniverseClient.universe(), it.star());
             out.add("Tier " + info.tier() + ", " + info.star().name().toLowerCase().replace('_', ' ') + " star");
             out.add(it.star().planets() + " planets");
             out.add(SystemInfo.visited(it.star()) ? "Visited" : "Not visited yet");
@@ -311,7 +311,7 @@ final class MapScreen extends Screen {
         var sp = view.project(c);
         if (sp.isPresent()) {
             int r = (int) Math.max(3, Math.min(20, 400 * UNITS / sp.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
-            disc(g, (int) sp.get().x(), (int) sp.get().y(), r, SystemInfo.of(inside).star().argb);
+            disc(g, (int) sp.get().x(), (int) sp.get().y(), r, SystemInfo.of(UniverseClient.universe(), inside).star().argb);
             g.text(font, inside.home() ? "Home star" : "Star", (int) sp.get().x() + r + 3, (int) sp.get().y() - 4, GRAY);
         }
         boolean all = order.size() <= 10;
