@@ -310,13 +310,14 @@ final class MapScreen extends Screen {
                 g.text(font, "" + t, width - 168 + t * 26 + 11, height - 28, GRAY);
             }
         }
-        if (selected >= 0) info(g, items.get(selected));
-        if (selected >= 0 && inside == null && items.get(selected).star() != null && !Warp.allowed(minecraft)) {
-            int wy = panelEnd(items.get(selected)) + 52;
-            g.text(font, "Warp needs creative mode", width - 168, wy, GRAY);
-            g.text(font, "or cheats on.", width - 168, wy + 11, GRAY);
-        }
-        else overview(g);
+        if (selected >= 0) {
+            info(g, items.get(selected));
+            if (inside == null && items.get(selected).star() != null && !Warp.allowed(minecraft)) {
+                int wy = panelEnd(items.get(selected)) + 52;
+                g.text(font, "Warp needs creative mode", width - 168, wy, GRAY);
+                g.text(font, "or cheats on.", width - 168, wy + 11, GRAY);
+            }
+        } else overview(g);
         g.text(font, "Click: select   Drag: turn   Wheel: zoom", 8, height - 26, GRAY);
         g.text(font, inside == null ? "Double click or Enter: enter the system" : "Backspace: back to the galaxy", 8, height - 14, GRAY);
         super.extractRenderState(g, mouseX, mouseY, a);
@@ -345,10 +346,10 @@ final class MapScreen extends Screen {
         Vector3d c = inside.center().minus(origin);
         var sp = view.project(c);
         if (sp.isPresent()) {
-            int r = (int) Math.max(4, Math.min(16, 400 * UNITS / sp.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
+            int r = (int) Math.max(4, Math.min(12, 400 * UNITS / sp.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
             int sc = SystemInfo.of(UniverseClient.universe(), inside).star().argb;
-            MapSprites.glow(g, (int) sp.get().x(), (int) sp.get().y(), 2 * r * 4, MapSprites.tint(sc, 0.8));
-            MapSprites.sphere(g, (int) sp.get().x(), (int) sp.get().y(), 2 * r + 1, sc);
+            MapSprites.glow(g, (int) sp.get().x(), (int) sp.get().y(), 2 * r * 3, MapSprites.tint(sc, 0.75));
+            MapSprites.disc(g, (int) sp.get().x(), (int) sp.get().y(), 2 * r + 1, sc);
             label(g, inside.home() ? "Home star" : "Star", (int) sp.get().x() + r + 3, (int) sp.get().y() - 4, GRAY, true);
         }
         plate(g, c, order);
@@ -491,7 +492,7 @@ final class MapScreen extends Screen {
     private static void star(GuiGraphicsExtractor g, int x, int y, int r, Item it, double near) {
         int c = it.color();
         MapSprites.glow(g, x, y, 2 * (r * 3 + 5), MapSprites.tint(c, 0.25 + 0.5 * near));
-        MapSprites.sphere(g, x, y, 2 * r + 1, MapSprites.tint(c, 0.5 + 0.5 * near));
+        MapSprites.disc(g, x, y, 2 * r + 1, MapSprites.tint(c, 0.55 + 0.45 * near)); // a star is lit by itself: no shading
         if (it.ring() != 0) MapSprites.ring(g, x, y, 2 * (r + 4), MapSprites.tint(it.ring(), 0.35 + 0.65 * near));
         if (it.star() != null && it.star().home()) MapSprites.ring(g, x, y, 2 * (r + 10), 0xFF7CFF7C);
     }

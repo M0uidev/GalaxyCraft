@@ -14,7 +14,7 @@ import net.minecraft.resources.Identifier;
 final class MapSprites {
     static final int N = 32;
     private static final int DUST_W = 256, DUST_H = 128;
-    private static Identifier glow, sphere, ring, dust;
+    private static Identifier glow, sphere, disc, ring, dust;
 
     private MapSprites() {}
 
@@ -34,6 +34,7 @@ final class MapSprites {
             double shade = Math.min(1, 0.22 + 0.78 * lit + 0.25 * Math.pow(lit, 24));
             return argb(edge, shade);
         });
+        disc = make("map_disc", N, N, (x, y, d, w, h) -> argb((1 - d) * N / 2.0, 1));
         ring = make("map_ring", N, N, (x, y, d, w, h) -> {
             double a = 1 - Math.abs(d - 0.9) * N / 3.0;
             return a <= 0 ? 0 : argb(Math.min(1, a), 1);
@@ -90,6 +91,12 @@ final class MapSprites {
     static void sphere(GuiGraphicsExtractor g, int cx, int cy, int size, int color) {
         ensure();
         quad(g, sphere, cx, cy, size, N, N, color);
+    }
+
+    /** Flat and soft-edged: what lights itself (a star). */
+    static void disc(GuiGraphicsExtractor g, int cx, int cy, int size, int color) {
+        ensure();
+        quad(g, disc, cx, cy, size, N, N, color);
     }
 
     static void ring(GuiGraphicsExtractor g, int cx, int cy, int size, int color) {
