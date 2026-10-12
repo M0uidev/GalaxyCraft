@@ -82,6 +82,13 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftOutpost")) { // tools/gxvoxel.sh outpost: OutpostProbe, Toad outposts on a tier >= 1 system's planets
+				vmArg "-Dgalaxycraft.outpostProbe=true"
+				vmArg "-Dgalaxycraft.planetDir=" // empty: each world keeps its own galaxy, as when playing
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+				if (project.hasProperty("galaxycraftShipDir")) vmArg "-Dgalaxycraft.shipDir=" + project.property("galaxycraftShipDir")
+			}
 			if (project.hasProperty("galaxycraftApproach")) { // tools/gxvoxel.sh approach: ApproachProbe, planets seen from afar
 				vmArg "-Dgalaxycraft.approachProbe=true"
 				vmArg "-Dgalaxycraft.planetDir=" // empty: each world keeps its own galaxy, as when playing
@@ -142,6 +149,7 @@ loom {
 			}
 			if (project.hasProperty("galaxycraftToadGame")) { // tools/gxvoxel.sh toad: ToadDolphinProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.toadGame=true"
+				vmArg "-Dgalaxycraft.stationsAnywhere=true"
 				if (project.hasProperty("galaxycraftShipDir")) vmArg "-Dgalaxycraft.shipDir=" + project.property("galaxycraftShipDir")
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
 				vmArg "-Dgalaxycraft.galaxy=true"

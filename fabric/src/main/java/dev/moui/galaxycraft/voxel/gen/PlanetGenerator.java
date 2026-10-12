@@ -40,7 +40,12 @@ public final class PlanetGenerator {
     }
 
     /** A generated planet's cells, before they are a VoxelPlanet (that is made on the game's thread). */
-    public record Cells(CubeSphere grid, int depth, char[] cells, dev.moui.galaxycraft.voxel.PlanetBiomes biomes) {
+    public record Cells(CubeSphere grid, int depth, char[] cells, dev.moui.galaxycraft.voxel.PlanetBiomes biomes,
+            java.util.List<Huts.Placed> huts) {
+        public Cells(CubeSphere grid, int depth, char[] cells, dev.moui.galaxycraft.voxel.PlanetBiomes biomes) {
+            this(grid, depth, cells, biomes, java.util.List.of());
+        }
+
         public VoxelPlanet planet(Blocks blocks) {
             VoxelPlanet p = VoxelPlanet.of(grid, depth, cells, blocks);
             p.setBiomes(biomes);
@@ -73,6 +78,15 @@ public final class PlanetGenerator {
 
     /** The cells alone: safe off the game's thread when ids only reads (see {@link #blocks()}). */
     public static Cells cells(PlanetBlueprint bp, Vegetation.Library plants, ToIntFunction<String> ids) {
+        return cells(bp, plants, ids, java.util.List.of(), true);
+    }
+
+    /**
+     * The cells with huts (toad outposts) asked for: each built (or, with build off, only its spot
+     * found) before the plants, which keep off it. Cells.huts() has those that found ground.
+     */
+    public static Cells cells(PlanetBlueprint bp, Vegetation.Library plants, ToIntFunction<String> ids,
+            java.util.List<Huts.Request> huts, boolean build) {
         Density density = new Density(bp);
         Density.Scale scale = density.scale();
         int radius = bp.radius(), depth = scale.depth();
@@ -189,6 +203,8 @@ public final class PlanetGenerator {
             }
         }
         Underground.ores(grid, depth, cells, height, bp.seed(), bp.ores(), ids);
+        java.util.List<Huts.Placed> placed = huts.isEmpty() ? java.util.List.of()
+                : Huts.plant(grid, depth, cells, height, bare, huts, build, ids);
         if (bp.plants() > 0) {
             String[] names = new String[columns];
             for (int col = 0; col < columns; col++) names[col] = biome[col].id();
@@ -196,7 +212,7 @@ public final class PlanetGenerator {
         }
         String[] names = new String[columns];
         for (int col = 0; col < columns; col++) names[col] = biome[col].id();
-        return new Cells(grid, depth, cells, dev.moui.galaxycraft.voxel.PlanetBiomes.of(names));
+        return new Cells(grid, depth, cells, dev.moui.galaxycraft.voxel.PlanetBiomes.of(names), placed);
     }
 
     private static char id(ToIntFunction<String> ids, String name) {

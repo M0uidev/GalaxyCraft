@@ -42,6 +42,9 @@ public final class ToadClient {
     private static Path file;
     private static boolean dirty;
     private static int talks;
+    /** Outposts made on worker threads, waiting for the client thread to put them (planet key, its Toads). */
+    private record Outposts(String planetKey, List<ToadRecord> toads) {}
+    private static final java.util.concurrent.ConcurrentLinkedQueue<Outposts> OUTPOSTS = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
     private ToadClient() {}
 
@@ -51,12 +54,84 @@ public final class ToadClient {
         file = planetsDir == null ? null : planetsDir.resolve("toads.json");
         store = file == null ? null : ToadStore.load(file);
         dirty = false;
+        OUTPOSTS.clear();
         ToadModels.load(ShipClient.shipDir());
     }
 
     /** The Toads (tests). */
     public static List<ToadRecord> toads() {
+        drainOutposts();
         return store == null ? List.of() : store.all();
+    }
+
+    /**
+     * A planet's outposts, made with its cells (any thread): put on the next frame, once, whatever
+     * happens to them later (a planet made again offers the same ones).
+     */
+    public static void offerOutposts(String planetKey, List<ToadRecord> toads) {
+        if (!toads.isEmpty()) OUTPOSTS.add(new Outposts(planetKey, List.copyOf(toads)));
+    }
+
+    /**
+     * A station's Technician, a few blocks from its core on the deck, facing the core (put again,
+     * with the same id, when the station is unfolded somewhere else). station: its id, center in
+     * galaxy units, rotation as its grid's.
+     */
+    public static void putTechnician(PlanetSession session, String stationId, Vector3d center, Quaterniond rotation) {
+        if (store == null) return;
+        Vector3d up = new Vector3d(0, 1, 0).rotate(rotation), side = new Vector3d(1, 0, 0).rotate(rotation);
+        Vector3d from = new Vector3d(center).fma(2.5 / GravityFrame.SCALE, side).fma(6 / GravityFrame.SCALE, up);
+        Vector3d[] hit = session.surfaceAlong(from, new Vector3d(up).negate(), 12);
+        if (hit == null) {
+            GalaxyCraft.LOG.info("No deck for the Technician of station {}", stationId);
+            return;
+        }
+        Vector3d fwd = new Vector3d(side).negate(), n = hit[1];
+        fwd.fma(-fwd.dot(n), n).normalize();
+        Quaterniond q = new Quaterniond().setFromNormalized(new Matrix3d(new Vector3d(n).cross(fwd), n, fwd));
+        store.put(new ToadRecord("toad-station-" + stationId, ToadType.TECHNICIAN, new double[] {hit[0].x, hit[0].y, hit[0].z},
+                new double[] {q.x, q.y, q.z, q.w}, stageName()));
+        dirty = true;
+        saveNow();
+    }
+
+    /** A station packed: its Technician goes with it. */
+    public static void removeTechnician(String stationId) {
+        if (store == null) return;
+        if (store.remove("toad-station-" + stationId).isPresent()) {
+            dirty = true;
+            saveNow();
+        }
+    }
+
+    private static int homeWait;
+
+    /**
+     * The home planet's Guide: once, when the player first stands near the world's first planet, a
+     * few blocks ahead on its ground (marked placed under "home", so it never comes back).
+     */
+    private static void homeGuide(LocalPlayer me, GravityFrame fr) {
+        if (store == null || me == null || fr == null || store.wasPlaced("home") || ++homeWait < 30) return;
+        homeWait = 0;
+        PlanetSession home = PlanetClient.sessionOf(0);
+        if (home == null || !home.active() || home.planet() == null || home.station() != null) return;
+        double blocks = fr.toGal(vec(me.getEyePosition())).distance(home.center()) * GravityFrame.SCALE;
+        if (blocks > home.planet().surface() + 24) return;
+        if (place(me, ToadType.GUIDE) != null) return; // no ground in reach yet: tried again
+        store.markPlaced("home");
+        dirty = true;
+        saveNow();
+    }
+
+    private static void drainOutposts() {
+        Outposts o;
+        while ((o = OUTPOSTS.poll()) != null) {
+            if (store == null || store.wasPlaced(o.planetKey())) continue;
+            for (ToadRecord r : o.toads()) store.put(r);
+            store.markPlaced(o.planetKey());
+            dirty = true;
+        }
+        saveNow();
     }
 
     private static void saveNow() {
@@ -227,12 +302,14 @@ public final class ToadClient {
 
     /** The pieces of this stage's Toads, universe units, for EntityClient's frame. */
     static void pieces(EntityClient ec, List<EntityWire.Piece> out) {
+        drainOutposts();
         if (store == null) return;
         String stage = stageName();
         double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);
         long now = System.nanoTime();
         LocalPlayer me = Minecraft.getInstance().player;
         GravityFrame fr = GalaxyCraftClient.frame();
+        homeGuide(me, fr);
         Vector3d eye = me != null && fr != null ? fr.toGal(vec(me.getEyePosition())) : null;
         ToadModels.Loaded model = ToadModels.get();
         float[][] srt = new float[model.rest().length][];

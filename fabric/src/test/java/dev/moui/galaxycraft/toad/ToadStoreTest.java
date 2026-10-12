@@ -46,4 +46,22 @@ class ToadStoreTest {
         assertEquals(1, s.all().size());
         assertEquals("b", s.all().get(0).id());
     }
+
+    @Test void placedPlanetsSurviveAndOldFilesLoad() throws IOException {
+        Path f = dir.resolve("p.json");
+        ToadStore s = ToadStore.load(f);
+        s.put(new ToadRecord("t", ToadType.MINER, new double[] {0, 0, 0}, new double[] {0, 0, 0, 1}, ""));
+        s.markPlaced("p7");
+        s.save();
+        ToadStore back = ToadStore.load(f);
+        assertTrue(back.wasPlaced("p7"));
+        assertFalse(back.wasPlaced("p8"));
+        assertEquals(1, back.all().size());
+        // The first format was a bare array of Toads.
+        Path old = dir.resolve("old.json");
+        Files.writeString(old, "[{\"id\":\"a\",\"type\":\"guide\",\"pos\":[1,2,3]}]");
+        ToadStore o = ToadStore.load(old);
+        assertEquals("a", o.all().get(0).id());
+        assertFalse(o.wasPlaced("p7"));
+    }
 }

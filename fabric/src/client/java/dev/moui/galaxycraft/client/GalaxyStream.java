@@ -314,12 +314,38 @@ final class GalaxyStream {
                 return;
             }
             if (bp.mode() == PlanetBlueprint.Mode.GENERATED) {
-                CompletableFuture<VoxelPlanet> g = PlanetClient.generateAsync(bp);
+                CompletableFuture<VoxelPlanet> g = generate(bp, e);
                 if (g == null) return; // no worldgen yet: tried again next time
                 f = g.thenApply(p -> p);
             } else f = CompletableFuture.completedFuture(bp.build(blocks));
         }
         making.put(index, f);
+    }
+
+    /** A generated planet's making, with the Toad outposts its system's tier and star give it (huts built with its cells). */
+    private CompletableFuture<VoxelPlanet> generate(PlanetBlueprint bp, GalaxyCatalog.Entry e) {
+        Universe.Star star = universe == null ? null
+                : SystemIndex.ref(e.index()).flatMap(r -> universe.star(r.sector())).orElse(null);
+        if (star == null || star.home()) return PlanetClient.generateAsync(bp);
+        String key = "p" + e.index();
+        java.util.List<dev.moui.galaxycraft.toad.ToadPlan.Spot> spots = dev.moui.galaxycraft.toad.ToadPlan.outposts(key, e.seed(),
+                e.radius(), universe.tier(star), universe.starType(star));
+        GalaxyCraft.LOG.info("Planet {} (radius {}): {} Toad outposts asked", e.index(), e.radius(), spots.size());
+        if (spots.isEmpty()) return PlanetClient.generateAsync(bp);
+        var chosen = spots;
+        java.util.List<dev.moui.galaxycraft.voxel.gen.Huts.Request> asked = new ArrayList<>();
+        for (var sp : chosen) asked.add(new dev.moui.galaxycraft.voxel.gen.Huts.Request(sp.id(), sp.dir()));
+        boolean build = !"false".equals(System.getProperty("galaxycraft.toadHuts"));
+        Vector3d center = e.center();
+        return PlanetClient.generateAsync(bp, asked, build, placed -> {
+            java.util.List<dev.moui.galaxycraft.toad.ToadRecord> toads = new ArrayList<>();
+            for (var p : placed)
+                for (var sp : chosen)
+                    if (sp.id().equals(p.id()))
+                        toads.add(dev.moui.galaxycraft.toad.ToadPlacing.record(stage, sp.type(), p, center, UNITS));
+            GalaxyCraft.LOG.info("Planet {}: {} of {} outposts found ground", e.index(), toads.size(), chosen.size());
+            ToadClient.offerOutposts(key, toads);
+        });
     }
 
     /**

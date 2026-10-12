@@ -304,6 +304,7 @@ public final class StationClient {
         s.center = at.center();
         PlanetSession session = activate(s);
         write(s);
+        ToadClient.putTechnician(session, s.id, s.center, s.rotation);
         useUp(player, hand, StationBlocks.CORE_ITEM);
         GalaxyCraft.LOG.info("Station {} up at {}", s.id, s.center);
         return session;
@@ -336,6 +337,7 @@ public final class StationClient {
         turned.center = at.center();
         PlanetSession session = activate(turned);
         write(turned);
+        ToadClient.putTechnician(session, turned.id, turned.center, turned.rotation);
         useUp(player, hand, StationBlocks.PACKED);
         GalaxyCraft.LOG.info("Station {} unfolded at {}", s.id, turned.center);
         return session;
@@ -357,6 +359,7 @@ public final class StationClient {
         if (found.isEmpty()) return;
         Station s = found.get().station();
         s.stage = null;
+        ToadClient.removeTechnician(s.id);
         found.get().session().clean();
         write(s);
         active.remove(found.get());
