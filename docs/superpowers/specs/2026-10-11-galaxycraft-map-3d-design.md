@@ -97,8 +97,9 @@ ships in two phases. **Phase 1 (on master):** everything above except the seam: 
 and orbits, with ships behind a `MapShips` interface that is empty until a ship side installs one
 (the map then shows systems, planets, tier and star, and warps; ship controls stay hidden).
 **Phase 2:** the `MapShips` implementation and the two call sites in `ShipClient`, once the toad
-ship is on master and its session agrees. `Universe.system` also becomes `synchronized` (the map
-asks it from the render thread; `GalaxyStream`'s maker thread already does).
+ship is on master and its session agrees. `Universe.system` also becomes `synchronized` as a
+precaution (the map asks it from the render thread, as `GalaxyStream` already does on the client
+thread: nothing races today).
 
 ## Risks
 

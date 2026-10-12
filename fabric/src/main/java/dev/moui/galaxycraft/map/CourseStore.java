@@ -21,6 +21,11 @@ public final class CourseStore {
         this.file = file;
     }
 
+    /** A store with no file: nothing is read, save does nothing. */
+    public static CourseStore empty() {
+        return new CourseStore(null);
+    }
+
     public static CourseStore load(Path file) {
         CourseStore s = new CourseStore(file);
         try {
@@ -67,6 +72,7 @@ public final class CourseStore {
     }
 
     public void save() throws IOException {
+        if (file == null) return;
         JsonObject o = new JsonObject();
         for (Map.Entry<String, Trip> e : trips.entrySet()) {
             Trip t = e.getValue();

@@ -5,6 +5,10 @@ import org.joml.Vector3d;
 
 /** A straight trip: from, to (universe), the tick it left and its speed, units a tick (> 0). Position is a function of the tick. */
 public record Course(UPos from, UPos to, long startTick, double speed) {
+    public Course {
+        if (!(speed > 0)) throw new IllegalArgumentException("speed must be above 0: " + speed);
+    }
+
     public double length() {
         return to.minus(from).length();
     }

@@ -92,7 +92,7 @@ public final class Universe {
     }
 
     /** The world's galaxy reaches this far (blocks; at least a system's reach). */
-    public Universe withHome(double reachBlocks) {
+    public synchronized Universe withHome(double reachBlocks) {
         homeReach = Math.max(systemBlocks(), reachBlocks);
         systems.clear();
         return this;

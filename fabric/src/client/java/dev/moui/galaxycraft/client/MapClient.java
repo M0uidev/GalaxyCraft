@@ -27,7 +27,7 @@ final class MapClient {
 
     /** Never null: an unloaded world has an empty store that is not saved. */
     static CourseStore courses() {
-        return courses != null ? courses : (courses = CourseStore.load(Path.of("courses.json.none")));
+        return courses != null ? courses : (courses = CourseStore.empty());
     }
 
     static long now() {

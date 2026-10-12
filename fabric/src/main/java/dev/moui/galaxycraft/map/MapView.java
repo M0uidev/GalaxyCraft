@@ -53,7 +53,7 @@ public final class MapView {
         Vector3d u = new Vector3d(r).cross(f);
         Vector3d d = new Vector3d(p).sub(eye);
         double z = d.dot(f);
-        if (z <= distance * 1e-6) return Optional.empty();
+        if (z <= distance * 0.01) return Optional.empty();
         double scale = (height / 2.0) / Math.tan(FOV / 2);
         return Optional.of(new Screen(width / 2.0 + d.dot(r) / z * scale, height / 2.0 - d.dot(u) / z * scale, z));
     }

@@ -66,4 +66,32 @@ class RemoteControlTest {
         assertTrue(s.get("a").isEmpty());
         assertEquals(0, RemoteControl.cancel(s, "a", HOME, 200).minus(HOME).length(), 1e-9); // no trip: stays recorded
     }
+
+    @Test void shipsComingFromNearbySidesStillOrbitApart(@TempDir Path d) {
+        CourseStore s = store(d);
+        UPos a = PLANET.plus(new Vector3d(-50_000, 0, 0));
+        UPos b = PLANET.plus(new Vector3d(-50_000 * Math.cos(0.77), 0, -50_000 * Math.sin(0.77))); // 44 degrees to the side
+        Trip ta = RemoteControl.send(s, "a", a, PLANET, 64, U, 50, 0);
+        Trip tb = RemoteControl.send(s, "b", b, PLANET, 64, U, 50, 0);
+        long t = Math.max(ta.orbit().epochTick(), tb.orbit().epochTick());
+        double apart = ta.positionAt(t).minus(tb.positionAt(t)).length();
+        assertTrue(apart > 0.3 * ta.orbit().radius(), "ships only " + apart + " apart");
+    }
+
+    @Test void manyShipsOnOnePlanetAreAllApart(@TempDir Path d) {
+        CourseStore s = store(d);
+        for (int i = 0; i < 6; i++) RemoteControl.send(s, "s" + i, HOME, PLANET, 64, U, 50, 0);
+        long t = 5000;
+        var all = s.all().values().stream().map(x -> x.positionAt(t)).toList();
+        for (int i = 0; i < all.size(); i++)
+            for (int j = i + 1; j < all.size(); j++)
+                assertTrue(all.get(i).minus(all.get(j)).length() > 1000, "ships " + i + " and " + j + " too close");
+    }
+
+    @Test void aStoppedEngineIsRefused(@TempDir Path d) {
+        CourseStore s = store(d);
+        assertThrows(IllegalArgumentException.class, () -> RemoteControl.send(s, "a", HOME, PLANET, 64, U, 0, 0));
+        assertThrows(IllegalArgumentException.class, () -> new Course(HOME, PLANET, 0, -1));
+        assertTrue(s.all().isEmpty());
+    }
 }

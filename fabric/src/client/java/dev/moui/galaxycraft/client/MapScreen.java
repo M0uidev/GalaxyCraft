@@ -130,7 +130,8 @@ final class MapScreen extends Screen {
         lastDragX = ev.x();
         List<Vector3d> pts = new ArrayList<>();
         for (Item it : items) pts.add(it.pos());
-        int i = view.pick(pts, ev.x(), ev.y(), 10);
+        int i = view.pick(pts, ev.x(), ev.y(), 8);
+        if (i < 0 && doubled && selected >= 0) i = selected; // the first click moved the focus: the second is on the same item
         if (i >= 0) {
             selected = i;
             view.focusOn(items.get(i).pos(), view.distance());
@@ -139,6 +140,11 @@ final class MapScreen extends Screen {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return false; // trips run on the world's clock: markers must keep moving
     }
 
     @Override
@@ -152,6 +158,7 @@ final class MapScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
+        if (scrollY == 0) return false;
         view.zoom(scrollY > 0 ? 0.85 : 1 / 0.85);
         return true;
     }
@@ -177,10 +184,14 @@ final class MapScreen extends Screen {
         view.width = width;
         view.height = height;
         long now = MapClient.now();
-        for (int i = 0; i < items.size(); i++) {
+        List<Integer> order = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) order.add(i);
+        // Far to near, so nearer discs and labels cover farther ones.
+        order.sort(java.util.Comparator.comparingDouble((Integer i) -> -view.project(items.get(i).pos()).map(MapView.Screen::depth).orElse(0.0)));
+        for (int i : order) {
             Item it = items.get(i);
             var p = view.project(it.pos());
-            if (p.isEmpty()) continue;
+            if (p.isEmpty() || Math.abs(p.get().x()) > 20000 || Math.abs(p.get().y()) > 20000) continue;
             int r = (int) Math.max(2, Math.min(24, it.size() / p.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
             disc(g, (int) p.get().x(), (int) p.get().y(), r, it.color());
             if (i == selected) ring(g, (int) p.get().x(), (int) p.get().y(), r + 4, WHITE);
