@@ -11,15 +11,22 @@ import net.minecraft.network.chat.Component;
 
 /**
  * What happens when you talk to a Toad: its lines, in chat, then its trade (Minecraft's own screen,
- * opened on the integrated server's player: the world is always singleplayer). Until
- * the 3D map's SystemInfo is in master the system's tier and star are the home system's (0, yellow)
- * and the ship's Warp Core and missing module are not asked.
+ * opened on the integrated server's player: the world is always singleplayer). The system's tier and
+ * star are those of the system the player is in (home: tier 0, yellow); the ship's Warp Core and
+ * missing module are not asked yet.
  */
 final class ToadTalk {
     private ToadTalk() {}
 
+    /** The system the player is in, as a Toad knows it (home's when the universe or the system is not known). */
+    static ToadContext context() {
+        var u = UniverseClient.universe();
+        if (u == null) return ToadContext.home();
+        return Warp.here().map(star -> ToadContext.forSystem(u.tier(star), u.starType(star))).orElse(ToadContext.home());
+    }
+
     static void talk(LocalPlayer player, ToadRecord toad) {
-        ToadContext ctx = new ToadContext(0, "yellow", 0, null, true);
+        ToadContext ctx = context();
         for (ToadDialogue.Line l : ToadDialogue.lines(toad.type(), ctx))
             player.sendSystemMessage(Component.translatable(l.key(), l.args().toArray()));
         ToadMerchant merchant = ToadMerchant.of(toad.type(), ctx.systemTier());
