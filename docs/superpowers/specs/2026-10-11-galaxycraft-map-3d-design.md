@@ -90,6 +90,16 @@ Two call sites in `ShipClient`: where each ship is placed/drawn from `store.all(
 (with a course, controls are ignored except W). Both ask `CourseStore.positionAt(id, t)` and fall
 back to the record. `ShipRecord`, `ShipStore` and the JSON do not change.
 
+## Phasing (found while planning, 2026-10-11)
+
+Master has no `ship/*`: the Toad ship lives on `feat/toad-ship` / `test/playtest`, unmerged. So the map
+ships in two phases. **Phase 1 (on master):** everything above except the seam: data, screen, courses
+and orbits, with ships behind a `MapShips` interface that is empty until a ship side installs one
+(the map then shows systems, planets, tier and star, and warps; ship controls stay hidden).
+**Phase 2:** the `MapShips` implementation and the two call sites in `ShipClient`, once the toad
+ship is on master and its session agrees. `Universe.system` also becomes `synchronized` (the map
+asks it from the render thread; `GalaxyStream`'s maker thread already does).
+
 ## Risks
 
 - **Units**: `ShipRecord.pos` is galaxy units of a stage, `Course` is universe units (`UPos`);
