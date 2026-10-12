@@ -1,5 +1,6 @@
 package dev.moui.galaxycraft.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.map.MapShips;
 import dev.moui.galaxycraft.map.MapView;
@@ -165,7 +166,7 @@ final class MapScreen extends Screen {
     @Override
     public boolean mouseClicked(MouseButtonEvent ev, boolean doubled) {
         if (super.mouseClicked(ev, doubled)) return true;
-        if (ev.button() != 0) return false;
+        if (ev.button() != InputConstants.MOUSE_BUTTON_LEFT) return false; // 26.x: SDL numbers, left is 1
         lastDragX = ev.x();
         int i = pickAt(ev.x(), ev.y());
         if (i < 0 && doubled && selected >= 0) i = selected; // the first click moved the focus: the second is on the same item
@@ -194,7 +195,7 @@ final class MapScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent ev, double dx, double dy) {
-        if (ev.button() == 0 && ev.x() < width - PANEL_W) {
+        if (ev.button() == InputConstants.MOUSE_BUTTON_LEFT && ev.x() < width - PANEL_W) {
             view.orbit(-dx * 0.01, dy * 0.01);
             return true;
         }

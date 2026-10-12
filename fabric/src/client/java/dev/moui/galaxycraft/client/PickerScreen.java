@@ -1,5 +1,6 @@
 package dev.moui.galaxycraft.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -157,7 +158,7 @@ public final class PickerScreen extends Screen {
     @Override
     public boolean mouseClicked(MouseButtonEvent ev, boolean doubled) {
         int i = at(ev.x(), ev.y());
-        if (i >= 0 && ev.button() == 0) {
+        if (i >= 0 && ev.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             choose(shown.get(i));
             return true;
         }

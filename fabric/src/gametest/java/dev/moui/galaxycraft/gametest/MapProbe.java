@@ -1,5 +1,6 @@
 package dev.moui.galaxycraft.gametest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.moui.galaxycraft.client.PendingGalaxy;
 import dev.moui.galaxycraft.client.PlanetClient;
 import dev.moui.galaxycraft.client.UniverseClient;
@@ -61,7 +62,7 @@ public final class MapProbe implements FabricClientGameTest {
         }
         ctx.getInput().setCursorPos(w / 2, h / 2);
         ctx.waitTicks(3);
-        ctx.getInput().pressMouse(0);
+        ctx.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
         ctx.waitTicks(3);
         ctx.takeScreenshot("map-picked");
         ctx.getInput().pressKey(257 /* Enter */);
@@ -70,7 +71,7 @@ public final class MapProbe implements FabricClientGameTest {
         // The panel's "Enter system" button (second button, 160 wide at the panel's left).
         ctx.getInput().setCursorPos(w - 90 * k, 116 * k);
         ctx.waitTicks(2);
-        ctx.getInput().pressMouse(0);
+        ctx.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
         ctx.waitTicks(5);
         ctx.takeScreenshot("map-system");
         ctx.getInput().scroll(0, 3);
