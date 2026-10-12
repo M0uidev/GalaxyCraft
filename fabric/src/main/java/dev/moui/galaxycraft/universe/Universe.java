@@ -103,6 +103,16 @@ public final class Universe {
         return s.home() ? homeReach : systemBlocks();
     }
 
+    /** A system's tier (0 to 5), from its distance to home and its own seed. */
+    public int tier(Star s) {
+        return Tier.of(s.center().minus(UPos.ZERO).length() / unitsPerBlock, s.seed(), s.home());
+    }
+
+    /** A system's star type, from its tier and its own seed. */
+    public StarType starType(Star s) {
+        return StarType.of(tier(s), s.seed(), s.home());
+    }
+
     /** How far a system's center strays from its sector's, units on each axis at most. */
     double jitter() {
         return SECTOR / 2 - (systemBlocks() + GAP_BLOCKS / 2) * unitsPerBlock;
