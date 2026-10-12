@@ -96,6 +96,15 @@ public final class Huts {
                     if (Math.abs(a) <= 1 && Math.abs(b) <= 1) cells[base + level + 4] = cap;
                 }
             cells[col(n, f, ci - 1, cj - 1) * layers + level + 1] = torch;
+            // A level way out: three wide, three long, past the door (ground above the floor is cut
+            // with what grows on it, ground below it filled), so the door is never walled by a step.
+            for (int a = HALF + 1; a <= HALF + 3; a++)
+                for (int b = -1; b <= 1; b++) {
+                    int c = col(n, f, ci + a, cj + b), base = c * layers, g = depth - 1 + height[c];
+                    for (int k = level + 1; k <= level + HEIGHT; k++) cells[base + k] = Blocks.AIR;
+                    for (int k = g + 1; k <= level; k++) cells[base + k] = dirt;
+                    height[c] = level - (depth - 1);
+                }
         }
         // What grows is kept off the hut and its ring.
         for (int a = -KEEP; a <= KEEP; a++)

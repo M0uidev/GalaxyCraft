@@ -105,4 +105,21 @@ class HutsTest {
         assertEquals(1, out.size());
         assertArrayEquals(copy, w.cells);
     }
+
+    @Test void aStepInFrontOfTheDoorIsLeveled() {
+        // Ground one block higher on the door's side of the hut (rows past the hut's middle).
+        World w = world(c -> c / N % N >= 28 ? 1 : 0);
+        List<Huts.Placed> out = Huts.plant(w.g, DEPTH, w.cells, w.height, w.bare,
+                List.of(new Huts.Request("h", dir(0, 1, 0))), true, ids);
+        assertEquals(1, out.size());
+        // Every column of the way out has its top at the floor's layer, nothing above it.
+        double[] d = out.get(0).dir();
+        int at = w.g.cellAt(new org.joml.Vector3d(d[0], d[1], d[2]).mul(30 + DEPTH - 0.5));
+        int col = at / LAYERS, n = N;
+        for (int a = 2; a <= 4; a++) { // the spot is the column past the middle; the way out is the three after the wall
+            int c = col + a * n;
+            assertEquals(0, w.height[c], "height " + a);
+            for (int k = DEPTH; k < LAYERS; k++) assertEquals(0, w.cells[c * LAYERS + k], "air " + a + " " + k);
+        }
+    }
 }
