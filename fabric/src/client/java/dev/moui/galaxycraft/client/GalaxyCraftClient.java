@@ -168,6 +168,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> DolphinStarter.stop());
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> dev.moui.galaxycraft.client.music.MusicService.shutdown());
         dev.moui.galaxycraft.client.music.MusicKeys.register();
+        ModKeys.register();
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player != null && client.level != null) dev.moui.galaxycraft.client.music.MusicService.tick();
         });
@@ -438,7 +439,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     /** F6: Mario's movement or Minecraft's. */
     static void toggleMovement() {
         GalaxyOptions.MOVEMENT.set(GalaxyOptions.MOVEMENT.get().other());
-        say("movement: " + GalaxyOptions.MOVEMENT.get().label() + " (F6 to switch)");
+        say("movement: " + GalaxyOptions.MOVEMENT.get().label() + " (" + ModKeys.label(ModKeys.MOVEMENT) + " to switch)");
     }
 
     public static boolean flying() {
