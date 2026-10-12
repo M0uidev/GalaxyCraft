@@ -5,6 +5,8 @@ import dev.moui.galaxycraft.universe.OriginPolicy;
 import dev.moui.galaxycraft.universe.SystemIndex;
 import dev.moui.galaxycraft.universe.UPos;
 import dev.moui.galaxycraft.universe.Universe;
+import dev.moui.galaxycraft.universe.Visited;
+import dev.moui.galaxycraft.universe.WarpGate;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.client.Minecraft;
@@ -22,7 +24,9 @@ public final class Warp {
     /** A star counts as aimed at within this many degrees of the crosshair. */
     static final double AIM_DEG = 2.5;
     private static final double UNITS = 1 / GravityFrame.SCALE;
-    private static int hintTicks;
+    private static int hintTicks, visitTicks;
+    private static Visited visited;
+    private static java.nio.file.Path visitedFor;
 
     private Warp() {}
 
@@ -32,6 +36,17 @@ public final class Warp {
         Vector3d mario = PlanetClient.marioUniverse();
         if (u == null || mario == null) return Optional.empty();
         return u.systemAt(UPos.of(mario), OriginPolicy.SYSTEM_MARGIN);
+    }
+
+    /** This galaxy's visited systems (reloaded when the galaxy's folder changes); null outside a galaxy. */
+    public static Visited visited() {
+        java.nio.file.Path f = PlanetClient.visitedFile();
+        if (f == null) return null;
+        if (visited == null || !f.equals(visitedFor)) {
+            visited = Visited.load(f);
+            visitedFor = f;
+        }
+        return visited;
     }
 
     /** The other systems within the stars' reach, nearest first. */
@@ -65,7 +80,10 @@ public final class Warp {
     static String label(Universe.Star s) {
         Vector3d mario = PlanetClient.marioUniverse();
         long blocks = mario == null ? 0 : Math.round(s.center().minus(UPos.of(mario)).length() / UNITS);
-        return String.format("%s: %d planets, %,d blocks", s.home() ? "Home" : "System " + SystemIndex.name(s.sector()), s.planets(), blocks);
+        String name = s.home() ? "Home" : "System " + SystemIndex.name(s.sector());
+        Universe u = UniverseClient.universe();
+        String kind = u == null ? "" : ", tier " + u.tier(s) + ", " + u.starType(s).name().toLowerCase().replace('_', ' ');
+        return String.format("%s: %d planets, %,d blocks%s", name, s.planets(), blocks, kind);
     }
 
     /** K: to the star in the crosshair, or the map when there is none. */
@@ -83,6 +101,12 @@ public final class Warp {
 
     /** Off to that system's first planet. */
     public static void to(Minecraft mc, Universe.Star s) {
+        Universe u = UniverseClient.universe();
+        Visited seen = visited();
+        if (u != null && seen != null && !WarpGate.allowed(u, s, seen, GalaxyOptions.WARP_CORE.get())) {
+            GalaxyCraftClient.say(WarpGate.why(u, s, GalaxyOptions.WARP_CORE.get()));
+            return;
+        }
         int index = s.home() ? PlanetClient.catalog().getFirst().index() : SystemIndex.index(s.sector(), 0);
         GalaxyCraftClient.say("warping to " + label(s));
         Flight.end(mc.player); // no glide or pulse into the warp (the landing ends any left too)
@@ -92,6 +116,20 @@ public final class Warp {
 
     /** Every client tick: out in the void, the star in the crosshair is named above the hotbar. */
     static void tick(Minecraft mc) {
+        if (++visitTicks >= 20) { // once a second: the system Mario is in counts as visited
+            visitTicks = 0;
+            Visited seen = visited();
+            if (seen != null)
+                here().ifPresent(s -> {
+                    if (seen.mark(s.sector())) {
+                        try {
+                            seen.save();
+                        } catch (java.io.IOException e) {
+                            dev.moui.galaxycraft.GalaxyCraft.LOG.warn("Visited systems not saved: {}", e.toString());
+                        }
+                    }
+                });
+        }
         if (mc.player == null || mc.gui.screen() != null || !GalaxyCraftClient.inVoid() || ++hintTicks < 10) return;
         hintTicks = 0;
         aimed(mc.player).ifPresent(s -> mc.gui.hud.setOverlayMessage(Component.literal(label(s) + " - " + ModKeys.label(ModKeys.WARP) + " to warp"), false));

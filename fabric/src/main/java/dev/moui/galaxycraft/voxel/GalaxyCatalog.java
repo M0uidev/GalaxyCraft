@@ -19,25 +19,27 @@ public final class GalaxyCatalog {
     static final int TRIES = 400;
 
     /**
-     * The world layout new worlds get: 2 spaces planets far apart (and lets other systems reach
-     * farther). Worlds saved before keep 1, so their planets stay where their blocks were saved.
+     * The world layout new worlds get: 3 spaces planets more than 1,500 blocks apart (2 spaced them
+     * far apart and lets other systems reach farther). Worlds saved before keep their layout, so
+     * their planets stay where their blocks were saved.
      */
-    public static final int LAYOUT = 2;
+    public static final int LAYOUT = 3;
 
     /** Empty space between two planets' gravities, by layout. */
     public enum Spacing {
-        NEAR(24, 150), NORMAL(96, 600), FAR(300, 1500);
+        NEAR(24, 150, 600), NORMAL(96, 600, 1600), FAR(300, 1500, 2400);
 
-        private final int old, wide;
+        private final int old, wide, farther;
 
-        Spacing(int old, int wide) {
+        Spacing(int old, int wide, int farther) {
             this.old = old;
             this.wide = wide;
+            this.farther = farther;
         }
 
         /** Blocks between gravities in that layout. */
         public int blocks(int layout) {
-            return layout >= 2 ? wide : old;
+            return layout >= 3 ? farther : layout >= 2 ? wide : old;
         }
     }
 

@@ -126,6 +126,8 @@ public final class PlanetClient {
     /** -Dgalaxycraft.planetDir (game tests): one folder for every world, as before worlds had galaxies. */
     private static final boolean FIXED_DIR = !System.getProperty("galaxycraft.planetDir", "").isEmpty();
     /** The world's planets (null: no world, so none is loaded or saved). */
+    /** The folder of the galaxy being played (visited systems live in it); null outside a world. */
+    private static java.nio.file.Path galaxyDir;
     private static PlanetStore store = FIXED_DIR ? new PlanetStore(planetDir()) : null;
     /** The world's galaxy (null: none, or FIXED_DIR). */
     private static GalaxySave galaxy;
@@ -1119,6 +1121,7 @@ public final class PlanetClient {
         if (FIXED_DIR) return;
         galaxy = g;
         store = new PlanetStore(g.planets());
+        galaxyDir = g.planets();
         StationClient.enterWorld(g.planets());
         ShipClient.enterWorld(g.planets());
         MapClient.enterWorld(g.planets());
@@ -1155,6 +1158,7 @@ public final class PlanetClient {
         UniverseClient.leave(bridge);
         galaxy = null;
         store = null;
+        galaxyDir = null;
         stage = null;
         landPending = false;
         generating = null;
@@ -1438,6 +1442,12 @@ public final class PlanetClient {
                 GalaxyCatalog.LAYOUT);
         if (r.placed() < r.asked()) say(player, r.placed() + " of " + r.asked() + " planets fit in the galaxy");
         return new GalaxySave.Galaxy(GalaxyCatalog.LAYOUT, o, r.entries());
+    }
+
+    /** This galaxy's visited.json (Visited), or null when no galaxy is entered. */
+    public static java.nio.file.Path visitedFile() {
+        java.nio.file.Path dir = FIXED_DIR ? planetDir() : galaxyDir;
+        return dir == null ? null : dir.resolve("visited.json");
     }
 
     /**

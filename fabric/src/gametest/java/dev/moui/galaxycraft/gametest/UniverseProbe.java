@@ -292,6 +292,16 @@ public final class UniverseProbe implements FabricClientGameTest {
             gliding = ctx.computeOnClient(mc -> mc.player.isFallFlying());
         }
         check(gliding, "the elytra open out in the void");
+        // Between systems the pulse stays off: only a system's reach is Pulse's, the rest is the Warp Core's.
+        ctx.getInput().holdKey(o -> o.keySprint);
+        ctx.waitTicks(60);
+        double voidPulse = ctx.computeOnClient(mc -> dev.moui.galaxycraft.client.Flight.pulseSpeed());
+        ctx.getInput().releaseKey(o -> o.keySprint);
+        log(String.format("pulse out between systems: %.2f blocks a tick", voidPulse));
+        check(voidPulse == 0, "the pulse stays off between systems");
+        Vector3d inside = new Vector3d(0, -1, 0).mul(1500 * U);
+        ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(inside));
+        ctx.waitTicks(40);
         Vector3d before = ctx.computeOnClient(mc -> PlanetClient.marioUniverse());
         ctx.getInput().holdKey(o -> o.keySprint);
         ctx.waitTicks(100);
@@ -330,7 +340,54 @@ public final class UniverseProbe implements FabricClientGameTest {
         int home = ctx.computeOnClient(mc -> PlanetClient.catalog().getFirst().index());
         ctx.runOnClient(mc -> PlanetClient.travelTo(home));
         waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(home), 240);
+        gate(ctx);
         ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MARIO));
+    }
+
+    /**
+     * The Warp Core's reach: with the core at tier 0 a far, not yet visited system is refused (Mario
+     * stays where he is); at tier 3 it opens, and is recorded in visited.json; then, the core at 0
+     * again, the visited system still opens.
+     */
+    private void gate(ClientGameTestContext ctx) {
+        Universe.Star far = ctx.computeOnClient(mc -> {
+            Universe u = UniverseClient.universe();
+            return u.around(UPos.of(new Vector3d(45_000 * U, 0, 0)), 3).stream().filter(s -> u.tier(s) >= 3).findFirst().orElseThrow();
+        });
+        int index = SystemIndex.index(far.sector(), 0);
+        int tier = ctx.computeOnClient(mc -> UniverseClient.universe().tier(far));
+        log(String.format("far system %s: tier %d, %.0f blocks from home", SystemIndex.name(far.sector()), tier,
+                far.center().minus(UPos.ZERO).length() / U));
+        ctx.runOnClient(mc -> GalaxyOptions.WARP_CORE.set(0));
+        ctx.runOnClient(mc -> dev.moui.galaxycraft.client.Warp.to(mc, far));
+        ctx.waitTicks(60);
+        check(ctx.computeOnClient(mc -> !PlanetClient.waitingToLand() && !on(index)), "a Warp Core of tier 0 refuses a far new system");
+        ctx.runOnClient(mc -> GalaxyOptions.WARP_CORE.set(3));
+        ctx.runOnClient(mc -> dev.moui.galaxycraft.client.Warp.to(mc, far));
+        waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(index), 240);
+        ctx.waitTicks(60);
+        check(ctx.computeOnClient(mc -> on(index)), "a Warp Core of tier 3 opens it");
+        java.nio.file.Path visited = ctx.computeOnClient(mc -> PlanetClient.visitedFile());
+        String text = visited != null && java.nio.file.Files.isRegularFile(visited) ? read(visited) : "";
+        check(text.contains(SystemIndex.name(far.sector())), "the visit is in visited.json: " + text);
+        int home = ctx.computeOnClient(mc -> PlanetClient.catalog().getFirst().index());
+        ctx.runOnClient(mc -> GalaxyOptions.WARP_CORE.set(0));
+        ctx.runOnClient(mc -> dev.moui.galaxycraft.client.Warp.to(mc, ctx.computeOnClient(m -> UniverseClient.universe().star(Universe.Sector.HOME).orElseThrow())));
+        waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(home), 240);
+        ctx.runOnClient(mc -> dev.moui.galaxycraft.client.Warp.to(mc, far));
+        waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(index), 240);
+        check(ctx.computeOnClient(mc -> on(index)), "a visited system opens with the Warp Core at tier 0");
+        ctx.runOnClient(mc -> GalaxyOptions.WARP_CORE.set(3));
+        ctx.runOnClient(mc -> PlanetClient.travelTo(home));
+        waitReal(ctx, mc -> !PlanetClient.waitingToLand() && onSurface() && on(home), 240);
+    }
+
+    private static String read(java.nio.file.Path f) {
+        try {
+            return java.nio.file.Files.readString(f);
+        } catch (IOException e) {
+            return "";
+        }
     }
 
     /**

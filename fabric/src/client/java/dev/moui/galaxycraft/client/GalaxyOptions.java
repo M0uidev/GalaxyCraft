@@ -64,6 +64,10 @@ public final class GalaxyOptions {
             "How far the far view stays fine past the blocks: next to them it is almost block by block, and each step farther "
                     + "its patches are twice as wide. Higher: finer farther out, more memory",
             1, 6, 1, 2, ""));
+    public static final Setting.Range WARP_CORE = SETTINGS.add(new Setting.Range("warpCore", "Warp Core Tier",
+            "Highest tier of a system you have not been to that you can warp to. Stands in for the ship's Warp Core module "
+                    + "until it exists (3 = no limit)",
+            0, 3, 1, 3, ""));
     public static final Setting.Toggle PARTICLES = SETTINGS.add(new Setting.Toggle("particles", "Game Particles",
             "Minecraft's particles (explosions, broken blocks, hits) drawn in the game", true));
 
