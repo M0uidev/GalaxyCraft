@@ -34,9 +34,30 @@ plan 2 (`Universe.tier(Star)`, `Universe.starType(Star)`).
 4. **Where exactly**: feet on `surfaceAlong(centre + dir * (radius + margin), -dir, reach)`; the
    rotation is the one `ToadClient.place` already builds (up = surface normal). Near spawn for the
    Guide: 8 blocks from `PlanetSession.spawn` point.
-5. **Villages later**: when progression stage 5 has a structure placer, it calls
-   `ToadPlan.forStructure(structureSeed, kind)` for its Toad and passes the house position; until
-   then outposts are a lone Toad (optionally a 3x3 mushroom-block hut placed through `Placer`).
+5. **The hut (user decision 2026-10-12: a small mushroom hut at each outpost, not a lone Toad)**.
+   A hut is a `Vegetation.Thing` built in code (`toad/ToadHut`: about 5x5x4 blocks of mushroom
+   stem walls, a red mushroom block roof with white spots, a door gap, a floor patch at dy 0, a
+   torch). `Vegetation.place(grid, depth, cells, height, f, i, j, col, thing, ids)` already lays a
+   Thing on the grid whole-or-not-at-all, handles face edges and cover, so no new placing code.
+   - **Hook (generation time)**: after `Vegetation.plant` in `Vegetation.cells`, a new
+     `Vegetation.plantStructures(..., List<Structure>)` places each `(direction, Thing)` on the
+     nearest column where the hut fits, flattening nothing (if it does not fit, try the next
+     candidate direction from the same hash, up to 8). `PlanetBlueprint` carries the list
+     (`structures()`, default empty so every existing caller is unchanged). The same hook is what
+     progression's stage 5 structures (villages, mines) can use: I define it as generic
+     (`Structure(String id, double[] dir, Thing thing)`), they add kinds.
+   - The hut's block stays deterministic from the seed, edits persist as normal edits, and there is
+     no `placed` bookkeeping for blocks. The Toad record is still put by the runtime step above,
+     standing at the hut's door (the hut reports its door column), and uses the `placed` mark.
+   - **Existing saved planets**: if a planet was already generated and saved with its cells, the hut
+     cannot appear there. To check before coding: whether `PlanetStore.Saved` keeps cells or only
+     edits over the generator. If cells, huts only appear on planets generated after this lands
+     (fine for new worlds), and the runtime step skips the Toad when the planet has no hut so it
+     never floats beside nothing.
+   - **Fallback flag** `galaxycraft.toadHuts=false` (or no structure fits): the lone Toad
+     placement described in 4, same ids.
+   - Home Guide and station Technician stay lone Toads (a station is a flat metal deck; the home
+     planet gets no hut in the first version).
 
 ## What I need from progression (b5)
 
@@ -45,6 +66,9 @@ plan 2 (`Universe.tier(Star)`, `Universe.starType(Star)`).
   only `PlanetClient.stage()` and `GalaxyCatalog.Entry` are known to me. If `Universe.system()`
   already gives it, I use that.
 - Confirmation that tier/star never change for a seed (derived, not stored), so ids stay stable.
+- Nothing for the hut itself: `Vegetation.place` and the new `plantStructures` hook are in
+  voxel/gen, which I understand is not being edited by b5 in Task 1-6 (stage 3-5 will be). If their
+  stage 5 designs a different hook, tell me and I conform instead of keeping mine.
 - Later: the structure table, and the Warp Core tier name for `ToadContext.warpCoreTier`.
 
 ## Tests
@@ -54,7 +78,7 @@ no outpost under radius 48. `ToadStoreTest`: `placed` round trip and old file. P
 `ToadDolphinProbe` to enter a planet of tier >= 1 and count the placed Toads. Probe needs the
 Dolphin slot from the orchestrator.
 
-## Open questions for the user
+## Decided (user, 2026-10-12)
 
-- A lone Toad on the surface, or a small mushroom hut with it?
-- How many outposts per planet is right (first draft: at most 2)?
+- A small mushroom hut at each outpost. Outposts per planet as drafted: 0-1 in tiers 1-2, 0-2
+  (Mailman too) in tier 3+.
