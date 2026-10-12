@@ -631,7 +631,10 @@ public final class PlanetClient {
     /** Client tick, after the gravity frame is up to date. */
     public static void tick(LocalPlayer player, BridgeClient bridge, GravityFrame frame, Seqlock.WorldState world) {
         if (blocks == null) {
-            if (FIXED_DIR) StationClient.enterWorld(planetDir());
+            if (FIXED_DIR) {
+                StationClient.enterWorld(planetDir());
+                MapClient.enterWorld(planetDir());
+            }
             blocks = McBlocks.create(Minecraft.getInstance());
             atlasLink = new AtlasLink(blocks.atlas, 1);
             session.setBlocks(blocks);
@@ -1079,6 +1082,7 @@ public final class PlanetClient {
         galaxy = g;
         store = new PlanetStore(g.planets());
         StationClient.enterWorld(g.planets());
+        MapClient.enterWorld(g.planets());
         landOn = resolved(g.spot().orElse(null));
         landPending = true;
         homeAsked = false;
@@ -1097,6 +1101,7 @@ public final class PlanetClient {
         writeSpot(Minecraft.getInstance().player);
         saveNow();
         StationClient.enterWorld(null); // saved, dropped with the galaxy
+        MapClient.enterWorld(null);
         if (stream != null) stream.clear();
         stream = null;
         session.unload();

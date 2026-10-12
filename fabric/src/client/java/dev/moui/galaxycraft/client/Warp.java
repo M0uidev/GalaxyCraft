@@ -80,7 +80,7 @@ public final class Warp {
 
     static void map(Minecraft mc) {
         if (mc.player == null || UniverseClient.universe() == null) return;
-        mc.gui.setScreen(new GalaxyMapScreen());
+        mc.gui.setScreen(new MapScreen());
     }
 
     /** Off to that system's first planet. */
