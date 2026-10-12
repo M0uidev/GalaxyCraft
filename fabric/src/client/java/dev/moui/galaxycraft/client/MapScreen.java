@@ -126,7 +126,7 @@ final class MapScreen extends Screen {
     private void rebuildButtons() {
         clearWidgets();
         int x = width - 170, y = selected < 0 ? 40 : panelEnd(items.get(selected));
-        addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose()).bounds(width / 2 - 50, height - 27, 100, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose()).bounds(width - 170, height - 68, 160, 20).build());
         if (selected < 0) return;
         Item it = items.get(selected);
         if (inside == null && it.star() != null) {
@@ -206,7 +206,7 @@ final class MapScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent ev) {
-        if (ev.isConfirmation() && selected >= 0 && inside == null && items.get(selected).star() != null) {
+        if ((ev.isConfirmation() || ev.key() == 257 || ev.key() == 335) && selected >= 0 && inside == null && items.get(selected).star() != null) {
             systemLevel(items.get(selected).star());
             rebuildButtons();
             return true;
@@ -253,6 +253,7 @@ final class MapScreen extends Screen {
         }
         hovered = pickAt(mouseX, mouseY);
         if (hovered >= 0) labelled.add(hovered);
+        if (inside != null) systemFrame(g, order, hovered); // under the planets
         for (int i : order) {
             Item it = items.get(i);
             int r = (int) Math.max(2, Math.min(24, it.size() / depth[i] * (height / 2.0) / Math.tan(Math.toRadians(30))));
@@ -261,7 +262,6 @@ final class MapScreen extends Screen {
             if (i == selected) ring(g, (int) sx[i], (int) sy[i], r + 4, WHITE);
             else if (i == hovered) ring(g, (int) sx[i], (int) sy[i], r + 4, HOVER);
         }
-        if (inside != null) systemFrame(g, order, hovered);
         you(g);
         for (int i : order) {
             if (!labelled.contains(i)) continue;
@@ -310,7 +310,7 @@ final class MapScreen extends Screen {
         Vector3d c = inside.center().minus(origin);
         var sp = view.project(c);
         if (sp.isPresent()) {
-            int r = (int) Math.max(3, Math.min(20, 400 * UNITS / sp.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
+            int r = (int) Math.max(3, Math.min(12, 400 * UNITS / sp.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
             disc(g, (int) sp.get().x(), (int) sp.get().y(), r, SystemInfo.of(UniverseClient.universe(), inside).star().argb);
             g.text(font, inside.home() ? "Home star" : "Star", (int) sp.get().x() + r + 3, (int) sp.get().y() - 4, GRAY);
         }
