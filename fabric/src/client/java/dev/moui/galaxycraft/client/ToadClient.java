@@ -6,10 +6,13 @@ import dev.moui.galaxycraft.gravity.LookMath;
 import dev.moui.galaxycraft.ship.ShipBoarding;
 import dev.moui.galaxycraft.ship.model.BckReader;
 import dev.moui.galaxycraft.ship.model.ShipModels;
+import dev.moui.galaxycraft.toad.ToadContext;
+import dev.moui.galaxycraft.toad.ToadConversation;
 import dev.moui.galaxycraft.toad.ToadLook;
 import dev.moui.galaxycraft.toad.ToadModels;
 import dev.moui.galaxycraft.toad.ToadPose;
 import dev.moui.galaxycraft.toad.ToadRecord;
+import dev.moui.galaxycraft.toad.ToadScript;
 import dev.moui.galaxycraft.toad.ToadStore;
 import dev.moui.galaxycraft.toad.ToadType;
 import dev.moui.galaxycraft.view.EntityWire;
@@ -21,6 +24,7 @@ import java.util.List;
 import java.util.UUID;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix3d;
@@ -178,13 +182,159 @@ public final class ToadClient {
 
     /** Client tick: a right click on a Toad talks to it. True if the click was the Toad's. */
     static boolean tick(LocalPlayer player, GravityFrame frame, boolean rightClick) {
-        if (!rightClick || store == null || player == null || frame == null) return false;
+        if (store == null || player == null || frame == null) {
+            endConversation();
+            return false;
+        }
+        if (conv != null && !stillTalking(player, frame)) endConversation();
+        if (conv != null) {
+            dialogueKeys(player);
+            if (conv == null) return rightClick; // a key ended it (Bye, Trade): the click was its too
+            if (rightClick) {
+                ToadRecord other = aimed(player, frame);
+                if (other == null || other.id().equals(with.id())) {
+                    ToadConversation.Outcome o = conv.choosing() ? conv.confirm() : advanceNow();
+                    outcome(player, o);
+                    return true;
+                }
+            } else return false;
+        }
+        if (!rightClick) return false;
         ToadRecord t = aimed(player, frame);
         if (t == null) return false;
         talks++;
         talked(t);
         ToadTalk.talk(player, t);
         return true;
+    }
+
+    // ---- the dialogue box: one conversation at a time, driven by the pure ToadConversation ----
+
+    private static ToadConversation conv;
+    private static ToadRecord with;
+    private static ToadContext convContext;
+    private static int savedSlot, shownPage = -1, blipped;
+    private static String pageText = "";
+    private static long lastFrameNs;
+    private static boolean[] keysWas = new boolean[7];
+    /** Blocks: farther than this from the Toad and the box closes. */
+    static final double WALK_AWAY = 8;
+
+    /** The talk begun (ToadTalk). */
+    static void begin(LocalPlayer player, ToadRecord toad, ToadConversation c, ToadContext ctx) {
+        endConversation();
+        conv = c;
+        with = toad;
+        convContext = ctx;
+        savedSlot = player.getInventory().getSelectedSlot();
+        shownPage = -1;
+        blipped = 0;
+        lastFrameNs = 0;
+        java.util.Arrays.fill(keysWas, true); // a key held when it opens is not a press
+    }
+
+    /** The conversation going on (tests), or null. */
+    public static ToadConversation conversation() {
+        return conv;
+    }
+
+    /** The Toad being talked to (tests), or null. */
+    public static ToadRecord talkingTo() {
+        return with;
+    }
+
+    /** Choice i of the box taken, as its number key does (tests, and a way in for other input). */
+    public static void choose(LocalPlayer player, int i) {
+        if (conv != null) outcome(player, conv.choose(i));
+    }
+
+    /** Ends the talk (the box goes). */
+    public static void endConversation() {
+        conv = null;
+        with = null;
+        ToadDialogueHud.show(null);
+    }
+
+    private static boolean stillTalking(LocalPlayer player, GravityFrame frame) {
+        if (Minecraft.getInstance().gui.screen() != null) return false; // any screen (Esc's menu, a chest): the talk is over
+        ToadRecord now = null;
+        for (ToadRecord r : store.all()) if (r.id().equals(with.id())) now = r;
+        if (now == null) return false;
+        Vector3d eye = frame.toGal(vec(player.getEyePosition()));
+        return eye.distance(centreOf(now)) * GravityFrame.SCALE <= WALK_AWAY;
+    }
+
+    private static ToadConversation.Outcome advanceNow() {
+        conv.advance(pageText.length());
+        return conv.outcome();
+    }
+
+    /** Enter, Up/Down and the keys 1 to 4 (edges), and the hotbar kept where it was. */
+    private static void dialogueKeys(LocalPlayer player) {
+        Minecraft mc = Minecraft.getInstance();
+        boolean[] now = new boolean[7];
+        now[0] = ToadKeys.ADVANCE.isDown();
+        now[1] = ToadKeys.UP.isDown();
+        now[2] = ToadKeys.DOWN.isDown();
+        for (int i = 0; i < 4; i++) now[3 + i] = mc.options.keyHotbarSlots[i].isDown();
+        ToadConversation.Outcome o = ToadConversation.Outcome.NONE;
+        if (now[1] && !keysWas[1]) conv.move(-1);
+        if (now[2] && !keysWas[2]) conv.move(1);
+        if (now[0] && !keysWas[0]) o = conv.choosing() ? conv.confirm() : advanceNow();
+        for (int i = 0; i < 4 && o == ToadConversation.Outcome.NONE; i++)
+            if (now[3 + i] && !keysWas[3 + i]) o = conv.choose(i);
+        keysWas = now;
+        player.getInventory().setSelectedSlot(savedSlot);
+        outcome(player, o);
+    }
+
+    /** What a choice leads to: the merchant screen, the end, or more to say. */
+    private static void outcome(LocalPlayer player, ToadConversation.Outcome o) {
+        if (conv == null) return;
+        ToadRecord toad = with;
+        ToadContext ctx = convContext;
+        if (o == ToadConversation.Outcome.TRADE) {
+            endConversation();
+            ToadTalk.trade(player, toad, ctx);
+        } else if (o == ToadConversation.Outcome.CLOSED) {
+            endConversation();
+        } else if (conv.choosing() == false && conv.lastAsked() != null && pendingAsk != conv.lastAsked()) {
+            pendingAsk = conv.lastAsked();
+            conv.add(pendingAsk == ToadConversation.Choice.PLACE ? ToadScript.place(toad.type(), ctx) : ToadScript.advice(toad.type(), ctx));
+        }
+        if (conv != null && conv.choosing()) pendingAsk = null;
+    }
+
+    private static ToadConversation.Choice pendingAsk;
+
+    /** Each frame: letters typed with their sound, the Toad kept talking, the box's view made ready. */
+    private static void dialogueFrame(long now) {
+        if (conv == null || with == null) {
+            if (conv == null) ToadDialogueHud.show(null);
+            return;
+        }
+        if (Minecraft.getInstance().gui.screen() != null) { // a screen opened between ticks
+            endConversation();
+            return;
+        }
+        double dt = lastFrameNs == 0 ? 0 : Math.min(0.1, (now - lastFrameNs) / 1e9);
+        lastFrameNs = now;
+        if (conv.pageNumber() != shownPage) {
+            shownPage = conv.pageNumber();
+            blipped = 0;
+            ToadConversation.Page p = conv.page();
+            pageText = Component.translatable(p.key(), p.args().toArray()).getString();
+        }
+        conv.tick(dt);
+        int visible = conv.visibleChars(pageText.length());
+        for (; blipped < visible; blipped++) ToadVoice.speak(with.type(), pageText.charAt(blipped), blipped);
+        boolean typing = visible < pageText.length();
+        STATES.computeIfAbsent(with.id(), k -> new State()).talkUntil = now + (typing ? TALK_NS / 2 : 0);
+        List<String> choices = new ArrayList<>();
+        for (ToadConversation.Choice c : conv.choices())
+            choices.add(Component.translatable("toad.choice." + c.name().toLowerCase()).getString());
+        ToadDialogueHud.show(new ToadDialogueHud.View(Component.translatable("toad.name." + with.type().id()).getString(),
+                ToadLook.of(with.type()).cap(), pageText, visible, typing, conv.choosing(), choices, conv.highlight()));
     }
 
     /** Whether a right click is a Toad's, and so no item's (a block in hand must not go down). */
@@ -303,6 +453,7 @@ public final class ToadClient {
     /** The pieces of this stage's Toads, universe units, for EntityClient's frame. */
     static void pieces(EntityClient ec, List<EntityWire.Piece> out) {
         drainOutposts();
+        dialogueFrame(System.nanoTime());
         if (store == null) return;
         String stage = stageName();
         double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);
