@@ -38,6 +38,6 @@ and outposts on planets of other systems.
 
 ## Not there yet
 
-More types' wares (the first tables are a draft, refined by playing), the system's tier and star
-in what a Toad says (it answers as if the system were the home one for now), Toads in villages
+More types' wares (the first tables are a draft, refined by playing), the ship (the Warp Core and a missing
+module are not asked yet; a Toad speaks and sells by the tier and star of the system you are in), Toads in villages
 and mines (waits for progression's structures), and Toads that walk.
