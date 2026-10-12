@@ -88,7 +88,7 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
                     flat.fma(-flat.dot(up), up).normalize();
                     Vector3d right = new Vector3d(up).cross(flat).negate();
                     Vector3d toadFeet = new Vector3d(feet).fma(units((k - 2) * 1.5), right);
-                    return new Vector3d(toadFeet).fma(units(2.2), flat).fma(units(1.0), up);
+                    return new Vector3d(toadFeet).fma(units(2.2), flat);
                 });
                 Vector3d head = ctx.computeOnClient(mc -> {
                     GravityFrame f = GalaxyCraftClient.frame();
@@ -97,7 +97,7 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
                     Vector3d flat = new Vector3d(eye).sub(centre);
                     flat.fma(-flat.dot(up), up).normalize();
                     Vector3d right = new Vector3d(up).cross(flat).negate();
-                    return new Vector3d(feet).fma(units((k - 2) * 1.5), right).fma(units(0.8), up);
+                    return new Vector3d(feet).fma(units((k - 2) * 1.5), right).fma(units(1.2), up);
                 });
                 ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(spot));
                 ctx.waitTicks(30);
