@@ -124,6 +124,15 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftShipGame")) { // tools/gxvoxel.sh ship: ShipDolphinProbe in the dev Dolphin
+				vmArg "-Dgalaxycraft.shipGame=true"
+				vmArg "-Dgalaxycraft.stationsAnywhere=true"
+				if (project.hasProperty("galaxycraftShipDir")) vmArg "-Dgalaxycraft.shipDir=" + project.property("galaxycraftShipDir")
+				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"
+				vmArg "-Dgalaxycraft.galaxy=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftStationGame")) { // tools/gxvoxel.sh station: StationDolphinProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.stationGame=true"
 				if (project.hasProperty("galaxycraftStationPin")) vmArg "-Dgalaxycraft.stationPin=" + project.property("galaxycraftStationPin")
@@ -182,6 +191,10 @@ loom {
 				vmArg "-Dgalaxycraft.station=true"
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.stationsAnywhere=true"
+			}
+			if (project.hasProperty("galaxycraftShip")) { // ShipProbe: the Ship Table, modules and gliding, no game
+				vmArg "-Dgalaxycraft.ship=true"
+				vmArg "-Dgalaxycraft.hidden=true"
 			}
 			if (project.hasProperty("galaxycraftSoundtrack")) { // SoundtrackProbe: synthetic songs, no audio line, no game
 				vmArg "-Dgalaxycraft.soundtrack=true"
