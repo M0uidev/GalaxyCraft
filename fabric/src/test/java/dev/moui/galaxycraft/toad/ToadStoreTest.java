@@ -64,4 +64,17 @@ class ToadStoreTest {
         assertEquals("a", o.all().get(0).id());
         assertFalse(o.wasPlaced("p7"));
     }
+
+    @Test void aHomeSurvivesAndIsOptional() throws IOException {
+        Path f = dir.resolve("h.json");
+        ToadStore s = ToadStore.load(f);
+        s.put(new ToadRecord("a", ToadType.MINER, new double[] {1, 2, 3}, new double[] {0, 0, 0, 1}, "", new double[] {4, 5, 6}));
+        s.put(new ToadRecord("b", ToadType.GUIDE, new double[] {1, 2, 3}, new double[] {0, 0, 0, 1}, ""));
+        s.save();
+        ToadStore back = ToadStore.load(f);
+        for (ToadRecord r : back.all()) {
+            if (r.id().equals("a")) assertArrayEquals(new double[] {4, 5, 6}, r.home());
+            else assertNull(r.home());
+        }
+    }
 }

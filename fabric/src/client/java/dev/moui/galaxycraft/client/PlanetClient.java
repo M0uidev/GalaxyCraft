@@ -66,6 +66,8 @@ public final class PlanetClient {
     /** Keys by their USB HID usage (as the host reports them). */
     private static final int SC_W = 26, SC_A = 4, SC_S = 22, SC_D = 7, SC_LSHIFT = 225, SC_RSHIFT = 229, SC_SPACE = 44, SC_LCTRL = 224;
     private static final int MOUSE_LEFT = 1 << 1, MOUSE_RIGHT = 1 << 3;
+    /** USB HID usages the Toad dialogue reads from the host's keys (as W, A, S, D above): 1-4, Enter, Down, Up. */
+    private static final int SC_1 = 30, SC_ENTER = 40, SC_DOWN = 81, SC_UP = 82;
     public static final int DEFAULT_RADIUS = 32;
     /**
      * Time a tick may spend building the planets' far views and chunks, ms (-Dgalaxycraft.meshBudgetMs):
@@ -740,7 +742,9 @@ public final class PlanetClient {
                                 key(in, SC_SPACE) || Minecraft.getInstance().options.keyJump.isDown(), ModKeys.SHIP_DOWN.isDown(),
                                 key(in, SC_LCTRL) || Minecraft.getInstance().options.keySprint.isDown())))
             buttons &= ~MOUSE_RIGHT;
-        else if (frame != null && player != null && !screen && ToadClient.tick(player, frame, pressed(buttons, MOUSE_RIGHT))) {
+        else if (frame != null && player != null && !screen && ToadClient.tick(player, frame, pressed(buttons, MOUSE_RIGHT),
+                key(in, SC_ENTER), key(in, SC_UP), key(in, SC_DOWN),
+                key(in, SC_1), key(in, SC_1 + 1), key(in, SC_1 + 2), key(in, SC_1 + 3))) {
             buttons &= ~MOUSE_RIGHT;
             toadClick = true; // still held next tick: not a new press (the box's "go on" is one per click)
         }
