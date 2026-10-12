@@ -193,8 +193,7 @@ public final class ToadClient {
             if (rightClick) {
                 ToadRecord other = aimed(player, frame);
                 if (other == null || other.id().equals(with.id())) {
-                    ToadConversation.Outcome o = conv.choosing() ? conv.confirm() : advanceNow();
-                    outcome(player, o);
+                    if (inputReady()) outcome(player, conv.choosing() ? conv.confirm() : advanceNow());
                     return true;
                 }
             } else return false;
@@ -230,7 +229,29 @@ public final class ToadClient {
         shownPage = -1;
         blipped = 0;
         lastFrameNs = 0;
+        lastInputNs = System.nanoTime(); // the click that opened it is not the first "go on"
         java.util.Arrays.fill(keysWas, true); // a key held when it opens is not a press
+        refreshPage();
+    }
+
+    /** The page's text, resolved (a page change or a new talk), so a click always has its length. */
+    private static void refreshPage() {
+        if (conv == null || conv.pageNumber() == shownPage) return;
+        shownPage = conv.pageNumber();
+        blipped = 0;
+        ToadConversation.Page p = conv.page();
+        pageText = Component.translatable(p.key(), p.args().toArray()).getString();
+    }
+
+    private static long lastInputNs;
+    /** A "go on" or choice closer than this to the last one is ignored (a held or bouncing click). */
+    private static final long INPUT_GAP_NS = 150_000_000L;
+
+    private static boolean inputReady() {
+        long now = System.nanoTime();
+        if (now - lastInputNs < INPUT_GAP_NS) return false;
+        lastInputNs = now;
+        return true;
     }
 
     /** The conversation going on (tests), or null. */
@@ -265,7 +286,9 @@ public final class ToadClient {
     }
 
     private static ToadConversation.Outcome advanceNow() {
+        refreshPage();
         conv.advance(pageText.length());
+        refreshPage();
         return conv.outcome();
     }
 
@@ -280,7 +303,7 @@ public final class ToadClient {
         ToadConversation.Outcome o = ToadConversation.Outcome.NONE;
         if (now[1] && !keysWas[1]) conv.move(-1);
         if (now[2] && !keysWas[2]) conv.move(1);
-        if (now[0] && !keysWas[0]) o = conv.choosing() ? conv.confirm() : advanceNow();
+        if (now[0] && !keysWas[0] && inputReady()) o = conv.choosing() ? conv.confirm() : advanceNow();
         for (int i = 0; i < 4 && o == ToadConversation.Outcome.NONE; i++)
             if (now[3 + i] && !keysWas[3 + i]) o = conv.choose(i);
         keysWas = now;
@@ -301,6 +324,7 @@ public final class ToadClient {
         } else if (conv.choosing() == false && conv.lastAsked() != null && pendingAsk != conv.lastAsked()) {
             pendingAsk = conv.lastAsked();
             conv.add(pendingAsk == ToadConversation.Choice.PLACE ? ToadScript.place(toad.type(), ctx) : ToadScript.advice(toad.type(), ctx));
+            refreshPage();
         }
         if (conv != null && conv.choosing()) pendingAsk = null;
     }
@@ -319,12 +343,7 @@ public final class ToadClient {
         }
         double dt = lastFrameNs == 0 ? 0 : Math.min(0.1, (now - lastFrameNs) / 1e9);
         lastFrameNs = now;
-        if (conv.pageNumber() != shownPage) {
-            shownPage = conv.pageNumber();
-            blipped = 0;
-            ToadConversation.Page p = conv.page();
-            pageText = Component.translatable(p.key(), p.args().toArray()).getString();
-        }
+        refreshPage();
         conv.tick(dt);
         int visible = conv.visibleChars(pageText.length());
         for (; blipped < visible; blipped++) ToadVoice.speak(with.type(), pageText.charAt(blipped), blipped);
