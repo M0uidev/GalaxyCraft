@@ -125,4 +125,23 @@ class UniverseTest {
                 for (var e : two.system(s, java.util.List.of("minecraft:plains")).entries())
                     assertTrue(e.center().length() / U + dev.moui.galaxycraft.voxel.PlanetSession.gravityRadius(e.radius()) <= 3500 + 1e-6);
     }
+
+    @Test void systemsCanBeAskedFromTwoThreads() throws Exception {
+        var u = new Universe(21, U);
+        var stars = u.around(UPos.ZERO, 5).stream().filter(s -> !s.home()).toList();
+        var errors = new java.util.concurrent.ConcurrentLinkedQueue<Throwable>();
+        Runnable job = () -> {
+            try {
+                for (int i = 0; i < 40; i++) for (var s : stars) u.system(s, LAND);
+            } catch (Throwable t) {
+                errors.add(t);
+            }
+        };
+        Thread a = new Thread(job), b = new Thread(job);
+        a.start();
+        b.start();
+        a.join();
+        b.join();
+        assertTrue(errors.isEmpty(), errors.toString());
+    }
 }

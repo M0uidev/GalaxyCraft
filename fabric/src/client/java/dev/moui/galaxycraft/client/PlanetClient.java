@@ -634,6 +634,7 @@ public final class PlanetClient {
             if (FIXED_DIR) {
                 StationClient.enterWorld(planetDir());
                 ShipClient.enterWorld(planetDir());
+                MapClient.enterWorld(planetDir());
             }
             blocks = McBlocks.create(Minecraft.getInstance());
             atlasLink = new AtlasLink(blocks.atlas, 1);
@@ -1094,6 +1095,7 @@ public final class PlanetClient {
         store = new PlanetStore(g.planets());
         StationClient.enterWorld(g.planets());
         ShipClient.enterWorld(g.planets());
+        MapClient.enterWorld(g.planets());
         landOn = resolved(g.spot().orElse(null));
         landPending = true;
         homeAsked = false;
@@ -1113,6 +1115,7 @@ public final class PlanetClient {
         saveNow();
         StationClient.enterWorld(null); // saved, dropped with the galaxy
         ShipClient.enterWorld(null);
+        MapClient.enterWorld(null);
         if (stream != null) stream.clear();
         stream = null;
         session.unload();
