@@ -38,6 +38,7 @@ public final class ToadClient {
     private static ToadStore store;
     private static Path file;
     private static boolean dirty;
+    private static int talks;
 
     private ToadClient() {}
 
@@ -102,6 +103,7 @@ public final class ToadClient {
         if (!rightClick || store == null || player == null || frame == null) return false;
         ToadRecord t = aimed(player, frame);
         if (t == null) return false;
+        talks++;
         ToadTalk.talk(player, t);
         return true;
     }
@@ -157,11 +159,30 @@ public final class ToadClient {
         fwd.normalize();
         Vector3d right = new Vector3d(up).cross(fwd);
         Quaterniond q = new Quaterniond().setFromNormalized(new Matrix3d(right, up, fwd));
-        store.put(new ToadRecord(UUID.randomUUID().toString(), type, new double[] {hit[0].x, hit[0].y, hit[0].z},
+        put(type, hit[0], q);
+        return null;
+    }
+
+    /** Puts a Toad down with its feet at a galaxy point, turned by q (tests; place() and the world's placing). */
+    public static void put(ToadType type, Vector3d feet, Quaterniond q) {
+        if (store == null) return;
+        store.put(new ToadRecord(UUID.randomUUID().toString(), type, new double[] {feet.x, feet.y, feet.z},
                 new double[] {q.x, q.y, q.z, q.w}, stageName()));
         dirty = true;
         saveNow();
-        return null;
+    }
+
+    /** How many times a Toad has been talked to this session (tests). */
+    public static int talks() {
+        return talks;
+    }
+
+    /** Takes every Toad out of the world (tests). */
+    public static void clearAll() {
+        if (store == null) return;
+        for (ToadRecord r : store.all()) store.remove(r.id());
+        dirty = true;
+        saveNow();
     }
 
     /** The pieces of this stage's Toads, universe units, for EntityClient's frame. */
