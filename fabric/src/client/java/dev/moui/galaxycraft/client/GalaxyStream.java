@@ -324,21 +324,31 @@ final class GalaxyStream {
 
     /** A generated planet's making, with the Toad outposts its system's tier and star give it (huts built with its cells). */
     private CompletableFuture<VoxelPlanet> generate(PlanetBlueprint bp, GalaxyCatalog.Entry e) {
-        Universe.Star star = universe == null ? null
-                : SystemIndex.ref(e.index()).flatMap(r -> universe.star(r.sector())).orElse(null);
-        if (star == null || star.home()) return PlanetClient.generateAsync(bp);
+        // -Dgalaxycraft.toadTier=N (probes): every generated planet counts as in a tier-N yellow system, and
+        // has at least one outpost, so a short test sees a hut without flying 12,000 blocks.
+        Integer forced = Integer.getInteger("galaxycraft.toadTier");
         String key = "p" + e.index();
-        java.util.List<dev.moui.galaxycraft.toad.ToadPlan.Spot> spots = dev.moui.galaxycraft.toad.ToadPlan.outposts(key, e.seed(),
-                e.radius(), universe.tier(star), universe.starType(star));
+        java.util.List<dev.moui.galaxycraft.toad.ToadPlan.Spot> spots;
+        if (forced != null) {
+            spots = dev.moui.galaxycraft.toad.ToadPlan.outposts(key, e.seed(), e.radius(), forced, dev.moui.galaxycraft.universe.StarType.YELLOW);
+            for (int i = 1; spots.isEmpty() && i < 40; i++)
+                spots = dev.moui.galaxycraft.toad.ToadPlan.outposts(key, e.seed() + i, e.radius(), forced, dev.moui.galaxycraft.universe.StarType.YELLOW);
+        } else {
+            Universe.Star star = universe == null ? null
+                    : SystemIndex.ref(e.index()).flatMap(r -> universe.star(r.sector())).orElse(null);
+            if (star == null || star.home()) return PlanetClient.generateAsync(bp);
+            spots = dev.moui.galaxycraft.toad.ToadPlan.outposts(key, e.seed(), e.radius(), universe.tier(star), universe.starType(star));
+        }
         if (spots.isEmpty()) return PlanetClient.generateAsync(bp);
+        var chosen = spots;
         java.util.List<dev.moui.galaxycraft.voxel.gen.Huts.Request> asked = new ArrayList<>();
-        for (var sp : spots) asked.add(new dev.moui.galaxycraft.voxel.gen.Huts.Request(sp.id(), sp.dir()));
+        for (var sp : chosen) asked.add(new dev.moui.galaxycraft.voxel.gen.Huts.Request(sp.id(), sp.dir()));
         boolean build = !"false".equals(System.getProperty("galaxycraft.toadHuts"));
         Vector3d center = e.center();
         return PlanetClient.generateAsync(bp, asked, build, placed -> {
             java.util.List<dev.moui.galaxycraft.toad.ToadRecord> toads = new ArrayList<>();
             for (var p : placed)
-                for (var sp : spots)
+                for (var sp : chosen)
                     if (sp.id().equals(p.id()))
                         toads.add(dev.moui.galaxycraft.toad.ToadPlacing.record(stage, sp.type(), p, center, UNITS));
             ToadClient.offerOutposts(key, toads);
