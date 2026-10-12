@@ -7,7 +7,9 @@ const path = require('node:path');
 
 /** Where on the disc the models are (extract's -s is DISC_DIR/<arc>). */
 const DISC_DIR = 'ObjectData';
-const ARCS = ['UFOKinoko.arc']; // the Starshroom, the Toad Brigade's ship
+// The Starshroom, the Toad Brigade's ship, a Toad (Kinopio) and the things Toads carry.
+const ARCS = ['UFOKinoko.arc', 'Kinopio.arc', 'KinopioGoodsGlasses.arc', 'KinopioGoodsPickel.arc',
+  'KinopioGoodsRucksack.arc', 'KinopioGoodsSnorkel.arc', 'KinopioGoodsMailBag.arc'];
 
 function find(dir, name) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

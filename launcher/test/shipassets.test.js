@@ -13,12 +13,14 @@ test('copies the arcs the disc has and lists the ones it lacks', async () => {
     dir,
     extract: async (out) => {
       fs.mkdirSync(path.join(out, 'ObjectData'), { recursive: true });
-      fs.writeFileSync(path.join(out, 'ObjectData', 'UFOKinoko.arc'), Buffer.from('RARC'));
+      for (const name of shipassets.ARCS) fs.writeFileSync(path.join(out, 'ObjectData', name), Buffer.from('RARC'));
     },
     yaz0: (b) => b,
   });
-  assert.equal(r.copied, 1);
+  assert.equal(r.copied, shipassets.ARCS.length);
   assert.ok(fs.existsSync(path.join(dir, 'UFOKinoko.arc')));
+  assert.ok(fs.existsSync(path.join(dir, 'Kinopio.arc')));
+  assert.ok(fs.existsSync(path.join(dir, 'KinopioGoodsPickel.arc')));
   assert.deepEqual(r.missing, []);
 });
 

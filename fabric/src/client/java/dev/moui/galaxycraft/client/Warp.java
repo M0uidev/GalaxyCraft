@@ -14,15 +14,13 @@ import org.joml.Vector3d;
 
 /**
  * Warp to another solar system, free: aim at its star on the sky and press K, or pick it on the
- * galaxy map (N, or K with no star in the crosshair). The screen goes dark, Mario lands on the
+ * galaxy map (its key, or the warp key with no star in the crosshair; both in Controls). The screen goes dark, Mario lands on the
  * system's first planet (the floating origin moves there first) and the camera zooms in from
  * space, as entering a world.
  */
 public final class Warp {
     /** A star counts as aimed at within this many degrees of the crosshair. */
     static final double AIM_DEG = 2.5;
-    /** SDL scancodes: K warps to the star aimed at (or opens the map), N opens the map. */
-    static final int SC_K = 14, SC_N = 17;
     private static final double UNITS = 1 / GravityFrame.SCALE;
     private static int hintTicks;
 
@@ -80,7 +78,7 @@ public final class Warp {
 
     static void map(Minecraft mc) {
         if (mc.player == null || UniverseClient.universe() == null) return;
-        mc.gui.setScreen(new GalaxyMapScreen());
+        mc.gui.setScreen(new MapScreen());
     }
 
     /** Off to that system's first planet. */
@@ -96,6 +94,6 @@ public final class Warp {
     static void tick(Minecraft mc) {
         if (mc.player == null || mc.gui.screen() != null || !GalaxyCraftClient.inVoid() || ++hintTicks < 10) return;
         hintTicks = 0;
-        aimed(mc.player).ifPresent(s -> mc.gui.hud.setOverlayMessage(Component.literal(label(s) + " - K to warp"), false));
+        aimed(mc.player).ifPresent(s -> mc.gui.hud.setOverlayMessage(Component.literal(label(s) + " - " + ModKeys.label(ModKeys.WARP) + " to warp"), false));
     }
 }

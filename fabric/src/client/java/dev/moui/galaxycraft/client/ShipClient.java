@@ -3,6 +3,9 @@ package dev.moui.galaxycraft.client;
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.gravity.LookMath;
+import dev.moui.galaxycraft.map.MapShips;
+import dev.moui.galaxycraft.map.Trip;
+import dev.moui.galaxycraft.universe.UPos;
 import dev.moui.galaxycraft.play.PlayConfig;
 import dev.moui.galaxycraft.ship.SeatLayout;
 import dev.moui.galaxycraft.ship.ShipBlocks;
@@ -81,6 +84,7 @@ public final class ShipClient {
         file = planetsDir == null ? null : planetsDir.resolve("ships.json");
         store = file == null ? null : ShipStore.load(file);
         dirty = false;
+        MapShips.install(MAP_SHIPS);
         ShipModels.load(shipDir());
     }
 
@@ -276,7 +280,11 @@ public final class ShipClient {
                 leaveNow(player);
                 return false;
             }
-            fly(player, frame, r.get(), c);
+            if (MapClient.courses().get(r.get().id()).isPresent() && c.forward()) {
+                MapClient.courses().remove(r.get().id()); // W takes the controls: the map's trip ends here
+                MapClient.save();
+            }
+            if (MapClient.courses().get(r.get().id()).isEmpty()) fly(player, frame, r.get(), c);
             if (rightClick && docked == null) {
                 cyclePad(player, frame);
                 return true;
@@ -297,11 +305,13 @@ public final class ShipClient {
         Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
         List<ShipRecord> here = new ArrayList<>();
         List<double[]> centers = new ArrayList<>();
-        for (ShipRecord s : store.all())
+        for (ShipRecord raw : store.all()) {
+            ShipRecord s = onTrip(raw);
             if (!s.isPad() && s.stage().equals(stageName())) {
-                here.add(s);
+                here.add(raw);
                 centers.add(s.pos());
             }
+        }
         int i = ShipBoarding.nearest(eye, look.normalize(), centers, REACH / GravityFrame.SCALE, RADIUS / GravityFrame.SCALE);
         return i < 0 ? null : here.get(i);
     }
@@ -471,6 +481,12 @@ public final class ShipClient {
         Optional<ShipRecord> r = aboard();
         GravityFrame frame = GalaxyCraftClient.frame();
         if (r.isEmpty() || frame == null) return;
+        if (MapClient.courses().get(r.get().id()).isPresent()) {
+            autopilot(player, frame, r.get());
+            store.put(placed(r.get(), frame, player, 1f));
+            dirty = true;
+            return;
+        }
         if (velocity.lengthSquared() > 1e-10)
             player.move(net.minecraft.world.entity.MoverType.SELF, new Vec3(velocity.x, velocity.y, velocity.z));
         player.setDeltaMovement(Vec3.ZERO);
@@ -551,6 +567,62 @@ public final class ShipClient {
         }
     }
 
+    // ---- the map's remote control ----
+
+    /** Blocks a tick per point of the speed stat on a trip sent from the map (about the pulse: 10 to 20). */
+    private static final double TRIP_BLOCKS_PER_SPEED = 12;
+
+    /** A ship on the map's trip is where the trip has it now: its record's place, replaced; others as they are. */
+    private static ShipRecord onTrip(ShipRecord r) {
+        if (r.isPad()) return r;
+        Trip t = MapClient.courses().get(r.id()).orElse(null);
+        if (t == null) return r;
+        var p = t.positionAt(MapClient.now()).minus(UPos.ZERO);
+        return new ShipRecord(r.id(), r.modules(), new double[] {p.x, p.y, p.z}, r.rot(), r.stage());
+    }
+
+    /**
+     * The pilot's ship on a trip: it flies itself. Like the pulse the player stays where it is in
+     * Minecraft and the gravity frame slides, so it holds at any speed and distance.
+     */
+    private static void autopilot(LocalPlayer player, GravityFrame frame, ShipRecord r) {
+        player.setNoGravity(true);
+        player.resetFallDistance();
+        if (player.isFallFlying()) player.stopFallFlying();
+        velocity = new Vector3d();
+        double[] want = onTrip(r).pos(), at = placed(r, frame, player, 1f).pos();
+        Vector3d d = new Vector3d(want[0] - at[0], want[1] - at[1], want[2] - at[2]);
+        if (d.lengthSquared() > 0) frame.slide(d);
+    }
+
+    /** What the map sees of the ships: this stage's ships, and where a cancelled trip left one. */
+    private static final MapShips MAP_SHIPS = new MapShips() {
+        @Override
+        public List<Ship> ships() {
+            if (store == null) return List.of();
+            List<Ship> out = new ArrayList<>();
+            int n = 0;
+            for (ShipRecord r : store.all()) {
+                if (r.isPad() || !r.stage().equals(stageName())) continue;
+                double perTick = ShipStats.of(r.modules()).speed() * TRIP_BLOCKS_PER_SPEED / GravityFrame.SCALE;
+                out.add(new Ship(r.id(), "Starshroom " + (++n), perTick, UPos.of(new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]))));
+            }
+            return out;
+        }
+
+        @Override
+        public void stopped(String shipId, UPos at) {
+            if (store == null) return;
+            var p = at.minus(UPos.ZERO);
+            for (ShipRecord r : store.all())
+                if (r.id().equals(shipId)) {
+                    store.put(new ShipRecord(r.id(), r.modules(), new double[] {p.x, p.y, p.z}, r.rot(), r.stage()));
+                    dirty = true;
+                    syncHulls();
+                }
+        }
+    };
+
     // ---- solid hulls ----
 
     /**
@@ -567,7 +639,7 @@ public final class ShipClient {
         String stage = stageName();
         java.util.Set<String> want = new java.util.HashSet<>();
         for (ShipRecord r : store.all()) {
-            if (!r.stage().equals(stage) || r.id().equals(boarded)) continue;
+            if (!r.stage().equals(stage) || r.id().equals(boarded) || MapClient.courses().get(r.id()).isPresent()) continue; // on a trip: no hull left behind
             want.add(r.id());
             if (solid.get(r.id()) == r) continue;
             solid.put(r.id(), r);
@@ -616,7 +688,8 @@ public final class ShipClient {
         String stage = stageName();
         LocalPlayer me = Minecraft.getInstance().player;
         GravityFrame fr = GalaxyCraftClient.frame();
-        for (ShipRecord r : store.all()) {
+        for (ShipRecord raw : store.all()) {
+            ShipRecord r = onTrip(raw);
             if (!r.stage().equals(stage)) continue;
             if (r.isPad()) {
                 drawPad(ec, r, 0, out);

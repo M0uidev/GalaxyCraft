@@ -31,7 +31,7 @@ Cada módulo tiene nivel 1 a 3. Por ahora lo único visible es la nave; los mód
 ## Pilotarla
 
 - **Clic derecho** sobre la nave: subes y quedas sentado. La nave flota donde la llevas.
-- **W / S** adelante y atrás hacia donde miras; **A / D** de lado; **Espacio** sube; **C** baja.
+- **W / S** adelante y atrás hacia donde miras; **A / D** de lado; **Espacio** sube; **Z** baja (la tecla se cambia en Controles).
 - **Ctrl** es el turbo: casi el doble de velocidad máxima.
 - **Shift** te baja y te deja junto al casco.
 - La nave es sólida: no se puede traspasar, ni por fuera ni caminando sobre ella.
@@ -45,7 +45,7 @@ Cada módulo tiene nivel 1 a 3. Por ahora lo único visible es la nave; los mód
 - Se pone en el suelo, en un planeta o en una estación espacial. Es sólida.
 - Volando, cualquier plataforma a hasta 90 bloques (y por encima de ti hasta 70) cuenta. Aparece un aviso
   con su número y distancia. **Clic derecho** a bordo elige la siguiente.
-- Mantén **C**: la nave va sola hasta la elegida (primero encima, luego baja frenando) y se acopla.
+- Mantén **Z** (bajar): la nave va sola hasta la elegida (primero encima, luego baja frenando) y se acopla.
   **Espacio** despega.
 
 ## Pendiente

@@ -36,7 +36,7 @@ public final class GalaxyOptions {
             "Mario: SMG2 moves Mario (his jumps, spins and long jumps), drawn as Mario with Steve's skin.\n"
                     + "Minecraft: Minecraft's own physics move you, as Steve; Mario goes with you.\n"
                     + "Mario at Minecraft's speeds: Mario moves at Minecraft's speeds (Ctrl sprints, Shift sneaks) and jumps 1.25 blocks.\n"
-                    + "F6 switches them while playing.",
+                    + "The Switch Movement key (F6 by default, in Controls) switches them while playing.",
             Movement.class, Movement.MARIO, Movement::label));
     public static final Setting.Choice<MarioModel> MARIO_MODEL = SETTINGS.add(new Setting.Choice<>("marioModel", "Mario Model",
             "Mario movement's body: Steve's boxes on Mario's skeleton (with your skin), or the game's original Mario.\n"

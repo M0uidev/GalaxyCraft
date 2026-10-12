@@ -64,8 +64,8 @@ public final class PlanetClient {
     /** How far Mario's blows reach (Minecraft's entity interaction range), blocks. */
     static final double REACH = 3;
     /** Keys by their USB HID usage (as the host reports them). */
-    private static final int SC_W = 26, SC_A = 4, SC_S = 22, SC_D = 7, SC_LSHIFT = 225, SC_RSHIFT = 229, SC_SPACE = 44, SC_LCTRL = 224, SC_C = 6;
-    private static final int SC_P = 19, MOUSE_LEFT = 1 << 1, MOUSE_RIGHT = 1 << 3;
+    private static final int SC_W = 26, SC_A = 4, SC_S = 22, SC_D = 7, SC_LSHIFT = 225, SC_RSHIFT = 229, SC_SPACE = 44, SC_LCTRL = 224;
+    private static final int MOUSE_LEFT = 1 << 1, MOUSE_RIGHT = 1 << 3;
     public static final int DEFAULT_RADIUS = 32;
     /**
      * Time a tick may spend building the planets' far views and chunks, ms (-Dgalaxycraft.meshBudgetMs):
@@ -634,6 +634,8 @@ public final class PlanetClient {
             if (FIXED_DIR) {
                 StationClient.enterWorld(planetDir());
                 ShipClient.enterWorld(planetDir());
+                MapClient.enterWorld(planetDir());
+                ToadClient.enterWorld(planetDir());
             }
             blocks = McBlocks.create(Minecraft.getInstance());
             atlasLink = new AtlasLink(blocks.atlas, 1);
@@ -691,7 +693,7 @@ public final class PlanetClient {
         }
         Optional<Seqlock.InputState> in = bridge.input();
         int buttons = in.map(Seqlock.InputState::buttons).orElse(0);
-        boolean p = in.map(i -> (i.keys()[SC_P / 8] >> (SC_P % 8) & 1) != 0).orElse(false);
+        boolean p = ModKeys.TELEPORT.isDown();
         boolean screen = Minecraft.getInstance().gui.screen() != null; // the clicks are the screen's
         // As Minecraft: a button pressed on a screen (Done on a sign's editor) is not the game's
         // once the screen closes, until it is let go (else it breaks what the crosshair is on).
@@ -707,8 +709,10 @@ public final class PlanetClient {
                         new dev.moui.galaxycraft.ship.ShipThrust.Controls(
                                 key(in, SC_W) || Minecraft.getInstance().options.keyUp.isDown(), key(in, SC_S) || Minecraft.getInstance().options.keyDown.isDown(),
                                 key(in, SC_A) || Minecraft.getInstance().options.keyLeft.isDown(), key(in, SC_D) || Minecraft.getInstance().options.keyRight.isDown(),
-                                key(in, SC_SPACE) || Minecraft.getInstance().options.keyJump.isDown(), key(in, SC_C),
+                                key(in, SC_SPACE) || Minecraft.getInstance().options.keyJump.isDown(), ModKeys.SHIP_DOWN.isDown(),
                                 key(in, SC_LCTRL) || Minecraft.getInstance().options.keySprint.isDown())))
+            buttons &= ~MOUSE_RIGHT;
+        else if (frame != null && player != null && !screen && ToadClient.tick(player, frame, pressed(buttons, MOUSE_RIGHT)))
             buttons &= ~MOUSE_RIGHT;
         PlanetSession was = focus;
         focus = nearest(world.queryPos());
@@ -1117,6 +1121,8 @@ public final class PlanetClient {
         store = new PlanetStore(g.planets());
         StationClient.enterWorld(g.planets());
         ShipClient.enterWorld(g.planets());
+        MapClient.enterWorld(g.planets());
+        ToadClient.enterWorld(g.planets());
         landOn = resolved(g.spot().orElse(null));
         landPending = true;
         homeAsked = false;
@@ -1136,6 +1142,8 @@ public final class PlanetClient {
         saveNow();
         StationClient.enterWorld(null); // saved, dropped with the galaxy
         ShipClient.enterWorld(null);
+        MapClient.enterWorld(null);
+        ToadClient.enterWorld(null);
         if (stream != null) stream.clear();
         stream = null;
         session.unload();
