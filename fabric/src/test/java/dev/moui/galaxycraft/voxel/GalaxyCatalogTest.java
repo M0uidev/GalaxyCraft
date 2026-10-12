@@ -87,7 +87,7 @@ class GalaxyCatalogTest {
         assertEquals(600, GalaxyCatalog.Spacing.NORMAL.blocks(2));
         assertEquals(150, GalaxyCatalog.Spacing.NEAR.blocks(2));
         assertEquals(1500, GalaxyCatalog.Spacing.FAR.blocks(2));
-        assertEquals(2, GalaxyCatalog.LAYOUT);
+        assertEquals(3, GalaxyCatalog.LAYOUT);
         var old = GalaxyCatalog.make(opts(12, GalaxyCatalog.Spacing.NORMAL, 5), 32, LAND, U);
         assertEquals(old, GalaxyCatalog.make(opts(12, GalaxyCatalog.Spacing.NORMAL, 5), 32, LAND, U, 1), "layout 1 is today's");
         var wide = GalaxyCatalog.make(opts(12, GalaxyCatalog.Spacing.NORMAL, 5), 32, LAND, U, 2);
@@ -102,5 +102,29 @@ class GalaxyCatalogTest {
         var o = new GalaxyCatalog.Options(64, 32, 128, GalaxyCatalog.First.generated("random", 64), GalaxyCatalog.Spacing.FAR, 3);
         var r = GalaxyCatalog.make(o, 64, LAND, U, 2);
         assertEquals(64, r.entries().size(), r.entries().size() + " of 64 placed");
+    }
+
+    @Test void layoutThreeSpacesPlanetsFarApartAndOlderLayoutsKeepTheirs() {
+        assertEquals(24, GalaxyCatalog.Spacing.NEAR.blocks(1));
+        assertEquals(150, GalaxyCatalog.Spacing.NEAR.blocks(2));
+        assertEquals(1500, GalaxyCatalog.Spacing.FAR.blocks(2));
+        assertEquals(600, GalaxyCatalog.Spacing.NEAR.blocks(3));
+        assertTrue(GalaxyCatalog.Spacing.NORMAL.blocks(3) > 1500);
+        assertTrue(GalaxyCatalog.Spacing.FAR.blocks(3) > GalaxyCatalog.Spacing.NORMAL.blocks(3));
+        assertEquals(3, GalaxyCatalog.LAYOUT);
+    }
+
+    @Test void aLayoutTwoWorldKeepsItsPlanetsWhereTheyWere() {
+        var o = opts(10, GalaxyCatalog.Spacing.NORMAL, 7);
+        var two = GalaxyCatalog.make(o, 32, LAND, U, 2);
+        // Saved worlds re-make their catalog with their own layout: same options, same planets.
+        assertEquals(two, GalaxyCatalog.make(o, 32, LAND, U, 2));
+        var three = GalaxyCatalog.make(o, 32, LAND, U, 3);
+        assertNotEquals(two.entries(), three.entries());
+        double nearest = Double.MAX_VALUE;
+        for (var a : three.entries())
+            for (var b : three.entries())
+                if (a != b) nearest = Math.min(nearest, a.center().distance(b.center()) / U);
+        assertTrue(nearest > 1500, "layout 3 centers " + nearest + " blocks apart");
     }
 }
