@@ -181,6 +181,25 @@ public final class ToadClient {
     }
 
     /** Client tick: a right click on a Toad talks to it. True if the click was the Toad's. */
+    /**
+     * A tick: the right click's press, and the keys the host sees (the keyboard reaches the game
+     * through Dolphin as well as Minecraft's window): Enter, Up, Down and 1 to 4 count with
+     * Minecraft's own.
+     */
+    static boolean tick(LocalPlayer player, GravityFrame frame, boolean rightClick, boolean enter, boolean up, boolean down,
+            boolean one, boolean two, boolean three, boolean four) {
+        hostKeys[0] = enter;
+        hostKeys[1] = up;
+        hostKeys[2] = down;
+        hostKeys[3] = one;
+        hostKeys[4] = two;
+        hostKeys[5] = three;
+        hostKeys[6] = four;
+        return tick(player, frame, rightClick);
+    }
+
+    private static final boolean[] hostKeys = new boolean[7];
+
     static boolean tick(LocalPlayer player, GravityFrame frame, boolean rightClick) {
         if (store == null || player == null || frame == null) {
             endConversation();
@@ -296,10 +315,10 @@ public final class ToadClient {
     private static void dialogueKeys(LocalPlayer player) {
         Minecraft mc = Minecraft.getInstance();
         boolean[] now = new boolean[7];
-        now[0] = ToadKeys.ADVANCE.isDown();
-        now[1] = ToadKeys.UP.isDown();
-        now[2] = ToadKeys.DOWN.isDown();
-        for (int i = 0; i < 4; i++) now[3 + i] = mc.options.keyHotbarSlots[i].isDown();
+        now[0] = ToadKeys.ADVANCE.isDown() || hostKeys[0];
+        now[1] = ToadKeys.UP.isDown() || hostKeys[1];
+        now[2] = ToadKeys.DOWN.isDown() || hostKeys[2];
+        for (int i = 0; i < 4; i++) now[3 + i] = mc.options.keyHotbarSlots[i].isDown() || hostKeys[3 + i];
         ToadConversation.Outcome o = ToadConversation.Outcome.NONE;
         if (now[1] && !keysWas[1]) conv.move(-1);
         if (now[2] && !keysWas[2]) conv.move(1);
