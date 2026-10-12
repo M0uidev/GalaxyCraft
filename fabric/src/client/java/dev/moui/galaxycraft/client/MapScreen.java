@@ -135,10 +135,12 @@ final class MapScreen extends Screen {
         if (selected < 0) return;
         Item it = items.get(selected);
         if (inside == null && it.star() != null) {
-            addRenderableWidget(Button.builder(Component.literal("Warp"), b -> {
+            Button warp = Button.builder(Component.literal("Warp"), b -> {
                 onClose();
                 Warp.to(minecraft, it.star());
-            }).bounds(x, y, 160, 20).build());
+            }).bounds(x, y, 160, 20).build();
+            warp.active = Warp.allowed(minecraft); // else the lines under the buttons say why
+            addRenderableWidget(warp);
             y += 24;
             addRenderableWidget(Button.builder(Component.literal("Enter system"), b -> {
                 systemLevel(it.star());
@@ -309,6 +311,11 @@ final class MapScreen extends Screen {
             }
         }
         if (selected >= 0) info(g, items.get(selected));
+        if (selected >= 0 && inside == null && items.get(selected).star() != null && !Warp.allowed(minecraft)) {
+            int wy = panelEnd(items.get(selected)) + 52;
+            g.text(font, "Warp needs creative mode", width - 168, wy, GRAY);
+            g.text(font, "or cheats on.", width - 168, wy + 11, GRAY);
+        }
         else overview(g);
         g.text(font, "Click: select   Drag: turn   Wheel: zoom", 8, height - 26, GRAY);
         g.text(font, inside == null ? "Double click or Enter: enter the system" : "Backspace: back to the galaxy", 8, height - 14, GRAY);
