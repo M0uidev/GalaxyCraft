@@ -1,7 +1,9 @@
 # Toads
 
-Toads are SMG2's own Kinopio, drawn by the game, that you can talk to. (First step: they are
-placed by hand; the world will place them in villages, on stations and on the home planet.)
+Toads are SMG2's own Kinopio, drawn by the game, that you can talk to. They are animated (idle,
+talking), turn to you when you are near, and each type carries its own thing. The world places
+them: a Guide near where you first stand on the home planet, a Technician on each station deck,
+and outposts on planets of other systems.
 
 ## Try it
 
@@ -14,6 +16,19 @@ placed by hand; the world will place them in villages, on stations and on the ho
    vanilla villager screen). A Guide sells bread and torches for coal, cobblestone or copper; each
    type sells different things.
 
+## Where they are
+
+- **Home planet:** one Guide, put down a few blocks ahead the first time you stand near the
+  first planet's surface.
+- **Stations:** a Technician on the deck, a few blocks from the core. Fold the station into its
+  item and it goes with it; unfold it elsewhere and it is there again.
+- **Outposts:** planets in systems of tier 1 and up (about 12,000 blocks from home and beyond) get
+  a small mushroom hut with a Toad just inside the door: tiers 1-2 have none or one (a Miner or
+  an Explorer), tier 3 and up none to two (the Mailman too). Blue and lava stars lean to
+  Miners, red dwarfs to Explorers. Only planets generated from now on get them (a planet already
+  saved keeps what it was). Start the game with `-Dgalaxycraft.toadHuts=false` to put a lone
+  Toad on the ground instead of a hut.
+
 ## What to look for
 
 - It stands on the ground (feet on it, not sunk, not floating) and turns to face you.
@@ -23,5 +38,6 @@ placed by hand; the world will place them in villages, on stations and on the ho
 
 ## Not there yet
 
-More types' wares (the first tables are a draft, refined by playing), the 3D map's system tier and star in what it says (it answers as if the system were the
-home one for now), animation (it stands in its bind pose), and being placed by the world.
+More types' wares (the first tables are a draft, refined by playing), the system's tier and star
+in what a Toad says (it answers as if the system were the home one for now), Toads in villages
+and mines (waits for progression's structures), and Toads that walk.
