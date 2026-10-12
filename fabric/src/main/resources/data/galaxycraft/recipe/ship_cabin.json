@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {"G":"minecraft:glass","I":"minecraft:iron_ingot"},
+  "pattern": ["GGG","GIG"],
+  "result": {
+    "id": "galaxycraft:ship_cabin"
+  }
+}

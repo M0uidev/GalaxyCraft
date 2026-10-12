@@ -16,6 +16,7 @@ const tar = require('tar');
 const gamepack = require('../core/gamepack');
 const disc = require('../core/disc');
 const soundtrack = require('../core/soundtrack');
+const shipassets = require('../core/shipassets');
 const delta = require('../core/delta');
 const { downloadAll, fetchJson } = require('../core/download');
 const { ensureMinecraft } = require('./mcinstall');
@@ -129,6 +130,7 @@ class Installer extends EventEmitter {
       // 2. The disc files, from the player's game.
       await this.makeDiscFiles(lay, sys, rom);
       await this.makeSoundtrack(lay, sys, rom, { progress: true });
+      await this.makeShipAssets(lay, sys, rom);
 
       // 3. Minecraft, Fabric and Java.
       if (minecraft) await this.minecraft(manifest);
@@ -208,6 +210,28 @@ class Installer extends EventEmitter {
     }
   }
 
+  /**
+   * <data>/ship: the arcs the Toad ship is built from, copied from the player's disc. Optional like
+   * the soundtrack: a failure is logged and ships are drawn as cubes.
+   */
+  async makeShipAssets(lay, sys, rom) {
+    try {
+      const tool = path.join(lay.dolphin, sys.tool);
+      const r = await shipassets.install({
+        dir: path.join(this.paths.dataDir, 'ship'),
+        extract: async (out, arcs) => {
+          for (const arc of arcs) {
+            await run(tool, ['extract', '-i', rom, '-s', `${shipassets.DISC_DIR}/${arc}`, '-o', out, '-q'], { timeout: 600000 });
+          }
+        },
+        yaz0: (b) => disc.yaz0Decompress(b),
+      });
+      if (r.missing.length) this.log(`${r.missing.length} ship models are not on your disc: ${r.missing.join(', ')}`);
+    } catch (e) {
+      this.log(`The ship models could not be set up (${e.message}); ships are drawn as cubes`);
+    }
+  }
+
   /** Minecraft ready to run for a manifest: { version, java, dirs }. Quick when nothing is missing. */
   minecraft(manifest, { verify = 'size' } = {}) {
     const lay = gamepack.layout(this.paths, manifest.version);
@@ -224,6 +248,7 @@ class Installer extends EventEmitter {
     const sys = i.manifest.dolphin[this.system];
     await this.makeDiscFiles(i.lay, sys, rom);
     await this.makeSoundtrack(i.lay, sys, rom);
+    await this.makeShipAssets(i.lay, sys, rom);
     writeJson(i.lay.descriptor, gamepack.descriptor(rom, i.lay.module));
     return { ...i, sys };
   }

@@ -268,6 +268,7 @@ final class EntityClient {
             if (GalaxyOptions.PARTICLES.get())
                 for (ParticleClient.Live l : particles.all()) particle(l, mario, pt, pieces);
         }
+        ShipClient.pieces(this, pt, pieces);
         if (self != null) self(self, pt, pieces);
         else if (session().active() && marioFeetGal != null) heldPieces(session().cellAt(marioFeetGal), pieces);
         if (pieces.isEmpty() && wasEmpty) return;
@@ -322,6 +323,61 @@ final class EntityClient {
         }
         return new double[] {g.m00(), g.m10(), g.m20(), g.m30(), g.m01(), g.m11(), g.m21(), g.m31(), g.m02(), g.m12(),
                 g.m22(), g.m32()};
+    }
+
+
+    // ---- ships (ShipClient) ----
+
+    /** A ship piece's model, made once and kept for the scene like the others (-1: none left). */
+    int shipModel(Object key, List<EntityWire.Quad> quads) {
+        Integer id = modelIds.get(key);
+        if (id == null) {
+            id = addModel(quads);
+            modelIds.put(key, id);
+        }
+        return id;
+    }
+
+    /** A ship piece's skin, made once (-1: none left). */
+    int shipSkin(Object key, int w, int h, int[] argb) {
+        Integer id = skinIds.get(key);
+        if (id == null) {
+            id = addSkin(w, h, argb);
+            skinIds.put(key, id);
+        }
+        return id;
+    }
+
+    /** Minecraft's cushion, a client-only one (never in a level), at `at` (blocks -> galaxy units), drawn by its own renderer. */
+    private net.minecraft.world.entity.decoration.Cushion cushion;
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void shipCushion(Matrix4d at, float pt, List<EntityWire.Piece> out) {
+        var level = Minecraft.getInstance().level;
+        if (level == null || failed.contains(net.minecraft.world.entity.decoration.Cushion.class)) return;
+        try {
+            if (cushion == null || cushion.level() != level) {
+                cushion = new net.minecraft.world.entity.decoration.Cushion(net.minecraft.world.entity.EntityTypes.CUSHION, level);
+                cushion.setColor(net.minecraft.world.item.DyeColor.RED);
+            }
+            EntityRenderer r = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(cushion);
+            EntityRenderState st = r.createRenderState(cushion, pt);
+            PoseStack ps = new PoseStack();
+            net.minecraft.world.phys.Vec3 offset = r.getRenderOffset(st);
+            ps.translate(offset.x, offset.y, offset.z);
+            capture.begin(at, out);
+            // `at` is already galaxy units: no planet (or player frame) stands between.
+            Matrix4d was = galaxy;
+            galaxy = new Matrix4d();
+            try {
+                r.submit(st, ps, capture, camera);
+            } finally {
+                galaxy = was;
+            }
+        } catch (RuntimeException ex) {
+            failed.add(net.minecraft.world.entity.decoration.Cushion.class);
+            GalaxyCraft.LOG.warn("Not drawing the ship's cushions in the game", ex);
+        }
     }
 
     // ---- shadow entities ----
@@ -500,6 +556,11 @@ final class EntityClient {
         return FontPages.skin(page, (wh, argb) -> addSkin(wh[0], wh[1], argb));
     }
 
+    /** Minecraft's glass block texture, as a skin (the ship's portholes). */
+    int glassSkin() {
+        return entitySkin(net.minecraft.resources.Identifier.withDefaultNamespace("textures/block/glass.png"), true);
+    }
+
     /** A sprite's own image (its first frame), as a skin. */
     int spriteSkin(TextureAtlasSprite s) {
         Identifier name = s.contents().name();
@@ -629,6 +690,11 @@ final class EntityClient {
         try {
             EntityRenderer r = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(player);
             EntityRenderState st = r.createRenderState(player, pt);
+            if (ShipClient.aboard().isPresent() && st instanceof net.minecraft.client.renderer.entity.state.HumanoidRenderState h) {
+                h.isPassenger = true; // seated on the ship's cushion
+                h.isFallFlying = false;
+                h.walkAnimationSpeed = 0;
+            }
             Vector3d o = frame.toGal(new Vector3d(st.x, st.y, st.z));
             Vector3d x = frame.toGal(new Vector3d(st.x + 1, st.y, st.z)).sub(o);
             Vector3d y = frame.toGal(new Vector3d(st.x, st.y + 1, st.z)).sub(o);

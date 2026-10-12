@@ -102,6 +102,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     public void onInitializeClient() {
         ShadowWorld.signEditor = GalaxyCraftClient::editSign;
         dev.moui.galaxycraft.station.StationHooks.set(StationClient.HOOKS);
+        dev.moui.galaxycraft.ship.ShipHooks.set(ShipClient.HOOKS);
         bridge = new BridgeClient(Path.of(Layout.SHM_PATH), () -> System.nanoTime() / 1_000_000L,
                 new BridgeClient.PartListener() {
                     @Override public void onUpsert(int partId, double[] gameMtx, byte[] kcl) {
@@ -790,6 +791,29 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             abilities.flying = false;
             abilities.mayfly = false;
         }
+        if (!flying && ++abilitiesCheck >= 40) cleanServerFlight(player);
+    }
+
+    private static int abilitiesCheck;
+
+    /**
+     * A world can have creative flight saved on (a double tap of Space while a ship set the
+     * abilities): the server then closes every elytra as it opens. Only /fly is flight here, so
+     * with it off a flying flag on the server is switched off (once a couple of seconds).
+     */
+    private static void cleanServerFlight(LocalPlayer player) {
+        abilitiesCheck = 0;
+        var server = Minecraft.getInstance().getSingleplayerServer();
+        if (server == null) return;
+        java.util.UUID id = player.getUUID();
+        server.execute(() -> {
+            var sp = server.getPlayerList().getPlayer(id);
+            if (sp != null && sp.getAbilities().flying) {
+                sp.getAbilities().flying = false;
+                sp.onUpdateAbilities();
+                GalaxyCraft.LOG.info("Creative flight switched off in the server (only /fly is flight here)");
+            }
+        });
     }
 
     /** Freezes the player in place (no gravity, no momentum, no fall damage pending) or lets go. */
@@ -807,10 +831,40 @@ public final class GalaxyCraftClient implements ClientModInitializer {
 
     private static void afterTick(Minecraft client) {
         sendPose(client);
+        elytraDiagnosis(client);
+    }
+
+    private static int diagCooldown;
+
+    /**
+     * A jump pressed in the air that does not open an elytra: once a second at most, why not
+     * (what Minecraft checks), logged so a playtest's log says what stopped it.
+     */
+    private static void elytraDiagnosis(Minecraft mc) {
+        LocalPlayer p = mc.player;
+        if (p == null || diagCooldown-- > 0) return;
+        if (!mc.options.keyJump.isDown() || p.isFallFlying()) return;
+        diagCooldown = 20;
+        var chest = p.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST);
+        boolean canGlide = false;
+        try {
+            var m = net.minecraft.world.entity.player.Player.class.getDeclaredMethod("canGlide");
+            m.setAccessible(true);
+            canGlide = (boolean) m.invoke(p);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // the diagnosis only
+        }
+        GalaxyCraft.LOG.info("elytra-diag: wear {}/{} willBreak={} canGlide={}", chest.getDamageValue(), chest.getMaxDamage(),
+                chest.nextDamageWillBreak(), canGlide);
+        GalaxyCraft.LOG.info("elytra-diag: jump pressed, not gliding: chest={} onGround={} inWater={} passenger={} "
+                + "levitation={} mayfly={} flying={} noGravity={} ship={} screen={}", chest.getItem(), p.onGround(), p.isInWater(),
+                p.isPassenger(), p.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION), p.getAbilities().mayfly,
+                p.getAbilities().flying, p.isNoGravity(), ShipClient.aboard().isPresent(), mc.gui.screen());
     }
 
     /** Start of the local player's own tick: Mario mode moves the player here. */
     public static void onPlayerTick(LocalPlayer player) {
+        ShipClient.onPlayerTick(player);
         if (followTarget != null) {
             player.setPos(followTarget.x, followTarget.y, followTarget.z);
             followTarget = null;

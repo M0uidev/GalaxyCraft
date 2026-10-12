@@ -22,6 +22,12 @@ abstract class MinecraftMixin {
         if (GalaxyCraftClient.exportingOverlay()) cir.setReturnValue(GalaxyCraftClient.hostFocused());
     }
 
+    /** A right click that boards a ship (or flies one) uses no item: not a ship, a pad, a block. */
+    @Inject(method = "startUseItem", at = @At("HEAD"), cancellable = true)
+    private void galaxycraft$shipClickIsNotAnItems(CallbackInfo ci) {
+        if (dev.moui.galaxycraft.client.ShipClient.swallowsUse()) ci.cancel();
+    }
+
     @Redirect(method = "handleKeybinds", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/CameraType;cycle()Lnet/minecraft/client/CameraType;"))
     private CameraType galaxycraft$cycle(CameraType current) {
         return GalaxyCraftClient.cycleCamera(current);

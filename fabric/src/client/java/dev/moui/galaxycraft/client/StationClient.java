@@ -444,7 +444,7 @@ public final class StationClient {
     }
 
     /** One fewer of the item in hand, outside creative (on the server, which syncs back). */
-    private static void useUp(Player player, InteractionHand hand, Item item) {
+    static void useUp(Player player, InteractionHand hand, Item item) {
         if (player.getAbilities().instabuild) return;
         MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
         if (server == null) return;

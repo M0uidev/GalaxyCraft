@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {"I":"minecraft:iron_ingot","C":"minecraft:crafting_table"},
+  "pattern": ["III","ICI","III"],
+  "result": {
+    "id": "galaxycraft:ship_table"
+  }
+}

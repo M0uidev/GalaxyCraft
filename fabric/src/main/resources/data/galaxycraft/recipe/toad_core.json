@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {"R":"minecraft:redstone","S":"minecraft:red_mushroom","I":"minecraft:iron_ingot","N":"minecraft:nether_star"},
+  "pattern": ["RSR","INI","RSR"],
+  "result": {
+    "id": "galaxycraft:toad_core"
+  }
+}
