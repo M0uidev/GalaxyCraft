@@ -102,6 +102,7 @@ public final class ToadClient {
     /** A station packed: its Technician goes with it. */
     public static void removeTechnician(String stationId) {
         if (store == null) return;
+        ToadWalker.forget("toad-station-" + stationId);
         if (store.remove("toad-station-" + stationId).isPresent()) {
             dirty = true;
             saveNow();
@@ -158,7 +159,7 @@ public final class ToadClient {
     }
 
     private static Vector3d centreOf(ToadRecord r) {
-        Vector3d up = new Vector3d(0, 1, 0).rotate(new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]));
+        Vector3d up = new Vector3d(0, 1, 0).rotate(ToadWalker.orientation(r));
         double half = ToadModels.HEIGHT_PX / 16.0 / 2 / GravityFrame.SCALE; // the model stands from its feet up
         return new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]).fma(half, up);
     }
@@ -447,7 +448,10 @@ public final class ToadClient {
     /** Takes every Toad out of the world (tests). */
     public static void clearAll() {
         if (store == null) return;
-        for (ToadRecord r : store.all()) store.remove(r.id());
+        for (ToadRecord r : store.all()) {
+            store.remove(r.id());
+            ToadWalker.forget(r.id());
+        }
         dirty = true;
         saveNow();
     }
@@ -463,7 +467,7 @@ public final class ToadClient {
 
     private static final java.util.Map<String, State> STATES = new java.util.HashMap<>();
     /** Blocks within which a Toad turns to the player, radians a second it turns at, how long (ns) a talk animates. */
-    private static final double LOOK_RANGE = 8, TURN = 4;
+    private static final double LOOK_RANGE = 8, TURN = 4, WALK_RANGE = 64;
     private static final long TALK_NS = 4_000_000_000L;
     private static final double FPS = 30;
     private static final long EPOCH = System.nanoTime();
@@ -488,6 +492,39 @@ public final class ToadClient {
         return a;
     }
 
+    /** The planet this Toad walks on (active, a planet not a station, the player within draw range), or null. */
+    private static PlanetSession walkable(ToadRecord r, Vector3d eye) {
+        if (r.type() == ToadType.TECHNICIAN) return null; // stations: the Technician stays
+        Vector3d p = new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]);
+        if (p.distance(eye) * GravityFrame.SCALE > WALK_RANGE) return null;
+        PlanetSession best = null;
+        for (PlanetSession s : PlanetClient.planets())
+            if (s.active() && s.station() == null && s.planet() != null && s.center().distance(p) <= s.gravityUnits()
+                    && (best == null || s.center().distance(p) < best.center().distance(p))) best = s;
+        return best;
+    }
+
+    /** The animation for what the Toad is doing: Kinopio's own, or the one with the pickel for a miner. */
+    private static String animName(String walk, ToadLook look) {
+        if (walk == null || walk.equals("Wait")) return look.idle();
+        String pickel = look.idle().endsWith("Pickel") ? walk + "Pickel" : walk;
+        return ToadModels.get().anims().containsKey(pickel) ? pickel : walk;
+    }
+
+    private static double lastSaved;
+
+    /** A Toad walked: its new spot is saved, at most every few seconds. */
+    private static void moved(ToadRecord r) {
+        double[] home = ToadWalker.homeOf(r.id());
+        if (r.home() == null && home != null) store.put(new ToadRecord(r.id(), r.type(), r.pos(), r.rot(), r.stage(), home));
+        dirty = true;
+        double t = System.nanoTime() / 1e9;
+        if (t - lastSaved > 5) {
+            lastSaved = t;
+            saveNow();
+        }
+    }
+
     /** The pieces of this stage's Toads, universe units, for EntityClient's frame. */
     static void pieces(EntityClient ec, List<EntityWire.Piece> out) {
         drainOutposts();
@@ -509,21 +546,39 @@ public final class ToadClient {
             State st = STATES.computeIfAbsent(r.id(), k -> new State());
             double dt = st.last == 0 ? 0 : Math.min(0.1, (now - st.last) / 1e9);
             st.last = now;
-            Quaterniond q = new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]);
-            Vector3d pos = new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]);
-            // Turn to the player when near (about its up, from the way it was put down), else back.
-            double target = 0;
-            if (eye != null) {
-                Vector3d to = new Vector3d(eye).sub(pos);
-                double x = to.dot(new Vector3d(1, 0, 0).rotate(q)), z = to.dot(new Vector3d(0, 0, 1).rotate(q));
-                if (to.length() * GravityFrame.SCALE < LOOK_RANGE && x * x + z * z > 1e-12) target = Math.atan2(x, z);
+            boolean talking = now < st.talkUntil || (conv != null && with != null && with.id().equals(r.id()));
+            // Walking: on a planet near the player, a Toad that is not talking wanders about its home.
+            String walk = null;
+            double walkYaw = 0;
+            PlanetSession ground = eye == null ? null : walkable(r, eye);
+            if (ground != null) {
+                double toPlayer = new Vector3d(eye).sub(r.pos()[0], r.pos()[1], r.pos()[2]).length() * GravityFrame.SCALE;
+                ToadWalker.Frame f = ToadWalker.step(r, dt, ground, false, ToadWalker.near(toPlayer), talking, st.yaw);
+                if (f != null) {
+                    walk = f.anim();
+                    walkYaw = f.yaw();
+                    if (f.moved()) moved(r);
+                }
             }
-            double diff = wrap(target - st.yaw), step = TURN * dt;
-            st.yaw = wrap(st.yaw + Math.max(-step, Math.min(step, diff)));
+            Quaterniond q = ToadWalker.orientation(r);
+            Vector3d pos = new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]);
+            if (walk != null && (walk.equals("Walk") || walk.equals("Turn"))) st.yaw = wrap(walkYaw);
+            else {
+                // Turn to the player when near (about its up, from the way it was put down), else stay as it is.
+                double target = st.yaw;
+                if (eye != null) {
+                    Vector3d to = new Vector3d(eye).sub(pos);
+                    double x = to.dot(new Vector3d(1, 0, 0).rotate(q)), z = to.dot(new Vector3d(0, 0, 1).rotate(q));
+                    if (to.length() * GravityFrame.SCALE < LOOK_RANGE && x * x + z * z > 1e-12) target = Math.atan2(x, z);
+                    else if (walk == null) target = 0;
+                }
+                double diff = wrap(target - st.yaw), step = TURN * dt;
+                st.yaw = wrap(st.yaw + Math.max(-step, Math.min(step, diff)));
+                if (walk != null) ToadWalker.face(r.id(), st.yaw);
+            }
             Matrix4d base = new Matrix4d().translation(pos.x, pos.y, pos.z).rotate(q).rotateY(st.yaw).scale(unitsPerPixel);
             // The pose: the animation's frame on every joint it has, the rest pose for the others.
-            boolean talking = now < st.talkUntil;
-            BckReader.Anim anim = model.anims().get(talking ? look.talk() : look.idle());
+            BckReader.Anim anim = model.anims().get(talking ? look.talk() : animName(walk, look));
             if (anim == null) anim = model.anims().get(talking ? "Talk" : "Wait");
             double frame = (now - EPOCH) / 1e9 * FPS + (anim == null ? 0 : st.phase * anim.duration());
             for (int j = 0; j < srt.length; j++) {

@@ -44,9 +44,12 @@ public final class ToadStore {
                 JsonArray q = o.has("rot") ? o.getAsJsonArray("rot") : null;
                 double[] rot = q == null || q.size() != 4 ? new double[] {0, 0, 0, 1}
                         : new double[] {q.get(0).getAsDouble(), q.get(1).getAsDouble(), q.get(2).getAsDouble(), q.get(3).getAsDouble()};
+                JsonArray h = o.has("home") ? o.getAsJsonArray("home") : null;
+                double[] home = h == null || h.size() != 3 ? null
+                        : new double[] {h.get(0).getAsDouble(), h.get(1).getAsDouble(), h.get(2).getAsDouble()};
                 s.toads.add(new ToadRecord(o.get("id").getAsString(), type,
                         new double[] {p.get(0).getAsDouble(), p.get(1).getAsDouble(), p.get(2).getAsDouble()},
-                        rot, o.has("stage") ? o.get("stage").getAsString() : ""));
+                        rot, o.has("stage") ? o.get("stage").getAsString() : "", home));
             }
         } catch (IOException | RuntimeException e) {
             s.toads.clear(); // a damaged file loses its Toads, not the world
@@ -95,6 +98,11 @@ public final class ToadStore {
             for (double v : r.rot()) q.add(v);
             o.add("rot", q);
             o.addProperty("stage", r.stage());
+            if (r.home() != null) {
+                JsonArray h = new JsonArray();
+                for (double v : r.home()) h.add(v);
+                o.add("home", h);
+            }
             a.add(o);
         }
         Files.createDirectories(file.toAbsolutePath().getParent());

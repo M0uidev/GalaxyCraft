@@ -49,6 +49,11 @@ public final class ToadWander {
         return heading;
     }
 
+    /** The way it faces while it stands (it turned to look at the player): its next turn starts from here. */
+    public void face(double h) {
+        if (state == State.IDLE) heading = h;
+    }
+
     public boolean sleeping() {
         return state == State.SLEEP;
     }
