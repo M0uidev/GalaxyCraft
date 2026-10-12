@@ -23,9 +23,12 @@ Animation (walk, idle: a later phase, static pose first), voices and sounds, que
 
 ## Model
 
-- `ToadNpc`: own entity, no villager AI, persistent, never despawns, not attacked by mobs, stays
-  within a short radius of its spot. Drawn as rigid pieces of `Kinopio.arc` through `EntityDraw`
-  (same path as the Starshroom); `KinopioGoods*` arcs are its accessories.
+- A Toad is **not a Minecraft entity**: ships and stations here are records kept in a JSON file
+  (`ShipStore`), drawn by the game through `EntityWire`, with interaction in client hooks
+  (`ShipClient.aimedShip`). `ToadRecord` + `ToadStore` follow that pattern: id, type, position
+  (universe units), facing, stage. Always present where placed, never despawns, nothing attacks it.
+  Drawn as rigid pieces of `Kinopio.arc` through the Starshroom's path (`Rarc`, `BdlReader`,
+  `ShipModels`); `KinopioGoods*` arcs are its accessories.
 - `ToadType` (data rows, no class per type):
 
 | Type | Where | Accessory | Sells |
@@ -57,7 +60,7 @@ Animation (walk, idle: a later phase, static pose first), voices and sounds, que
   `SystemInfo` interface (`map/`), never recomputed here. It does not touch Toad NPC code, nor this
   `ShipModels`/`BdlReader`.
 - **SMG2 mobs spike** (`spike/smg2-mobs`, session galaxycraft-e3): research only, no Java.
-  Recommendation: Java authority (`ToadNpc`) plus, if wanted later, a game-side `ModelObj` puppet for
+  Recommendation: Java authority (`ToadRecord`) plus, if wanted later, a game-side `ModelObj` puppet for
   real animations (option C); static pieces first is option B. If the puppet path is taken,
   `Kinopio.arc` must be listed in GalaxyCraftSpace's UseResource (`scenario_1.bcsv`, emptied today by
   `tools/space_galaxy.py:use_resource_arc`): coordinate with that session before editing it.
@@ -68,7 +71,7 @@ Animation (walk, idle: a later phase, static pose first), voices and sounds, que
 ## Testing
 
 Unit tests for offer tables (tier balance: nothing sold above its tier) and dialogue rules.
-`ToadNpcProbe` in the style of `ShipProbe`: place a Toad, talk, trade, check it is drawn. Never run
+`ToadProbe` in the style of `ShipProbe`: place a Toad, talk, trade, check it is drawn. Never run
 gxplay while another session uses it.
 
 ## Open questions
