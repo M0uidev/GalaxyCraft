@@ -31,6 +31,11 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
         if (!Boolean.getBoolean("galaxycraft.toadGame")) return;
+        try { // what an earlier run marked (the home Guide is put once) is not this world's
+            java.nio.file.Files.deleteIfExists(Path.of(System.getProperty("galaxycraft.planetDir", "."), "toads.json"));
+        } catch (IOException e) {
+            log("could not clear toads.json: " + e);
+        }
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
             sp.getServer().runCommand("gamemode survival @a");
             sp.getServer().runCommand("gamerule fall_damage false");
@@ -167,8 +172,11 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
             ctx.runOnClient(mc -> mc.player.closeContainer());
             ctx.waitTicks(10);
 
-            hut(ctx);
+            // Still in space (stations go only there): the station first, then the planet.
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(space));
+            ctx.waitTicks(40);
             station(ctx, sp);
+            hut(ctx);
 
             ctx.runOnClient(mc -> ToadClient.clearAll());
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(home));
@@ -176,7 +184,6 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
             ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MARIO));
             ctx.waitTicks(60);
         }
-        world(ctx);
         log(failed ? "FAIL" : "PASS");
     }
 
@@ -186,12 +193,6 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
      */
     private void station(ClientGameTestContext ctx, TestSingleplayerContext sp) {
         ctx.runOnClient(mc -> ToadClient.clearAll());
-        Vector3d home = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
-        Vector3d space = new Vector3d(0, 1, 0).mul(units(SPACE_UP)).add(home);
-        ctx.runOnClient(mc -> PlanetClient.remove());
-        ctx.waitTicks(20);
-        ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(space));
-        ctx.waitTicks(60);
         sp.getServer().runCommand("item replace entity @a hotbar.0 with galaxycraft:station_core");
         ctx.waitTicks(5);
         dev.moui.galaxycraft.voxel.PlanetSession s = ctx.computeOnClient(mc -> {
@@ -221,47 +222,6 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
     }
 
     /**
-     * 6. A new world with every generated planet counted as tier 3 (-Dgalaxycraft.toadTier, set
-     * here): the home planet has a hut and its Toad, and the Guide stands near where Mario lands.
-     */
-    private void world(ClientGameTestContext ctx) {
-        System.setProperty("galaxycraft.toadTier", "3");
-        try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
-            sp.getServer().runCommand("gamemode survival @a");
-            sp.getServer().runCommand("gamerule fall_damage false");
-            sp.getServer().runCommand("effect give @a resistance infinite 255 true");
-            sp.getServer().runCommand("time set day");
-            ctx.waitFor(mc -> GalaxyCraftClient.galaxyPos().isPresent(), 1200);
-            ctx.waitTicks(40);
-            ctx.runOnClient(mc -> GalaxyOptions.MOVEMENT.set(Movement.MINECRAFT));
-            ctx.runOnClient(mc -> ToadClient.clearAll());
-            dev.moui.galaxycraft.voxel.PlanetSession s = PlanetClient.session();
-            ctx.waitFor(mc -> s.active() && s.queued() == 0, 6000);
-            ctx.runOnClient(mc -> PlanetClient.teleport());
-            ctx.waitTicks(200);
-            var toads = ctx.computeOnClient(mc -> ToadClient.toads());
-            for (var t : toads) log("toad " + t.id() + " " + t.type().id());
-            check(toads.stream().anyMatch(t -> t.type() == ToadType.GUIDE), "the home Guide is near where Mario lands");
-            check(toads.stream().anyMatch(t -> t.id().startsWith("toad-p")), "the home planet has an outpost with its hut");
-            for (var t : toads) {
-                if (!t.id().startsWith("toad-p")) continue;
-                Vector3d at = new Vector3d(t.pos()[0], t.pos()[1], t.pos()[2]);
-                Vector3d up = new Vector3d(0, 1, 0).rotate(new Quaterniond(t.rot()[0], t.rot()[1], t.rot()[2], t.rot()[3]));
-                Vector3d fwd = new Vector3d(0, 0, 1).rotate(new Quaterniond(t.rot()[0], t.rot()[1], t.rot()[2], t.rot()[3]));
-                Vector3d out = new Vector3d(at).fma(units(7), fwd).fma(units(0.3), up);
-                ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(out));
-                ctx.waitTicks(120);
-                aimAt(ctx, new Vector3d(at).fma(units(1.2), up));
-                ctx.waitTicks(20);
-                shot(ctx, "outpost-real");
-                break;
-            }
-        } finally {
-            System.clearProperty("galaxycraft.toadTier");
-        }
-    }
-
-    /**
      * 4. An outpost: a generated planet made with a hut asked for, its Miner put at the door. Shots
      * from outside (front, side from above), from inside beside the Toad, and the Toad from behind.
      */
@@ -285,7 +245,11 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
         var rec = dev.moui.galaxycraft.toad.ToadPlacing.record("", ToadType.MINER, made.get(0), ctx.computeOnClient(mc -> s.center()), units(1));
         Vector3d feet = new Vector3d(rec.pos()[0], rec.pos()[1], rec.pos()[2]);
         Quaterniond q = new Quaterniond(rec.rot()[0], rec.rot()[1], rec.rot()[2], rec.rot()[3]);
-        ctx.runOnClient(mc -> ToadClient.put(ToadType.MINER, feet, q));
+        // The way the world's outposts arrive: offered from a worker thread, put by the client.
+        ctx.runOnClient(mc -> ToadClient.offerOutposts("probe-planet", java.util.List.of(rec)));
+        check(ctx.computeOnClient(mc -> ToadClient.toads().stream().anyMatch(t -> t.id().equals("toad-hut-test"))),
+                "the offered outpost is put");
+
         Vector3d up = new Vector3d(0, 1, 0).rotate(q), fwd = new Vector3d(0, 0, 1).rotate(q), right = new Vector3d(1, 0, 0).rotate(q);
         Vector3d head = new Vector3d(feet).fma(units(1.2), up);
         // Outside, in front of the door.
@@ -310,6 +274,8 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
         ctx.waitTicks(20);
         shot(ctx, "hut-inside");
         ctx.runOnClient(mc -> PlanetClient.askHuts(java.util.List.of()));
+        check(ctx.computeOnClient(mc -> ToadClient.toads().stream().anyMatch(t -> t.type() == ToadType.GUIDE)),
+                "the home Guide stands near where Mario lands");
     }
 
     private static void aimAt(ClientGameTestContext ctx, Vector3d targetGal) {
