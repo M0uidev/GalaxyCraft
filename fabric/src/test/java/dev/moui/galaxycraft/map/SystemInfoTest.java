@@ -14,7 +14,7 @@ class SystemInfoTest {
         var u = new Universe(5, U);
         var home = u.star(Universe.Sector.HOME).orElseThrow();
         assertEquals(new SystemInfo(0, StarType.YELLOW), SystemInfo.of(u, home));
-        assertTrue(SystemInfo.visited(home));
+        assertTrue(SystemInfo.visited(null, home));
     }
 
     @Test void infoIsTheUniverses() {
@@ -27,5 +27,17 @@ class SystemInfoTest {
             kinds.add(info.star());
         }
         assertFalse(kinds.isEmpty());
+    }
+
+    @Test void visitedSystemsAreMarked() throws Exception {
+        var u = new Universe(9, U);
+        var other = u.around(UPos.ZERO, 3).stream().filter(s -> !s.home()).findFirst().orElseThrow();
+        assertFalse(SystemInfo.visited(null, other));
+        var file = java.nio.file.Files.createTempFile("visited", ".json");
+        java.nio.file.Files.delete(file);
+        var v = dev.moui.galaxycraft.universe.Visited.load(file);
+        assertFalse(SystemInfo.visited(v, other));
+        v.mark(other.sector());
+        assertTrue(SystemInfo.visited(v, other));
     }
 }

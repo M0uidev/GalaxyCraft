@@ -40,6 +40,8 @@ final class MapScreen extends Screen {
     private static final int PICK_PX = 14;
     /** Ring color by tier 0..5 (the border of a system's dot). */
     private static final int[] TIER = {0xFF7CFF7C, 0xFF4FD0FF, 0xFF8F7CFF, 0xFFFF7CE0, 0xFFFFA040, 0xFFFF4040};
+    /** The side panel's width: the map is centered in what is left of it. */
+    private static final int PANEL_W = 175, TOP = 24;
     private static final int HOVER = 0xFFFFE066, TIP = 0xF0181A28;
 
     /** Something on the map: where (units from Mario), size (units), color, label. */
@@ -47,6 +49,8 @@ final class MapScreen extends Screen {
 
     private final MapView view = new MapView();
     private final List<Item> items = new ArrayList<>();
+    /** Rectangles of the labels drawn this frame: a label that would cover one is dropped. */
+    private final List<int[]> taken = new ArrayList<>();
     private Universe.Star inside; // null: the universe level
     private UPos origin = UPos.ZERO; // where Mario was when the items were made: their positions are relative to it
     private int selected = -1;
@@ -59,7 +63,7 @@ final class MapScreen extends Screen {
 
     @Override
     protected void init() {
-        view.width = width;
+        view.width = width - PANEL_W;
         view.height = height;
         if (items.isEmpty()) universeLevel();
         rebuildButtons();
@@ -98,7 +102,7 @@ final class MapScreen extends Screen {
         for (Universe.Star s : u.around(m, UniverseClient.STAR_SECTORS)) {
             SystemInfo info = SystemInfo.of(u, s);
             String label = (s.home() ? "Home" : "System " + SystemIndex.name(s.sector())) + "  T" + info.tier();
-            int color = SystemInfo.visited(s) ? info.star().argb : dim(info.star().argb);
+            int color = visited(s) ? info.star().argb : dim(info.star().argb);
             items.add(new Item(label, s.center().minus(m), (150 + 25 * s.planets()) * UNITS, color, s, s.center(), 0, TIER[Math.min(5, info.tier())], null));
         }
         view.focusOn(new Vector3d(), Math.max(1, UNITS * 6000));
@@ -177,7 +181,7 @@ final class MapScreen extends Screen {
 
     /** The item nearest the point within PICK_PX, or -1. */
     private int pickAt(double x, double y) {
-        if (x >= width - 175) return -1; // the side panel
+        if (x >= width - PANEL_W) return -1; // the side panel
         List<Vector3d> pts = new ArrayList<>(items.size());
         for (Item it : items) pts.add(it.pos());
         return view.pick(pts, x, y, PICK_PX);
@@ -190,7 +194,7 @@ final class MapScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent ev, double dx, double dy) {
-        if (ev.button() == 0 && ev.x() < width - 175) {
+        if (ev.button() == 0 && ev.x() < width - PANEL_W) {
             view.orbit(-dx * 0.01, dy * 0.01);
             return true;
         }
@@ -222,8 +226,9 @@ final class MapScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
         g.fill(0, 0, width, height, 0xFF05060C);
-        view.width = width;
+        view.width = width - PANEL_W;
         view.height = height;
+        taken.clear();
         long now = MapClient.now();
         int n = items.size();
         double[] depth = new double[n];
@@ -232,7 +237,7 @@ final class MapScreen extends Screen {
         List<Integer> order = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             var p = view.project(items.get(i).pos());
-            if (p.isEmpty() || p.get().x() < -30 || p.get().y() < -30 || p.get().x() > width + 30 || p.get().y() > height + 30) continue;
+            if (p.isEmpty() || p.get().x() < -30 || p.get().y() < -30 || p.get().x() > view.width + 30 || p.get().y() > height + 30) continue;
             seen[i] = true;
             depth[i] = p.get().depth();
             sx[i] = p.get().x();
@@ -263,15 +268,26 @@ final class MapScreen extends Screen {
             else if (i == hovered) ring(g, (int) sx[i], (int) sy[i], r + 4, HOVER);
         }
         you(g);
-        for (int i : order) {
-            if (!labelled.contains(i)) continue;
+        // Labels, most wanted first (the pick and the hovered always win), none that covers another.
+        java.util.Set<Integer> shown = new java.util.HashSet<>(order);
+        List<Integer> prio = new ArrayList<>();
+        if (selected >= 0 && shown.contains(selected)) prio.add(selected);
+        if (hovered >= 0 && hovered != selected && shown.contains(hovered)) prio.add(hovered);
+        for (int k = order.size() - 1; k >= 0; k--) {
+            int i = order.get(k);
+            if (labelled.contains(i) && i != selected && i != hovered) prio.add(i);
+        }
+        for (int i : prio) {
             Item it = items.get(i);
             int r = (int) Math.max(2, Math.min(24, it.size() / depth[i] * (height / 2.0) / Math.tan(Math.toRadians(30))));
-            g.text(font, it.label(), (int) sx[i] + r + 3, (int) sy[i] - 4, i == selected ? WHITE : GRAY);
+            boolean key = i == selected || i == hovered;
+            String text = key || inside == null ? it.label() : shortLabel(it);
+            label(g, text, (int) sx[i] + r + 3, (int) sy[i] - 4, i == selected ? WHITE : GRAY, key);
         }
         if (inside != null) shipMarkers(g, now);
-        g.fill(width - 175, 0, width, height, PANEL);
-        g.centeredText(font, inside == null ? "Galaxy Map" : "System " + (inside.home() ? "Home" : SystemIndex.name(inside.sector())), width / 2, 12, WHITE);
+        g.fill(0, 0, width - PANEL_W, TOP - 2, 0xFF05060C); // the title's strip: nothing shows through
+        g.fill(width - PANEL_W, 0, width, height, PANEL);
+        g.centeredText(font, inside == null ? "Galaxy Map" : "System " + (inside.home() ? "Home" : SystemIndex.name(inside.sector())), (width - PANEL_W) / 2, 8, WHITE);
         if (inside == null) {
             g.text(font, "Ring = tier", width - 168, height - 40, GRAY);
             for (int t = 0; t < TIER.length; t++) {
@@ -281,11 +297,10 @@ final class MapScreen extends Screen {
         }
         if (selected >= 0) info(g, items.get(selected));
         else overview(g);
-        g.text(font, inside == null
-                ? "Click: select   Double click or Enter: enter the system   Drag: turn   Wheel: zoom"
-                : "Click: select   Backspace: back to the galaxy   Drag: turn   Wheel: zoom", 8, height - 14, GRAY);
+        g.text(font, "Click: select   Drag: turn   Wheel: zoom", 8, height - 26, GRAY);
+        g.text(font, inside == null ? "Double click or Enter: enter the system" : "Backspace: back to the galaxy", 8, height - 14, GRAY);
         super.extractRenderState(g, mouseX, mouseY, a);
-        if (hovered >= 0 && mouseX < width - 175) tooltip(g, items.get(hovered), mouseX, mouseY);
+        if (hovered >= 0 && mouseX < width - PANEL_W) tooltip(g, items.get(hovered), mouseX, mouseY);
     }
 
     /** Lines describing an item, shared by the tooltip and the side panel. */
@@ -295,7 +310,7 @@ final class MapScreen extends Screen {
             SystemInfo info = SystemInfo.of(UniverseClient.universe(), it.star());
             out.add("Tier " + info.tier() + ", " + info.star().name().toLowerCase().replace('_', ' ') + " star");
             out.add(it.star().planets() + " planets, radius " + it.star().minRadius() + " to " + it.star().maxRadius());
-            out.add(SystemInfo.visited(it.star()) ? "Visited" : "Not visited yet");
+            out.add(visited(it.star()) ? "Visited" : "Not visited yet");
             out.add(String.format("%,d blocks away", Math.round(it.pos().length() / UNITS)));
         } else {
             out.add("Radius " + (int) it.radiusBlocks() + " blocks");
@@ -312,7 +327,7 @@ final class MapScreen extends Screen {
         if (sp.isPresent()) {
             int r = (int) Math.max(3, Math.min(12, 400 * UNITS / sp.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
             disc(g, (int) sp.get().x(), (int) sp.get().y(), r, SystemInfo.of(UniverseClient.universe(), inside).star().argb);
-            g.text(font, inside.home() ? "Home star" : "Star", (int) sp.get().x() + r + 3, (int) sp.get().y() - 4, GRAY);
+            label(g, inside.home() ? "Home star" : "Star", (int) sp.get().x() + r + 3, (int) sp.get().y() - 4, GRAY, true);
         }
         boolean all = order.size() <= 10;
         for (int i : order) {
@@ -346,7 +361,28 @@ final class MapScreen extends Screen {
         int x = (int) p.get().x(), y = (int) p.get().y();
         g.fill(x - 5, y, x + 6, y + 1, 0xFF7CFF7C);
         g.fill(x, y - 5, x + 1, y + 6, 0xFF7CFF7C);
-        g.text(font, "You", x + 7, y + 3, 0xFF7CFF7C);
+        label(g, "You", x + 7, y + 3, 0xFF7CFF7C, true);
+    }
+
+    /** Draws a label unless it would cover one already drawn (force: always) or sits in the title's strip. */
+    private void label(GuiGraphicsExtractor g, String text, int x, int y, int color, boolean force) {
+        int w = font.width(text);
+        int[] r = {x - 1, y - 1, x + w + 1, y + 9};
+        if (y < TOP) return;
+        if (!force) for (int[] t : taken) if (r[0] < t[2] && r[2] > t[0] && r[1] < t[3] && r[3] > t[1]) return;
+        g.text(font, text, x, y, color);
+        taken.add(r);
+    }
+
+    /** "P5 r48" for a planet's crowded label (the biome is in the tooltip and the panel). */
+    private static String shortLabel(Item it) {
+        String l = it.label();
+        int sp = l.indexOf(' ', 7);
+        return "P" + (sp < 0 ? l.substring(7) : l.substring(7, sp)) + " r" + (int) it.radiusBlocks();
+    }
+
+    private static boolean visited(Universe.Star s) {
+        return SystemInfo.visited(Warp.visited(), s);
     }
 
     private static int dim(int argb) {
@@ -362,7 +398,7 @@ final class MapScreen extends Screen {
         int w = 0;
         for (String l : lines) w = Math.max(w, font.width(l));
         int h = lines.size() * 11 + 6;
-        int x = Math.min(mx + 12, width - 175 - w - 10), y = Math.max(2, Math.min(my + 12, height - h - 2));
+        int x = Math.min(mx + 12, width - PANEL_W - w - 10), y = Math.max(2, Math.min(my + 12, height - h - 2));
         g.fill(x - 4, y - 3, x + w + 4, y + h - 3, TIP);
         for (int k = 0; k < lines.size(); k++) g.text(font, lines.get(k), x, y + k * 11, k == 0 ? WHITE : GRAY);
     }
@@ -377,8 +413,8 @@ final class MapScreen extends Screen {
 
     private void info(GuiGraphicsExtractor g, Item it) {
         int x = width - 168, y = 14;
-        g.text(font, it.label(), x, y, WHITE);
-        if (it.ring() != 0) g.fill(x - 12, y, x - 5, y + 7, it.ring());
+        g.fill(x, y + 1, x + 7, y + 8, it.ring() != 0 ? it.ring() : it.color()); // the tier's color, or the planet's
+        g.text(font, it.label(), x + 11, y, WHITE);
         for (String l : describe(it)) g.text(font, l, x, y += 12, GRAY);
         var ships = MapShips.provider().ships();
         if (ships.isEmpty()) return;
