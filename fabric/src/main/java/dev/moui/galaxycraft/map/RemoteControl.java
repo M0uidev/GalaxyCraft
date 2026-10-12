@@ -5,9 +5,9 @@ import org.joml.Vector3d;
 
 /** Sending a ship to a planet and stopping it: pure, on a CourseStore. */
 public final class RemoteControl {
-    /** Orbit radius over the surface, blocks: 60% of the radius plus 24. First draft, tuned by playing. */
+    /** Orbit radius from the planet's center, blocks: just outside its gravity (the pulse's margin), as the pulse stops. First draft. */
     static double orbitBlocks(double planetRadiusBlocks) {
-        return planetRadiusBlocks * 1.6 + 24;
+        return dev.moui.galaxycraft.voxel.PlanetSession.gravityRadius(planetRadiusBlocks) + 64;
     }
 
     /** Radians a tick: a lap takes about 60 seconds (1200 ticks). */
@@ -22,8 +22,8 @@ public final class RemoteControl {
 
     /**
      * A trip from where the ship is now to an orbit around the planet, kept in the store (a trip it
-     * had is replaced). The orbit's phase starts on the side the ship comes from, turned by 45
-     * degrees until no ship already bound for that planet is near that spot.
+     * had is replaced). The orbit's spot is searched from the side the ship comes from all
+     * round the planet: the one farthest from the ships already bound for it.
      */
     public static Trip send(CourseStore store, String shipId, UPos shipNow, UPos planetCenter, double planetRadiusBlocks,
             double unitsPerBlock, double unitsPerTick, long now) {
@@ -32,13 +32,18 @@ public final class RemoteControl {
         double radius = orbitBlocks(planetRadiusBlocks) * unitsPerBlock;
         Vector3d side = from.minus(planetCenter);
         double base = side.x == 0 && side.z == 0 ? 0 : Math.atan2(side.z, side.x);
-        // The first of 8 spots, starting on the side the ship comes from, that no ship bound for the planet is near.
+        // Of 24 spots around the planet (the first on the side the ship comes from), the one farthest from every ship already
+        // bound for it, as they will be when this one arrives.
         Trip trip = null;
-        for (int k = 0; k < 8 && trip == null; k++) {
-            Trip candidate = around(from, planetCenter, radius, base + k * Math.PI / 4, unitsPerTick, now);
-            if (free(store, candidate)) trip = candidate;
+        double best = -1;
+        for (int k = 0; k < 24; k++) {
+            Trip candidate = around(from, planetCenter, radius, base + k * Math.PI / 12, unitsPerTick, now);
+            double apart = separation(store, candidate);
+            if (apart > best + 1e-9) {
+                best = apart;
+                trip = candidate;
+            }
         }
-        if (trip == null) trip = around(from, planetCenter, radius, base, unitsPerTick, now);
         store.put(shipId, trip);
         return trip;
     }
@@ -49,16 +54,16 @@ public final class RemoteControl {
         return new Trip(course, new Orbit(center, radius, phase, RATE, now + course.durationTicks()));
     }
 
-    /** No ship bound for this planet is within 22.5 degrees of the candidate's spot when it arrives (all turn at RATE). */
-    private static boolean free(CourseStore store, Trip candidate) {
+    /** The smallest angle (radians) between the candidate's spot and the ships bound for its planet, at the candidate's arrival (all turn at RATE); pi if none. */
+    private static double separation(CourseStore store, Trip candidate) {
         long at = candidate.orbit().epochTick();
+        double min = Math.PI;
         for (Trip o : store.all().values()) {
             if (!o.orbit().center().equals(candidate.orbit().center())) continue;
             double theirs = o.orbit().phase() + o.orbit().rate() * (at - o.orbit().epochTick());
-            double d = Math.abs(Math.IEEEremainder(candidate.orbit().phase() - theirs, 2 * Math.PI));
-            if (d < Math.PI / 8) return false;
+            min = Math.min(min, Math.abs(Math.IEEEremainder(candidate.orbit().phase() - theirs, 2 * Math.PI)));
         }
-        return true;
+        return min;
     }
 
     /** Stops the ship where it is: the trip is forgotten and that position returned (the ship side records it). */

@@ -94,4 +94,10 @@ class RemoteControlTest {
         assertThrows(IllegalArgumentException.class, () -> new Course(HOME, PLANET, 0, -1));
         assertTrue(s.all().isEmpty());
     }
+
+    @Test void theOrbitStaysJustOutsideTheGravity(@TempDir Path d) {
+        Trip t = RemoteControl.send(store(d), "a", HOME, PLANET, 64, U, 50, 0);
+        double gravity = dev.moui.galaxycraft.voxel.PlanetSession.gravityRadius(64) * U;
+        assertTrue(t.orbit().radius() >= gravity + 64 * U - 1e-6, "orbit " + t.orbit().radius() + " inside gravity " + gravity);
+    }
 }
