@@ -36,6 +36,9 @@ final class MapScreen extends Screen {
      * cost grows with the square of the count: thousands of systems at once make each frame crawl.
      */
     private static final int MAX_DRAWN = 400;
+    /** How near the mouse must be to a point, in pixels, to hover or click it (a star is often a 2 px dot). */
+    private static final int PICK_PX = 14;
+    private static final int HOVER = 0xFFFFE066, TIP = 0xF0181A28;
 
     /** Something on the map: where (units from Mario), size (units), color, label. */
     private record Item(String label, Vector3d pos, double size, int color, Universe.Star star, UPos center, double radiusBlocks) {}
@@ -44,6 +47,7 @@ final class MapScreen extends Screen {
     private final List<Item> items = new ArrayList<>();
     private Universe.Star inside; // null: the universe level
     private int selected = -1;
+    private int hovered = -1;
     private double lastDragX;
 
     MapScreen() {
@@ -135,9 +139,7 @@ final class MapScreen extends Screen {
         if (super.mouseClicked(ev, doubled)) return true;
         if (ev.button() != 0) return false;
         lastDragX = ev.x();
-        List<Vector3d> pts = new ArrayList<>();
-        for (Item it : items) pts.add(it.pos());
-        int i = view.pick(pts, ev.x(), ev.y(), 8);
+        int i = pickAt(ev.x(), ev.y());
         if (i < 0 && doubled && selected >= 0) i = selected; // the first click moved the focus: the second is on the same item
         if (i >= 0) {
             selected = i;
@@ -147,6 +149,14 @@ final class MapScreen extends Screen {
             return true;
         }
         return false;
+    }
+
+    /** The item nearest the point within PICK_PX, or -1. */
+    private int pickAt(double x, double y) {
+        if (x >= width - 175) return -1; // the side panel
+        List<Vector3d> pts = new ArrayList<>(items.size());
+        for (Item it : items) pts.add(it.pos());
+        return view.pick(pts, x, y, PICK_PX);
     }
 
     @Override
@@ -217,11 +227,14 @@ final class MapScreen extends Screen {
             if (it.star() != null && it.star().home() && inside == null) labelled.add(i);
             if (Math.abs(sx[i] - mouseX) < 6 && Math.abs(sy[i] - mouseY) < 6) labelled.add(i);
         }
+        hovered = pickAt(mouseX, mouseY);
+        if (hovered >= 0) labelled.add(hovered);
         for (int i : order) {
             Item it = items.get(i);
             int r = (int) Math.max(2, Math.min(24, it.size() / depth[i] * (height / 2.0) / Math.tan(Math.toRadians(30))));
             disc(g, (int) sx[i], (int) sy[i], r, it.color());
             if (i == selected) ring(g, (int) sx[i], (int) sy[i], r + 4, WHITE);
+            else if (i == hovered) ring(g, (int) sx[i], (int) sy[i], r + 4, HOVER);
         }
         for (int i : order) {
             if (!labelled.contains(i)) continue;
@@ -234,21 +247,45 @@ final class MapScreen extends Screen {
         g.centeredText(font, inside == null ? "Galaxy Map" : "System " + (inside.home() ? "Home" : SystemIndex.name(inside.sector())), width / 2, 12, WHITE);
         if (selected >= 0) info(g, items.get(selected));
         else g.text(font, items.isEmpty() ? "No system in reach" : "Click a system", width - 168, 14, GRAY);
-        g.text(font, "Drag: turn   Wheel: zoom   Backspace: up", 8, height - 14, GRAY);
+        g.text(font, inside == null
+                ? "Click: select   Double click or Enter: enter the system   Drag: turn   Wheel: zoom"
+                : "Click: select   Backspace: back to the galaxy   Drag: turn   Wheel: zoom", 8, height - 14, GRAY);
         super.extractRenderState(g, mouseX, mouseY, a);
+        if (hovered >= 0 && mouseX < width - 175) tooltip(g, items.get(hovered), mouseX, mouseY);
+    }
+
+    /** Lines describing an item, shared by the tooltip and the side panel. */
+    private List<String> describe(Item it) {
+        List<String> out = new ArrayList<>();
+        if (it.star() != null && inside == null) {
+            SystemInfo info = SystemInfo.of(it.star());
+            out.add("Tier " + info.tier() + ", " + info.star().name().toLowerCase().replace('_', ' ') + " star");
+            out.add(it.star().planets() + " planets");
+            out.add(String.format("%,d blocks away", Math.round(it.pos().length() / UNITS)));
+        } else {
+            out.add("Radius " + (int) it.radiusBlocks() + " blocks");
+            out.add(String.format("%,d blocks away", Math.round(it.pos().length() / UNITS)));
+        }
+        return out;
+    }
+
+    private void tooltip(GuiGraphicsExtractor g, Item it, int mx, int my) {
+        List<String> lines = new ArrayList<>();
+        lines.add(it.label());
+        lines.addAll(describe(it));
+        if (inside == null && it.star() != null) lines.add("Double click to enter");
+        int w = 0;
+        for (String l : lines) w = Math.max(w, font.width(l));
+        int h = lines.size() * 11 + 6;
+        int x = Math.min(mx + 12, width - 175 - w - 10), y = Math.max(2, Math.min(my + 12, height - h - 2));
+        g.fill(x - 4, y - 3, x + w + 4, y + h - 3, TIP);
+        for (int k = 0; k < lines.size(); k++) g.text(font, lines.get(k), x, y + k * 11, k == 0 ? WHITE : GRAY);
     }
 
     private void info(GuiGraphicsExtractor g, Item it) {
         int x = width - 168, y = 14;
         g.text(font, it.label(), x, y, WHITE);
-        if (it.star() != null && inside == null) {
-            SystemInfo info = SystemInfo.of(it.star());
-            g.text(font, "Tier " + info.tier() + ", " + info.star().name().toLowerCase().replace('_', ' ') + " star", x, y + 12, GRAY);
-            g.text(font, it.star().planets() + " planets", x, y + 24, GRAY);
-            g.text(font, String.format("%,d blocks", Math.round(it.pos().length() / UNITS)), x, y + 36, GRAY);
-        } else {
-            g.text(font, "Radius " + (int) it.radiusBlocks() + " blocks", x, y + 12, GRAY);
-        }
+        for (String l : describe(it)) g.text(font, l, x, y += 12, GRAY);
     }
 
     private void shipMarkers(GuiGraphicsExtractor g, long now) {
