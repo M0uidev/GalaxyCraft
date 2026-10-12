@@ -229,6 +229,7 @@ final class MapScreen extends Screen {
         view.width = width - PANEL_W;
         view.height = height;
         taken.clear();
+        taken.add(new int[] {0, height - 30, width - PANEL_W, height}); // the help lines
         long now = MapClient.now();
         int n = items.size();
         double[] depth = new double[n];
