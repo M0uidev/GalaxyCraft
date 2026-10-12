@@ -257,6 +257,23 @@ class VegetationTest {
         return g;
     }
 
+    /** Leaves no log holds (the crown of a tree that was not planted, left on a neighbor) go; held ones stay. */
+    @Test void leavesWithNoLogWithinSixStepsAreDropped() {
+        CubeSphere g = new CubeSphere(16, 10, 20);
+        char[] cells = new char[g.cellCount()];
+        char log = 7, leaf = 8;
+        int base = (3 * 16 + 5) * g.layers; // a column's first cell
+        cells[base + 4] = log;
+        for (int k = 5; k <= 11; k++) cells[base + k] = leaf; // 1..6 steps held, 7 not
+        int lone = (9 * 16 + 9) * g.layers + 8;
+        cells[lone] = leaf;
+        Vegetation.dropLooseLeaves(g, cells, java.util.Set.of(log), java.util.Set.of(leaf));
+        for (int k = 5; k <= 10; k++) assertEquals(leaf, cells[base + k], "held leaf " + k);
+        assertEquals(Blocks.AIR, cells[base + 11], "seven steps from the log");
+        assertEquals(Blocks.AIR, cells[lone], "a leaf with no log at all");
+        assertEquals(log, cells[base + 4]);
+    }
+
     /** A tall trunk stays with its own tree even when a neighbor's crown reaches it first: if only one is planted, no log floats. */
     @Test void aTrunkIsNeverTakenByTheNeighborsCrown() {
         String log = "minecraft:jungle_log[axis=y]", leaf = "minecraft:jungle_leaves[distance=1,persistent=false]";

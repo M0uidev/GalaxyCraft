@@ -180,6 +180,7 @@ public final class Vegetation {
         if (plants <= 0 || library == null) return;
         int n = grid.n;
         Random rnd = new Random(seed * 131 + 17);
+        Set<Character> logs = new HashSet<>(), leaves = new HashSet<>(); // what was planted, by id
         for (int f = 0; f < 6; f++)
             for (int i0 = 0; i0 < n; i0 += CHUNK)
                 for (int j0 = 0; j0 < n; j0 += CHUNK)
@@ -195,9 +196,15 @@ public final class Vegetation {
                             if (i >= n || j >= n) continue;
                             int col = (f * n + i) * n + j;
                             if (!bare[col] || !biome[col].equals(biome[mid])) continue;
-                            place(grid, depth, cells, height, f, i, j, col, t, ids);
+                            if (!place(grid, depth, cells, height, f, i, j, col, t, ids)) continue;
+                            for (String block : t.blocks()) {
+                                String name = block.indexOf('[') >= 0 ? block.substring(0, block.indexOf('[')) : block;
+                                if (solidPart(name)) logs.add((char) ids.applyAsInt(block));
+                                else if (name.endsWith("_leaves")) leaves.add((char) ids.applyAsInt(block));
+                            }
                         }
                     }
+        dropLooseLeaves(grid, cells, logs, leaves);
     }
 
     /**
@@ -239,6 +246,29 @@ public final class Vegetation {
             cells[cell] = (char) ids.applyAsInt(t.blocks()[b]);
         }
         return true;
+    }
+
+    /**
+     * Leaves no log holds within {@link dev.moui.galaxycraft.voxel.LeafDecay#REACH} leaf steps go: a
+     * crown shares its leaves with its neighbors', and when one tree is not planted (its logs do not
+     * fit) the leaves it left on the other would hang in the air, as Minecraft would never leave them.
+     */
+    static void dropLooseLeaves(CubeSphere grid, char[] cells, Set<Character> logs, Set<Character> leaves) {
+        if (leaves.isEmpty() || logs.isEmpty()) return;
+        boolean[] held = new boolean[cells.length];
+        ArrayDeque<int[]> todo = new ArrayDeque<>();
+        for (int c = 0; c < cells.length; c++) if (logs.contains(cells[c])) todo.add(new int[] {c, 0});
+        while (!todo.isEmpty()) {
+            int[] at = todo.poll();
+            if (at[1] >= dev.moui.galaxycraft.voxel.LeafDecay.REACH) continue;
+            for (int s = 0; s < 6; s++) {
+                int n = grid.neighbor(at[0], s);
+                if (n < 0 || held[n] || !leaves.contains(cells[n])) continue;
+                held[n] = true;
+                todo.add(new int[] {n, at[1] + 1});
+            }
+        }
+        for (int c = 0; c < cells.length; c++) if (!held[c] && leaves.contains(cells[c])) cells[c] = Blocks.AIR;
     }
 
     /** A log, wood, stem or hyphae block: what a tree's body is made of (leaves, vines and the rest may be cut). */
