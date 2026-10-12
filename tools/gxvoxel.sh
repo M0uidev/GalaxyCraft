@@ -33,6 +33,8 @@
 #                             fabric/build/run/clientGameTest/screenshots)
 #   tools/gxvoxel.sh galaxy   GalaxyProbe: Create World's tab, a galaxy of 64 planets, 8 complete and the
 #                             rest far, an edit on the farthest kept (galaxy-*.png)
+# A new probe's -Dgalaxycraft.<name> flag (fabric/build.gradle) must also be added to the guard of
+# WalkOnStubPlanetTest, or that test runs after the probe and fails.
 set -u
 # GXC_GUI=1 runs Dolphin in a window, to watch the test as it plays.
 GUI="${GXC_GUI:+--gui}"
