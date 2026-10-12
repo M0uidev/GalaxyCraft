@@ -125,7 +125,7 @@ final class MapScreen extends Screen {
 
     private void rebuildButtons() {
         clearWidgets();
-        int x = width - 170, y = 40;
+        int x = width - 170, y = selected < 0 ? 40 : panelEnd(items.get(selected));
         addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose()).bounds(width / 2 - 50, height - 27, 100, 20).build());
         if (selected < 0) return;
         Item it = items.get(selected);
@@ -280,7 +280,7 @@ final class MapScreen extends Screen {
             }
         }
         if (selected >= 0) info(g, items.get(selected));
-        else g.text(font, items.isEmpty() ? "No system in reach" : "Click a system", width - 168, 14, GRAY);
+        else overview(g);
         g.text(font, inside == null
                 ? "Click: select   Double click or Enter: enter the system   Drag: turn   Wheel: zoom"
                 : "Click: select   Backspace: back to the galaxy   Drag: turn   Wheel: zoom", 8, height - 14, GRAY);
@@ -294,7 +294,7 @@ final class MapScreen extends Screen {
         if (it.star() != null && inside == null) {
             SystemInfo info = SystemInfo.of(UniverseClient.universe(), it.star());
             out.add("Tier " + info.tier() + ", " + info.star().name().toLowerCase().replace('_', ' ') + " star");
-            out.add(it.star().planets() + " planets");
+            out.add(it.star().planets() + " planets, radius " + it.star().minRadius() + " to " + it.star().maxRadius());
             out.add(SystemInfo.visited(it.star()) ? "Visited" : "Not visited yet");
             out.add(String.format("%,d blocks away", Math.round(it.pos().length() / UNITS)));
         } else {
@@ -367,10 +367,49 @@ final class MapScreen extends Screen {
         for (int k = 0; k < lines.size(); k++) g.text(font, lines.get(k), x, y + k * 11, k == 0 ? WHITE : GRAY);
     }
 
+    /** Where the buttons start in the side panel: below the pick's lines and the ships' ones. */
+    private int panelEnd(Item it) {
+        int lines = 1 + describe(it).size();
+        var ships = MapShips.provider().ships();
+        if (!ships.isEmpty()) lines += 1 + ships.size();
+        return 14 + 12 * lines + 8;
+    }
+
     private void info(GuiGraphicsExtractor g, Item it) {
         int x = width - 168, y = 14;
         g.text(font, it.label(), x, y, WHITE);
+        if (it.ring() != 0) g.fill(x - 12, y, x - 5, y + 7, it.ring());
         for (String l : describe(it)) g.text(font, l, x, y += 12, GRAY);
+        var ships = MapShips.provider().ships();
+        if (ships.isEmpty()) return;
+        g.text(font, "Ships", x, y += 12, WHITE);
+        long now = MapClient.now();
+        for (MapShips.Ship s : ships) {
+            Trip t = MapClient.courses().get(s.id()).orElse(null);
+            String st = t == null ? "parked" : t.arrived(now) ? "orbiting" : "en route";
+            g.text(font, s.name() + ": " + st, x, y += 12, RING);
+        }
+    }
+
+    /** Nothing picked: the system's planets, or a hint. */
+    private void overview(GuiGraphicsExtractor g) {
+        int x = width - 168, y = 28;
+        if (items.isEmpty()) {
+            g.text(font, "No system in reach", x, 14, GRAY);
+            return;
+        }
+        if (inside == null) {
+            g.text(font, items.size() + " systems in view", x, 14, WHITE);
+            g.text(font, "Click one for details", x, 26, GRAY);
+            return;
+        }
+        g.text(font, items.size() + " planets", x, 14, WHITE);
+        for (int i = 0; i < Math.min(items.size(), 10); i++) {
+            Item it = items.get(i);
+            g.fill(x, y + 1 + i * 12, x + 6, y + 7 + i * 12, it.color());
+            g.text(font, it.label() + "  r" + (int) it.radiusBlocks(), x + 10, y + i * 12, GRAY);
+        }
+        if (items.size() > 10) g.text(font, "+" + (items.size() - 10) + " more", x, y + 120, GRAY);
     }
 
     private void shipMarkers(GuiGraphicsExtractor g, long now) {
