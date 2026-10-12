@@ -30,14 +30,18 @@
 #                             through the void (universe-*.png)
 #   tools/gxvoxel.sh approach ApproachProbe: a planet from 5000 blocks to its gravity, never invisible; a star
 #                             opening into its planets (approach-*.png in the dev Dolphin's ScreenShots)
+#   tools/gxvoxel.sh map      MapProbe: the 3D map (N): hover, pick, enter a system, back (map-*.png in
+#                             fabric/build/run/clientGameTest/screenshots)
 #   tools/gxvoxel.sh galaxy   GalaxyProbe: Create World's tab, a galaxy of 64 planets, 8 complete and the
 #                             rest far, an edit on the farthest kept (galaxy-*.png)
+# A new probe's -Dgalaxycraft.<name> flag (fabric/build.gradle) must also be added to the guard of
+# WalkOnStubPlanetTest, or that test runs after the probe and fails.
 set -u
 # GXC_GUI=1 runs Dolphin in a window, to watch the test as it plays.
 GUI="${GXC_GUI:+--gui}"
 # Under gdb (crash backtraces in the log) the windowed Dolphin quits at once: not with GXC_GUI.
 GDB="--gdb"; [ -z "$GUI" ] || GDB=""
-if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ] || [ "${1:-}" = universe ] || [ "${1:-}" = approach ]; then
+if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ] || [ "${1:-}" = universe ] || [ "${1:-}" = approach ] || [ "${1:-}" = map ]; then
   # LauncherProbe (or GalaxyProbe, a world of many planets): the dev Dolphin boots by itself (no
   # savestate), Minecraft starts at its title.
   G="python3 tools/gxdev.py"
@@ -46,6 +50,7 @@ if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ] || [ "${1:-}" = universe ] || 
   if [ "$1" = galaxy ]; then NAME=GalaxyProbe GPROP=galaxycraftGalaxy GTAG=galaxy
   elif [ "$1" = universe ]; then NAME=UniverseProbe GPROP=galaxycraftUniverse GTAG=universe
   elif [ "$1" = approach ]; then NAME=ApproachProbe GPROP=galaxycraftApproach GTAG=approach
+  elif [ "$1" = map ]; then NAME=MapProbe GPROP=galaxycraftMap GTAG=map
   else NAME=LauncherProbe GPROP=galaxycraftLauncher GTAG=launch; fi
   LOG="$HOME/.local/share/galaxycraft-dev/$GTAG-minecraft.log"
   syati/build.sh > /dev/null 2>&1 || { echo "gxvoxel: FAILED: syati/build.sh" >&2; exit 1; }

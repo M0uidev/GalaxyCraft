@@ -88,6 +88,12 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftMap")) { // tools/gxvoxel.sh map: MapProbe, the 3D map in the real game
+				vmArg "-Dgalaxycraft.mapProbe=true"
+				vmArg "-Dgalaxycraft.planetDir=" // empty: each world keeps its own galaxy, as when playing
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
 			if (project.hasProperty("galaxycraftWalk")) { // tools/gxvoxel.sh walk: WalkProbe in the dev Dolphin
 				vmArg "-Dgalaxycraft.walk=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"

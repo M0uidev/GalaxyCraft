@@ -28,10 +28,12 @@ public final class WalkOnStubPlanetTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
         // Dolphin owns the shared memory in the demo and in the real-galaxy test.
+        // A new probe's -Dgalaxycraft.<name> flag MUST be added to this list, or this test also runs after the
+        // probe and fails (it waits for a stub planet the probe's Dolphin does not provide).
         if (Boolean.getBoolean("galaxycraft.demo") || Boolean.getBoolean("galaxycraft.galaxy")
                 || Boolean.getBoolean("galaxycraft.blocks") || Boolean.getBoolean("galaxycraft.spawn") || Boolean.getBoolean("galaxycraft.station")
                 || Boolean.getBoolean("galaxycraft.launcher") || Boolean.getBoolean("galaxycraft.universeProbe")
-                || Boolean.getBoolean("galaxycraft.approachProbe")) return;
+                || Boolean.getBoolean("galaxycraft.approachProbe") || Boolean.getBoolean("galaxycraft.mapProbe")) return;
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
             sp.getServer().runCommand("gamemode adventure @a");
             sp.getServer().runCommand("difficulty peaceful");

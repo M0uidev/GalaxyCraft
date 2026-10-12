@@ -35,15 +35,26 @@ final class MapScreen extends Screen {
      * Discs drawn at most. Minecraft compares every filled rectangle with the ones before it, so the
      * cost grows with the square of the count: thousands of systems at once make each frame crawl.
      */
-    private static final int MAX_DRAWN = 400;
+    private static final int MAX_DRAWN = 250;
+    /** How near the mouse must be to a point, in pixels, to hover or click it (a star is often a 2 px dot). */
+    private static final int PICK_PX = 14;
+    /** Ring color by tier 0..5 (the border of a system's dot). */
+    private static final int[] TIER = {0xFF7CFF7C, 0xFF4FD0FF, 0xFF8F7CFF, 0xFFFF7CE0, 0xFFFFA040, 0xFFFF4040};
+    /** The side panel's width: the map is centered in what is left of it. */
+    private static final int PANEL_W = 175, TOP = 24;
+    private static final int HOVER = 0xFFFFE066, TIP = 0xF0181A28;
 
     /** Something on the map: where (units from Mario), size (units), color, label. */
-    private record Item(String label, Vector3d pos, double size, int color, Universe.Star star, UPos center, double radiusBlocks) {}
+    private record Item(String label, Vector3d pos, double size, int color, Universe.Star star, UPos center, double radiusBlocks, int ring, String biome) {}
 
     private final MapView view = new MapView();
     private final List<Item> items = new ArrayList<>();
+    /** Rectangles of the labels drawn this frame: a label that would cover one is dropped. */
+    private final List<int[]> taken = new ArrayList<>();
     private Universe.Star inside; // null: the universe level
+    private UPos origin = UPos.ZERO; // where Mario was when the items were made: their positions are relative to it
     private int selected = -1;
+    private int hovered = -1;
     private double lastDragX;
 
     MapScreen() {
@@ -52,10 +63,27 @@ final class MapScreen extends Screen {
 
     @Override
     protected void init() {
-        view.width = width;
+        view.width = width - PANEL_W;
         view.height = height;
         if (items.isEmpty()) universeLevel();
         rebuildButtons();
+    }
+
+    private static String prettyBiome(String id) {
+        String n = id == null ? "random" : id.substring(id.indexOf(':') + 1);
+        return n.replace('_', ' ');
+    }
+
+    /** A planet's color from its biome (blueprints: violet). */
+    private static int biomeColor(GalaxyCatalog.Entry e) {
+        if (e.kind() == GalaxyCatalog.Kind.BLUEPRINT || e.biome() == null) return 0xFFC080FF;
+        String b = e.biome();
+        String[][] table = {{"ocean", "0xFF3A6FD8"}, {"river", "0xFF4F8AE0"}, {"desert", "0xFFE0C878"}, {"badlands", "0xFFC8643C"},
+                {"savanna", "0xFFBDB35A"}, {"jungle", "0xFF2FA23A"}, {"swamp", "0xFF5F7F4F"}, {"dark_forest", "0xFF2F5F2F"},
+                {"birch", "0xFF7DB86A"}, {"forest", "0xFF4F9A4A"}, {"windswept", "0xFF8A9A8A"}, {"taiga", "0xFF4F8A6A"},
+                {"snowy", "0xFFEAF2F8"}, {"beach", "0xFFE8DCA0"}};
+        for (String[] row : table) if (b.contains(row[0])) return (int) Long.decode(row[1]).longValue();
+        return 0xFF8FD16B; // plains and the rest
     }
 
     private UPos mario() {
@@ -70,10 +98,12 @@ final class MapScreen extends Screen {
         Universe u = UniverseClient.universe();
         if (u == null) return;
         UPos m = mario();
+        origin = m;
         for (Universe.Star s : u.around(m, UniverseClient.STAR_SECTORS)) {
-            SystemInfo info = SystemInfo.of(s);
+            SystemInfo info = SystemInfo.of(u, s);
             String label = (s.home() ? "Home" : "System " + SystemIndex.name(s.sector())) + "  T" + info.tier();
-            items.add(new Item(label, s.center().minus(m), (150 + 25 * s.planets()) * UNITS, info.star().argb, s, s.center(), 0));
+            int color = visited(s) ? info.star().argb : dim(info.star().argb);
+            items.add(new Item(label, s.center().minus(m), (150 + 25 * s.planets()) * UNITS, color, s, s.center(), 0, TIER[Math.min(5, info.tier())], null));
         }
         view.focusOn(new Vector3d(), Math.max(1, UNITS * 6000));
     }
@@ -85,20 +115,22 @@ final class MapScreen extends Screen {
         items.clear();
         selected = -1;
         UPos m = mario();
+        origin = m;
         List<GalaxyCatalog.Entry> planets;
         if (star.home()) planets = PlanetClient.catalog();
         else planets = u.system(star, LegacyBiome.land()).entries();
         for (GalaxyCatalog.Entry e : planets) {
             UPos at = star.home() ? UPos.of(new Vector3d(e.x(), e.y(), e.z())) : star.center().plus(new Vector3d(e.x(), e.y(), e.z()));
-            items.add(new Item("Planet " + e.index() + "  r" + e.radius(), at.minus(m), e.radius() * UNITS, 0xFF8FD16B, star, at, e.radius()));
+            String kind = e.kind() == GalaxyCatalog.Kind.BLUEPRINT ? "blueprint" : prettyBiome(e.biome());
+            items.add(new Item("Planet " + e.index() + "  " + kind, at.minus(m), e.radius() * UNITS, biomeColor(e), star, at, e.radius(), 0, kind));
         }
         view.focusOn(star.center().minus(m), Math.max(1, UNITS * 3000));
     }
 
     private void rebuildButtons() {
         clearWidgets();
-        int x = width - 170, y = 40;
-        addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose()).bounds(width / 2 - 50, height - 27, 100, 20).build());
+        int x = width - 170, y = selected < 0 ? 40 : panelEnd(items.get(selected));
+        addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose()).bounds(width - 170, height - 68, 160, 20).build());
         if (selected < 0) return;
         Item it = items.get(selected);
         if (inside == null && it.star() != null) {
@@ -135,9 +167,7 @@ final class MapScreen extends Screen {
         if (super.mouseClicked(ev, doubled)) return true;
         if (ev.button() != 0) return false;
         lastDragX = ev.x();
-        List<Vector3d> pts = new ArrayList<>();
-        for (Item it : items) pts.add(it.pos());
-        int i = view.pick(pts, ev.x(), ev.y(), 8);
+        int i = pickAt(ev.x(), ev.y());
         if (i < 0 && doubled && selected >= 0) i = selected; // the first click moved the focus: the second is on the same item
         if (i >= 0) {
             selected = i;
@@ -149,6 +179,14 @@ final class MapScreen extends Screen {
         return false;
     }
 
+    /** The item nearest the point within PICK_PX, or -1. */
+    private int pickAt(double x, double y) {
+        if (x >= width - PANEL_W) return -1; // the side panel
+        List<Vector3d> pts = new ArrayList<>(items.size());
+        for (Item it : items) pts.add(it.pos());
+        return view.pick(pts, x, y, PICK_PX);
+    }
+
     @Override
     public boolean isPauseScreen() {
         return false; // trips run on the world's clock: markers must keep moving
@@ -156,7 +194,7 @@ final class MapScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent ev, double dx, double dy) {
-        if (ev.button() == 0 && ev.x() < width - 175) {
+        if (ev.button() == 0 && ev.x() < width - PANEL_W) {
             view.orbit(-dx * 0.01, dy * 0.01);
             return true;
         }
@@ -172,7 +210,7 @@ final class MapScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent ev) {
-        if (ev.isConfirmation() && selected >= 0 && inside == null && items.get(selected).star() != null) {
+        if ((ev.isConfirmation() || ev.key() == 257 || ev.key() == 335) && selected >= 0 && inside == null && items.get(selected).star() != null) {
             systemLevel(items.get(selected).star());
             rebuildButtons();
             return true;
@@ -188,8 +226,10 @@ final class MapScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
         g.fill(0, 0, width, height, 0xFF05060C);
-        view.width = width;
+        view.width = width - PANEL_W;
         view.height = height;
+        taken.clear();
+        taken.add(new int[] {0, height - 30, width - PANEL_W, height}); // the help lines
         long now = MapClient.now();
         int n = items.size();
         double[] depth = new double[n];
@@ -198,7 +238,7 @@ final class MapScreen extends Screen {
         List<Integer> order = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             var p = view.project(items.get(i).pos());
-            if (p.isEmpty() || p.get().x() < -30 || p.get().y() < -30 || p.get().x() > width + 30 || p.get().y() > height + 30) continue;
+            if (p.isEmpty() || p.get().x() < -30 || p.get().y() < -30 || p.get().x() > view.width + 30 || p.get().y() > height + 30) continue;
             seen[i] = true;
             depth[i] = p.get().depth();
             sx[i] = p.get().x();
@@ -217,38 +257,196 @@ final class MapScreen extends Screen {
             if (it.star() != null && it.star().home() && inside == null) labelled.add(i);
             if (Math.abs(sx[i] - mouseX) < 6 && Math.abs(sy[i] - mouseY) < 6) labelled.add(i);
         }
+        hovered = pickAt(mouseX, mouseY);
+        if (hovered >= 0) labelled.add(hovered);
+        if (inside != null) systemFrame(g, order, hovered); // under the planets
         for (int i : order) {
             Item it = items.get(i);
             int r = (int) Math.max(2, Math.min(24, it.size() / depth[i] * (height / 2.0) / Math.tan(Math.toRadians(30))));
+            if (it.ring() != 0) disc(g, (int) sx[i], (int) sy[i], r + 2, it.ring());
             disc(g, (int) sx[i], (int) sy[i], r, it.color());
             if (i == selected) ring(g, (int) sx[i], (int) sy[i], r + 4, WHITE);
+            else if (i == hovered) ring(g, (int) sx[i], (int) sy[i], r + 4, HOVER);
         }
-        for (int i : order) {
-            if (!labelled.contains(i)) continue;
+        you(g);
+        // Labels, most wanted first (the pick and the hovered always win), none that covers another.
+        java.util.Set<Integer> shown = new java.util.HashSet<>(order);
+        List<Integer> prio = new ArrayList<>();
+        if (selected >= 0 && shown.contains(selected)) prio.add(selected);
+        if (hovered >= 0 && hovered != selected && shown.contains(hovered)) prio.add(hovered);
+        for (int k = order.size() - 1; k >= 0; k--) {
+            int i = order.get(k);
+            if (labelled.contains(i) && i != selected && i != hovered) prio.add(i);
+        }
+        for (int i : prio) {
             Item it = items.get(i);
             int r = (int) Math.max(2, Math.min(24, it.size() / depth[i] * (height / 2.0) / Math.tan(Math.toRadians(30))));
-            g.text(font, it.label(), (int) sx[i] + r + 3, (int) sy[i] - 4, i == selected ? WHITE : GRAY);
+            boolean key = i == selected || i == hovered;
+            String text = key || inside == null ? it.label() : shortLabel(it);
+            label(g, text, (int) sx[i] + r + 3, (int) sy[i] - 4, i == selected ? WHITE : GRAY, key);
         }
         if (inside != null) shipMarkers(g, now);
-        g.fill(width - 175, 0, width, height, PANEL);
-        g.centeredText(font, inside == null ? "Galaxy Map" : "System " + (inside.home() ? "Home" : SystemIndex.name(inside.sector())), width / 2, 12, WHITE);
+        g.fill(0, 0, width - PANEL_W, TOP - 2, 0xFF05060C); // the title's strip: nothing shows through
+        g.fill(width - PANEL_W, 0, width, height, PANEL);
+        g.centeredText(font, inside == null ? "Galaxy Map" : "System " + (inside.home() ? "Home" : SystemIndex.name(inside.sector())), (width - PANEL_W) / 2, 8, WHITE);
+        if (inside == null) {
+            g.text(font, "Ring = tier", width - 168, height - 40, GRAY);
+            for (int t = 0; t < TIER.length; t++) {
+                g.fill(width - 168 + t * 26, height - 28, width - 168 + t * 26 + 8, height - 20, TIER[t]);
+                g.text(font, "" + t, width - 168 + t * 26 + 11, height - 28, GRAY);
+            }
+        }
         if (selected >= 0) info(g, items.get(selected));
-        else g.text(font, items.isEmpty() ? "No system in reach" : "Click a system", width - 168, 14, GRAY);
-        g.text(font, "Drag: turn   Wheel: zoom   Backspace: up", 8, height - 14, GRAY);
+        else overview(g);
+        g.text(font, "Click: select   Drag: turn   Wheel: zoom", 8, height - 26, GRAY);
+        g.text(font, inside == null ? "Double click or Enter: enter the system" : "Backspace: back to the galaxy", 8, height - 14, GRAY);
         super.extractRenderState(g, mouseX, mouseY, a);
+        if (hovered >= 0 && mouseX < width - PANEL_W) tooltip(g, items.get(hovered), mouseX, mouseY);
+    }
+
+    /** Lines describing an item, shared by the tooltip and the side panel. */
+    private List<String> describe(Item it) {
+        List<String> out = new ArrayList<>();
+        if (it.star() != null && inside == null) {
+            SystemInfo info = SystemInfo.of(UniverseClient.universe(), it.star());
+            out.add("Tier " + info.tier() + ", " + info.star().name().toLowerCase().replace('_', ' ') + " star");
+            out.add(it.star().planets() + " planets, radius " + it.star().minRadius() + " to " + it.star().maxRadius());
+            out.add(visited(it.star()) ? "Visited" : "Not visited yet");
+            out.add(String.format("%,d blocks away", Math.round(it.pos().length() / UNITS)));
+        } else {
+            out.add("Radius " + (int) it.radiusBlocks() + " blocks");
+            if (it.biome() != null) out.add(it.biome());
+            out.add(String.format("%,d blocks away", Math.round(it.pos().length() / UNITS)));
+        }
+        return out;
+    }
+
+    /** Inside a system: the star at its center and the orbits (the selected and hovered planet's; all when there are few). */
+    private void systemFrame(GuiGraphicsExtractor g, List<Integer> order, int hover) {
+        Vector3d c = inside.center().minus(origin);
+        var sp = view.project(c);
+        if (sp.isPresent()) {
+            int r = (int) Math.max(3, Math.min(12, 400 * UNITS / sp.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
+            disc(g, (int) sp.get().x(), (int) sp.get().y(), r, SystemInfo.of(UniverseClient.universe(), inside).star().argb);
+            label(g, inside.home() ? "Home star" : "Star", (int) sp.get().x() + r + 3, (int) sp.get().y() - 4, GRAY, true);
+        }
+        boolean all = order.size() <= 10;
+        for (int i : order) {
+            if (!(all || i == selected || i == hover)) continue;
+            Vector3d off = new Vector3d(items.get(i).pos()).sub(c);
+            double rad = Math.hypot(off.x, off.z);
+            if (rad < 1e-9) continue;
+            int col = i == selected ? WHITE : i == hover ? HOVER : 0xFF3C4468;
+            int prevX = 0, prevY = 0;
+            boolean prev = false;
+            for (int k = 0; k <= 48; k++) {
+                double a = k * Math.PI / 24;
+                var p = view.project(new Vector3d(c.x + rad * Math.cos(a), c.y + off.y, c.z + rad * Math.sin(a)));
+                if (p.isEmpty()) {
+                    prev = false;
+                    continue;
+                }
+                int x = (int) p.get().x(), y = (int) p.get().y();
+                if (prev && (k & 1) == 0) line(g, prevX, prevY, x, y, col);
+                prevX = x;
+                prevY = y;
+                prev = true;
+            }
+        }
+    }
+
+    /** Where the player is: a green cross with its label. */
+    private void you(GuiGraphicsExtractor g) {
+        var p = view.project(mario().minus(origin));
+        if (p.isEmpty()) return;
+        int x = (int) p.get().x(), y = (int) p.get().y();
+        g.fill(x - 5, y, x + 6, y + 1, 0xFF7CFF7C);
+        g.fill(x, y - 5, x + 1, y + 6, 0xFF7CFF7C);
+        label(g, "You", x + 7, y + 3, 0xFF7CFF7C, true);
+    }
+
+    /** Draws a label unless it would cover one already drawn (force: always) or sits in the title's strip. */
+    private void label(GuiGraphicsExtractor g, String text, int x, int y, int color, boolean force) {
+        int w = font.width(text);
+        int[] r = {x - 1, y - 1, x + w + 1, y + 9};
+        if (y < TOP) return;
+        if (!force) for (int[] t : taken) if (r[0] < t[2] && r[2] > t[0] && r[1] < t[3] && r[3] > t[1]) return;
+        g.text(font, text, x, y, color);
+        taken.add(r);
+    }
+
+    /** "P5 r48" for a planet's crowded label (the biome is in the tooltip and the panel). */
+    private static String shortLabel(Item it) {
+        String l = it.label();
+        int sp = l.indexOf(' ', 7);
+        return "P" + (sp < 0 ? l.substring(7) : l.substring(7, sp)) + " r" + (int) it.radiusBlocks();
+    }
+
+    private static boolean visited(Universe.Star s) {
+        return SystemInfo.visited(Warp.visited(), s);
+    }
+
+    private static int dim(int argb) {
+        int r = (argb >> 16 & 0xFF) * 6 / 10, gr = (argb >> 8 & 0xFF) * 6 / 10, b = (argb & 0xFF) * 6 / 10;
+        return 0xFF000000 | r << 16 | gr << 8 | b;
+    }
+
+    private void tooltip(GuiGraphicsExtractor g, Item it, int mx, int my) {
+        List<String> lines = new ArrayList<>();
+        lines.add(it.label());
+        lines.addAll(describe(it));
+        if (inside == null && it.star() != null) lines.add("Double click to enter");
+        int w = 0;
+        for (String l : lines) w = Math.max(w, font.width(l));
+        int h = lines.size() * 11 + 6;
+        int x = Math.min(mx + 12, width - PANEL_W - w - 10), y = Math.max(2, Math.min(my + 12, height - h - 2));
+        g.fill(x - 4, y - 3, x + w + 4, y + h - 3, TIP);
+        for (int k = 0; k < lines.size(); k++) g.text(font, lines.get(k), x, y + k * 11, k == 0 ? WHITE : GRAY);
+    }
+
+    /** Where the buttons start in the side panel: below the pick's lines and the ships' ones. */
+    private int panelEnd(Item it) {
+        int lines = 1 + describe(it).size();
+        var ships = MapShips.provider().ships();
+        if (!ships.isEmpty()) lines += 1 + ships.size();
+        return 14 + 12 * lines + 8;
     }
 
     private void info(GuiGraphicsExtractor g, Item it) {
         int x = width - 168, y = 14;
-        g.text(font, it.label(), x, y, WHITE);
-        if (it.star() != null && inside == null) {
-            SystemInfo info = SystemInfo.of(it.star());
-            g.text(font, "Tier " + info.tier() + ", " + info.star().name().toLowerCase().replace('_', ' ') + " star", x, y + 12, GRAY);
-            g.text(font, it.star().planets() + " planets", x, y + 24, GRAY);
-            g.text(font, String.format("%,d blocks", Math.round(it.pos().length() / UNITS)), x, y + 36, GRAY);
-        } else {
-            g.text(font, "Radius " + (int) it.radiusBlocks() + " blocks", x, y + 12, GRAY);
+        g.fill(x, y + 1, x + 7, y + 8, it.ring() != 0 ? it.ring() : it.color()); // the tier's color, or the planet's
+        g.text(font, it.label(), x + 11, y, WHITE);
+        for (String l : describe(it)) g.text(font, l, x, y += 12, GRAY);
+        var ships = MapShips.provider().ships();
+        if (ships.isEmpty()) return;
+        g.text(font, "Ships", x, y += 12, WHITE);
+        long now = MapClient.now();
+        for (MapShips.Ship s : ships) {
+            Trip t = MapClient.courses().get(s.id()).orElse(null);
+            String st = t == null ? "parked" : t.arrived(now) ? "orbiting" : "en route";
+            g.text(font, s.name() + ": " + st, x, y += 12, RING);
         }
+    }
+
+    /** Nothing picked: the system's planets, or a hint. */
+    private void overview(GuiGraphicsExtractor g) {
+        int x = width - 168, y = 28;
+        if (items.isEmpty()) {
+            g.text(font, "No system in reach", x, 14, GRAY);
+            return;
+        }
+        if (inside == null) {
+            g.text(font, items.size() + " systems in view", x, 14, WHITE);
+            g.text(font, "Click one for details", x, 26, GRAY);
+            return;
+        }
+        g.text(font, items.size() + " planets", x, 14, WHITE);
+        for (int i = 0; i < Math.min(items.size(), 10); i++) {
+            Item it = items.get(i);
+            g.fill(x, y + 1 + i * 12, x + 6, y + 7 + i * 12, it.color());
+            g.text(font, it.label() + "  r" + (int) it.radiusBlocks(), x + 10, y + i * 12, GRAY);
+        }
+        if (items.size() > 10) g.text(font, "+" + (items.size() - 10) + " more", x, y + 120, GRAY);
     }
 
     private void shipMarkers(GuiGraphicsExtractor g, long now) {
