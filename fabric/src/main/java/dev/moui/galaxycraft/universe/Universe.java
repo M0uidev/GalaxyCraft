@@ -171,7 +171,7 @@ public final class Universe {
      * planets are the world's galaxy.json). Kept made for the last CACHE systems asked (one thread
      * at a time: the cache is not synchronized).
      */
-    public GalaxyCatalog.Result system(Star star, List<String> land) {
+    public synchronized GalaxyCatalog.Result system(Star star, List<String> land) {
         if (star.home()) throw new IllegalArgumentException("home's planets are the world's catalog");
         return systems.computeIfAbsent(star.sector(), k -> {
             Random rnd = new Random(star.seed());
