@@ -1,0 +1,17 @@
+{
+  "parent": "galaxycraft:ship/root",
+  "display": {
+    "icon": {"id": "galaxycraft:toad_core"},
+    "title": {"translate": "advancements.galaxycraft.ship.toad_core.title"},
+    "description": {"translate": "advancements.galaxycraft.ship.toad_core.description"},
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "has_core": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {"items": [{"items": "galaxycraft:toad_core"}]}
+    }
+  }
+}

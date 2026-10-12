@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "R": "minecraft:redstone",
+    "S": "minecraft:stone",
+    "L": "minecraft:glowstone_dust"
+  },
+  "pattern": [
+    "ILI",
+    "IRI",
+    "SSS"
+  ],
+  "result": {
+    "id": "galaxycraft:landing_pad",
+    "count": 2
+  }
+}

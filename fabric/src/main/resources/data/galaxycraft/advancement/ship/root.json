@@ -1,0 +1,16 @@
+{
+  "display": {
+    "icon": {"id": "galaxycraft:ship_table"},
+    "title": {"translate": "advancements.galaxycraft.ship.root.title"},
+    "description": {"translate": "advancements.galaxycraft.ship.root.description"},
+    "background": "minecraft:gui/advancements/backgrounds/stone",
+    "show_toast": true,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "has_table": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {"items": [{"items": "galaxycraft:ship_table"}]}
+    }
+  }
+}

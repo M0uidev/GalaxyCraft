@@ -17,6 +17,7 @@ public final class GalaxyCraft implements ModInitializer {
     @Override
     public void onInitialize() {
         dev.moui.galaxycraft.station.StationBlocks.register();
+        dev.moui.galaxycraft.ship.ShipBlocks.register();
         LOG.info("GalaxyCraft loaded; waiting for a galaxy on {}", dev.moui.galaxycraft.proto.Layout.SHM_PATH);
         ServerTickEvents.END_SERVER_TICK.register(ShadowWorld::tick);
         ServerLifecycleEvents.SERVER_STOPPING.register(ShadowWorld::stop);

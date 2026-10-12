@@ -55,6 +55,12 @@ public final class CollisionField {
         else blocks.remove(id);
     }
 
+    /** A part given as triangles already in galaxy coordinates (a ship's hull). */
+    public synchronized void upsertTriangles(int id, List<Tri> galaxyTris) {
+        index.put(id, new ArrayList<>(galaxyTris));
+        blocks.remove(id);
+    }
+
     public synchronized void removePart(int id) {
         index.remove(id);
         blocks.remove(id);

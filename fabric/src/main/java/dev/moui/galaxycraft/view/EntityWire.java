@@ -19,8 +19,15 @@ public final class EntityWire {
     static final int VERTEX_BYTES = 6 + 4 + 4;
     static final int POS_FRAC = 16, ST_FRAC = 4096;
 
-    /** A quad: 4 corners (x, y, z in model pixels), their texture coordinates (0..1), RGBA. */
-    public record Quad(float[][] pos, float[][] uv, int rgba) {}
+    /**
+     * A quad: 4 corners (x, y, z in model pixels), their texture coordinates (0..1), RGBA; colors
+     * (null: rgba on every corner) gives each corner its own, for smooth shading.
+     */
+    public record Quad(float[][] pos, float[][] uv, int rgba, int[] colors) {
+        public Quad(float[][] pos, float[][] uv, int rgba) {
+            this(pos, uv, rgba, null);
+        }
+    }
 
     /** One piece this frame: model and skin ids, overlay and tint RGBA, 3x4 row-major model pixels -> galaxy. */
     public record Piece(int model, int skin, int overlay, int tint, double[] mtx) {}
@@ -50,7 +57,7 @@ public final class EntityWire {
         for (Quad q : quads)
             for (int k = 0; k < 4; k++) {
                 for (int c = 0; c < 3; c++) b.putShort(fixed(q.pos[k][c], POS_FRAC));
-                b.putInt(q.rgba);
+                b.putInt(q.colors != null ? q.colors[k] : q.rgba);
                 b.putShort(fixed(q.uv[k][0], ST_FRAC)).putShort(fixed(q.uv[k][1], ST_FRAC));
             }
         return b.array(); // the rest stays 0: GX_NOP
