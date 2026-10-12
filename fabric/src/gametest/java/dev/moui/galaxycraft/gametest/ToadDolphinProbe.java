@@ -105,6 +105,24 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
                 ctx.waitTicks(40);
                 aimAt(ctx, head);
                 shot(ctx, "toad-" + row[i].id());
+                if (row[i] == ToadType.MINER) {
+                    // From behind and farther than it turns to the player (8 blocks): the pickel on its back.
+                    Vector3d far = ctx.computeOnClient(mc -> {
+                        GravityFrame f = GalaxyCraftClient.frame();
+                        Vector3d up = f.upGal().normalize();
+                        Vector3d eye = f.toGal(new Vector3d(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ()));
+                        Vector3d flat = new Vector3d(eye).sub(centre);
+                        flat.fma(-flat.dot(up), up).normalize();
+                        Vector3d right = new Vector3d(up).cross(flat).negate();
+                        return new Vector3d(feet).fma(units((k - 2) * 1.5), right).fma(units(-10), flat);
+                    });
+                    ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(far));
+                    ctx.waitTicks(40);
+                    aimAt(ctx, head);
+                    ctx.waitTicks(40);
+                    aimAt(ctx, head);
+                    shot(ctx, "toad-miner-back");
+                }
             }
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(space));
             ctx.waitTicks(30);
@@ -145,8 +163,11 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
             log("the Toad's trade has " + offers + " offers");
             check(offers == 4, "the Guide's trade opens (2 things, 2 payments each)");
             shot(ctx, "toad-trade");
+            ctx.takeScreenshot("toad-trade-gui"); // Minecraft's window: the merchant screen is not in Dolphin's picture
             ctx.runOnClient(mc -> mc.player.closeContainer());
             ctx.waitTicks(10);
+
+            hut(ctx);
 
             ctx.runOnClient(mc -> ToadClient.clearAll());
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(home));
@@ -155,6 +176,57 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
             ctx.waitTicks(60);
             log(failed ? "FAIL" : "PASS");
         }
+    }
+
+    /**
+     * 4. An outpost: a generated planet made with a hut asked for, its Miner put at the door. Shots
+     * from outside (front, side from above), from inside beside the Toad, and the Toad from behind.
+     */
+    private void hut(ClientGameTestContext ctx) {
+        ctx.runOnClient(mc -> ToadClient.clearAll());
+        var bp = dev.moui.galaxycraft.voxel.PlanetBlueprint.standard("hut", 64)
+                .withMode(dev.moui.galaxycraft.voxel.PlanetBlueprint.Mode.GENERATED).withPlants(100).withWater(false)
+                .withBiome(21, "minecraft:plains", 0);
+        ctx.runOnClient(mc -> PlanetClient.remove());
+        ctx.waitTicks(20);
+        ctx.runOnClient(mc -> PlanetClient.askHuts(java.util.List.of(
+                new dev.moui.galaxycraft.voxel.gen.Huts.Request("toad-hut-test", new double[] {0, 1, 0}))));
+        dev.moui.galaxycraft.voxel.PlanetSession s = PlanetClient.session();
+        ctx.runOnClient(mc -> PlanetClient.requestSpawn(bp));
+        ctx.waitFor(mc -> s.active() && s.queued() == 0, 6000);
+        ctx.runOnClient(mc -> PlanetClient.teleport());
+        ctx.waitTicks(100);
+        var made = PlanetClient.madeHuts();
+        check(made.size() == 1, "the planet's hut found ground (" + made.size() + ")");
+        if (made.isEmpty()) return;
+        var rec = dev.moui.galaxycraft.toad.ToadPlacing.record("", ToadType.MINER, made.get(0), ctx.computeOnClient(mc -> s.center()), units(1));
+        Vector3d feet = new Vector3d(rec.pos()[0], rec.pos()[1], rec.pos()[2]);
+        Quaterniond q = new Quaterniond(rec.rot()[0], rec.rot()[1], rec.rot()[2], rec.rot()[3]);
+        ctx.runOnClient(mc -> ToadClient.put(ToadType.MINER, feet, q));
+        Vector3d up = new Vector3d(0, 1, 0).rotate(q), fwd = new Vector3d(0, 0, 1).rotate(q), right = new Vector3d(1, 0, 0).rotate(q);
+        Vector3d head = new Vector3d(feet).fma(units(1.2), up);
+        // Outside, in front of the door.
+        Vector3d out = new Vector3d(feet).fma(units(7), fwd).fma(units(0.3), up);
+        ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(out));
+        ctx.waitTicks(120);
+        aimAt(ctx, head);
+        ctx.waitTicks(20);
+        shot(ctx, "hut-front");
+        // From the side and above, the whole roof.
+        Vector3d roof = new Vector3d(feet).fma(units(9), right).fma(units(6), up);
+        ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(roof));
+        ctx.waitTicks(60);
+        aimAt(ctx, head);
+        ctx.waitTicks(20);
+        shot(ctx, "hut-side");
+        // Inside: back in the hut, looking at the Toad, then it from behind (the miner's pickel).
+        Vector3d inside = new Vector3d(feet).fma(units(-1.6), fwd).fma(units(0.3), up);
+        ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(inside));
+        ctx.waitTicks(60);
+        aimAt(ctx, head);
+        ctx.waitTicks(20);
+        shot(ctx, "hut-inside");
+        ctx.runOnClient(mc -> PlanetClient.askHuts(java.util.List.of()));
     }
 
     private static void aimAt(ClientGameTestContext ctx, Vector3d targetGal) {

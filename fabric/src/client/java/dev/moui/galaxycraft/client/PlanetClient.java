@@ -225,7 +225,21 @@ public final class PlanetClient {
             return;
         }
         say(player, "Generating " + bp.name() + "...");
-        generating = generateAsync(bp);
+        generating = generateAsync(bp, askedHuts, true, placed -> madeHuts = placed);
+    }
+
+    private static java.util.List<dev.moui.galaxycraft.voxel.gen.Huts.Request> askedHuts = java.util.List.of();
+    private static volatile java.util.List<dev.moui.galaxycraft.voxel.gen.Huts.Placed> madeHuts = java.util.List.of();
+
+    /** Tests: the next generated planet made here (not the catalog's) gets these huts, and madeHuts() tells where. */
+    public static void askHuts(java.util.List<dev.moui.galaxycraft.voxel.gen.Huts.Request> huts) {
+        askedHuts = java.util.List.copyOf(huts);
+        madeHuts = java.util.List.of();
+    }
+
+    /** The huts of the last planet made after askHuts (tests). */
+    public static java.util.List<dev.moui.galaxycraft.voxel.gen.Huts.Placed> madeHuts() {
+        return madeHuts;
     }
 
     /** How long a planet being made waits for an answer from the game's or the server's thread, s. */
