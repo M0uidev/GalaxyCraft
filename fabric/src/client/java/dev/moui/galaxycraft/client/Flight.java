@@ -144,7 +144,8 @@ public final class Flight {
      * PULSE_MAX blocks a tick where it looks, and slows down again near any planet's gravity (it never
      * enters one at that speed) or when sprint is let go. It slides the gravity frame: the player stays
      * where it is in Minecraft (its server would pull back such a speed), only its place in the galaxy
-     * moves. Only with the endless universe.
+     * moves. Only with the endless universe, and only inside a system's reach (Warp.here): other systems
+     * are the Warp Core's.
      */
     private static void pulse(LocalPlayer player, GravityFrame frame, boolean voidNow, Vector3d posBlocks) {
         boolean want = voidNow && player.isFallFlying() && PlanetClient.ENDLESS && UniverseClient.universe() != null
@@ -155,6 +156,7 @@ public final class Flight {
         for (PlanetLayout.Sphere s : PlanetClient.streamedSpheres())
             room = Math.min(room, (s.center().distance(posUnits) - s.gravity()) * GravityFrame.SCALE);
         double cap = Math.max(0, Math.min(PULSE_MAX, (room - PULSE_MARGIN) / 10));
+        if (Warp.here().isEmpty()) cap = 0; // the pulse stays inside a system: other systems are for the Warp Core
         pulse = want ? Math.min(pulse + PULSE_ACCEL, cap) : Math.min(pulse * 0.85, cap);
         if (pulse < 0.05) pulse = 0;
         if (pulse == 0) return;
