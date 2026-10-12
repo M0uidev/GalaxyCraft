@@ -32,4 +32,14 @@ class SystemInfoTest {
             assertEquals(SystemInfo.tierAt(blocks), SystemInfo.of(s, U).tier());
         }
     }
+
+    @Test void starsVaryAndAreStable() {
+        var u = new Universe(9, U);
+        var kinds = new java.util.HashSet<StarType>();
+        for (var s : u.around(UPos.ZERO, 6)) {
+            assertEquals(SystemInfo.of(s, U).star(), SystemInfo.of(s, U).star());
+            kinds.add(SystemInfo.of(s, U).star());
+        }
+        assertTrue(kinds.size() > 1);
+    }
 }

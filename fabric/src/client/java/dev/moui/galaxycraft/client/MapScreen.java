@@ -35,13 +35,15 @@ final class MapScreen extends Screen {
      * Discs drawn at most. Minecraft compares every filled rectangle with the ones before it, so the
      * cost grows with the square of the count: thousands of systems at once make each frame crawl.
      */
-    private static final int MAX_DRAWN = 400;
+    private static final int MAX_DRAWN = 250;
     /** How near the mouse must be to a point, in pixels, to hover or click it (a star is often a 2 px dot). */
     private static final int PICK_PX = 14;
+    /** Ring color by tier 0..5 (the border of a system's dot). */
+    private static final int[] TIER = {0xFF7CFF7C, 0xFF4FD0FF, 0xFF8F7CFF, 0xFFFF7CE0, 0xFFFFA040, 0xFFFF4040};
     private static final int HOVER = 0xFFFFE066, TIP = 0xF0181A28;
 
     /** Something on the map: where (units from Mario), size (units), color, label. */
-    private record Item(String label, Vector3d pos, double size, int color, Universe.Star star, UPos center, double radiusBlocks) {}
+    private record Item(String label, Vector3d pos, double size, int color, Universe.Star star, UPos center, double radiusBlocks, int ring) {}
 
     private final MapView view = new MapView();
     private final List<Item> items = new ArrayList<>();
@@ -77,7 +79,8 @@ final class MapScreen extends Screen {
         for (Universe.Star s : u.around(m, UniverseClient.STAR_SECTORS)) {
             SystemInfo info = SystemInfo.of(s);
             String label = (s.home() ? "Home" : "System " + SystemIndex.name(s.sector())) + "  T" + info.tier();
-            items.add(new Item(label, s.center().minus(m), (150 + 25 * s.planets()) * UNITS, info.star().argb, s, s.center(), 0));
+            int color = SystemInfo.visited(s) ? info.star().argb : dim(info.star().argb);
+            items.add(new Item(label, s.center().minus(m), (150 + 25 * s.planets()) * UNITS, color, s, s.center(), 0, TIER[Math.min(5, info.tier())]));
         }
         view.focusOn(new Vector3d(), Math.max(1, UNITS * 6000));
     }
@@ -94,7 +97,7 @@ final class MapScreen extends Screen {
         else planets = u.system(star, LegacyBiome.land()).entries();
         for (GalaxyCatalog.Entry e : planets) {
             UPos at = star.home() ? UPos.of(new Vector3d(e.x(), e.y(), e.z())) : star.center().plus(new Vector3d(e.x(), e.y(), e.z()));
-            items.add(new Item("Planet " + e.index() + "  r" + e.radius(), at.minus(m), e.radius() * UNITS, 0xFF8FD16B, star, at, e.radius()));
+            items.add(new Item("Planet " + e.index() + "  r" + e.radius(), at.minus(m), e.radius() * UNITS, 0xFF8FD16B, star, at, e.radius(), 0));
         }
         view.focusOn(star.center().minus(m), Math.max(1, UNITS * 3000));
     }
@@ -232,6 +235,7 @@ final class MapScreen extends Screen {
         for (int i : order) {
             Item it = items.get(i);
             int r = (int) Math.max(2, Math.min(24, it.size() / depth[i] * (height / 2.0) / Math.tan(Math.toRadians(30))));
+            if (it.ring() != 0) disc(g, (int) sx[i], (int) sy[i], r + 2, it.ring());
             disc(g, (int) sx[i], (int) sy[i], r, it.color());
             if (i == selected) ring(g, (int) sx[i], (int) sy[i], r + 4, WHITE);
             else if (i == hovered) ring(g, (int) sx[i], (int) sy[i], r + 4, HOVER);
@@ -245,6 +249,13 @@ final class MapScreen extends Screen {
         if (inside != null) shipMarkers(g, now);
         g.fill(width - 175, 0, width, height, PANEL);
         g.centeredText(font, inside == null ? "Galaxy Map" : "System " + (inside.home() ? "Home" : SystemIndex.name(inside.sector())), width / 2, 12, WHITE);
+        if (inside == null) {
+            g.text(font, "Ring = tier", width - 168, height - 40, GRAY);
+            for (int t = 0; t < TIER.length; t++) {
+                g.fill(width - 168 + t * 26, height - 28, width - 168 + t * 26 + 8, height - 20, TIER[t]);
+                g.text(font, "" + t, width - 168 + t * 26 + 11, height - 28, GRAY);
+            }
+        }
         if (selected >= 0) info(g, items.get(selected));
         else g.text(font, items.isEmpty() ? "No system in reach" : "Click a system", width - 168, 14, GRAY);
         g.text(font, inside == null
@@ -261,12 +272,18 @@ final class MapScreen extends Screen {
             SystemInfo info = SystemInfo.of(it.star());
             out.add("Tier " + info.tier() + ", " + info.star().name().toLowerCase().replace('_', ' ') + " star");
             out.add(it.star().planets() + " planets");
+            out.add(SystemInfo.visited(it.star()) ? "Visited" : "Not visited yet");
             out.add(String.format("%,d blocks away", Math.round(it.pos().length() / UNITS)));
         } else {
             out.add("Radius " + (int) it.radiusBlocks() + " blocks");
             out.add(String.format("%,d blocks away", Math.round(it.pos().length() / UNITS)));
         }
         return out;
+    }
+
+    private static int dim(int argb) {
+        int r = (argb >> 16 & 0xFF) * 6 / 10, gr = (argb >> 8 & 0xFF) * 6 / 10, b = (argb & 0xFF) * 6 / 10;
+        return 0xFF000000 | r << 16 | gr << 8 | b;
     }
 
     private void tooltip(GuiGraphicsExtractor g, Item it, int mx, int my) {

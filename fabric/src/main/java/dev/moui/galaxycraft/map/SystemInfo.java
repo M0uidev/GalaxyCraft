@@ -20,7 +20,19 @@ public record SystemInfo(int tier, StarType star) {
     public static SystemInfo of(Universe.Star star, double unitsPerBlock) {
         if (star.home()) return new SystemInfo(0, StarType.YELLOW);
         double blocks = star.center().minus(UPos.ZERO).length() / unitsPerBlock;
-        return new SystemInfo(tierAt(blocks), StarType.YELLOW);
+        return new SystemInfo(tierAt(blocks), starOf(star.seed()));
+    }
+
+    /** Stand-in star: varied by the system's seed so the map shows the colors; the real one comes from Universe. */
+    static StarType starOf(long seed) {
+        long h = seed * 0x9E3779B97F4A7C15L;
+        int k = (int) ((h >>> 40) % 10);
+        return k < 5 ? StarType.YELLOW : k < 7 ? StarType.RED_DWARF : k < 9 ? StarType.BLUE : StarType.LAVA;
+    }
+
+    /** Whether the player has been to the system. Stand-in: only home until visits are recorded. */
+    public static boolean visited(Universe.Star star) {
+        return star.home();
     }
 
     public static int tierAt(double blocksFromHome) {
