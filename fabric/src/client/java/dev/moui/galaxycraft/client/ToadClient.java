@@ -42,6 +42,9 @@ public final class ToadClient {
     private static Path file;
     private static boolean dirty;
     private static int talks;
+    /** Outposts made on worker threads, waiting for the client thread to put them (planet key, its Toads). */
+    private record Outposts(String planetKey, List<ToadRecord> toads) {}
+    private static final java.util.concurrent.ConcurrentLinkedQueue<Outposts> OUTPOSTS = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
     private ToadClient() {}
 
@@ -51,12 +54,33 @@ public final class ToadClient {
         file = planetsDir == null ? null : planetsDir.resolve("toads.json");
         store = file == null ? null : ToadStore.load(file);
         dirty = false;
+        OUTPOSTS.clear();
         ToadModels.load(ShipClient.shipDir());
     }
 
     /** The Toads (tests). */
     public static List<ToadRecord> toads() {
+        drainOutposts();
         return store == null ? List.of() : store.all();
+    }
+
+    /**
+     * A planet's outposts, made with its cells (any thread): put on the next frame, once, whatever
+     * happens to them later (a planet made again offers the same ones).
+     */
+    public static void offerOutposts(String planetKey, List<ToadRecord> toads) {
+        if (!toads.isEmpty()) OUTPOSTS.add(new Outposts(planetKey, List.copyOf(toads)));
+    }
+
+    private static void drainOutposts() {
+        Outposts o;
+        while ((o = OUTPOSTS.poll()) != null) {
+            if (store == null || store.wasPlaced(o.planetKey())) continue;
+            for (ToadRecord r : o.toads()) store.put(r);
+            store.markPlaced(o.planetKey());
+            dirty = true;
+        }
+        saveNow();
     }
 
     private static void saveNow() {
@@ -227,6 +251,7 @@ public final class ToadClient {
 
     /** The pieces of this stage's Toads, universe units, for EntityClient's frame. */
     static void pieces(EntityClient ec, List<EntityWire.Piece> out) {
+        drainOutposts();
         if (store == null) return;
         String stage = stageName();
         double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);

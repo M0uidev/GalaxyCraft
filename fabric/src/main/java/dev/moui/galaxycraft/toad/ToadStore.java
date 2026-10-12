@@ -15,6 +15,8 @@ import java.util.Optional;
 public final class ToadStore {
     private final Path file;
     private final List<ToadRecord> toads = new ArrayList<>();
+    /** Planets whose outposts were already put (a removed Toad does not come back). */
+    private final java.util.Set<String> placed = new java.util.LinkedHashSet<>();
 
     private ToadStore(Path file) {
         this.file = file;
@@ -24,7 +26,14 @@ public final class ToadStore {
         ToadStore s = new ToadStore(file);
         try {
             if (!Files.exists(file)) return s;
-            JsonArray a = JsonParser.parseString(Files.readString(file)).getAsJsonArray();
+            JsonElement root = JsonParser.parseString(Files.readString(file));
+            JsonArray a;
+            if (root.isJsonArray()) a = root.getAsJsonArray(); // before outposts: a plain list of Toads
+            else {
+                a = root.getAsJsonObject().getAsJsonArray("toads");
+                if (root.getAsJsonObject().has("placed"))
+                    for (JsonElement k : root.getAsJsonObject().getAsJsonArray("placed")) s.placed.add(k.getAsString());
+            }
             for (JsonElement e : a) {
                 JsonObject o = e.getAsJsonObject();
                 ToadType type = null;
@@ -41,12 +50,22 @@ public final class ToadStore {
             }
         } catch (IOException | RuntimeException e) {
             s.toads.clear(); // a damaged file loses its Toads, not the world
+            s.placed.clear();
         }
         return s;
     }
 
     public List<ToadRecord> all() {
         return List.copyOf(toads);
+    }
+
+    /** Whether this planet's outposts were put already. */
+    public boolean wasPlaced(String planetKey) {
+        return placed.contains(planetKey);
+    }
+
+    public void markPlaced(String planetKey) {
+        placed.add(planetKey);
     }
 
     public void put(ToadRecord r) {
@@ -79,6 +98,11 @@ public final class ToadStore {
             a.add(o);
         }
         Files.createDirectories(file.toAbsolutePath().getParent());
-        Files.writeString(file, a.toString());
+        JsonObject root = new JsonObject();
+        root.add("toads", a);
+        JsonArray k = new JsonArray();
+        for (String key : placed) k.add(key);
+        root.add("placed", k);
+        Files.writeString(file, root.toString());
     }
 }

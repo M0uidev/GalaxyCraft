@@ -251,6 +251,16 @@ public final class PlanetClient {
 
     /** bp's planet made on another thread (null without Minecraft's worldgen: no single player world). */
     static java.util.concurrent.CompletableFuture<VoxelPlanet> generateAsync(PlanetBlueprint bp) {
+        return generateAsync(bp, java.util.List.of(), true, null);
+    }
+
+    /**
+     * As above, with huts asked for (Toad outposts): onPlaced gets those that found ground, from the
+     * worker thread, once the cells are made.
+     */
+    static java.util.concurrent.CompletableFuture<VoxelPlanet> generateAsync(PlanetBlueprint bp,
+            java.util.List<dev.moui.galaxycraft.voxel.gen.Huts.Request> huts, boolean build,
+            java.util.function.Consumer<java.util.List<dev.moui.galaxycraft.voxel.gen.Huts.Placed>> onPlaced) {
         McWorldgen gen = worldgen();
         if (gen == null || blocks == null) return null;
         java.util.Map<String, Integer> known = new java.util.concurrent.ConcurrentHashMap<>();
@@ -261,7 +271,8 @@ public final class PlanetClient {
         McBlocks b = blocks;
         return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
             // Its parallel streams run on the workers they are started from.
-            PlanetGenerator.Cells cells = workers.submit(() -> PlanetGenerator.cells(bp, gen.vegetation(), ids)).join();
+            PlanetGenerator.Cells cells = workers.submit(() -> PlanetGenerator.cells(bp, gen.vegetation(), ids, huts, build)).join();
+            if (onPlaced != null) onPlaced.accept(cells.huts());
             // The planet reads every cell's block info as it is put together (millions of cells for a
             // big one): that is done here, not in a tick, once the game's thread has worked out the
             // info of each block it uses (McBlocks makes it from Minecraft's models, lazily).
