@@ -52,6 +52,11 @@ public final class ToadConversation {
         return pages.get(index);
     }
 
+    /** Which page is showing (0 first); changes when the next one starts, for the voice's bookkeeping. */
+    public int pageNumber() {
+        return index;
+    }
+
     /** Time passes: letters come. */
     public void tick(double seconds) {
         if (!choosing) elapsed += Math.max(0, seconds);

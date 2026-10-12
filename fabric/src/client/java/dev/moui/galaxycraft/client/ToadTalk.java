@@ -1,19 +1,18 @@
 package dev.moui.galaxycraft.client;
 
 import dev.moui.galaxycraft.toad.ToadContext;
-import dev.moui.galaxycraft.toad.ToadDialogue;
-import dev.moui.galaxycraft.toad.ToadRecord;
 import dev.moui.galaxycraft.toad.ToadMerchant;
+import dev.moui.galaxycraft.toad.ToadRecord;
+import dev.moui.galaxycraft.toad.ToadScript;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.network.chat.Component;
 
 /**
- * What happens when you talk to a Toad: its lines, in chat, then its trade (Minecraft's own screen,
- * opened on the integrated server's player: the world is always singleplayer). The system's tier and
- * star are those of the system the player is in (home: tier 0, yellow); the ship's Warp Core and
- * missing module are not asked yet.
+ * What happens when you talk to a Toad: its dialogue box opens (ToadClient runs it, the player keeps
+ * moving) and, if Trade is chosen, Minecraft's merchant screen (opened on the integrated server's
+ * player: the world is always singleplayer). The system's tier and star are those of the system
+ * the player is in (home: tier 0, yellow); the ship's Warp Core and missing module are not asked yet.
  */
 final class ToadTalk {
     private ToadTalk() {}
@@ -27,11 +26,15 @@ final class ToadTalk {
 
     static void talk(LocalPlayer player, ToadRecord toad) {
         ToadContext ctx = context();
-        for (ToadDialogue.Line l : ToadDialogue.lines(toad.type(), ctx))
-            player.sendSystemMessage(Component.translatable(l.key(), l.args().toArray()));
+        boolean canTrade = ToadMerchant.of(toad.type(), ctx.systemTier()) != null;
+        ToadClient.begin(player, toad, ToadScript.open(toad.type(), ctx, canTrade), ctx);
+    }
+
+    /** Trade chosen: the merchant screen. */
+    static void trade(LocalPlayer player, ToadRecord toad, ToadContext ctx) {
         ToadMerchant merchant = ToadMerchant.of(toad.type(), ctx.systemTier());
         var server = Minecraft.getInstance().getSingleplayerServer();
-        if (merchant == null || server == null) return; // it sells nothing here: it only talks
+        if (merchant == null || server == null) return; // it sells nothing here
         java.util.UUID id = player.getUUID();
         server.execute(() -> {
             ServerPlayer sp = server.getPlayerList().getPlayer(id);

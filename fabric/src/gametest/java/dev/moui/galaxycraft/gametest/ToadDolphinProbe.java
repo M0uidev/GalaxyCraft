@@ -163,14 +163,59 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
             gxdev("ctl", "keys");
             waitReal(ctx, 1500);
             check(ctx.computeOnClient(mc -> ToadClient.talks()) > before, "a right click on the Toad talks to it");
+            // The box: open, letters typed, the player free to move; clicks go through the pages to the choices.
+            check(ctx.computeOnClient(mc -> ToadClient.conversation() != null), "the Toad's dialogue box opens");
+            check(ctx.computeOnClient(mc -> !(mc.player.containerMenu instanceof net.minecraft.world.inventory.MerchantMenu)),
+                    "no merchant screen yet");
+            check(ctx.computeOnClient(mc -> mc.gui.screen() == null), "the box is not a screen: the player is free");
+            waitReal(ctx, 700);
+            ctx.takeScreenshot("toad-dialogue");
+            for (int i = 0; i < 8 && !ctx.computeOnClient(mc -> ToadClient.conversation() != null && ToadClient.conversation().choosing()); i++) {
+                gxdev("ctl", "keys rmb");
+                waitReal(ctx, 250);
+                gxdev("ctl", "keys");
+                waitReal(ctx, 350);
+            }
+            check(ctx.computeOnClient(mc -> ToadClient.conversation() != null && ToadClient.conversation().choosing()),
+                    "clicks go through the pages to the choices");
+            ctx.takeScreenshot("toad-dialogue-choices");
+            // 2: Tell me about this place: more pages, then the choices again.
+            ctx.runOnClient(mc -> ToadClient.choose(mc.player, 1));
+            ctx.waitTicks(10);
+            check(ctx.computeOnClient(mc -> ToadClient.conversation() != null && !ToadClient.conversation().choosing()),
+                    "asking about the place says more");
+            for (int i = 0; i < 8 && !ctx.computeOnClient(mc -> ToadClient.conversation() != null && ToadClient.conversation().choosing()); i++) {
+                gxdev("ctl", "keys rmb");
+                waitReal(ctx, 250);
+                gxdev("ctl", "keys");
+                waitReal(ctx, 350);
+            }
+            check(ctx.computeOnClient(mc -> ToadClient.conversation() != null && ToadClient.conversation().choosing()),
+                    "and the choices come back");
+            // 1: Trade closes the box and opens the merchant screen.
+            ctx.runOnClient(mc -> ToadClient.choose(mc.player, 0));
+            waitReal(ctx, 1500);
             int offers = ctx.computeOnClient(mc -> mc.player.containerMenu instanceof net.minecraft.world.inventory.MerchantMenu m
                     ? m.getOffers().size() : -1);
             log("the Toad's trade has " + offers + " offers");
-            check(offers == 4, "the Guide's trade opens (2 things, 2 payments each)");
+            check(offers == 4, "Trade opens the Guide's merchant screen (2 things, 2 payments each)");
+            check(ctx.computeOnClient(mc -> ToadClient.conversation() == null), "and the box is gone");
             shot(ctx, "toad-trade");
             ctx.takeScreenshot("toad-trade-gui"); // Minecraft's window: the merchant screen is not in Dolphin's picture
             ctx.runOnClient(mc -> mc.player.closeContainer());
             ctx.waitTicks(10);
+            // Talk again and walk away: the box closes by itself.
+            aimAt(ctx, centre);
+            ctx.waitTicks(5);
+            gxdev("ctl", "keys rmb");
+            waitReal(ctx, 300);
+            gxdev("ctl", "keys");
+            waitReal(ctx, 500);
+            check(ctx.computeOnClient(mc -> ToadClient.conversation() != null), "a second talk opens the box again");
+            Vector3d farAway = ctx.computeOnClient(mc -> new Vector3d(centre).fma(units(20), GalaxyCraftClient.frame().upGal().normalize()));
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(farAway));
+            ctx.waitTicks(40);
+            check(ctx.computeOnClient(mc -> ToadClient.conversation() == null), "walking away closes the box");
 
             // Still in space (stations go only there): the station first, then the planet.
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(space));
