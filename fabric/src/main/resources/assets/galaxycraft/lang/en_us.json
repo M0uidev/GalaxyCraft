@@ -82,5 +82,10 @@
   "message.galaxycraft.pad.docked": "Docked. Space to lift off",
   "message.galaxycraft.ship.crowded": "Too close to another ship or pad",
   "message.galaxycraft.toad.no_world": "There is no world to put a Toad in.",
-  "message.galaxycraft.toad.no_ground": "There is no ground ahead for a Toad."
+  "message.galaxycraft.toad.no_ground": "There is no ground ahead for a Toad.",
+  "toad.name.guide": "Toad Guide",
+  "toad.name.miner": "Toad Miner",
+  "toad.name.explorer": "Toad Explorer",
+  "toad.name.technician": "Toad Technician",
+  "toad.name.mailman": "Toad Mailman"
 }

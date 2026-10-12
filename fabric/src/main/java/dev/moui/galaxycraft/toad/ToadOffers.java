@@ -27,6 +27,14 @@ public final class ToadOffers {
 
     private ToadOffers() {}
 
+    /** Every offer of a type from tier 0 up to a tier (clamped to 0..5): what is on sale in a system of that tier. */
+    public static List<Offer> upTo(ToadType type, int tier) {
+        int t = Math.max(0, Math.min(5, tier));
+        List<Offer> out = new java.util.ArrayList<>();
+        for (int i = 0; i <= t; i++) out.addAll(forType(type, i));
+        return out;
+    }
+
     /** The offers of a type at a tier (clamped to 0..5); empty when it sells nothing there. */
     public static List<Offer> forType(ToadType type, int tier) {
         int t = Math.max(0, Math.min(5, tier));

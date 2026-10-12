@@ -34,4 +34,12 @@ class ToadOffersTest {
         assertEquals(0, ItemTiers.tier("minecraft:coal"));
         assertEquals(2, ItemTiers.tier("minecraft:diamond"));
     }
+
+    @Test void upToCollectsEveryTierUpToTheOne() {
+        var m1 = ToadOffers.upTo(ToadType.MINER, 1);
+        assertEquals(ToadOffers.forType(ToadType.MINER, 0).size() + ToadOffers.forType(ToadType.MINER, 1).size(), m1.size());
+        assertEquals(ToadOffers.forType(ToadType.MINER, 0), ToadOffers.upTo(ToadType.MINER, 0));
+        assertTrue(ToadOffers.upTo(ToadType.TECHNICIAN, 1).isEmpty(), "nothing is sold below its tier: a Technician has nothing at tier 1");
+        assertFalse(ToadOffers.upTo(ToadType.TECHNICIAN, 2).isEmpty());
+    }
 }

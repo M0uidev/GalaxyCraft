@@ -84,16 +84,8 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
             aimAt(ctx, centre);
             shot(ctx, "toad-side");
 
-            // 3. Right click on it talks; on nothing it does not.
+            // 3. Right click on nothing talks to nobody; on the Toad it talks and opens its trade.
             int before = ctx.computeOnClient(mc -> ToadClient.talks());
-            aimAt(ctx, centre);
-            ctx.waitTicks(5);
-            gxdev("ctl", "keys rmb");
-            waitReal(ctx, 300);
-            gxdev("ctl", "keys");
-            waitReal(ctx, 500);
-            int after = ctx.computeOnClient(mc -> ToadClient.talks());
-            check(after > before, "a right click on the Toad talks to it");
             Vector3d away = ctx.computeOnClient(mc -> new Vector3d(centre).fma(units(30), GalaxyCraftClient.frame().upGal().normalize()));
             aimAt(ctx, away);
             ctx.waitTicks(5);
@@ -101,8 +93,21 @@ public final class ToadDolphinProbe implements FabricClientGameTest {
             waitReal(ctx, 300);
             gxdev("ctl", "keys");
             waitReal(ctx, 500);
-            check(ctx.computeOnClient(mc -> ToadClient.talks()) == after, "a right click on nothing talks to nobody");
-            shot(ctx, "toad-talk");
+            check(ctx.computeOnClient(mc -> ToadClient.talks()) == before, "a right click on nothing talks to nobody");
+            aimAt(ctx, centre);
+            ctx.waitTicks(5);
+            gxdev("ctl", "keys rmb");
+            waitReal(ctx, 300);
+            gxdev("ctl", "keys");
+            waitReal(ctx, 1500);
+            check(ctx.computeOnClient(mc -> ToadClient.talks()) > before, "a right click on the Toad talks to it");
+            int offers = ctx.computeOnClient(mc -> mc.player.containerMenu instanceof net.minecraft.world.inventory.MerchantMenu m
+                    ? m.getOffers().size() : -1);
+            log("the Toad's trade has " + offers + " offers");
+            check(offers == 4, "the Guide's trade opens (2 things, 2 payments each)");
+            shot(ctx, "toad-trade");
+            ctx.runOnClient(mc -> mc.player.closeContainer());
+            ctx.waitTicks(10);
 
             ctx.runOnClient(mc -> ToadClient.clearAll());
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(home));
