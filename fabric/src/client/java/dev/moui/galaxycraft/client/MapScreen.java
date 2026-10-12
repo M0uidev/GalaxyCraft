@@ -28,7 +28,14 @@ import org.joml.Vector3d;
  */
 final class MapScreen extends Screen {
     private static final double UNITS = 1 / GravityFrame.SCALE;
-    private static final int WHITE = 0xFFFFFFFF, GRAY = 0xFFA0A0A0, PANEL = 0xC0101018, RING = 0xFF6EC1FF;
+    private static final int WHITE = 0xFFFFFFFF, GRAY = 0xFFA0A0A0, PANEL = 0xFF101018, RING = 0xFF6EC1FF;
+    /** Labels drawn at most: the nearest ones, the pick and the one under the mouse (thousands of systems would pile up). */
+    private static final int LABELS = 12;
+    /**
+     * Discs drawn at most. Minecraft compares every filled rectangle with the ones before it, so the
+     * cost grows with the square of the count: thousands of systems at once make each frame crawl.
+     */
+    private static final int MAX_DRAWN = 400;
 
     /** Something on the map: where (units from Mario), size (units), color, label. */
     private record Item(String label, Vector3d pos, double size, int color, Universe.Star star, UPos center, double radiusBlocks) {}
@@ -184,18 +191,43 @@ final class MapScreen extends Screen {
         view.width = width;
         view.height = height;
         long now = MapClient.now();
+        int n = items.size();
+        double[] depth = new double[n];
+        double[] sx = new double[n], sy = new double[n];
+        boolean[] seen = new boolean[n];
         List<Integer> order = new ArrayList<>();
-        for (int i = 0; i < items.size(); i++) order.add(i);
-        // Far to near, so nearer discs and labels cover farther ones.
-        order.sort(java.util.Comparator.comparingDouble((Integer i) -> -view.project(items.get(i).pos()).map(MapView.Screen::depth).orElse(0.0)));
+        for (int i = 0; i < n; i++) {
+            var p = view.project(items.get(i).pos());
+            if (p.isEmpty() || p.get().x() < -30 || p.get().y() < -30 || p.get().x() > width + 30 || p.get().y() > height + 30) continue;
+            seen[i] = true;
+            depth[i] = p.get().depth();
+            sx[i] = p.get().x();
+            sy[i] = p.get().y();
+            order.add(i);
+        }
+        // Far to near, so nearer discs cover farther ones.
+        order.sort(java.util.Comparator.comparingDouble((Integer i) -> -depth[i]));
+        if (order.size() > MAX_DRAWN) order = new ArrayList<>(order.subList(order.size() - MAX_DRAWN, order.size()));
+        // Labels: the nearest few, the pick, home and whatever is under the mouse.
+        java.util.Set<Integer> labelled = new java.util.HashSet<>();
+        for (int k = order.size() - 1; k >= 0 && labelled.size() < LABELS; k--) labelled.add(order.get(k));
+        if (selected >= 0) labelled.add(selected);
         for (int i : order) {
             Item it = items.get(i);
-            var p = view.project(it.pos());
-            if (p.isEmpty() || Math.abs(p.get().x()) > 20000 || Math.abs(p.get().y()) > 20000) continue;
-            int r = (int) Math.max(2, Math.min(24, it.size() / p.get().depth() * (height / 2.0) / Math.tan(Math.toRadians(30))));
-            disc(g, (int) p.get().x(), (int) p.get().y(), r, it.color());
-            if (i == selected) ring(g, (int) p.get().x(), (int) p.get().y(), r + 4, WHITE);
-            if (r >= 3 || i == selected) g.text(font, it.label(), (int) p.get().x() + r + 3, (int) p.get().y() - 4, i == selected ? WHITE : GRAY);
+            if (it.star() != null && it.star().home() && inside == null) labelled.add(i);
+            if (Math.abs(sx[i] - mouseX) < 6 && Math.abs(sy[i] - mouseY) < 6) labelled.add(i);
+        }
+        for (int i : order) {
+            Item it = items.get(i);
+            int r = (int) Math.max(2, Math.min(24, it.size() / depth[i] * (height / 2.0) / Math.tan(Math.toRadians(30))));
+            disc(g, (int) sx[i], (int) sy[i], r, it.color());
+            if (i == selected) ring(g, (int) sx[i], (int) sy[i], r + 4, WHITE);
+        }
+        for (int i : order) {
+            if (!labelled.contains(i)) continue;
+            Item it = items.get(i);
+            int r = (int) Math.max(2, Math.min(24, it.size() / depth[i] * (height / 2.0) / Math.tan(Math.toRadians(30))));
+            g.text(font, it.label(), (int) sx[i] + r + 3, (int) sy[i] - 4, i == selected ? WHITE : GRAY);
         }
         if (inside != null) shipMarkers(g, now);
         g.fill(width - 175, 0, width, height, PANEL);
@@ -235,11 +267,16 @@ final class MapScreen extends Screen {
         }
     }
 
+    /** A round-looking disc in at most three rectangles (see MAX_DRAWN: every fill is a cost). */
     private static void disc(GuiGraphicsExtractor g, int cx, int cy, int r, int color) {
-        for (int dy = -r; dy <= r; dy++) {
-            int w = (int) Math.sqrt((double) r * r - (double) dy * dy);
-            g.fill(cx - w, cy + dy, cx + w + 1, cy + dy + 1, color);
+        if (r <= 2) {
+            g.fill(cx - r, cy - r, cx + r + 1, cy + r + 1, color);
+            return;
         }
+        int a = Math.max(1, r * 6 / 10), b = Math.max(1, r * 8 / 10);
+        g.fill(cx - r, cy - a, cx + r + 1, cy + a + 1, color);
+        g.fill(cx - b, cy - b, cx + b + 1, cy + b + 1, color);
+        g.fill(cx - a, cy - r, cx + a + 1, cy + r + 1, color);
     }
 
     private static void ring(GuiGraphicsExtractor g, int cx, int cy, int r, int color) {
@@ -252,7 +289,8 @@ final class MapScreen extends Screen {
     private static void line(GuiGraphicsExtractor g, int x0, int y0, int x1, int y1, int color) {
         int n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
         if (n == 0 || n > 4000) return;
-        for (int i = 0; i <= n; i += 2) {
+        int step = Math.max(2, n / 150); // at most ~150 dots: each fill is a cost
+        for (int i = 0; i <= n; i += step) {
             int x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n;
             g.fill(x, y, x + 1, y + 1, color);
         }
