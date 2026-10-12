@@ -4,7 +4,7 @@ Date: 2026-10-11. Branch `feat/map-3d`. Status: design approved in conversation,
 
 ## Goal
 
-Replace the galaxy map's list of buttons (`GalaxyMapScreen`, keys M / N / K) with a 3D map: see the
+Replace the galaxy map's list of buttons (`GalaxyMapScreen`; its key N and the warp key K with no star aimed; M is the music player's) with a 3D map: see the
 systems and their planets, pick one, send the ship there by remote and leave it **orbiting**. The
 pilot may be aboard while it is sent. Each system shows its **tier** and **star type**.
 
@@ -70,7 +70,7 @@ map, and from the seat when aboard) and ends orbiting it; the map never needs a 
 - Side panel: name, tier, star, planets, distance in blocks. Buttons: **Send ship** (a short list if
   several), **Warp** (existing, free; `Tier.reach` will limit it when the Warp Core lands), **Cancel
   course** (stops the ship where it is).
-- M / N / K (with no star aimed) open it. Opens with the pilot aboard and a course running; markers
+- The map key (N by default) or the warp key with no star aimed (K) open it; both are Minecraft key mappings in Controls ("Super Minecraft Galaxy"), as are the mod's other keys (see `ModKeys`). Opens with the pilot aboard and a course running; markers
   move live.
 
 ### Remote control
