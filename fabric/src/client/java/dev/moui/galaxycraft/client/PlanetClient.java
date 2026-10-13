@@ -811,9 +811,9 @@ public final class PlanetClient {
                 hit = true;
             }
             // Right click on a mob or vehicle in reach uses it (rides a minecart or boat).
-            if (target != null && pressed(buttons, MOUSE_RIGHT) && !ShadowToads.isToad(target)) { // a Toad is talked to (ToadClient), not used
-                ShadowWorld.interact(target.getId(), player.getUUID());
-                hit = true;
+            if (target != null && pressed(buttons, MOUSE_RIGHT)) {
+                if (!ShadowToads.isToad(target)) ShadowWorld.interact(target.getId(), player.getUUID()); // a Toad is talked to (ToadClient), not used
+                hit = true; // the click is the mob's: it does not also use the block behind it
             }
             ShadowWorld.steer(new ShadowWorld.Steer(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),
                     key(in, SC_LSHIFT) || key(in, SC_RSHIFT)));

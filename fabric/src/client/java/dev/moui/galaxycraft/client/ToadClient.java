@@ -622,6 +622,12 @@ public final class ToadClient {
      */
     static void draw(EntityClient ec, ToadRecord r, Matrix4d base, java.util.function.Function<Matrix4d, double[]> rows, String animName,
             List<EntityWire.Piece> out) {
+        draw(ec, r, base, rows, animName, 0, out);
+    }
+
+    /** As above, overlay the game's tint over every piece (EntityClient.HURT: red, as a hurt mob). */
+    static void draw(EntityClient ec, ToadRecord r, Matrix4d base, java.util.function.Function<Matrix4d, double[]> rows, String animName,
+            int overlay, List<EntityWire.Piece> out) {
         ToadModels.Loaded model = ToadModels.get();
         ToadLook look = ToadLook.of(r.type());
         State st = STATES.computeIfAbsent(r.id(), k -> new State());
@@ -647,7 +653,7 @@ public final class ToadClient {
             int skn = ec.shipSkin(skin == part.skin() ? skin : "toad-flat-" + look.vest(), skin.width(), skin.height(), skin.argb());
             if (mdl < 0 || skn < 0) continue;
             Matrix4d m = new Matrix4d(base).mul(new Matrix4d(ToadModels.pieceMatrix(model, world[rp.joint()])));
-            out.add(new EntityWire.Piece(mdl, skn, 0, tint, rows.apply(m)));
+            out.add(new EntityWire.Piece(mdl, skn, overlay, tint, rows.apply(m)));
         }
         if (look.joint() < world.length)
             for (ShipModels.PartModel g : ToadModels.goods(look.goods())) {
@@ -655,7 +661,7 @@ public final class ToadClient {
                 int skn = ec.shipSkin(g.skin(), g.skin().width(), g.skin().height(), g.skin().argb());
                 if (mdl < 0 || skn < 0) continue;
                 Matrix4d m = new Matrix4d(base).mul(new Matrix4d(ToadModels.pieceMatrix(model, world[look.joint()])));
-                out.add(new EntityWire.Piece(mdl, skn, 0, g.tint(), rows.apply(m)));
+                out.add(new EntityWire.Piece(mdl, skn, overlay, g.tint(), rows.apply(m)));
             }
     }
 }
