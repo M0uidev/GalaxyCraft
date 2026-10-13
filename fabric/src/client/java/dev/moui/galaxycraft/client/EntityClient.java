@@ -395,7 +395,8 @@ final class EntityClient {
         float yaw = e instanceof net.minecraft.world.entity.LivingEntity l ? l.yBodyRot : e.getYRot();
         boolean talking = ToadClient.talkingTo() != null && id.equals(ToadClient.talkingTo().id());
         Matrix4d base = new Matrix4d(at).rotateY(-Math.toRadians(yaw)).scale(1 / 16.0);
-        ToadClient.draw(this, rec, base, this::toGal, ToadClient.animFor(e, talking), out);
+        boolean red = e instanceof net.minecraft.world.entity.LivingEntity l && (l.hurtTime > 0 || l.deathTime > 0); // as a hurt mob
+        ToadClient.draw(this, rec, base, this::toGal, ToadClient.animFor(e, talking), red ? HURT : 0, out);
     }
 
     private void shadowEntity(ShadowWorld.Entities shadow, Entity e, Vector3d mario, float pt, List<EntityWire.Piece> out) {
