@@ -213,7 +213,7 @@ enum {
   GXC_MSG_ENTITIES = 110,  /* this frame's entities, all big-endian; only the newest one counts */
   GXC_MSG_SEAT = 112,      /* Mario rides something: f32 pos[3] (galaxy), u32 riding (0: he gets off); big-endian,
                               sent every frame while he rides (the game lets go if they stop);
-                              riding 1: seated, 2: gliding, 3: walking as Mario, 4: flung by a Launch Star */
+                              riding 1: seated, 2: gliding, 3: walking as Mario, 4: flung by a Launch Star, 5: the same with Mario not shown (the mod draws the player) */
   GXC_MSG_HURT = 111,      /* the player was hurt in Minecraft: f32 from[3] (galaxy), u32 GXC_HURT_*; big-endian */
   GXC_MSG_SKY = 113,       /* the sky's light now (Minecraft's lightmap at full sky light, day or night): f32 rgb[3],
                               big-endian; planets' sky-lit faces take it. Red 2 or more over its 0..1 means a

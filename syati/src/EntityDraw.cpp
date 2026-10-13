@@ -49,6 +49,8 @@ bool gSeatFlying = false;
 // Riding 4: a Launch Star's flight (the mod flies the player along its course): the same pose, and the
 // game's own effects of Mario flung by a Launch Star (the streaks, the glow) while it lasts.
 bool gSeatStar = false;
+// Launch Star flight with Mario not shown (the player is drawn by the mod): riding 5.
+bool gSeatHidden = false;
 bool gStarFx = false;
 const char* const STAR_FX[] = {"MarioSuperSpinDriver", "MarioSpinDriverBodyLine", "MarioSpinDriverHandLineL",
                                "MarioSpinDriverHandLineR", "SuperSpinDriverFlyGlow"};
@@ -383,8 +385,9 @@ void EntityDrawSeat(const gxc::InboxSeat& seat)
     gSeat[k] = seat.pos[k];
   }
   gSeatFrames = seat.riding ? SEAT_FRAMES : 0;
-  gSeatFlying = seat.riding == 2 || seat.riding == 4;
-  gSeatStar = seat.riding == 4;
+  gSeatFlying = seat.riding == 2 || seat.riding == 4 || seat.riding == 5;
+  gSeatStar = seat.riding == 4 || seat.riding == 5;
+  gSeatHidden = seat.riding == 5;
   gSeatWalking = seat.riding == 3;
   gSeats++;
 }
@@ -485,7 +488,7 @@ bool EntityDrawSafeFromAbyss()
 
 bool EntityDrawFlying()
 {
-  return gSeatFrames != 0 && gSeatFlying;
+  return gSeatFrames != 0 && gSeatFlying && !gSeatHidden;
 }
 
 uint32_t EntityDrawRiding()

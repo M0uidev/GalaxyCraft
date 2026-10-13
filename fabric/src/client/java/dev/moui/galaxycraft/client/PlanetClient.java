@@ -1080,7 +1080,7 @@ public final class PlanetClient {
         if (on || riding) {
             Vector3d at = GameOrigin.toGame(walker != null ? walker : onSeat ? f.galOf(s.pos()) : GameOrigin.offset());
             if (bridge.send(Layout.MSG_SEAT, java.nio.ByteBuffer.allocate(16).putFloat((float) at.x).putFloat((float) at.y)
-                    .putFloat((float) at.z).putInt(!on ? 0 : LaunchStarClient.flying() && !GalaxyCraftClient.walking() ? 4 : walker != null && marioFlies ? 2 : 1).array()))
+                    .putFloat((float) at.z).putInt(!on ? 0 : LaunchStarClient.flying() ? (GalaxyCraftClient.walking() ? 5 : 4) : walker != null && marioFlies ? 2 : 1).array()))
                 riding = on;
         }
     }
