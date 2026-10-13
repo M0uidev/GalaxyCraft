@@ -173,6 +173,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         net.minecraft.client.gui.screens.MenuScreens.register(dev.moui.galaxycraft.ship.ShipCargoMenu.TYPE, ShipCargoScreen::new);
         ToadKeys.register();
         ToadDialogueHud.register();
+        ShipHud.register();
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player != null && client.level != null) dev.moui.galaxycraft.client.music.MusicService.tick();
         });

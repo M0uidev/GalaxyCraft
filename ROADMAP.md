@@ -173,7 +173,8 @@ New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it cam
   the 3D model. Split in three: the ship inventory is first (spec `docs/superpowers/specs/2026-10-13-galaxycraft-ship-cargo-design.md`,
   branch `feat/ship-cargo`); the customizer and the pad's screen come after.
 - 2026-10-13: **Flight UI for the Toad ship** (user): a custom UI while piloting that shows the ship's stats, speed and
-  similar, in a style that fits the game (not a plain Minecraft HUD). Comes after the ship cargo.
+  similar, in a style that fits the game (not a plain Minecraft HUD). Built on `feat/ship-cargo` with the cargo: a panel with speed gauge (top-speed mark, turbo range), module pips,
+  seats, hull, hold use and the keys, in the Toad dialogue box's colors; awaiting your playtest.
 
 - 2026-10-12: **Names for galaxies and planets, rename, and an empire** (user): galaxies and planets get random
   names from a list, in the style "Ares 48" (a name plus a number, maybe with a slash). You can rename the planet you

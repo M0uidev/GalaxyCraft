@@ -63,11 +63,17 @@ nivel 1 una, nivel 2 dos, nivel 3 las cuatro (las cerradas se ven oscuras en la 
 - **Qué cofre ves:** el botón *View* bajo cada bahía elige cuál se muestra abajo.
 - Los cofres se dibujan dentro de la nave, detrás de los asientos, a media escala. La carga se guarda con la nave.
 
+## El panel de vuelo
+
+Al pilotar aparece abajo a la derecha un panel con la cabeza roja de Toad: la **velocidad** en bloques por segundo con un
+medidor (la raya dorada es la velocidad máxima; pasada esa raya el medidor se vuelve naranja, es el turbo y sale la
+palabra TURBO), los **módulos** como tres cuadritos de nivel (motor, timón, casco, cabina), los asientos, la resistencia,
+cuántos cofres lleva de los que la cabina permite, "Docked on a pad" mientras estás acoplado y las teclas.
+
 ## Pendiente
 
 - La pose sentada (de momento mantienes la pose de vuelo) y los cojines de la cabina por ajustar.
 - Los módulos aún no cambian el aspecto de la nave.
 - La posición y el tamaño de los cofres dentro del casco se ajustan en `CargoLayout` (no se ha mirado en el juego todavía).
-- Una pantalla propia al pilotar con la velocidad y las estadísticas (en el roadmap).
 - Equilibrar los niveles y los logros (te toca a ti).
 - Habilidades: aterrizar, remolcar, saltos.

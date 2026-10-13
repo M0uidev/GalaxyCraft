@@ -12,6 +12,7 @@ import dev.moui.galaxycraft.ship.CargoLayout;
 import dev.moui.galaxycraft.ship.SeatLayout;
 import dev.moui.galaxycraft.ship.ShipCargo;
 import dev.moui.galaxycraft.ship.ShipCargoMenu;
+import dev.moui.galaxycraft.ship.ShipHudModel;
 import dev.moui.galaxycraft.ship.ShipBlocks;
 import dev.moui.galaxycraft.ship.ShipBoarding;
 import dev.moui.galaxycraft.ship.ShipHooks;
@@ -405,6 +406,11 @@ public final class ShipClient {
         if (docked != null && c.up()) docked = null; // Space lifts off
         velocity = ShipThrust.step(velocity, vec(player.getLookAngle()), keys, ShipStats.of(r.modules()));
         landingAssist(player, frame, c);
+        ShipCargo hold = store.cargo(r.id(), r.modules().cabin());
+        int chests = 0;
+        for (int i = 0; i < ShipCargo.BAYS; i++) if (hold.bay(i) == ShipCargo.Bay.SMALL || hold.bay(i) == ShipCargo.Bay.LARGE_HEAD) chests++;
+        ShipHud.show(ShipHudModel.of(new Vector3d(velocity), c.turbo(), r.modules(), chests, hold.capacity()),
+                docked != null ? Component.translatable("hud.galaxycraft.ship.docked").getString() : null);
         // The move itself waits for the player's own tick (onPlayerTick), after Minecraft has
         // saved the old position: moved before that, the view would not be drawn between the two
         // and the flight would step at 20 Hz.
@@ -565,6 +571,7 @@ public final class ShipClient {
     private static void leaveNow(LocalPlayer player) {
         if (boarded == null) return;
         GalaxyCraft.LOG.info("Left ship {}", boarded);
+        ShipHud.show(null, null);
         Optional<ShipRecord> was = aboard();
         boarded = null;
         velocity = new Vector3d();

@@ -57,6 +57,29 @@ public final class ShipCargoProbe implements FabricClientGameTest {
                     fails.add("threw " + e);
                 }
             });
+            // Pictures: the hold's screen with a few chests and things in it, and the flight panel.
+            ShipCargo shown = new ShipCargo(4);
+            shown.install(0);
+            shown.install(1);
+            shown.join(0);
+            shown.install(2);
+            sp.getServer().runOnServer(server -> {
+                ServerPlayer pl = server.getPlayerList().getPlayers().get(0);
+                shown.chest(0).items().set(0, new ItemStack(Items.DIAMOND, 12));
+                shown.chest(0).items().set(1, new ItemStack(Items.OAK_LOG, 64));
+                shown.chest(0).items().set(30, new ItemStack(Items.IRON_INGOT, 5));
+                pl.getInventory().setItem(2, new ItemStack(Items.CHEST, 2));
+                ShipCargoMenu.open(pl, "probe", shown, () -> {});
+            });
+            ctx.waitTicks(20);
+            ctx.takeScreenshot("ship-cargo-screen");
+            ctx.runOnClient(mc -> mc.player.closeContainer());
+            ctx.waitTicks(5);
+            ctx.runOnClient(mc -> dev.moui.galaxycraft.client.ShipHud.show(dev.moui.galaxycraft.ship.ShipHudModel.of(
+                    new org.joml.Vector3d(0, 0, 0.9), true, new dev.moui.galaxycraft.ship.ShipModules(2, 3, 1, 3), 2, 4), "Docked on a pad"));
+            ctx.waitTicks(5);
+            ctx.takeScreenshot("ship-hud");
+            ctx.runOnClient(mc -> dev.moui.galaxycraft.client.ShipHud.show(null, null));
         }
         System.out.println("[GalaxyCraft cargo] " + (fails.isEmpty() ? "PASS" : "FAIL " + fails));
     }
