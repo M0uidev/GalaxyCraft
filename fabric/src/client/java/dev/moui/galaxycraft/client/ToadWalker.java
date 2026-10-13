@@ -124,7 +124,7 @@ final class ToadWalker {
         r.pos()[0] = p.x;
         r.pos()[1] = p.y;
         r.pos()[2] = p.z;
-        Vector3d[] hit = s.surfaceAlong(point(w, w.x, w.z, w.h + EYE, upb), new Vector3d(w.up).negate(), REACH + 1);
+        Vector3d[] hit = s.groundAlong(point(w, w.x, w.z, w.h + EYE, upb), new Vector3d(w.up).negate(), REACH + 1);
         if (hit != null) w.upNow = hit[1];
         return new Frame(st.anim(), Math.PI / 2 - st.heading(), moved);
     }
@@ -136,7 +136,7 @@ final class ToadWalker {
 
     /** The height of the ground in the column of (x, z), looking down from `from`; -1e3 if there is none. */
     private static double ground(PlanetSession s, Walk w, double x, double z, double from, double upb) {
-        Vector3d[] hit = s.surfaceAlong(point(w, x, z, from, upb), new Vector3d(w.up).negate(), REACH);
+        Vector3d[] hit = s.groundAlong(point(w, x, z, from, upb), new Vector3d(w.up).negate(), REACH);
         if (hit == null) return -1e3;
         return new Vector3d(hit[0]).sub(w.home).dot(w.up) / upb;
     }
