@@ -8,6 +8,7 @@ import dev.moui.galaxycraft.map.Trip;
 import dev.moui.galaxycraft.universe.UPos;
 import dev.moui.galaxycraft.play.PlayConfig;
 import dev.moui.galaxycraft.ship.CargoCodec;
+import dev.moui.galaxycraft.ship.CargoLayout;
 import dev.moui.galaxycraft.ship.SeatLayout;
 import dev.moui.galaxycraft.ship.ShipCargo;
 import dev.moui.galaxycraft.ship.ShipCargoMenu;
@@ -798,6 +799,11 @@ public final class ShipClient {
         Matrix4d blocks = new Matrix4d(base).scale(1 / GravityFrame.SCALE);
         for (float[] s : SeatLayout.seats(ShipStats.of(r.modules()).seats()))
             ec.shipCushion(new Matrix4d(blocks).translate(s[0] / 16.0, s[1] / 16.0 + 0.1, s[2] / 16.0), pt, out);
+        // The hold: the chests installed, behind the seats.
+        if (store != null)
+            for (CargoLayout.Placed c : CargoLayout.chests(store.cargo(r.id(), r.modules().cabin())))
+                ec.shipChest(new Matrix4d(blocks).translate(c.center()[0] / 16.0, c.center()[1] / 16.0, c.center()[2] / 16.0),
+                        c.large(), CargoLayout.SCALE, pt, out);
     }
 
     /** A matrix as the wire's 3x4 row-major. */

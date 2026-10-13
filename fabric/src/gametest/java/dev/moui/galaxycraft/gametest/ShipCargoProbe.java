@@ -30,6 +30,26 @@ public final class ShipCargoProbe implements FabricClientGameTest {
         if (!Boolean.getBoolean("galaxycraft.shipcargo")) return;
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
             ctx.waitTicks(20);
+            // The chests drawn in the ship come from Minecraft's chest renderer: single and both halves of a double one.
+            String render = ctx.computeOnClient(mc -> {
+                try {
+                    for (var type : net.minecraft.world.level.block.state.properties.ChestType.values()) {
+                        var state = net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState()
+                                .setValue(net.minecraft.world.level.block.ChestBlock.FACING, net.minecraft.core.Direction.SOUTH)
+                                .setValue(net.minecraft.world.level.block.ChestBlock.TYPE, type);
+                        var be = new net.minecraft.world.level.block.entity.ChestBlockEntity(net.minecraft.core.BlockPos.ZERO, state);
+                        be.setLevel(mc.level);
+                        var r = mc.getBlockEntityRenderDispatcher().getRenderer(be);
+                        if (r == null) return "no renderer for " + type;
+                        var st = r.createRenderState();
+                        r.extractRenderState(be, st, 0f, net.minecraft.world.phys.Vec3.ZERO, null);
+                    }
+                    return null;
+                } catch (RuntimeException e) {
+                    return e.toString();
+                }
+            });
+            if (render != null) fails.add("chest renderer: " + render);
             sp.getServer().runOnServer(server -> {
                 try {
                     run(server.getPlayerList().getPlayers().get(0), server);

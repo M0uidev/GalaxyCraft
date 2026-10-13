@@ -48,9 +48,26 @@ Cada módulo tiene nivel 1 a 3. Por ahora lo único visible es la nave; los mód
 - Mantén **Z** (bajar): la nave va sola hasta la elegida (primero encima, luego baja frenando) y se acopla.
   **Espacio** despega.
 
+## La bodega
+
+La nave lleva una **bodega** con 4 bahías en fila donde instalas cofres. El nivel de la **cabina** abre las bahías:
+nivel 1 una, nivel 2 dos, nivel 3 las cuatro (las cerradas se ven oscuras en la pantalla).
+
+- **Abrirla:** con **E** estando a bordo, o desde fuera **agachado (Shift) + clic derecho** sobre la nave. (Sin
+  Shift, el clic derecho sigue subiéndote a la nave.)
+- **Instalar un cofre:** arrastra un cofre de tu inventario a una bahía libre, o hazle Shift + clic: entra en la
+  primera bahía libre (uno por clic). Cada cofre guarda 27 espacios.
+- **Cofre grande:** con dos cofres en las bahías 1-2 o 3-4, el botón **+** entre ellos los une en un cofre doble
+  de 54 espacios (ocupa las dos bahías); **-** los vuelve a separar, pero solo si está vacío.
+- **Sacar un cofre:** arrástralo de vuelta; solo sale si está **vacío**, así no pierdes carga por accidente.
+- **Qué cofre ves:** el botón *View* bajo cada bahía elige cuál se muestra abajo.
+- Los cofres se dibujan dentro de la nave, detrás de los asientos, a media escala. La carga se guarda con la nave.
+
 ## Pendiente
 
 - La pose sentada (de momento mantienes la pose de vuelo) y los cojines de la cabina por ajustar.
 - Los módulos aún no cambian el aspecto de la nave.
+- La posición y el tamaño de los cofres dentro del casco se ajustan en `CargoLayout` (no se ha mirado en el juego todavía).
+- Una pantalla propia al pilotar con la velocidad y las estadísticas (en el roadmap).
 - Equilibrar los niveles y los logros (te toca a ti).
 - Habilidades: aterrizar, remolcar, saltos.
