@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-13 (inbox: ship and landing pad customization, ship inventory)
+Last updated: 2026-10-13 (inbox: ship and landing pad customization, ship inventory, flight UI)
 
 ---
 
@@ -171,6 +171,8 @@ New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it cam
   inside or crouch + right click from outside, drawn inside the ship; everything feeling interactive and well fitted to
   the 3D model. Split in three: the ship inventory is first (spec `docs/superpowers/specs/2026-10-13-galaxycraft-ship-cargo-design.md`,
   branch `feat/ship-cargo`); the customizer and the pad's screen come after.
+- 2026-10-13: **Flight UI for the Toad ship** (user): a custom UI while piloting that shows the ship's stats, speed and
+  similar, in a style that fits the game (not a plain Minecraft HUD). Comes after the ship cargo.
 
 - 2026-10-12: **Names for galaxies and planets, rename, and an empire** (user): galaxies and planets get random
   names from a list, in the style "Ares 48" (a name plus a number, maybe with a slash). You can rename the planet you

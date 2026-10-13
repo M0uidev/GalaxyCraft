@@ -5,6 +5,8 @@
   "item.galaxycraft.packed_station": "Packed Station",
   "item.galaxycraft.packed_station.size": "%s × %s × %s",
   "item.galaxycraft.packed_station.blocks": "%s blocks",
+  "screen.galaxycraft.ship_cargo.title": "Ship hold",
+  "screen.galaxycraft.ship_cargo.view": "View",
   "screen.galaxycraft.station.title": "Station",
   "screen.galaxycraft.station.name": "Name",
   "screen.galaxycraft.station.info": "%s × %s × %s, %s blocks",

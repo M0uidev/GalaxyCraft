@@ -1,0 +1,120 @@
+package dev.moui.galaxycraft.gametest;
+
+import com.google.gson.JsonElement;
+import com.mojang.serialization.JsonOps;
+import dev.moui.galaxycraft.ship.CargoCodec;
+import dev.moui.galaxycraft.ship.ShipCargo;
+import dev.moui.galaxycraft.ship.ShipCargoMenu;
+import java.util.ArrayList;
+import java.util.List;
+import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
+import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
+import net.minecraft.resources.RegistryOps;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
+
+/**
+ * The ship's hold through Minecraft's own menu (-PgalaxycraftShipCargo), no game: shift-click and drag install
+ * chests, Join makes a large one, items go in and out, a chest with items stays, Split and removal work once it
+ * is empty, and a hold with items survives its JSON. Prints "[GalaxyCraft cargo] PASS" or FAIL.
+ */
+public final class ShipCargoProbe implements FabricClientGameTest {
+    private final List<String> fails = new ArrayList<>();
+
+    @Override
+    public void runTest(ClientGameTestContext ctx) {
+        if (!Boolean.getBoolean("galaxycraft.shipcargo")) return;
+        try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
+            ctx.waitTicks(20);
+            sp.getServer().runOnServer(server -> {
+                try {
+                    run(server.getPlayerList().getPlayers().get(0), server);
+                } catch (RuntimeException e) {
+                    fails.add("threw " + e);
+                }
+            });
+        }
+        System.out.println("[GalaxyCraft cargo] " + (fails.isEmpty() ? "PASS" : "FAIL " + fails));
+    }
+
+    private void expect(boolean ok, String what) {
+        if (!ok) fails.add(what);
+    }
+
+    private void run(ServerPlayer p, net.minecraft.server.MinecraftServer server) {
+        p.setGameMode(GameType.SURVIVAL);
+        p.getInventory().clearContent();
+        p.getInventory().setItem(0, new ItemStack(Items.CHEST, 3));
+        p.getInventory().setItem(1, new ItemStack(Items.DIRT, 32));
+        int[] saved = {0};
+        ShipCargo cargo = new ShipCargo(4);
+        ShipCargoMenu m = new ShipCargoMenu(7, p.getInventory(), cargo, () -> saved[0]++);
+        int hotbar0 = ShipCargoMenu.PLAYER_START + 27, hotbar1 = hotbar0 + 1;
+
+        // Shift-click puts a chest in the first free bay; dragging it onto bay 1 installs another.
+        m.clicked(hotbar0, 0, ContainerInput.QUICK_MOVE, p);
+        expect(cargo.bay(0) == ShipCargo.Bay.SMALL, "shift-click did not install bay 0: " + cargo.bay(0));
+        m.clicked(hotbar0, 0, ContainerInput.PICKUP, p);
+        m.clicked(ShipCargoMenu.BAY_START + 1, 0, ContainerInput.PICKUP, p);
+        expect(cargo.bay(1) == ShipCargo.Bay.SMALL, "dragging did not install bay 1: " + cargo.bay(1));
+        expect(p.getInventory().countItem(Items.CHEST) == 0 && m.getCarried().getCount() == 1, "chests left: " + p.getInventory().countItem(Items.CHEST) + " carried " + m.getCarried());
+        m.clicked(hotbar0, 0, ContainerInput.PICKUP, p); // the one still on the cursor goes back
+        expect(saved[0] > 0, "installing did not ask for a save");
+
+        // Join: one large chest of 54 slots, shown.
+        expect(m.clickMenuButton(p, ShipCargoMenu.B_JOIN), "join refused");
+        m.broadcastChanges();
+        expect(m.shownSize() == 54, "shown size " + m.shownSize());
+        expect(cargo.bay(0) == ShipCargo.Bay.LARGE_HEAD && cargo.bay(1) == ShipCargo.Bay.LARGE_TAIL, "bays " + cargo.bay(0) + " " + cargo.bay(1));
+
+        // Items in by shift-click, into the shown chest; slot 53 (second row page) takes items too.
+        m.clicked(hotbar1, 0, ContainerInput.QUICK_MOVE, p);
+        expect(p.getInventory().countItem(Items.DIRT) == 0, "dirt stayed in the inventory");
+        int dirt = 0;
+        for (ItemStack s : cargo.chest(0).items()) if (s.is(Items.DIRT)) dirt += s.getCount();
+        expect(dirt == 32, "dirt in the chest " + dirt);
+
+        // A chest that holds something stays; split is refused.
+        m.clicked(ShipCargoMenu.BAY_START, 0, ContainerInput.PICKUP, p);
+        expect(m.getCarried().isEmpty() && cargo.bay(0) == ShipCargo.Bay.LARGE_HEAD, "a large chest was taken out");
+        expect(!m.clickMenuButton(p, ShipCargoMenu.B_SPLIT), "split with items");
+
+        // The hold survives its JSON, items included.
+        CargoCodec.setItemCodec(new CargoCodec.ItemCodec() {
+            @Override
+            public JsonElement encode(ItemStack s) {
+                return ItemStack.CODEC.encodeStart(RegistryOps.create(JsonOps.INSTANCE, server.registryAccess()), s).getOrThrow();
+            }
+
+            @Override
+            public ItemStack decode(JsonElement e) {
+                return ItemStack.CODEC.parse(RegistryOps.create(JsonOps.INSTANCE, server.registryAccess()), e).result().orElse(ItemStack.EMPTY);
+            }
+        });
+        ShipCargo back = CargoCodec.fromJson(CargoCodec.toJson(cargo), 4);
+        int again = 0;
+        for (ItemStack s : back.chest(0).items()) if (s.is(Items.DIRT)) again += s.getCount();
+        expect(back.bay(0) == ShipCargo.Bay.LARGE_HEAD && again == 32, "reloaded " + back.bay(0) + " dirt " + again);
+
+        // Out again: shift-click the content slots, then split, then take the chests out.
+        for (int i = 0; i < ShipCargo.LARGE; i++) m.clicked(ShipCargoMenu.CONTENT_START + i, 0, ContainerInput.QUICK_MOVE, p);
+        expect(p.getInventory().countItem(Items.DIRT) == 32, "dirt back " + p.getInventory().countItem(Items.DIRT));
+        expect(m.clickMenuButton(p, ShipCargoMenu.B_SPLIT), "split refused when empty");
+        m.clicked(ShipCargoMenu.BAY_START, 0, ContainerInput.QUICK_MOVE, p);
+        m.clicked(ShipCargoMenu.BAY_START + 1, 0, ContainerInput.QUICK_MOVE, p);
+        expect(cargo.bay(0) == ShipCargo.Bay.EMPTY && cargo.bay(1) == ShipCargo.Bay.EMPTY, "bays not emptied");
+        expect(p.getInventory().countItem(Items.CHEST) == 3, "chests back " + p.getInventory().countItem(Items.CHEST));
+
+        // A locked bay takes no chest.
+        ShipCargo one = new ShipCargo(1);
+        ShipCargoMenu m2 = new ShipCargoMenu(8, p.getInventory(), one, () -> {});
+        m2.setCarried(new ItemStack(Items.CHEST));
+        m2.clicked(ShipCargoMenu.BAY_START + 2, 0, ContainerInput.PICKUP, p);
+        expect(one.bay(2) == ShipCargo.Bay.EMPTY, "a locked bay took a chest");
+        m2.setCarried(ItemStack.EMPTY);
+    }
+}
