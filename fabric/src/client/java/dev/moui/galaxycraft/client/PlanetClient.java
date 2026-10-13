@@ -711,9 +711,10 @@ public final class PlanetClient {
                                 key(in, SC_SPACE) || Minecraft.getInstance().options.keyJump.isDown(), key(in, SC_C),
                                 key(in, SC_LCTRL) || Minecraft.getInstance().options.keySprint.isDown())))
             buttons &= ~MOUSE_RIGHT;
-        if (frame != null && player != null && !screen)
-            buttons &= ~LaunchStarClient.tick(player, frame, (buttons & MOUSE_RIGHT) != 0, pressed(buttons, MOUSE_LEFT),
-                    key(in, SC_LSHIFT) || key(in, SC_RSHIFT) || Minecraft.getInstance().options.keyShift.isDown(), MOUSE_RIGHT, MOUSE_LEFT);
+        // A flight goes on behind a screen (inventory, chat): only the clicks and Shift are the screen's.
+        if (frame != null && player != null && (!screen || LaunchStarClient.flying()))
+            buttons &= ~LaunchStarClient.tick(player, frame, !screen && (buttons & MOUSE_RIGHT) != 0, !screen && pressed(buttons, MOUSE_LEFT),
+                    !screen && (key(in, SC_LSHIFT) || key(in, SC_RSHIFT) || Minecraft.getInstance().options.keyShift.isDown()), MOUSE_RIGHT, MOUSE_LEFT);
         PlanetSession was = focus;
         focus = nearest(world.queryPos());
         if (focus != was) {
@@ -1018,7 +1019,7 @@ public final class PlanetClient {
         if (on || riding) {
             Vector3d at = GameOrigin.toGame(walker != null ? walker : onSeat ? f.galOf(s.pos()) : GameOrigin.offset());
             if (bridge.send(Layout.MSG_SEAT, java.nio.ByteBuffer.allocate(16).putFloat((float) at.x).putFloat((float) at.y)
-                    .putFloat((float) at.z).putInt(!on ? 0 : LaunchStarClient.flying() ? 4 : walker != null && marioFlies ? 2 : 1).array()))
+                    .putFloat((float) at.z).putInt(!on ? 0 : LaunchStarClient.flying() && !GalaxyCraftClient.walking() ? 4 : walker != null && marioFlies ? 2 : 1).array()))
                 riding = on;
         }
     }
