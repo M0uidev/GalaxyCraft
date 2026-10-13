@@ -400,8 +400,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     public static float thirdPersonDistance(float vanilla) {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null || frame == null) return vanilla;
-        int target = Flight.inVoid() ? GalaxyOptions.CAMERA_DISTANCE_SPACE.get()
+        double target = Flight.inVoid() ? GalaxyOptions.CAMERA_DISTANCE_SPACE.get()
                 : player.isFallFlying() ? GalaxyOptions.CAMERA_DISTANCE_GLIDING.get() : GalaxyOptions.CAMERA_DISTANCE.get();
+        Double starFlight = LaunchStarClient.cameraTarget(target);
+        if (starFlight != null) target = starFlight;
         long now = System.nanoTime();
         camDistance = Double.isNaN(camDistance) ? target
                 : CameraDistance.approach(camDistance, target, Math.min(1, (now - camDistanceNanos) / 1e9));

@@ -125,6 +125,23 @@ public final class LaunchStarClient {
         return GravityFrame.limitTurn(up, target, step);
     }
 
+    /** How far the third-person camera pulls back at full speed (blocks), over the usual distance. */
+    private static final double PULL_BACK = 9;
+    /** Ticks to reach (and leave) full speed for the camera's purposes. */
+    private static final double PULL_TICKS = 30;
+
+    /**
+     * The third-person camera's distance during a flight (blocks), or null when not flying: it pulls
+     * back as the star gains speed and closes in again before the landing, so the player is seen to travel.
+     */
+    static Double cameraTarget(double usual) {
+        Fling f = flight;
+        if (f == null) return null;
+        double share = Math.max(0, Math.min(1, Math.min(flown, f.profile().ticks() - flown) / PULL_TICKS));
+        share = share * share * (3 - 2 * share);
+        return usual + PULL_BACK * share;
+    }
+
     /** The player is being flung right now. */
     public static boolean flying() {
         return flight != null;
@@ -400,12 +417,29 @@ public final class LaunchStarClient {
         }
     }
 
+    /** The trail of small stars the flight leaves behind the player. */
+    private static final int TRAIL = 18;
+    private static final double TRAIL_GAP_TICKS = 1.6;
+
+    private static void trail(EntityClient ec, float pt, List<EntityWire.Piece> out) {
+        Fling f = flight;
+        double now = flown + pt;
+        for (int i = 2; i < TRAIL; i++) {
+            double t = now - i * TRAIL_GAP_TICKS;
+            if (t < 0) break;
+            Vector3d p = f.route().at(f.profile().arcAt(t) / GravityFrame.SCALE);
+            double fade = 1 - i / (double) TRAIL;
+            drawStar(ec, p, f.upStart(), t * 0.4 + i, 0.05 + 0.2 * fade, 0, 0xFFD060FF, true, out);
+        }
+    }
+
     /** The pieces of this stage's stars (and the course near one, and the ghost of the item in hand), universe units. */
     static void pieces(EntityClient ec, float pt, List<EntityWire.Piece> out) {
         if (store == null) return;
         LocalPlayer me = Minecraft.getInstance().player;
         GravityFrame fr = GalaxyCraftClient.frame();
         Vector3d eye = me != null && fr != null ? fr.toGal(vec(me.getEyePosition())) : null;
+        if (flight != null) trail(ec, pt, out);
         for (StarRecord r : store.all()) {
             if (!r.stage().equals(stage())) continue;
             StarRecord to = store.partnerOf(r.id()).orElse(null);
