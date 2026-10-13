@@ -174,7 +174,7 @@ public final class ToadClient {
         Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot())).normalize();
         Entity e = PlanetClient.aimedEntity(eye, look, REACH);
         if (e != null && ShadowToads.isToad(e)) return recordOf(ShadowToads.idOf(e));
-        java.util.Set<String> running = ShadowToads.positions().keySet();
+        java.util.Set<String> running = ShadowToads.running();
         List<ToadRecord> here = new ArrayList<>();
         List<double[]> centers = new ArrayList<>();
         for (ToadRecord t : store.all())
@@ -592,7 +592,7 @@ public final class ToadClient {
         homeGuide(me, fr);
         Vector3d eye = me != null && fr != null ? fr.toGal(vec(me.getEyePosition())) : null;
         double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);
-        java.util.Set<String> running = ShadowToads.positions().keySet();
+        java.util.Set<String> running = ShadowToads.running();
         for (ToadRecord r : store.all()) {
             if (!r.stage().equals(stageName()) || running.contains(r.id())) continue;
             State st = STATES.computeIfAbsent(r.id(), k -> new State());

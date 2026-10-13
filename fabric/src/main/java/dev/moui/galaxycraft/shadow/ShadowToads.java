@@ -30,6 +30,7 @@ public final class ShadowToads {
 
     private static volatile List<Wanted> wanted = List.of();
     private static volatile Map<String, double[]> positions = Map.of();
+    private static volatile Set<String> running = Set.of();
     private static final ConcurrentLinkedQueue<String> deaths = new ConcurrentLinkedQueue<>();
     /** Server thread: id -> entity id of the villager that is this Toad. */
     private static final Map<String, Integer> alive = new HashMap<>();
@@ -60,6 +61,11 @@ public final class ShadowToads {
         return positions;
     }
 
+    /** The Toads that have an entity right now (their record is not drawn). */
+    public static Set<String> running() {
+        return running;
+    }
+
     /** The id of a Toad that died since the last call, or null. */
     public static String pollDeath() {
         return deaths.poll();
@@ -77,6 +83,7 @@ public final class ShadowToads {
         died.clear();
         standing.clear();
         positions = Map.of();
+        running = Set.of();
         wanted = List.of();
     }
 
@@ -108,6 +115,7 @@ public final class ShadowToads {
             if (e != null) e.discard();
             it.remove();
         }
+        running = Set.copyOf(alive.keySet());
         for (String id : standing) {
             Integer eid = alive.get(id);
             Entity e = eid == null ? null : level.getEntity(eid);
