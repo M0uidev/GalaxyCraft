@@ -417,20 +417,14 @@ public final class LaunchStarClient {
         }
     }
 
-    /** The trail of small stars the flight leaves behind the player. */
-    private static final int TRAIL = 18;
-    private static final double TRAIL_GAP_TICKS = 1.6;
-
-    private static void trail(EntityClient ec, float pt, List<EntityWire.Piece> out) {
+    /**
+     * The direction the player is flying in the galaxy (unit), between ticks, or null when not flying:
+     * the drawn player lies along it, in the elytra's flying pose.
+     */
+    static Vector3d heading(float pt) {
         Fling f = flight;
-        double now = flown + pt;
-        for (int i = 2; i < TRAIL; i++) {
-            double t = now - i * TRAIL_GAP_TICKS;
-            if (t < 0) break;
-            Vector3d p = f.route().at(f.profile().arcAt(t) / GravityFrame.SCALE);
-            double fade = 1 - i / (double) TRAIL;
-            drawStar(ec, p, f.upStart(), t * 0.4 + i, 0.05 + 0.2 * fade, 0, 0xFFD060FF, true, out);
-        }
+        if (f == null) return null;
+        return f.route().tangent(f.profile().arcAt(flown + pt) / GravityFrame.SCALE);
     }
 
     /** The pieces of this stage's stars (and the course near one, and the ghost of the item in hand), universe units. */
@@ -439,7 +433,6 @@ public final class LaunchStarClient {
         LocalPlayer me = Minecraft.getInstance().player;
         GravityFrame fr = GalaxyCraftClient.frame();
         Vector3d eye = me != null && fr != null ? fr.toGal(vec(me.getEyePosition())) : null;
-        if (flight != null) trail(ec, pt, out);
         for (StarRecord r : store.all()) {
             if (!r.stage().equals(stage())) continue;
             StarRecord to = store.partnerOf(r.id()).orElse(null);

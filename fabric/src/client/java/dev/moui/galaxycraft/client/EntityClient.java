@@ -696,6 +696,17 @@ final class EntityClient {
                 h.isFallFlying = false;
                 h.walkAnimationSpeed = 0;
             }
+            Vector3d heading = LaunchStarClient.heading(pt);
+            if (heading != null && st instanceof net.minecraft.client.renderer.entity.state.AvatarRenderState av) {
+                // Flung by a Launch Star: lying along the way it goes, in the gliding pose.
+                Vector3d d = frame.dirToMc(heading).normalize();
+                float yaw = (float) Math.toDegrees(Math.atan2(-d.x, d.z)), pitch = (float) Math.toDegrees(-Math.asin(Math.max(-1, Math.min(1, d.y))));
+                av.isFallFlying = true;
+                av.fallFlyingTimeInTicks = 20;
+                av.yRot = yaw;
+                av.bodyRot = yaw;
+                av.xRot = pitch;
+            }
             Vector3d o0 = frame.toGal(new Vector3d(st.x, st.y, st.z));
             Vector3d x = frame.toGal(new Vector3d(st.x + 1, st.y, st.z)).sub(o0);
             Vector3d y = frame.toGal(new Vector3d(st.x, st.y + 1, st.z)).sub(o0);

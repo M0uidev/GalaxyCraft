@@ -46,6 +46,12 @@ u32 gSeats = 0;  // seat records received, for the dev harness
 // Riding 2: the player glides on elytra and Mario goes with it, shown in the Launch Star's flight
 // pose (SpaceFlyLoop in MarioAnime.arc), facing where he goes.
 bool gSeatFlying = false;
+// Riding 4: a Launch Star's flight (the mod flies the player along its course): the same pose, and the
+// game's own effects of Mario flung by a Launch Star (the streaks, the glow) while it lasts.
+bool gSeatStar = false;
+bool gStarFx = false;
+const char* const STAR_FX[] = {"MarioSuperSpinDriver", "MarioSpinDriverBodyLine", "MarioSpinDriverHandLineL",
+                               "MarioSpinDriverHandLineR", "SuperSpinDriverFlyGlow"};
 f32 gSeatLast[3];
 const f32 FLY_TURN_MIN = 2.f;  // units a frame: slower than this, he keeps facing as he was
 const char* const FLY_ANIM = "SpaceFlyLoop";
@@ -377,9 +383,25 @@ void EntityDrawSeat(const gxc::InboxSeat& seat)
     gSeat[k] = seat.pos[k];
   }
   gSeatFrames = seat.riding ? SEAT_FRAMES : 0;
-  gSeatFlying = seat.riding == 2;
+  gSeatFlying = seat.riding == 2 || seat.riding == 4;
+  gSeatStar = seat.riding == 4;
   gSeatWalking = seat.riding == 3;
   gSeats++;
+}
+
+// Mario's Launch Star flight effects on or off (once, on the change).
+static void StarFx(bool on)
+{
+  if (on == gStarFx)
+    return;
+  gStarFx = on;
+  for (u32 i = 0; i < sizeof(STAR_FX) / sizeof(STAR_FX[0]); i++)
+  {
+    if (on)
+      MR::emitEffectPlayer(STAR_FX[i]);
+    else
+      MR::deleteEffectPlayer(STAR_FX[i]);
+  }
 }
 
 // Mario at the player's feet, turned where it goes, in the animation of how it goes.
@@ -419,12 +441,14 @@ void EntityDrawAfterMario()
 {
   if (!gSeatFrames)
   {
+    StarFx(false);
     if (gSafeFrames)
       gSafeFrames--;
     return;
   }
   gSeatFrames--;
   gSafeFrames = SAFE_FRAMES;
+  StarFx(gSeatStar && gMario);
   for (u32 i = 0; i < sizeof(CARRIED_SILENT) / sizeof(CARRIED_SILENT[0]); i++)
     MR::stopSoundPlayer(CARRIED_SILENT[i], 0);
   // Standing still in Minecraft's movement must not put him to sleep: no snoring, no nodding off.
