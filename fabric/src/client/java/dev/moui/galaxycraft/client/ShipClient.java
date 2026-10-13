@@ -110,7 +110,7 @@ public final class ShipClient {
     // ---- placing ----
 
     /** Where a ship or pad would go down, how it is turned, and whether it may (problem: a translation key). */
-    private record Plan(Vector3d center, Quaterniond rot, String problem) {
+    record Plan(Vector3d center, Quaterniond rot, String problem) {
         boolean ok() {
             return problem == null;
         }
@@ -124,7 +124,7 @@ public final class ShipClient {
      * station's), else on the ground below a point ahead; a ship in open space floats ahead. A ship
      * rests on its keel, a pad lies flat; turned to the planet's up there and the way the player looks.
      */
-    private static Plan plan(Player player, boolean pad) {
+    static Plan plan(Player player, boolean pad) {
         GravityFrame frame = GalaxyCraftClient.frame();
         if (frame == null || store == null) return null;
         Vector3d eye = frame.toGal(vec(player.getEyePosition()));
@@ -321,6 +321,7 @@ public final class ShipClient {
      * a ship, a pad or a block in hand must not be put down by the click that boards.
      */
     public static boolean swallowsUse() {
+        if (LaunchStarClient.swallowsUse()) return true;
         if (store == null) return false;
         if (boarded != null) return true;
         LocalPlayer me = Minecraft.getInstance().player;
@@ -680,7 +681,7 @@ public final class ShipClient {
     // ---- drawing ----
 
     /** The ghost's colours (RGBA, the alpha how much is mixed over the piece): where the item goes, or why it cannot. */
-    private static final int GHOST_OK = 0x40D0FF99, GHOST_NO = 0xFF4040AA;
+    static final int GHOST_OK = 0x40D0FF99, GHOST_NO = 0xFF4040AA;
 
     /** The pieces of this stage's ships (and their cushions), universe units, for EntityClient's frame. */
     static void pieces(EntityClient ec, float pt, List<EntityWire.Piece> out) {

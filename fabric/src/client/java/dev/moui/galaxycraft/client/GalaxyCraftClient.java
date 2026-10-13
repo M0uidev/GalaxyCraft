@@ -103,6 +103,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         ShadowWorld.signEditor = GalaxyCraftClient::editSign;
         dev.moui.galaxycraft.station.StationHooks.set(StationClient.HOOKS);
         dev.moui.galaxycraft.ship.ShipHooks.set(ShipClient.HOOKS);
+        dev.moui.galaxycraft.launchstar.LaunchStarHooks.set(LaunchStarClient.HOOKS);
         bridge = new BridgeClient(Path.of(Layout.SHM_PATH), () -> System.nanoTime() / 1_000_000L,
                 new BridgeClient.PartListener() {
                     @Override public void onUpsert(int partId, double[] gameMtx, byte[] kcl) {
@@ -298,7 +299,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         // Minecraft movement: Mario goes where the player is, and Steve is drawn there outside first person.
         boolean walker = ownPhysics() && frame != null && mc.player != null && bridge.gameLinked();
         // The elytra in Mario's modes: Mario himself flies there (in his Launch Star pose), not Steve.
-        boolean marioFlies = walker && !walking() && mc.player.isFallFlying() && view() != View.FIRST;
+        boolean marioFlies = walker && !walking() && (mc.player.isFallFlying() || LaunchStarClient.flying()) && view() != View.FIRST;
         PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt)), pt) : null,
                 walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
         SkinClient.frame(bridge);
@@ -406,7 +407,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
      * a flight (the elytra, from take-off until landed) in any movement mode.
      */
     public static boolean ownPhysics() {
-        return walking() || Flight.active();
+        return walking() || Flight.active() || LaunchStarClient.busy();
     }
 
     /** Third person's eased distance (blocks, before the player's scale) and when it was last eased. */
@@ -420,8 +421,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
     public static float thirdPersonDistance(float vanilla) {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null || frame == null) return vanilla;
-        int target = Flight.inVoid() ? GalaxyOptions.CAMERA_DISTANCE_SPACE.get()
+        double target = Flight.inVoid() ? GalaxyOptions.CAMERA_DISTANCE_SPACE.get()
                 : player.isFallFlying() ? GalaxyOptions.CAMERA_DISTANCE_GLIDING.get() : GalaxyOptions.CAMERA_DISTANCE.get();
+        Double starFlight = LaunchStarClient.cameraTarget(target);
+        if (starFlight != null) target = starFlight;
         long now = System.nanoTime();
         camDistance = Double.isNaN(camDistance) ? target
                 : CameraDistance.approach(camDistance, target, Math.min(1, (now - camDistanceNanos) / 1e9));
@@ -547,6 +550,9 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 // Flying: up turns (smoothly) to the galaxy's +Y and stays there, whatever pulls.
                 Vector3d up = GravityFrame.limitTurn(frame.upGal(), GALAXY_UP, MAX_TURN_PER_TICK);
                 frame.update(up.negate(), pos);
+            } else if (LaunchStarClient.flying()) {
+                // A Launch Star's flight: up turns slowly to the arrival star's, so the camera rolls into the new planet.
+                frame.update(LaunchStarClient.upToward(frame).negate(), pos);
             } else if (Flight.active() && !player.onGround()) {
                 // Elytra: up turns to the gravity that pulls, at a flight's pace; in the void
                 // (no gravity) it stays as it was.

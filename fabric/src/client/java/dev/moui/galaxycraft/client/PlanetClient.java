@@ -665,6 +665,7 @@ public final class PlanetClient {
                 ShipClient.enterWorld(planetDir());
                 MapClient.enterWorld(planetDir());
                 ToadClient.enterWorld(planetDir());
+                LaunchStarClient.enterWorld(planetDir());
             }
             blocks = McBlocks.create(Minecraft.getInstance());
             atlasLink = new AtlasLink(blocks.atlas, 1);
@@ -748,6 +749,10 @@ public final class PlanetClient {
             buttons &= ~MOUSE_RIGHT;
             toadClick = true; // still held next tick: not a new press (the box's "go on" is one per click)
         }
+        // A flight goes on behind a screen (inventory, chat): only the clicks and Shift are the screen's.
+        if (frame != null && player != null && (!screen || LaunchStarClient.flying()))
+            buttons &= ~LaunchStarClient.tick(player, frame, !screen && (buttons & MOUSE_RIGHT) != 0, !screen && pressed(buttons, MOUSE_LEFT),
+                    !screen && (key(in, SC_LSHIFT) || key(in, SC_RSHIFT) || Minecraft.getInstance().options.keyShift.isDown()), MOUSE_RIGHT, MOUSE_LEFT);
         PlanetSession was = focus;
         focus = nearest(world.queryPos());
         if (focus != was) {
@@ -1075,7 +1080,7 @@ public final class PlanetClient {
         if (on || riding) {
             Vector3d at = GameOrigin.toGame(walker != null ? walker : onSeat ? f.galOf(s.pos()) : GameOrigin.offset());
             if (bridge.send(Layout.MSG_SEAT, java.nio.ByteBuffer.allocate(16).putFloat((float) at.x).putFloat((float) at.y)
-                    .putFloat((float) at.z).putInt(!on ? 0 : walker != null && marioFlies ? 2 : 1).array()))
+                    .putFloat((float) at.z).putInt(!on ? 0 : LaunchStarClient.flying() && !GalaxyCraftClient.walking() ? 4 : walker != null && marioFlies ? 2 : 1).array()))
                 riding = on;
         }
     }
@@ -1158,6 +1163,7 @@ public final class PlanetClient {
         ShipClient.enterWorld(g.planets());
         MapClient.enterWorld(g.planets());
         ToadClient.enterWorld(g.planets());
+        LaunchStarClient.enterWorld(g.planets());
         landOn = resolved(g.spot().orElse(null));
         landPending = true;
         homeAsked = false;
@@ -1179,6 +1185,7 @@ public final class PlanetClient {
         ShipClient.enterWorld(null);
         MapClient.enterWorld(null);
         ToadClient.enterWorld(null);
+        LaunchStarClient.enterWorld(null);
         if (stream != null) stream.clear();
         stream = null;
         session.unload();

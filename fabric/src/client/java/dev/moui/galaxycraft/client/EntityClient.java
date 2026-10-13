@@ -270,6 +270,7 @@ final class EntityClient {
         }
         ShipClient.pieces(this, pt, pieces);
         ToadClient.pieces(this, pieces);
+        LaunchStarClient.pieces(this, pt, pieces);
         if (self != null) self(self, pt, pieces);
         else if (session().active() && marioFeetGal != null) heldPieces(session().cellAt(marioFeetGal), pieces);
         if (pieces.isEmpty() && wasEmpty) return;
@@ -696,10 +697,24 @@ final class EntityClient {
                 h.isFallFlying = false;
                 h.walkAnimationSpeed = 0;
             }
-            Vector3d o = frame.toGal(new Vector3d(st.x, st.y, st.z));
-            Vector3d x = frame.toGal(new Vector3d(st.x + 1, st.y, st.z)).sub(o);
-            Vector3d y = frame.toGal(new Vector3d(st.x, st.y + 1, st.z)).sub(o);
-            Vector3d z = frame.toGal(new Vector3d(st.x, st.y, st.z + 1)).sub(o);
+            Vector3d heading = LaunchStarClient.heading(pt);
+            if (heading != null && st instanceof net.minecraft.client.renderer.entity.state.AvatarRenderState av) {
+                // Flung by a Launch Star: lying along the way it goes, in the gliding pose.
+                Vector3d d = frame.dirToMc(heading).normalize();
+                float yaw = (float) Math.toDegrees(Math.atan2(-d.x, d.z)), pitch = (float) Math.toDegrees(-Math.asin(Math.max(-1, Math.min(1, d.y))));
+                av.isFallFlying = true;
+                av.fallFlyingTimeInTicks = 20;
+                av.yRot = yaw;
+                av.bodyRot = yaw;
+                av.xRot = pitch;
+            }
+            Vector3d o0 = frame.toGal(new Vector3d(st.x, st.y, st.z));
+            Vector3d x = frame.toGal(new Vector3d(st.x + 1, st.y, st.z)).sub(o0);
+            Vector3d y = frame.toGal(new Vector3d(st.x, st.y + 1, st.z)).sub(o0);
+            Vector3d z = frame.toGal(new Vector3d(st.x, st.y, st.z + 1)).sub(o0);
+            // Where the player is between ticks: a slide of the frame (the pulse, a Launch Star, the
+            // map's autopilot) comes in gradually, as the camera has it, not in one step per tick.
+            Vector3d o = frame.toGal(new Vector3d(st.x, st.y, st.z), pt);
             galaxy = new Matrix4d(x.x, x.y, x.z, 0, y.x, y.y, y.z, 0, z.x, z.y, z.z, 0, o.x, o.y, o.z, 1);
             playerSkin = customSkin();
             PoseStack ps = new PoseStack();
