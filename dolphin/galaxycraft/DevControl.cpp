@@ -212,7 +212,10 @@ bool DevKeysToInput(std::string_view names, u8 keys[64], u32& buttons)
   const std::pair<std::string_view, int> scancodes[] = {
       {"w", SC_W},         {"a", SC_A},         {"s", SC_S},           {"d", SC_D},
       {"space", SC_SPACE}, {"shift", SC_LSHIFT}, {"ctrl", SC_LCTRL}, {"esc", SC_ESCAPE},
-      {"tab", SC_TAB}};
+      {"tab", SC_TAB},
+      // The dialogue box's keys (ToadClient): Enter, Up, Down and 1-4 (SDL scancodes).
+      {"enter", 40},       {"up", 82},          {"down", 81},          {"1", 30},
+      {"2", 31},           {"3", 32},           {"4", 33}};
   std::fill(keys, keys + 64, u8{0});
   buttons = 0;
   for (const std::string_view name : Words(names))

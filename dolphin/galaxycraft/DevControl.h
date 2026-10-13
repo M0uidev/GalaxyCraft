@@ -28,7 +28,7 @@ namespace gxc
 //                                mario_skin_writes (copies of Mario's skin the last /skin wrote),
 //                                plus_held (the mod holds SMG2's + button: the pause menu's SMG2 Menu)
 //   link on|off                  same as the Ctrl+G hotkey: Minecraft mode or Wiimote mode
-//   keys [w a s d space shift ctrl esc tab lmb rmb]...   hold these until the next keys, as if
+//   keys [w a s d space shift ctrl esc tab enter up down 1 2 3 4 lmb rmb]...   hold these until the next keys, as if
 //                                typed in Minecraft mode (no list: release all)
 struct DevCommand
 {

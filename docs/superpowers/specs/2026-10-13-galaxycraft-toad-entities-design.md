@@ -55,8 +55,13 @@ the offers by type and tier (`ToadMerchant`), and the permanent record.
   its state: Sleep (`isSleeping`), Walk (horizontal speed > 0.05), Talk (in conversation), Wait.
   The hurt flash, death fall and knockback tilt are the entity's own. The Technician on a station and the
   Guide use the same path (stations mirror their own planet space).
-- **Hut and bed.** Generated huts get **no bed or door for now** (their orientation on the cube sphere is
-  a separate job). Their Toads wander by day and have nowhere to sleep; the player's own houses work.
+- **Hut (what a villager needs).** Generated huts are rebuilt for the villager AI: the room is **3 blocks
+  high** (walls three high, windows on the middle one) with the **roof block on top, 4 in all** (today the
+  walls are two high, too low for a 2-high Toad with a door); a real **oak door** (both halves, closed by
+  default, villagers open it) in the doorway; a **red bed** (foot and head) along the back wall of the
+  3x3 room; the torch stays. Facing comes from the hut's own facing vector through the planet's cell
+  orientation (`CellSpace.direction`), not from a compass guess. The door gap and the level way out stay.
+  The room is cleared 4 high so a leveled hut never has terrain inside it.
 - **Removed.** `ToadWander`, `ToadWalker`, `ToadWanderTest` and the walk code in `ToadClient.pieces`;
   `ToadClient.occupies` (the entity has a real box, `ShadowWorld.occupied` already covers it).
 
@@ -74,8 +79,7 @@ the offers by type and tier (`ToadMerchant`), and the permanent record.
 
 ## Not in scope
 
-Breeding, gossip, villager professions, iron golems, raids, Toads carrying out trade with each other, beds
-and doors generated in huts, health saved across unloads (a Toad comes back at full health).
+Breeding, gossip, villager professions, iron golems, raids, Toads carrying out trade with each other, health saved across unloads (a Toad comes back at full health).
 
 ## Testing
 
@@ -83,7 +87,7 @@ and doors generated in huts, health saved across unloads (a Toad comes back at f
   solid, in a one-block cave, on a slab); the record <-> entity position mapping round trip; the dead
   Toad's record removal; the tag parse.
 - Probe (`tools/gxvoxel.sh`): spawn a Toad on a mirrored planet; it has a box and is hit with knockback
-  and damage; placed blocks inside it are refused; a house with a bed, a door and a light is built, the
+  and damage; placed blocks inside it are refused; a generated hut has its door, bed and 3-high room (and a Toad inside is asleep at night), a house with a bed, a door and a light is built, the
   clock set to night, and the Toad is asleep in the bed (`isSleeping`) with its Sleep animation; a Toad put
   inside a block is moved out within a second; killed, its record is gone after a save and load; the
   dialogue box still opens and trade still works on the entity.
