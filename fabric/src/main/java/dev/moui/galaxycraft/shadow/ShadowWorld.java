@@ -123,6 +123,18 @@ public final class ShadowWorld {
         return entities;
     }
 
+    /** Whether a mob (or any creature of the shadow) stands in this cell of p: no block goes there. */
+    public static boolean occupied(VoxelPlanet p, int cell) {
+        Entities es = entities;
+        if (es == null || es.planet() != p) return false;
+        ShadowMap m = es.map();
+        net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(m.x(cell), m.y(cell), m.z(cell), m.x(cell) + 1, m.y(cell) + 1, m.z(cell) + 1)
+                .deflate(0.02);
+        for (Entity e : es.list())
+            if (!e.isRemoved() && e.getBoundingBox().intersects(box)) return true;
+        return false;
+    }
+
     private static volatile LiveBlocks.Snapshot live;
     /** Server thread: the cells live last tick (they leave a little farther than they come). */
     private static final Set<Integer> liveCells = new HashSet<>();

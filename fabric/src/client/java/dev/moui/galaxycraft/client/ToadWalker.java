@@ -83,7 +83,7 @@ final class ToadWalker {
             w.x = off.dot(w.right) / upb;
             w.z = off.dot(w.fwd) / upb;
             w.h = off.dot(w.up) / upb;
-            w.wander = new ToadWander(0, 0, LEASH, r.id().hashCode());
+            w.wander = new ToadWander(0, 0, LEASH, r.id().hashCode(), dwellsInHut(r));
             w.wander.face(Math.PI / 2 - faceYaw);
             WALKS.put(r.id(), w);
         }
@@ -139,6 +139,11 @@ final class ToadWalker {
         Vector3d[] hit = s.surfaceAlong(point(w, x, z, from, upb), new Vector3d(w.up).negate(), REACH);
         if (hit == null) return -1e3;
         return new Vector3d(hit[0]).sub(w.home).dot(w.up) / upb;
+    }
+
+    /** An outpost's Toad (ToadPlan's ids): home is just inside its hut's door. */
+    static boolean dwellsInHut(ToadRecord r) {
+        return r.id().startsWith("toad-") && !r.id().startsWith("toad-station-");
     }
 
     /** Whether the player stands near enough to wake a sleeping Toad (blocks). */

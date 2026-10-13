@@ -126,4 +126,42 @@ class ToadWanderTest {
         r.run(120, shut, true, false, false, null);
         assertEquals("Sleep", r.anim);
     }
+
+    /** A hut round home (0, 0), the door at z 1 and x 0: walls 1 thick, a 3 x 3 room whose front row is z 0. */
+    private static final ToadWander.Terrain HUT = new ToadWander.Terrain() {
+        public double groundAt(double x, double z) { return 0; }
+        public boolean blocked(double x, double z, double y) {
+            boolean box = Math.abs(x) < 2.5 && z > -3.5 && z < 1.5;
+            boolean room = Math.abs(x) < 1.5 && z > -2.5 && z < 0.5;
+            boolean doorway = Math.abs(x) < 0.5 && z >= 0.5 && z <= 1.5;
+            return box && !room && !doorway;
+        }
+    };
+
+    @Test void aHutDwellerSleepsInsideEvenFromBehindItsWalls() {
+        for (long seed = 1; seed <= 6; seed++) {
+            Rig r = new Rig(0, 0, 10, seed);
+            r.w = new ToadWander(0, 0, 10, seed, true);
+            r.x = seed % 2 == 0 ? 4 : -4;
+            r.z = -6;
+            r.run(240, HUT, true, false, false, null);
+            assertTrue(r.w.sleeping(), "seed " + seed + " is not asleep at " + r.x + ", " + r.z);
+            assertTrue(Math.abs(r.x) < 1.5 && r.z > -2.5 && r.z < 0.5, "seed " + seed + " sleeps outside: " + r.x + ", " + r.z);
+        }
+    }
+
+    @Test void aHutDwellerWalksOutByTheDoorAtDawnAndStaysInFront() {
+        Rig r = new Rig(0, 0, 10, 3);
+        r.w = new ToadWander(0, 0, 10, 3, true);
+        r.run(60, HUT, true, false, false, null);
+        assertTrue(r.w.sleeping());
+        double[] minZ = {99};
+        r.run(600, HUT, false, false, false, () -> {
+            assertFalse(HUT.blocked(r.x, r.z, 0), "inside a wall at " + r.x + ", " + r.z);
+            if (Math.abs(r.x) > 2.5) minZ[0] = Math.min(minZ[0], r.z);
+        });
+        assertFalse(r.w.sleeping());
+        assertTrue(Math.hypot(r.x, r.z) > 0.5 || minZ[0] < 99);
+        assertTrue(minZ[0] > 0 || minZ[0] == 99, "walked beside the hut at z " + minZ[0]);
+    }
 }

@@ -27,7 +27,15 @@ public final class ToadWander {
 
     private enum State { IDLE, TURN, WALK, SLEEP }
 
+    /**
+     * A hut's door: the way out of it is a gate this far in front of home (+z), and the hut itself
+     * (a box around home) is walked out of and into through it, not through its walls.
+     */
+    public static final double GATE_Z = 3, HUT_HALF_X = 2.7, HUT_BACK_Z = -3.7, HUT_FRONT_Z = 1.7;
+
     private final double homeX, homeZ, leash;
+    private final boolean gated;
+    private final java.util.ArrayDeque<double[]> route = new java.util.ArrayDeque<>();
     private final Random rng;
     private State state = State.IDLE;
     private double heading, wantHeading, targetX, targetZ, timer, walked;
@@ -35,6 +43,12 @@ public final class ToadWander {
     private boolean homing;
 
     public ToadWander(double homeX, double homeZ, double leash, long seed) {
+        this(homeX, homeZ, leash, seed, false);
+    }
+
+    /** gated: home is just inside a hut's door (z toward the door), so it goes in and out by the door. */
+    public ToadWander(double homeX, double homeZ, double leash, long seed, boolean gated) {
+        this.gated = gated;
         this.homeX = homeX;
         this.homeZ = homeZ;
         this.leash = leash;
@@ -96,10 +110,18 @@ public final class ToadWander {
         }
     }
 
+    private double lastX, lastZ, detour;
+    private static final double DETOUR = 1.2;
+
     private Step walk(double dt, double x, double z, double y, Terrain t) {
         walked += dt;
+        lastX = x;
+        lastZ = z;
+        // Heads for the target, except while going round something (a detour keeps its heading a while).
+        if (detour > 0) detour -= dt;
+        else heading = Math.atan2(targetZ - z, targetX - x);
         double dist = Math.hypot(targetX - x, targetZ - z);
-        double goal = homing ? HOME_ARRIVED : ARRIVED;
+        double goal = homing && route.isEmpty() ? HOME_ARRIVED : ARRIVED;
         if (dist <= goal) return arrived();
         if (walked > 8 + dist / SPEED * 2) return blockedStep(x, z); // took far too long: another way
         double len = Math.min(SPEED * dt, dist);
@@ -113,6 +135,14 @@ public final class ToadWander {
 
     private Step arrived() {
         stuck = 0;
+        if (!route.isEmpty()) { // the next point of the way round (a hut's door)
+            double[] next = route.poll();
+            targetX = next[0];
+            targetZ = next[1];
+            wantHeading = Math.atan2(targetZ - lastZ, targetX - lastX);
+            state = State.TURN;
+            return new Step(0, 0, heading, "Turn");
+        }
         if (homing) return fallAsleep();
         state = State.IDLE;
         timer = idleTime();
@@ -127,6 +157,7 @@ public final class ToadWander {
     /** The way ahead is shut: another heading (+60, then -60 degrees), then a new target. */
     private Step blockedStep(double x, double z) {
         stuck++;
+        detour = DETOUR;
         if (homing && stuck >= GIVE_UP_HOMING) return fallAsleep();
         if (stuck == 1) turnTo(heading + Math.PI / 3);
         else if (stuck == 2) turnTo(heading - 2 * Math.PI / 3);
@@ -140,6 +171,19 @@ public final class ToadWander {
     }
 
     private void pickTarget(double x, double z) {
+        if (gated) {
+            // In front of the hut only, the day's walks: never behind or beside its walls.
+            for (int i = 0; i < 6; i++) {
+                double r = 3 + (leash - 3) * Math.sqrt(rng.nextDouble()), a = (rng.nextDouble() - 0.5) * 2.4;
+                double tx = homeX + Math.sin(a) * r, tz = homeZ + Math.cos(a) * r;
+                if (tz >= GATE_Z - 0.5 && Math.hypot(tx - x, tz - z) >= 1.0) {
+                    goTo(tx, tz, x, z);
+                    return;
+                }
+            }
+            goTo(homeX, homeZ + GATE_Z, x, z);
+            return;
+        }
         double r = leash * Math.sqrt(rng.nextDouble()), a = rng.nextDouble() * Math.PI * 2;
         double tx = homeX + Math.cos(a) * r, tz = homeZ + Math.sin(a) * r;
         if (Math.hypot(tx - x, tz - z) < 1.0) { // too close to be worth a walk: go the other side of home
@@ -150,10 +194,40 @@ public final class ToadWander {
     }
 
     private void goTo(double tx, double tz, double x, double z) {
-        targetX = tx;
-        targetZ = tz;
+        route.clear();
+        double fx = tx, fz = tz;
+        if (gated) {
+            boolean here = inHut(x, z), there = inHut(tx, tz);
+            double gx = homeX, gz = homeZ + GATE_Z;
+            if (here && !there) { // out by the door
+                route.add(new double[] {homeX, homeZ});
+                route.add(new double[] {gx, gz});
+                route.add(new double[] {tx, tz});
+            } else if (!here && there) { // in by the door, from the front or round the side
+                if (z < HUT_FRONT_Z + homeZ) {
+                    double side = (x >= homeX ? 1 : -1) * (HUT_HALF_X + 1.3);
+                    route.add(new double[] {homeX + side, z});
+                    route.add(new double[] {homeX + side, gz});
+                }
+                route.add(new double[] {gx, gz});
+                route.add(new double[] {homeX, homeZ + 0.8});
+                route.add(new double[] {tx, tz});
+            }
+            if (!route.isEmpty()) {
+                double[] first = route.poll();
+                fx = first[0];
+                fz = first[1];
+            }
+        }
+        targetX = fx;
+        targetZ = fz;
         stuck = homing ? stuck : 0;
-        turnTo(Math.atan2(tz - z, tx - x));
+        turnTo(Math.atan2(fz - z, fx - x));
+    }
+
+    /** Whether a point is in the hut's box (planar blocks, home at the door's inside). */
+    private boolean inHut(double x, double z) {
+        return Math.abs(x - homeX) < HUT_HALF_X && z - homeZ > HUT_BACK_Z && z - homeZ < HUT_FRONT_Z;
     }
 
     private void turnTo(double h) {

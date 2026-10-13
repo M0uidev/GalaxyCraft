@@ -1514,7 +1514,7 @@ public final class PlanetClient {
         } else {
             ItemStack held = stack.copy();
             Runnable place = () -> {
-                if (!focus.placeBlock(eye, look, blocks.placer(held, hand), feet)) {
+                if (!focus.placeBlock(eye, look, blocks.placer(held, hand), feet, c -> ShadowWorld.occupied(focus.planet(), c) || ToadClient.occupies(focus, c))) {
                     next.run();
                     return;
                 }

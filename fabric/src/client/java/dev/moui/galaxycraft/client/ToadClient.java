@@ -376,8 +376,31 @@ public final class ToadClient {
                 ToadLook.of(with.type()).cap(), pageText, visible, typing, conv.choosing(), choices, conv.highlight()));
     }
 
+    /** Whether a Toad of this planet stands in the cell (no block goes in it): points up its body and around it. */
+    static boolean occupies(PlanetSession s, int cell) {
+        if (store == null) return false;
+        double h = ToadModels.HEIGHT_PX / 16.0, w = 0.3;
+        for (ToadRecord t : store.all()) {
+            if (!t.stage().equals(stageName())) continue;
+            Vector3d up = new Vector3d(0, 1, 0).rotate(ToadWalker.orientation(t));
+            Vector3d side = new Vector3d(up.y, up.z, up.x).orthogonalize(up), other = new Vector3d(up).cross(side);
+            Vector3d feet = s.localOf(new Vector3d(t.pos()[0], t.pos()[1], t.pos()[2]));
+            for (double y = 0.1; y < h; y += 0.4)
+                for (int k = 0; k < 5; k++) {
+                    Vector3d p = new Vector3d(feet).fma(y, up);
+                    if (k == 1) p.fma(w, side);
+                    else if (k == 2) p.fma(-w, side);
+                    else if (k == 3) p.fma(w, other);
+                    else if (k == 4) p.fma(-w, other);
+                    if (s.planet().grid.cellAt(p) == cell) return true;
+                }
+        }
+        return false;
+    }
+
     /** Whether a right click is a Toad's, and so no item's (a block in hand must not go down). */
     public static boolean swallowsUse() {
+        if (conv != null) return true; // talking: the click goes on or chooses, whatever the crosshair is on
         if (store == null || store.all().isEmpty()) return false;
         LocalPlayer me = Minecraft.getInstance().player;
         GravityFrame frame = GalaxyCraftClient.frame();
@@ -525,6 +548,12 @@ public final class ToadClient {
         }
     }
 
+    /** Dark outside by the world's clock: Toads go home to sleep. */
+    private static boolean night() {
+        var level = Minecraft.getInstance().level;
+        return level != null && level.isDarkOutside();
+    }
+
     /** The pieces of this stage's Toads, universe units, for EntityClient's frame. */
     static void pieces(EntityClient ec, List<EntityWire.Piece> out) {
         drainOutposts();
@@ -553,7 +582,7 @@ public final class ToadClient {
             PlanetSession ground = eye == null ? null : walkable(r, eye);
             if (ground != null) {
                 double toPlayer = new Vector3d(eye).sub(r.pos()[0], r.pos()[1], r.pos()[2]).length() * GravityFrame.SCALE;
-                ToadWalker.Frame f = ToadWalker.step(r, dt, ground, false, ToadWalker.near(toPlayer), talking, st.yaw);
+                ToadWalker.Frame f = ToadWalker.step(r, dt, ground, night(), ToadWalker.near(toPlayer), talking, st.yaw);
                 if (f != null) {
                     walk = f.anim();
                     walkYaw = f.yaw();

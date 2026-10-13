@@ -896,6 +896,11 @@ public final class PlanetSession {
      * Its neighbors then settle (fences join it).
      */
     public boolean placeBlock(Vector3d eyeGal, Vector3d lookGal, Placer placer, Vector3d marioFeetGal) {
+        return placeBlock(eyeGal, lookGal, placer, marioFeetGal, c -> false);
+    }
+
+    /** As above, and no solid block goes in a cell occupied says a creature (a mob, a Toad) is in. */
+    public boolean placeBlock(Vector3d eyeGal, Vector3d lookGal, Placer placer, Vector3d marioFeetGal, java.util.function.IntPredicate occupied) {
         PlanetRaycast.Hit h = cast(eyeGal, lookGal);
         if (h == null || placer == null) return false;
         CellGrid g = planet.grid;
@@ -911,6 +916,7 @@ public final class PlanetSession {
         for (int[] set : sets) {
             if (set[0] < 0 || (set[0] != cell && !planet.info(set[0]).replaceable())) return false;
             if (!planet.blocks.info(set[1]).collides()) continue;
+            if (occupied.test(set[0])) return false;
             for (Vector3d p : body)
                 if (g.cellAt(p) == set[0]) return false;
         }
