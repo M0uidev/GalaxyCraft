@@ -534,7 +534,8 @@ public final class ToadClient {
         return ToadModels.get().anims().containsKey(pickel) ? pickel : walk;
     }
 
-    private static double lastSaved;
+    private static double lastSaved, clockSec;
+    private static long lastPieces;
 
     /** A Toad walked: its new spot is saved, at most every few seconds. */
     private static void moved(ToadRecord r) {
@@ -562,6 +563,10 @@ public final class ToadClient {
         String stage = stageName();
         double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);
         long now = System.nanoTime();
+        // Toads' time stands still while the game is paused, as the other mobs' does.
+        double gdt = lastPieces == 0 || Minecraft.getInstance().isPaused() ? 0 : Math.min(0.1, (now - lastPieces) / 1e9);
+        lastPieces = now;
+        clockSec += gdt;
         LocalPlayer me = Minecraft.getInstance().player;
         GravityFrame fr = GalaxyCraftClient.frame();
         homeGuide(me, fr);
@@ -573,8 +578,7 @@ public final class ToadClient {
             if (!r.stage().equals(stage)) continue;
             ToadLook look = ToadLook.of(r.type());
             State st = STATES.computeIfAbsent(r.id(), k -> new State());
-            double dt = st.last == 0 ? 0 : Math.min(0.1, (now - st.last) / 1e9);
-            st.last = now;
+            double dt = gdt;
             boolean talking = now < st.talkUntil || (conv != null && with != null && with.id().equals(r.id()));
             // Walking: on a planet near the player, a Toad that is not talking wanders about its home.
             String walk = null;
@@ -609,7 +613,7 @@ public final class ToadClient {
             // The pose: the animation's frame on every joint it has, the rest pose for the others.
             BckReader.Anim anim = model.anims().get(talking ? look.talk() : animName(walk, look));
             if (anim == null) anim = model.anims().get(talking ? "Talk" : "Wait");
-            double frame = (now - EPOCH) / 1e9 * FPS + (anim == null ? 0 : st.phase * anim.duration());
+            double frame = clockSec * FPS + (anim == null ? 0 : st.phase * anim.duration());
             for (int j = 0; j < srt.length; j++) {
                 if (anim != null && anim.joints() == srt.length) {
                     anim.sample(j, (float) frame, sample);

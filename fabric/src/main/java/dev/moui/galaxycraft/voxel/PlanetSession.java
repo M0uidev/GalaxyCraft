@@ -992,6 +992,31 @@ public final class PlanetSession {
         return new Vector3d[] {galOf(h.point()), up.normalize()};
     }
 
+    /**
+     * Where a walker standing along a ray from a galaxy point finds its footing within reach
+     * blocks: the top of the first block that collides (grass, flowers, signs, torches are walked
+     * through; glass and slabs are stood on, by their collision boxes) and the up there; null if none.
+     */
+    public Vector3d[] groundAlong(Vector3d fromGal, Vector3d dirGal, double reach) {
+        if (planet == null) return null;
+        Vector3d from = local(fromGal), dir = new Vector3d(dirGal).normalize();
+        Vector3d p = new Vector3d();
+        for (double t = 0; t <= reach; t += 0.1) {
+            p.set(dir).mul(t).add(from);
+            int c = planet.grid.cellAt(p);
+            if (c < 0) continue;
+            BlockInfo b = planet.info(c);
+            if (!b.collides()) continue;
+            double top = 0;
+            for (double[] box : b.boxes()) top = Math.max(top, box[4]);
+            Vector3d at = CellSpace.point(planet.grid, c, 0.5, top, 0.5);
+            Vector3d up = new Vector3d(planet.up(at));
+            if (up.lengthSquared() < 1e-12) return null;
+            return new Vector3d[] {galOf(at), up.normalize()};
+        }
+        return null;
+    }
+
     /** A change Minecraft made to the planet (redstone, a door opened): kept, and saved. */
     public void applyExternal(int cell, int id) {
         if (planet == null) return;
