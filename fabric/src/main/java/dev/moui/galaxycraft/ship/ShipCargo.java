@@ -1,5 +1,6 @@
 package dev.moui.galaxycraft.ship;
 
+import com.google.gson.JsonArray;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.world.item.ItemStack;
@@ -19,6 +20,8 @@ public final class ShipCargo {
     public static final class Chest {
         private final int size;
         private List<ItemStack> items;
+        /** What a file held, until the first {@link #items()} (the world's registries may not exist yet at load). */
+        private JsonArray pending;
         private boolean usedForTest;
 
         Chest(int size) {
@@ -34,13 +37,17 @@ public final class ShipCargo {
             if (items == null) {
                 items = new ArrayList<>(size);
                 for (int i = 0; i < size; i++) items.add(ItemStack.EMPTY);
+                if (pending != null) {
+                    CargoCodec.decodeInto(pending, items);
+                    pending = null;
+                }
             }
             return items;
         }
 
         public boolean isEmpty() {
             if (usedForTest) return false;
-            if (items == null) return true;
+            if (items == null) return pending == null || pending.isEmpty();
             for (ItemStack s : items) if (!s.isEmpty()) return false;
             return true;
         }
@@ -53,9 +60,21 @@ public final class ShipCargo {
         boolean hasItemsList() {
             return items != null;
         }
+
+        /** The slots as a file keeps them: only the non-empty ones. */
+        JsonArray save() {
+            if (items == null) return pending == null ? new JsonArray() : pending;
+            return CargoCodec.encode(items);
+        }
+
+        static Chest loaded(int size, JsonArray pending) {
+            Chest c = new Chest(size);
+            c.pending = pending == null || pending.isEmpty() ? null : pending;
+            return c;
+        }
     }
 
-    private final int capacity;
+    private int capacity;
     private final Bay[] bays = new Bay[BAYS];
     private final Chest[] chests = new Chest[BAYS];
 
@@ -71,6 +90,11 @@ public final class ShipCargo {
 
     public int capacity() {
         return capacity;
+    }
+
+    /** A better cabin unlocks bays; no cabin takes any away from chests already in them. */
+    public void ensureCapacity(int wanted) {
+        capacity = Math.max(capacity, Math.min(BAYS, wanted));
     }
 
     private static boolean inRange(int i) {
@@ -119,11 +143,11 @@ public final class ShipCargo {
     public void join(int i) {
         if (!canJoin(i)) throw new IllegalStateException("bays " + i + "+" + (i + 1) + " cannot join");
         Chest head = chests[i], tail = chests[i + 1], large = new Chest(LARGE);
-        if (head.hasItemsList() || tail.hasItemsList()) {
+        if (!head.isEmpty() || !tail.isEmpty()) {
             List<ItemStack> to = large.items();
             for (int k = 0; k < SMALL; k++) {
-                to.set(k, head.hasItemsList() ? head.items().get(k) : ItemStack.EMPTY);
-                to.set(SMALL + k, tail.hasItemsList() ? tail.items().get(k) : ItemStack.EMPTY);
+                to.set(k, head.items().get(k));
+                to.set(SMALL + k, tail.items().get(k));
             }
         }
         if (head.usedForTest || tail.usedForTest) large.usedForTest = true;

@@ -8,13 +8,18 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** The ships of one galaxy, kept in a JSON file next to its planets. */
 public final class ShipStore {
     private final Path file;
     private final List<ShipRecord> ships = new ArrayList<>();
+    /** Holds by ship id; one is made when first asked for. A file's hold waits, raw, until its ship's cabin is known. */
+    private final Map<String, ShipCargo> cargo = new HashMap<>();
+    private final Map<String, JsonElement> savedCargo = new HashMap<>();
 
     private ShipStore(Path file) {
         this.file = file;
@@ -36,6 +41,7 @@ public final class ShipStore {
                 s.ships.add(new ShipRecord(o.get("id").getAsString(), m,
                         new double[] {p.get(0).getAsDouble(), p.get(1).getAsDouble(), p.get(2).getAsDouble()}, rot,
                         o.has("stage") ? o.get("stage").getAsString() : ""));
+                if (o.has("cargo")) s.savedCargo.put(o.get("id").getAsString(), o.get("cargo"));
             }
         } catch (IOException | RuntimeException e) {
             s.ships.clear(); // a damaged file loses its ships, not the world
@@ -52,7 +58,21 @@ public final class ShipStore {
         ships.add(r);
     }
 
+    /** The hold of a ship (empty if it never had one), with the bays a cabin of this tier unlocks. */
+    public ShipCargo cargo(String shipId, int cabinTier) {
+        ShipCargo c = cargo.get(shipId);
+        if (c == null) {
+            JsonElement saved = savedCargo.remove(shipId);
+            c = saved == null ? new ShipCargo(ShipCargo.capacity(cabinTier)) : CargoCodec.fromJson(saved, ShipCargo.capacity(cabinTier));
+            cargo.put(shipId, c);
+        }
+        c.ensureCapacity(ShipCargo.capacity(cabinTier));
+        return c;
+    }
+
     public Optional<ShipRecord> remove(String id) {
+        cargo.remove(id);
+        savedCargo.remove(id);
         for (ShipRecord r : ships)
             if (r.id().equals(id)) {
                 ships.remove(r);
@@ -77,6 +97,9 @@ public final class ShipStore {
             for (double v : r.rot()) q.add(v);
             o.add("rot", q);
             o.addProperty("stage", r.stage());
+            ShipCargo c = cargo.get(r.id());
+            if (c != null) o.add("cargo", CargoCodec.toJson(c));
+            else if (savedCargo.containsKey(r.id())) o.add("cargo", savedCargo.get(r.id()));
             a.add(o);
         }
         Files.createDirectories(file.toAbsolutePath().getParent());
