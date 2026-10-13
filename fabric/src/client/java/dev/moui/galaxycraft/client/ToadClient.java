@@ -6,6 +6,8 @@ import dev.moui.galaxycraft.gravity.LookMath;
 import dev.moui.galaxycraft.ship.ShipBoarding;
 import dev.moui.galaxycraft.ship.model.BckReader;
 import dev.moui.galaxycraft.ship.model.ShipModels;
+import dev.moui.galaxycraft.shadow.ShadowToads;
+import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.toad.ToadContext;
 import dev.moui.galaxycraft.toad.ToadConversation;
 import dev.moui.galaxycraft.toad.ToadLook;
@@ -25,6 +27,7 @@ import java.util.UUID;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix3d;
@@ -102,7 +105,7 @@ public final class ToadClient {
     /** A station packed: its Technician goes with it. */
     public static void removeTechnician(String stationId) {
         if (store == null) return;
-        ToadWalker.forget("toad-station-" + stationId);
+        STATES.remove("toad-station-" + stationId);
         if (store.remove("toad-station-" + stationId).isPresent()) {
             dirty = true;
             saveNow();
@@ -159,25 +162,28 @@ public final class ToadClient {
     }
 
     private static Vector3d centreOf(ToadRecord r) {
-        Vector3d up = new Vector3d(0, 1, 0).rotate(ToadWalker.orientation(r));
+        Vector3d up = new Vector3d(0, 1, 0).rotate(new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]));
         double half = ToadModels.HEIGHT_PX / 16.0 / 2 / GravityFrame.SCALE; // the model stands from its feet up
         return new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]).fma(half, up);
     }
 
-    /** The Toad of this stage the crosshair is on (within reach), or null. */
+    /** The Toad of this stage the crosshair is on (within reach), or null: its entity's box, else (not running) a sphere on its record. */
     private static ToadRecord aimed(Player player, GravityFrame frame) {
         if (store == null) return null;
         Vector3d eye = frame.toGal(vec(player.getEyePosition()));
-        Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
+        Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot())).normalize();
+        Entity e = PlanetClient.aimedEntity(eye, look, REACH);
+        if (e != null && ShadowToads.isToad(e)) return recordOf(ShadowToads.idOf(e));
+        java.util.Set<String> running = ShadowToads.positions().keySet();
         List<ToadRecord> here = new ArrayList<>();
         List<double[]> centers = new ArrayList<>();
         for (ToadRecord t : store.all())
-            if (t.stage().equals(stageName())) {
+            if (t.stage().equals(stageName()) && !running.contains(t.id())) {
                 here.add(t);
                 Vector3d c = centreOf(t);
                 centers.add(new double[] {c.x, c.y, c.z});
             }
-        int i = ShipBoarding.nearest(eye, look.normalize(), centers, REACH / GravityFrame.SCALE, RADIUS / GravityFrame.SCALE);
+        int i = ShipBoarding.nearest(eye, look, centers, REACH / GravityFrame.SCALE, RADIUS / GravityFrame.SCALE);
         return i < 0 ? null : here.get(i);
     }
 
@@ -244,6 +250,7 @@ public final class ToadClient {
         endConversation();
         conv = c;
         with = toad;
+        ShadowWorld.standToad(toad.id(), true);
         convContext = ctx;
         savedSlot = player.getInventory().getSelectedSlot();
         shownPage = -1;
@@ -291,6 +298,7 @@ public final class ToadClient {
 
     /** Ends the talk (the box goes). */
     public static void endConversation() {
+        if (with != null) ShadowWorld.standToad(with.id(), false);
         conv = null;
         with = null;
         ToadDialogueHud.show(null);
@@ -376,28 +384,6 @@ public final class ToadClient {
                 ToadLook.of(with.type()).cap(), pageText, visible, typing, conv.choosing(), choices, conv.highlight()));
     }
 
-    /** Whether a Toad of this planet stands in the cell (no block goes in it): points up its body and around it. */
-    static boolean occupies(PlanetSession s, int cell) {
-        if (store == null) return false;
-        double h = ToadModels.HEIGHT_PX / 16.0, w = 0.3;
-        for (ToadRecord t : store.all()) {
-            if (!t.stage().equals(stageName())) continue;
-            Vector3d up = new Vector3d(0, 1, 0).rotate(ToadWalker.orientation(t));
-            Vector3d side = new Vector3d(up.y, up.z, up.x).orthogonalize(up), other = new Vector3d(up).cross(side);
-            Vector3d feet = s.localOf(new Vector3d(t.pos()[0], t.pos()[1], t.pos()[2]));
-            for (double y = 0.1; y < h; y += 0.4)
-                for (int k = 0; k < 5; k++) {
-                    Vector3d p = new Vector3d(feet).fma(y, up);
-                    if (k == 1) p.fma(w, side);
-                    else if (k == 2) p.fma(-w, side);
-                    else if (k == 3) p.fma(w, other);
-                    else if (k == 4) p.fma(-w, other);
-                    if (s.planet().grid.cellAt(p) == cell) return true;
-                }
-        }
-        return false;
-    }
-
     /** Whether a right click is a Toad's, and so no item's (a block in hand must not go down). */
     public static boolean swallowsUse() {
         if (conv != null) return true; // talking: the click goes on or chooses, whatever the crosshair is on
@@ -473,7 +459,7 @@ public final class ToadClient {
         if (store == null) return;
         for (ToadRecord r : store.all()) {
             store.remove(r.id());
-            ToadWalker.forget(r.id());
+            STATES.remove(r.id());
         }
         dirty = true;
         saveNow();
@@ -515,18 +501,6 @@ public final class ToadClient {
         return a;
     }
 
-    /** The planet this Toad walks on (active, a planet not a station, the player within draw range), or null. */
-    private static PlanetSession walkable(ToadRecord r, Vector3d eye) {
-        if (r.type() == ToadType.TECHNICIAN) return null; // stations: the Technician stays
-        Vector3d p = new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]);
-        if (p.distance(eye) * GravityFrame.SCALE > WALK_RANGE) return null;
-        PlanetSession best = null;
-        for (PlanetSession s : PlanetClient.planets())
-            if (s.active() && s.station() == null && s.planet() != null && s.center().distance(p) <= s.gravityUnits()
-                    && (best == null || s.center().distance(p) < best.center().distance(p))) best = s;
-        return best;
-    }
-
     /** The animation for what the Toad is doing: Kinopio's own, or the one with the pickel for a miner. */
     private static String animName(String walk, ToadLook look) {
         if (walk == null || walk.equals("Wait")) return look.idle();
@@ -537,111 +511,151 @@ public final class ToadClient {
     private static double lastSaved, clockSec;
     private static long lastPieces;
 
-    /** A Toad walked: its new spot is saved, at most every few seconds. */
-    private static void moved(ToadRecord r) {
-        double[] home = ToadWalker.homeOf(r.id());
-        if (r.home() == null && home != null) store.put(new ToadRecord(r.id(), r.type(), r.pos(), r.rot(), r.stage(), home));
-        dirty = true;
+    /** Toads' clock for animations (seconds): it stands still while the game is paused. */
+    static double clock() {
+        return clockSec;
+    }
+
+    private static void tickClock(long now) {
+        double gdt = lastPieces == 0 || Minecraft.getInstance().isPaused() ? 0 : Math.min(0.1, (now - lastPieces) / 1e9);
+        lastPieces = now;
+        clockSec += gdt;
+    }
+
+    /** The record of the Toad with this id, or null. */
+    static ToadRecord recordOf(String id) {
+        if (store == null) return null;
+        for (ToadRecord r : store.all()) if (r.id().equals(id)) return r;
+        return null;
+    }
+
+    /** Kinopio's animation for what a Toad entity is doing. */
+    static String animFor(Entity e, boolean talking) {
+        ToadRecord r = recordOf(ShadowToads.idOf(e));
+        ToadLook look = ToadLook.of(r == null ? ToadType.GUIDE : r.type());
+        if (talking) return look.talk();
+        if (e instanceof net.minecraft.world.entity.LivingEntity l && l.isSleeping()) return animName("Sleep", look);
+        double vx = e.getDeltaMovement().x, vz = e.getDeltaMovement().z;
+        return animName(vx * vx + vz * vz > 0.0025 ? "Walk" : "Wait", look);
+    }
+
+    /** A save at most every few seconds. */
+    private static void saveSoon() {
         double t = System.nanoTime() / 1e9;
-        if (t - lastSaved > 5) {
+        if (dirty && t - lastSaved > 5) {
             lastSaved = t;
             saveNow();
         }
     }
 
-    /** Dark outside by the world's clock: Toads go home to sleep. */
-    private static boolean night() {
-        var level = Minecraft.getInstance().level;
-        return level != null && level.isDarkOutside();
+    /** Once a tick: tells the shadow which Toads of this planet to run, takes their positions back, drops the dead. */
+    static void syncShadow(PlanetSession s) {
+        if (store == null || !s.active() || s.planet() == null) return;
+        List<ShadowToads.Wanted> want = new ArrayList<>();
+        for (ToadRecord r : store.all()) {
+            // The Technician stays where it was put: a station is a flat slab with edges to fall off.
+            if (!r.stage().equals(stageName()) || r.type() == ToadType.TECHNICIAN) continue;
+            Vector3d gal = new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]);
+            if (s.cellAt(gal) < 0) continue;
+            Vector3d local = s.localOf(gal);
+            Vector3d f = new Vector3d(0, 0, 1).rotate(new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]));
+            want.add(new ShadowToads.Wanted(r.id(), new double[] {local.x, local.y, local.z}, (float) Math.toDegrees(Math.atan2(-f.x, f.z))));
+        }
+        ShadowWorld.wantToads(s.planet(), want);
+        for (String dead; (dead = ShadowToads.pollDeath()) != null; ) {
+            store.remove(dead);
+            STATES.remove(dead);
+            if (with != null && with.id().equals(dead)) endConversation();
+            dirty = true;
+        }
+        for (var en : ShadowToads.positions().entrySet()) {
+            ToadRecord r = recordOf(en.getKey());
+            if (r == null) continue;
+            Vector3d g = s.galOf(new Vector3d(en.getValue()[0], en.getValue()[1], en.getValue()[2]));
+            r.pos()[0] = g.x;
+            r.pos()[1] = g.y;
+            r.pos()[2] = g.z;
+            dirty = true;
+        }
+        saveSoon();
     }
 
-    /** The pieces of this stage's Toads, universe units, for EntityClient's frame. */
+    /** The pieces of this stage's Toads that no entity draws (their planet is not running), universe units. */
     static void pieces(EntityClient ec, List<EntityWire.Piece> out) {
         drainOutposts();
         dialogueFrame(System.nanoTime());
         if (store == null) return;
-        String stage = stageName();
-        double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);
         long now = System.nanoTime();
-        // Toads' time stands still while the game is paused, as the other mobs' does.
-        double gdt = lastPieces == 0 || Minecraft.getInstance().isPaused() ? 0 : Math.min(0.1, (now - lastPieces) / 1e9);
-        lastPieces = now;
-        clockSec += gdt;
+        tickClock(now);
         LocalPlayer me = Minecraft.getInstance().player;
         GravityFrame fr = GalaxyCraftClient.frame();
         homeGuide(me, fr);
         Vector3d eye = me != null && fr != null ? fr.toGal(vec(me.getEyePosition())) : null;
+        double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);
+        java.util.Set<String> running = ShadowToads.positions().keySet();
+        for (ToadRecord r : store.all()) {
+            if (!r.stage().equals(stageName()) || running.contains(r.id())) continue;
+            State st = STATES.computeIfAbsent(r.id(), k -> new State());
+            boolean talking = now < st.talkUntil;
+            Quaterniond q = new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]);
+            Vector3d pos = new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]);
+            // Turn to the player when near (about its up, from the way it was put down).
+            double target = 0;
+            if (eye != null) {
+                Vector3d to = new Vector3d(eye).sub(pos);
+                double x = to.dot(new Vector3d(1, 0, 0).rotate(q)), z = to.dot(new Vector3d(0, 0, 1).rotate(q));
+                if (to.length() * GravityFrame.SCALE < LOOK_RANGE && x * x + z * z > 1e-12) target = Math.atan2(x, z);
+            }
+            double dt = Math.min(0.1, (now - (st.last == 0 ? now : st.last)) / 1e9);
+            st.last = now;
+            double diff = wrap(target - st.yaw), step = TURN * dt;
+            st.yaw = wrap(st.yaw + Math.max(-step, Math.min(step, diff)));
+            Matrix4d base = new Matrix4d().translation(pos.x, pos.y, pos.z).rotate(q).rotateY(st.yaw).scale(unitsPerPixel);
+            ToadLook look = ToadLook.of(r.type());
+            draw(ec, r, base, ShipClient::rows, talking ? look.talk() : look.idle(), out);
+        }
+    }
+
+    /**
+     * One Toad's pieces: Kinopio posed by the named animation, its cap and vest coloured, what it
+     * carries on its joint. base maps model pixels to wherever rows turns a matrix into the wire's.
+     */
+    static void draw(EntityClient ec, ToadRecord r, Matrix4d base, java.util.function.Function<Matrix4d, double[]> rows, String animName,
+            List<EntityWire.Piece> out) {
         ToadModels.Loaded model = ToadModels.get();
+        ToadLook look = ToadLook.of(r.type());
+        State st = STATES.computeIfAbsent(r.id(), k -> new State());
+        BckReader.Anim anim = model.anims().get(animName);
+        if (anim == null) anim = model.anims().get("Wait");
+        double frame = clockSec * FPS + (anim == null ? 0 : st.phase * anim.duration());
         float[][] srt = new float[model.rest().length][];
         float[] sample = new float[9];
-        for (ToadRecord r : store.all()) {
-            if (!r.stage().equals(stage)) continue;
-            ToadLook look = ToadLook.of(r.type());
-            State st = STATES.computeIfAbsent(r.id(), k -> new State());
-            double dt = gdt;
-            boolean talking = now < st.talkUntil || (conv != null && with != null && with.id().equals(r.id()));
-            // Walking: on a planet near the player, a Toad that is not talking wanders about its home.
-            String walk = null;
-            double walkYaw = 0;
-            PlanetSession ground = eye == null ? null : walkable(r, eye);
-            if (ground != null) {
-                double toPlayer = new Vector3d(eye).sub(r.pos()[0], r.pos()[1], r.pos()[2]).length() * GravityFrame.SCALE;
-                ToadWalker.Frame f = ToadWalker.step(r, dt, ground, night(), ToadWalker.near(toPlayer), talking, st.yaw);
-                if (f != null) {
-                    walk = f.anim();
-                    walkYaw = f.yaw();
-                    if (f.moved()) moved(r);
-                }
-            }
-            Quaterniond q = ToadWalker.orientation(r);
-            Vector3d pos = new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]);
-            if (walk != null && (walk.equals("Walk") || walk.equals("Turn"))) st.yaw = wrap(walkYaw);
-            else {
-                // Turn to the player when near (about its up, from the way it was put down), else stay as it is.
-                double target = st.yaw;
-                if (eye != null) {
-                    Vector3d to = new Vector3d(eye).sub(pos);
-                    double x = to.dot(new Vector3d(1, 0, 0).rotate(q)), z = to.dot(new Vector3d(0, 0, 1).rotate(q));
-                    if (to.length() * GravityFrame.SCALE < LOOK_RANGE && x * x + z * z > 1e-12) target = Math.atan2(x, z);
-                    else if (walk == null) target = 0;
-                }
-                double diff = wrap(target - st.yaw), step = TURN * dt;
-                st.yaw = wrap(st.yaw + Math.max(-step, Math.min(step, diff)));
-                if (walk != null) ToadWalker.face(r.id(), st.yaw);
-            }
-            Matrix4d base = new Matrix4d().translation(pos.x, pos.y, pos.z).rotate(q).rotateY(st.yaw).scale(unitsPerPixel);
-            // The pose: the animation's frame on every joint it has, the rest pose for the others.
-            BckReader.Anim anim = model.anims().get(talking ? look.talk() : animName(walk, look));
-            if (anim == null) anim = model.anims().get(talking ? "Talk" : "Wait");
-            double frame = clockSec * FPS + (anim == null ? 0 : st.phase * anim.duration());
-            for (int j = 0; j < srt.length; j++) {
-                if (anim != null && anim.joints() == srt.length) {
-                    anim.sample(j, (float) frame, sample);
-                    srt[j] = sample.clone();
-                } else srt[j] = model.rest()[j];
-            }
-            org.joml.Matrix4f[] world = ToadPose.worlds(model.parent(), srt);
-            for (ToadModels.RigPart rp : model.parts()) {
-                ShipModels.PartModel part = rp.part();
-                ShipModels.Skin skin = part.skin();
-                int tint = part.tint();
-                if (rp.texture() == ToadModels.CAP_TEXTURE && rp.joint() == ToadModels.HEAD_JOINT) tint = look.cap();
-                for (int vt : ToadModels.VEST_TEXTURES) if (rp.texture() == vt) skin = flat(look.vest());
-                int mdl = ec.shipModel(part, part.quads());
-                int skn = ec.shipSkin(skin == part.skin() ? skin : "toad-flat-" + look.vest(), skin.width(), skin.height(), skin.argb());
-                if (mdl < 0 || skn < 0) continue;
-                Matrix4d m = new Matrix4d(base).mul(new Matrix4d(ToadModels.pieceMatrix(model, world[rp.joint()])));
-                out.add(new EntityWire.Piece(mdl, skn, 0, tint, ShipClient.rows(m)));
-            }
-            // What it carries, on its joint.
-            if (look.joint() < world.length)
-                for (ShipModels.PartModel g : ToadModels.goods(look.goods())) {
-                    int mdl = ec.shipModel(g, g.quads());
-                    int skn = ec.shipSkin(g.skin(), g.skin().width(), g.skin().height(), g.skin().argb());
-                    if (mdl < 0 || skn < 0) continue;
-                    Matrix4d m = new Matrix4d(base).mul(new Matrix4d(ToadModels.pieceMatrix(model, world[look.joint()])));
-                    out.add(new EntityWire.Piece(mdl, skn, 0, g.tint(), ShipClient.rows(m)));
-                }
+        for (int j = 0; j < srt.length; j++) {
+            if (anim != null && anim.joints() == srt.length) {
+                anim.sample(j, (float) frame, sample);
+                srt[j] = sample.clone();
+            } else srt[j] = model.rest()[j];
         }
+        org.joml.Matrix4f[] world = ToadPose.worlds(model.parent(), srt);
+        for (ToadModels.RigPart rp : model.parts()) {
+            ShipModels.PartModel part = rp.part();
+            ShipModels.Skin skin = part.skin();
+            int tint = part.tint();
+            if (rp.texture() == ToadModels.CAP_TEXTURE && rp.joint() == ToadModels.HEAD_JOINT) tint = look.cap();
+            for (int vt : ToadModels.VEST_TEXTURES) if (rp.texture() == vt) skin = flat(look.vest());
+            int mdl = ec.shipModel(part, part.quads());
+            int skn = ec.shipSkin(skin == part.skin() ? skin : "toad-flat-" + look.vest(), skin.width(), skin.height(), skin.argb());
+            if (mdl < 0 || skn < 0) continue;
+            Matrix4d m = new Matrix4d(base).mul(new Matrix4d(ToadModels.pieceMatrix(model, world[rp.joint()])));
+            out.add(new EntityWire.Piece(mdl, skn, 0, tint, rows.apply(m)));
+        }
+        if (look.joint() < world.length)
+            for (ShipModels.PartModel g : ToadModels.goods(look.goods())) {
+                int mdl = ec.shipModel(g, g.quads());
+                int skn = ec.shipSkin(g.skin(), g.skin().width(), g.skin().height(), g.skin().argb());
+                if (mdl < 0 || skn < 0) continue;
+                Matrix4d m = new Matrix4d(base).mul(new Matrix4d(ToadModels.pieceMatrix(model, world[look.joint()])));
+                out.add(new EntityWire.Piece(mdl, skn, 0, g.tint(), rows.apply(m)));
+            }
     }
 }

@@ -33,7 +33,11 @@ public final class ShadowToads {
     private static final ConcurrentLinkedQueue<String> deaths = new ConcurrentLinkedQueue<>();
     /** Server thread: id -> entity id of the villager that is this Toad. */
     private static final Map<String, Integer> alive = new HashMap<>();
+    /** Server thread: Toads whose death was announced and whose record may still be listed (not to be made again). */
+    private static final Set<String> died = new HashSet<>();
     private static int ticks;
+    /** Server thread: Toads being talked to (they stand still and look at Mario). */
+    private static final Set<String> standing = new HashSet<>();
 
     private ShadowToads() {}
 
@@ -61,31 +65,41 @@ public final class ShadowToads {
         return deaths.poll();
     }
 
+    static void stand(String id, boolean on) {
+        if (on) standing.add(id);
+        else standing.remove(id);
+    }
+
     /** The planet went away (or another came): the entities go, nobody is dead. */
     static void release(ServerLevel level) {
         for (Entity e : level.getAllEntities()) if (isToad(e)) e.discard();
         alive.clear();
+        died.clear();
+        standing.clear();
         positions = Map.of();
         wanted = List.of();
     }
 
     /** Each server tick, with the running planet and its mirrored columns. */
-    static void tick(ServerLevel level, VoxelPlanet planet, ShadowMap map, Set<Long> mirrored) {
+    static void tick(ServerLevel level, VoxelPlanet planet, ShadowMap map, Set<Long> mirrored, net.minecraft.world.phys.Vec3 lookAt) {
         if (planet == null || map == null) return;
         ticks++;
         Set<String> want = new HashSet<>();
         for (Wanted w : wanted) {
             want.add(w.id());
             Integer eid = alive.get(w.id());
+            if (died.contains(w.id())) continue;
             if (eid != null) {
                 Entity e = level.getEntity(eid);
-                if (e != null && !e.isRemoved()) continue;
-                alive.remove(w.id()); // it was there and is gone: killed (a /kill counts), not unloaded
+                if (e != null && !e.isRemoved() && e.isAlive()) continue;
+                alive.remove(w.id()); // it was there and is dead or gone: killed (a /kill counts), not unloaded
+                died.add(w.id());
                 deaths.add(w.id());
                 continue;
             }
             spawn(level, planet, map, mirrored, w);
         }
+        died.retainAll(want);
         // Toads nobody wants any more (the record was deleted): their entities go.
         for (var it = alive.entrySet().iterator(); it.hasNext(); ) {
             var en = it.next();
@@ -93,6 +107,14 @@ public final class ShadowToads {
             Entity e = level.getEntity(en.getValue());
             if (e != null) e.discard();
             it.remove();
+        }
+        for (String id : standing) {
+            Integer eid = alive.get(id);
+            Entity e = eid == null ? null : level.getEntity(eid);
+            if (!(e instanceof Villager v) || e.isRemoved()) continue;
+            v.getNavigation().stop();
+            v.getBrain().eraseMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.WALK_TARGET);
+            if (lookAt != null) v.getLookControl().setLookAt(lookAt.x, lookAt.y, lookAt.z);
         }
         if (ticks % 20 != 0) return;
         Map<String, double[]> out = new HashMap<>();

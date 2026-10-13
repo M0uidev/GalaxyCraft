@@ -12,6 +12,7 @@ import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.gravity.LookMath;
 import dev.moui.galaxycraft.proto.Layout;
 import dev.moui.galaxycraft.proto.Seqlock;
+import dev.moui.galaxycraft.shadow.ShadowToads;
 import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.voxel.AtlasLink;
 import dev.moui.galaxycraft.voxel.CellSpace;
@@ -656,6 +657,12 @@ public final class PlanetClient {
     }
 
     /** Client tick, after the gravity frame is up to date. */
+    /** The shadow mob the look from eye (galaxy units) meets within reach blocks, or null (the focused planet's). */
+    static net.minecraft.world.entity.Entity aimedEntity(Vector3d eyeGal, Vector3d lookGal, double reach) {
+        PlanetSession s = focus;
+        return s == null || !s.active() || !shadow.available() ? null : entities.aimed(s.localOf(eyeGal), lookGal, reach);
+    }
+
     public static void tick(LocalPlayer player, BridgeClient bridge, GravityFrame frame, Seqlock.WorldState world) {
         if (blocks == null) {
             if (FIXED_DIR) {
@@ -747,6 +754,7 @@ public final class PlanetClient {
         }
         PlanetSession was = focus;
         focus = nearest(world.queryPos());
+        ToadClient.syncShadow(focus);
         if (focus != was) {
             was.setOutline(-1);
             was.setCrack(-1, -1, null);
@@ -803,7 +811,7 @@ public final class PlanetClient {
                 hit = true;
             }
             // Right click on a mob or vehicle in reach uses it (rides a minecart or boat).
-            if (target != null && pressed(buttons, MOUSE_RIGHT)) {
+            if (target != null && pressed(buttons, MOUSE_RIGHT) && !ShadowToads.isToad(target)) { // a Toad is talked to (ToadClient), not used
                 ShadowWorld.interact(target.getId(), player.getUUID());
                 hit = true;
             }
@@ -1514,7 +1522,7 @@ public final class PlanetClient {
         } else {
             ItemStack held = stack.copy();
             Runnable place = () -> {
-                if (!focus.placeBlock(eye, look, blocks.placer(held, hand), feet, c -> ShadowWorld.occupied(focus.planet(), c) || ToadClient.occupies(focus, c))) {
+                if (!focus.placeBlock(eye, look, blocks.placer(held, hand), feet, c -> ShadowWorld.occupied(focus.planet(), c) )) {
                     next.run();
                     return;
                 }

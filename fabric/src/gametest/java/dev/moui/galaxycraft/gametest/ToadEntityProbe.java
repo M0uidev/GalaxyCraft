@@ -53,6 +53,7 @@ public final class ToadEntityProbe implements FabricClientGameTest {
             check(count(ctx, "t1") == 1, "exactly one entity for t1, found " + count(ctx, "t1"));
             run(ctx, 30);
             check(ctx.computeOnClient(mc -> ShadowToads.positions().containsKey("t1")), "its position is published");
+            hitShoveAndKill(ctx);
             ctx.runOnClient(mc -> ShadowWorld.attach(null, "probe")); // unload
             run(ctx, 10);
             check(ctx.computeOnClient(mc -> ShadowToads.pollDeath() == null), "unloading kills nobody");
@@ -127,6 +128,43 @@ public final class ToadEntityProbe implements FabricClientGameTest {
         check(find(ctx, "t2") != null, "it was not despawned");
     }
 
+    /** A hit hurts it; shoved into the ground it comes out within a second; a lethal blow is announced once. */
+    private void hitShoveAndKill(ClientGameTestContext ctx) {
+        Entity t1 = find(ctx, "t1");
+        if (t1 == null) return;
+        ctx.runOnClient(mc -> {
+            var server = mc.getSingleplayerServer();
+            server.execute(() -> server.getPlayerList().getPlayers().get(0).setGameMode(net.minecraft.world.level.GameType.SURVIVAL));
+        });
+        run(ctx, 10);
+        float h0 = ctx.computeOnClient(mc -> ((net.minecraft.world.entity.LivingEntity) t1).getHealth());
+        for (int i = 0; i < 6 && ctx.computeOnClient(mc -> ((net.minecraft.world.entity.LivingEntity) t1).getHealth()) >= h0; i++) {
+            ctx.runOnClient(mc -> ShadowWorld.attack(t1.getId(), mc.player.getUUID()));
+            run(ctx, 15); // the attack cooldown charges between blows
+        }
+        float h1 = ctx.computeOnClient(mc -> ((net.minecraft.world.entity.LivingEntity) t1).getHealth());
+        check(h1 < h0, "a hit hurts it (" + h0 + " -> " + h1 + ")");
+        check(ctx.computeOnClient(mc -> ShadowToads.pollDeath() == null), "a hit that does not kill announces no death");
+        double y0 = ctx.computeOnClient(mc -> t1.getY());
+        ctx.runOnClient(mc -> {
+            var server = mc.getSingleplayerServer();
+            server.execute(() -> t1.snapTo(t1.getX(), t1.getY() - 2, t1.getZ(), t1.getYRot(), 0)); // shoved into the ground
+        });
+        run(ctx, 45);
+        double y1 = ctx.computeOnClient(mc -> t1.getY());
+        check(y1 > y0 - 0.9, "shoved into the ground it came out (" + y0 + " -> " + y1 + ")");
+        ctx.runOnClient(mc -> {
+            var server = mc.getSingleplayerServer();
+            server.execute(() -> t1.kill(server.getLevel(ShadowWorld.KEY)));
+        });
+        run(ctx, 20);
+        check("t1".equals(ctx.computeOnClient(mc -> ShadowToads.pollDeath())), "its death is announced");
+        check(ctx.computeOnClient(mc -> ShadowToads.pollDeath() == null), "only once");
+        ctx.runOnClient(mc -> ShadowWorld.wantToads(s.planet(), List.of())); // the record is gone: nobody is wanted
+        run(ctx, 20);
+        check(count(ctx, "t1") == 0, "and it does not come back");
+    }
+
     private void diag(ClientGameTestContext ctx, String label, int[] cells) {
         ctx.runOnClient(mc -> {
             var server = mc.getSingleplayerServer();
@@ -192,7 +230,11 @@ public final class ToadEntityProbe implements FabricClientGameTest {
 
     private void run(ClientGameTestContext ctx, int ticks) {
         for (int t = 0; t < ticks; t++) {
-            ctx.runOnClient(mc -> link.tick("probe", mario));
+            ctx.runOnClient(mc -> {
+                link.tick("probe", mario);
+                ShadowWorld.mario(new ShadowWorld.MarioAt(s.planet(), new Vector3d(0, s.planet().surface() + 0.5, 0.8), new Vector3d(0, 0, -1),
+                        mc.player.getUUID()));
+            });
             ctx.waitTick();
         }
     }

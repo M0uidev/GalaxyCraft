@@ -378,6 +378,11 @@ public final class ShadowWorld {
         });
     }
 
+    /** A Toad being talked to stands still and looks at Mario (on), or goes on with its day (off). */
+    public static void standToad(String id, boolean on) {
+        ops.add(level -> ShadowToads.stand(id, on));
+    }
+
     /** This planet, of this stage, is the one to run (null: none). */
     public static void attach(VoxelPlanet p, String stage) {
         ops.add(level -> {
@@ -607,7 +612,7 @@ public final class ShadowWorld {
         flushEdges(level);
         moveProxy(level);
         animate(level);
-        ShadowToads.tick(level, planet, map, mirrored);
+        ShadowToads.tick(level, planet, map, mirrored, proxy == null || proxy.isRemoved() ? null : proxy.getEyePosition());
         entities = map == null ? null : new Entities(planet, map, collect(level));
         MarioAt at = marioAt;
         List<LiveBlocks.Live> blocks = map == null ? List.of()
