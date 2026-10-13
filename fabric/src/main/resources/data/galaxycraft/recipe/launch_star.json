@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "N": "minecraft:nether_star",
+    "G": "minecraft:gold_ingot",
+    "A": "minecraft:amethyst_shard"
+  },
+  "pattern": [
+    "AGA",
+    "GNG",
+    "AGA"
+  ],
+  "result": {
+    "id": "galaxycraft:launch_star",
+    "count": 2
+  }
+}

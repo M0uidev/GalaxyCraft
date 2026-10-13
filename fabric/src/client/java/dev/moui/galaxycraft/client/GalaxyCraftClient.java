@@ -103,6 +103,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         ShadowWorld.signEditor = GalaxyCraftClient::editSign;
         dev.moui.galaxycraft.station.StationHooks.set(StationClient.HOOKS);
         dev.moui.galaxycraft.ship.ShipHooks.set(ShipClient.HOOKS);
+        dev.moui.galaxycraft.launchstar.LaunchStarHooks.set(LaunchStarClient.HOOKS);
         bridge = new BridgeClient(Path.of(Layout.SHM_PATH), () -> System.nanoTime() / 1_000_000L,
                 new BridgeClient.PartListener() {
                     @Override public void onUpsert(int partId, double[] gameMtx, byte[] kcl) {
@@ -278,7 +279,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         // Minecraft movement: Mario goes where the player is, and Steve is drawn there outside first person.
         boolean walker = ownPhysics() && frame != null && mc.player != null && bridge.gameLinked();
         // The elytra in Mario's modes: Mario himself flies there (in his Launch Star pose), not Steve.
-        boolean marioFlies = walker && !walking() && mc.player.isFallFlying() && view() != View.FIRST;
+        boolean marioFlies = walker && !walking() && (mc.player.isFallFlying() || LaunchStarClient.flying()) && view() != View.FIRST;
         PlanetClient.frame(bridge, pt, walker ? frame.toGal(vec(mc.player.getPosition(pt)), pt) : null,
                 walker && view() != View.FIRST && !marioFlies ? frame : null, marioFlies);
         SkinClient.frame(bridge);

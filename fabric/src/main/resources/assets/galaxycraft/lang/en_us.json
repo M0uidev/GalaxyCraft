@@ -45,5 +45,11 @@
   "message.galaxycraft.pad.placed": "Landing pad down. Fly near it and hold C to dock (right click picks another)",
   "message.galaxycraft.pad.near": "Landing pad %s of %s, %s blocks away: right click for the next, hold C to dock",
   "message.galaxycraft.pad.docked": "Docked. Space to lift off",
-  "message.galaxycraft.ship.crowded": "Too close to another ship or pad"
+  "message.galaxycraft.ship.crowded": "Too close to another ship or pad",
+  "item.galaxycraft.launch_star": "Launch Star",
+  "message.galaxycraft.star.ground": "A Launch Star goes on the ground: point at it",
+  "message.galaxycraft.star.placed": "Launch Star down. Put the other one on another planet to link them",
+  "message.galaxycraft.star.linked": "Launch Stars linked! Hold right click on one to be launched",
+  "message.galaxycraft.star.alone": "This Launch Star has no partner yet: put another one on a different planet",
+  "message.galaxycraft.star.crowded": "Too close to another Launch Star"
 }
