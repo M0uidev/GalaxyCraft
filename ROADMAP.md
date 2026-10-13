@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-13 (merged: Toad ship, 3D map, progression stage 2, Toad NPCs as villagers, Launch Stars)
+Last updated: 2026-10-13 (inbox: ship and landing pad customization, ship inventory)
 
 ---
 
@@ -162,6 +162,15 @@ Last updated: 2026-10-13 (merged: Toad ship, 3D map, progression stage 2, Toad N
 ## Inbox
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
+
+- 2026-10-13: **Ship and landing pad customization, and ship inventory** (user): (1) a real ship customizer, where you
+  change the ship's parts, e.g. the glass type, with the glass texture fitted to the round porthole so the white
+  Minecraft glass border shows all around; (2) the landing pad becomes a proper station with a small screen
+  where you change its outside look (texture, color, more options to find); (3) ship inventory: chests you install
+  in the ship (4 units of room, a large chest takes 2; the cabin's tier unlocks the room), opened by a key (E) from
+  inside or crouch + right click from outside, drawn inside the ship; everything feeling interactive and well fitted to
+  the 3D model. Split in three: the ship inventory is first (spec `docs/superpowers/specs/2026-10-13-galaxycraft-ship-cargo-design.md`,
+  branch `feat/ship-cargo`); the customizer and the pad's screen come after.
 
 - 2026-10-12: **Names for galaxies and planets, rename, and an empire** (user): galaxies and planets get random
   names from a list, in the style "Ares 48" (a name plus a number, maybe with a slash). You can rename the planet you
