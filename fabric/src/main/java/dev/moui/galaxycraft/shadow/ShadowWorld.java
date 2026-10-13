@@ -371,10 +371,18 @@ public final class ShadowWorld {
         });
     }
 
+    /** The Toads of p to run in the shadow (replaces the list; any thread). */
+    public static void wantToads(VoxelPlanet p, List<ShadowToads.Wanted> toads) {
+        ops.add(level -> {
+            if (p == planet) ShadowToads.want(toads);
+        });
+    }
+
     /** This planet, of this stage, is the one to run (null: none). */
     public static void attach(VoxelPlanet p, String stage) {
         ops.add(level -> {
             release(level);
+            ShadowToads.release(level);
             planet = p;
             map = p == null ? null : ShadowMap.of(p, stage);
         });
@@ -599,6 +607,7 @@ public final class ShadowWorld {
         flushEdges(level);
         moveProxy(level);
         animate(level);
+        ShadowToads.tick(level, planet, map, mirrored);
         entities = map == null ? null : new Entities(planet, map, collect(level));
         MarioAt at = marioAt;
         List<LiveBlocks.Live> blocks = map == null ? List.of()
