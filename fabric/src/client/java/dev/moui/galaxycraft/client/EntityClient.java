@@ -696,10 +696,13 @@ final class EntityClient {
                 h.isFallFlying = false;
                 h.walkAnimationSpeed = 0;
             }
-            Vector3d o = frame.toGal(new Vector3d(st.x, st.y, st.z));
-            Vector3d x = frame.toGal(new Vector3d(st.x + 1, st.y, st.z)).sub(o);
-            Vector3d y = frame.toGal(new Vector3d(st.x, st.y + 1, st.z)).sub(o);
-            Vector3d z = frame.toGal(new Vector3d(st.x, st.y, st.z + 1)).sub(o);
+            Vector3d o0 = frame.toGal(new Vector3d(st.x, st.y, st.z));
+            Vector3d x = frame.toGal(new Vector3d(st.x + 1, st.y, st.z)).sub(o0);
+            Vector3d y = frame.toGal(new Vector3d(st.x, st.y + 1, st.z)).sub(o0);
+            Vector3d z = frame.toGal(new Vector3d(st.x, st.y, st.z + 1)).sub(o0);
+            // Where the player is between ticks: a slide of the frame (the pulse, a Launch Star, the
+            // map's autopilot) comes in gradually, as the camera has it, not in one step per tick.
+            Vector3d o = frame.toGal(new Vector3d(st.x, st.y, st.z), pt);
             galaxy = new Matrix4d(x.x, x.y, x.z, 0, y.x, y.y, y.z, 0, z.x, z.y, z.z, 0, o.x, o.y, o.z, 1);
             playerSkin = customSkin();
             PoseStack ps = new PoseStack();
