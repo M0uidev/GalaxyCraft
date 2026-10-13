@@ -22,6 +22,7 @@
 #   tools/gxvoxel.sh toad     ToadDolphinProbe instead: a Toad in space, drawn from Kinopio.arc and talked to (toad-*.png); GXC_ARGS=-PgalaxycraftShipDir=<arcs with Kinopio.arc>
 #   tools/gxvoxel.sh ship     ShipDolphinProbe instead: a Toad ship in space, boarded and flown (ship-*.png); GXC_ARGS=-PgalaxycraftShipDir=<arcs>
 #   tools/gxvoxel.sh station  StationDolphinProbe instead: a flat station in space, Mario on it, packed (station-*.png)
+#   tools/gxvoxel.sh launchstar  LaunchStarProbe: Launch Stars between two systems, there and back, measured tick by tick
 #   tools/gxvoxel.sh outpost  OutpostProbe: warps to a tier >= 1 system and finds the Toad outposts its
 #                             planets were generated with (outpost-*.png)
 #   tools/gxvoxel.sh boot     GalaxyCraft's own boot, no Minecraft: SMG2 reaches GalaxyCraftSpace by
@@ -43,7 +44,7 @@ set -u
 GUI="${GXC_GUI:+--gui}"
 # Under gdb (crash backtraces in the log) the windowed Dolphin quits at once: not with GXC_GUI.
 GDB="--gdb"; [ -z "$GUI" ] || GDB=""
-if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ] || [ "${1:-}" = universe ] || [ "${1:-}" = approach ] || [ "${1:-}" = map ] || [ "${1:-}" = outpost ]; then
+if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ] || [ "${1:-}" = universe ] || [ "${1:-}" = approach ] || [ "${1:-}" = map ] || [ "${1:-}" = outpost ] || [ "${1:-}" = launchstar ]; then
   # LauncherProbe (or GalaxyProbe, a world of many planets): the dev Dolphin boots by itself (no
   # savestate), Minecraft starts at its title.
   G="python3 tools/gxdev.py"
@@ -54,6 +55,7 @@ if [ "${1:-}" = launch ] || [ "${1:-}" = galaxy ] || [ "${1:-}" = universe ] || 
   elif [ "$1" = approach ]; then NAME=ApproachProbe GPROP=galaxycraftApproach GTAG=approach
   elif [ "$1" = map ]; then NAME=MapProbe GPROP=galaxycraftMap GTAG=map
   elif [ "$1" = outpost ]; then NAME=OutpostProbe GPROP=galaxycraftOutpost GTAG=outpost
+  elif [ "$1" = launchstar ]; then NAME=LaunchStarProbe GPROP=galaxycraftLaunchStar GTAG=launchstar
   else NAME=LauncherProbe GPROP=galaxycraftLauncher GTAG=launch; fi
   LOG="$HOME/.local/share/galaxycraft-dev/$GTAG-minecraft.log"
   syati/build.sh > /dev/null 2>&1 || { echo "gxvoxel: FAILED: syati/build.sh" >&2; exit 1; }

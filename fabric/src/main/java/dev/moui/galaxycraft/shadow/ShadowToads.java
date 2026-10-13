@@ -48,6 +48,7 @@ public final class ShadowToads {
 
     /** The Toad id an entity carries, or null. */
     public static String idOf(Entity e) {
+        if (e == null) return null; // the level's entity iteration can hand a hole while entities leave
         for (String t : e.entityTags()) if (t.startsWith(PREFIX)) return t.substring(PREFIX.length());
         return null;
     }
@@ -78,7 +79,9 @@ public final class ShadowToads {
 
     /** The planet went away (or another came): the entities go, nobody is dead. */
     static void release(ServerLevel level) {
-        for (Entity e : level.getAllEntities()) if (isToad(e)) e.discard();
+        List<Entity> toads = new java.util.ArrayList<>();
+        for (Entity e : level.getAllEntities()) if (isToad(e)) toads.add(e);
+        for (Entity e : toads) e.discard(); // after the walk: discarding inside it left holes in the iteration
         alive.clear();
         died.clear();
         standing.clear();

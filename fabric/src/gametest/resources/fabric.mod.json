@@ -10,6 +10,7 @@
 			"dev.moui.galaxycraft.gametest.GalaxyProbe",
 			"dev.moui.galaxycraft.gametest.UniverseProbe",
 			"dev.moui.galaxycraft.gametest.OutpostProbe",
+			"dev.moui.galaxycraft.gametest.LaunchStarProbe",
 			"dev.moui.galaxycraft.gametest.ApproachProbe",
 			"dev.moui.galaxycraft.gametest.MapProbe",
 			"dev.moui.galaxycraft.gametest.BiomeProbe",

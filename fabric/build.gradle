@@ -89,6 +89,13 @@ loom {
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 				if (project.hasProperty("galaxycraftShipDir")) vmArg "-Dgalaxycraft.shipDir=" + project.property("galaxycraftShipDir")
 			}
+			if (project.hasProperty("galaxycraftLaunchStar")) { // tools/gxvoxel.sh launchstar: LaunchStarProbe, Launch Stars between systems
+				vmArg "-Dgalaxycraft.launchStarProbe=true"
+				vmArg "-Dgalaxycraft.planetDir=" // empty: each world keeps its own galaxy, as when playing
+				vmArg "-Dgalaxycraft.hidden=true"
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+				if (project.hasProperty("galaxycraftShipDir")) vmArg "-Dgalaxycraft.shipDir=" + project.property("galaxycraftShipDir")
+			}
 			if (project.hasProperty("galaxycraftApproach")) { // tools/gxvoxel.sh approach: ApproachProbe, planets seen from afar
 				vmArg "-Dgalaxycraft.approachProbe=true"
 				vmArg "-Dgalaxycraft.planetDir=" // empty: each world keeps its own galaxy, as when playing

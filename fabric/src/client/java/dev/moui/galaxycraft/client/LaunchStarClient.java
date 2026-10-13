@@ -147,6 +147,26 @@ public final class LaunchStarClient {
         return flight != null;
     }
 
+    /** Tests: a star down at pos (universe units) with that up, named code (stars with the same code link); its id. */
+    public static String placeForTest(Vector3d pos, Vector3d up, String code) {
+        StarRecord r = store.place(new StarRecord(UUID.randomUUID().toString(), new double[] {pos.x, pos.y, pos.z},
+                new double[] {up.x, up.y, up.z}, stage(), bodyOf(pos), null));
+        r = store.setCode(r.id(), code);
+        dirty = true;
+        routes.clear();
+        return r.id();
+    }
+
+    /** Tests: the flight from that star to its partner starts at once (no wind-up); false when it has none. */
+    public static boolean launchForTest(String fromId) {
+        LocalPlayer me = Minecraft.getInstance().player;
+        GravityFrame frame = GalaxyCraftClient.frame();
+        StarRecord from = store == null ? null : store.get(fromId), to = from == null ? null : store.partnerOf(fromId).orElse(null);
+        if (me == null || frame == null || to == null) return false;
+        launch(me, frame, from, to);
+        return true;
+    }
+
     /** The ticks the current flight has run and its length (tests); -1: none. */
     public static int[] progress() {
         return flight == null ? new int[] {-1, -1} : new int[] {flown, flight.profile().ticks()};
