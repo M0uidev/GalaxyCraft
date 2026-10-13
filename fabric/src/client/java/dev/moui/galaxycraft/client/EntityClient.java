@@ -385,7 +385,25 @@ final class EntityClient {
     // ---- shadow entities ----
 
     @SuppressWarnings({"rawtypes", "unchecked"})
+    /** A Toad's villager drawn as Kinopio: model pixels are 1/16 block, in the shadow's frame there. */
+    private void shadowToad(ShadowWorld.Entities shadow, Entity e, String id, Vector3d mario, List<EntityWire.Piece> out) {
+        var rec = ToadClient.recordOf(id);
+        double[] f = shadow.map().frame(e.getX(), e.getY(), e.getZ());
+        if (rec == null || f == null || new Vector3d(f[0], f[1], f[2]).distance(mario) > range()) return;
+        Matrix4d at = new Matrix4d(f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], 0, f[0], f[1], f[2], 1);
+        seen.add(new Seen(e, at, new Vector3d(e.getX(), e.getY(), e.getZ())));
+        float yaw = e instanceof net.minecraft.world.entity.LivingEntity l ? l.yBodyRot : e.getYRot();
+        boolean talking = ToadClient.talkingTo() != null && id.equals(ToadClient.talkingTo().id());
+        Matrix4d base = new Matrix4d(at).rotateY(-Math.toRadians(yaw)).scale(1 / 16.0);
+        ToadClient.draw(this, rec, base, this::toGal, ToadClient.animFor(e, talking), out);
+    }
+
     private void shadowEntity(ShadowWorld.Entities shadow, Entity e, Vector3d mario, float pt, List<EntityWire.Piece> out) {
+        String toadId = dev.moui.galaxycraft.shadow.ShadowToads.idOf(e);
+        if (toadId != null) { // a Toad: Kinopio, posed by what the villager is doing
+            shadowToad(shadow, e, toadId, mario, out);
+            return;
+        }
         if (failed.contains(e.getClass())) return;
         try {
             EntityRenderer r = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(e);

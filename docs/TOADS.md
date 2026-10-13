@@ -47,4 +47,20 @@ and outposts on planets of other systems.
 
 More types' wares (the first tables are a draft, refined by playing), the ship (the Warp Core and a missing
 module are not asked yet; a Toad speaks and sells by the tier and star of the system you are in), Toads in villages
-and mines (waits for progression's structures), and Toads that walk, real portraits, and SMG2's own Toad voice (the box uses a pitched Minecraft sound for now).
+and mines (waits for progression's structures), and real portraits, and SMG2's own Toad voice (the box uses a pitched Minecraft sound for now).
+
+## Toads are villagers (2026-10-13)
+
+A Toad is a real `Villager` in the shadow dimension, tagged `galaxycraft_toad:<id>`, drawn as Kinopio
+(`EntityClient.shadowToad`, `ToadClient.draw`). `toads.json` stays the permanent record; `ShadowToads`
+(server) spawns the entity when its planet is mirrored, on free ground (`toad/FreeSpot`), keeps it out of
+blocks (each second), publishes its position (the client writes it back to the record) and announces its
+death (the record is deleted: Toads are vulnerable like villagers). Minecraft's own AI does the rest: it
+claims a bed by day (the mirror registers beds and doors as points of interest), sleeps in it at night,
+opens doors. Hitting, aiming and the box of the entity are the mobs' own. A right click is ours (the
+dialogue box and `ToadMerchant`), the villager's trading is never opened; while talking, the Toad stands
+and looks at the player. The Technician on a station stays a static record (a station is a slab with
+edges). Generated huts have a 3-high room under a roof, an oak door and a red bed.
+
+Probe (Minecraft only): `./gradlew runClientGameTest -PgalaxycraftToadEntity` (`ToadEntityProbe`): the
+entity, one per Toad, persistence, position, a bed and the night, a hit, a shove into the ground, a death.

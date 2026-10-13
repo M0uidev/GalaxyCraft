@@ -206,6 +206,10 @@ loom {
 				vmArg "-Dgalaxycraft.hidden=true"
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
+			if (project.hasProperty("galaxycraftToadEntity")) { // ToadEntityProbe: Toads as villagers in the shadow, no game
+				vmArg "-Dgalaxycraft.toadEntity=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+			}
 			if (project.hasProperty("galaxycraftBlocks")) { // BlockRulesProbe: Minecraft's blocks on a planet, no game
 				vmArg "-Dgalaxycraft.blocks=true"
 				vmArg "-Dgalaxycraft.hidden=true"

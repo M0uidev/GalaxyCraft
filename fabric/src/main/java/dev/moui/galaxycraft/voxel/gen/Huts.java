@@ -11,7 +11,8 @@ import org.joml.Vector3d;
  * Small mushroom huts on a generated planet, where its Toad outposts are (see toad.ToadPlan). Made
  * with the cells, before the plants: the ground under a hut is leveled (a step of two blocks at
  * most), what grows is kept off it, and the same request on the same planet gives the same hut.
- * A hut is 5×5 blocks of floor, walls two high with a door and two windows, a red mushroom roof.
+ * A hut is 5×5 blocks of floor, a room three high (walls with an oak door and two windows, a red bed
+ * along the back wall), a red mushroom roof over it: what a villager needs to live and sleep there.
  * No Minecraft types, so it is unit tested.
  */
 public final class Huts {
@@ -25,9 +26,14 @@ public final class Huts {
      */
     public record Placed(String id, double[] dir, double radius, double[] facing) {}
 
-    private static final int HALF = 2, CLEAR = 3, KEEP = 5, HEIGHT = 6, STEP = 2, TRIES = 4, SPREAD = 8;
+    private static final int HALF = 2, CLEAR = 3, KEEP = 5, HEIGHT = 8, STEP = 2, TRIES = 4, SPREAD = 8;
     private static final String PLANKS = "minecraft:oak_planks", STEM = "minecraft:mushroom_stem", CAP = "minecraft:red_mushroom_block",
-            GLASS = "minecraft:glass", TORCH = "minecraft:torch", DIRT = "minecraft:dirt";
+            GLASS = "minecraft:glass",
+            /** Facing out of the door and from the bed's foot to its head: +i of the face, south in the cell's model space. */
+            DOOR_LOWER = "minecraft:oak_door[facing=south,half=lower,hinge=left,open=false,powered=false]",
+            DOOR_UPPER = "minecraft:oak_door[facing=south,half=upper,hinge=left,open=false,powered=false]",
+            BED_FOOT = "minecraft:red_bed[facing=south,occupied=false,part=foot]",
+            BED_HEAD = "minecraft:red_bed[facing=south,occupied=false,part=head]", TORCH = "minecraft:torch", DIRT = "minecraft:dirt";
 
     private Huts() {}
 
@@ -80,7 +86,9 @@ public final class Huts {
                     for (int k = level + 1; k <= level + HEIGHT; k++) cells[base + k] = Blocks.AIR;
                 }
             char planks = (char) ids.applyAsInt(PLANKS), stem = (char) ids.applyAsInt(STEM), cap = (char) ids.applyAsInt(CAP),
-                    glass = (char) ids.applyAsInt(GLASS), torch = (char) ids.applyAsInt(TORCH), dirt = (char) ids.applyAsInt(DIRT);
+                    glass = (char) ids.applyAsInt(GLASS), torch = (char) ids.applyAsInt(TORCH), dirt = (char) ids.applyAsInt(DIRT),
+                    doorLow = (char) ids.applyAsInt(DOOR_LOWER), doorUp = (char) ids.applyAsInt(DOOR_UPPER),
+                    bedFoot = (char) ids.applyAsInt(BED_FOOT), bedHead = (char) ids.applyAsInt(BED_HEAD);
             for (int a = -HALF; a <= HALF; a++)
                 for (int b = -HALF; b <= HALF; b++) {
                     int c = col(n, f, ci + a, cj + b), base = c * layers, g = depth - 1 + height[c];
@@ -88,14 +96,20 @@ public final class Huts {
                     cells[base + level] = planks;
                     boolean wall = Math.abs(a) == HALF || Math.abs(b) == HALF;
                     boolean door = a == HALF && b == 0, window = a == 0 && Math.abs(b) == HALF;
-                    if (wall && !door) {
-                        cells[base + level + 1] = stem;
-                        cells[base + level + 2] = window ? glass : stem;
+                    if (wall) {
+                        for (int k = 1; k <= 3; k++) cells[base + level + k] = window && k == 2 ? glass : stem;
+                        if (door) { // the doorway: the door's two halves under a lintel
+                            cells[base + level + 1] = doorLow;
+                            cells[base + level + 2] = doorUp;
+                        }
                     }
-                    cells[base + level + 3] = a == 0 && b == 0 || (a == 1 && b == -1) ? stem : cap; // spots on the roof
-                    if (Math.abs(a) <= 1 && Math.abs(b) <= 1) cells[base + level + 4] = cap;
+                    cells[base + level + 4] = a == 0 && b == 0 || (a == 1 && b == -1) ? stem : cap; // the roof, with spots
+                    if (Math.abs(a) <= 1 && Math.abs(b) <= 1) cells[base + level + 5] = cap;
                 }
-            cells[col(n, f, ci - 1, cj - 1) * layers + level + 1] = torch;
+            // A bed along the back wall (foot at the wall, head toward the door), the torch beside it.
+            cells[col(n, f, ci - 1, cj - 1) * layers + level + 1] = bedFoot;
+            cells[col(n, f, ci, cj - 1) * layers + level + 1] = bedHead;
+            cells[col(n, f, ci - 1, cj + 1) * layers + level + 1] = torch;
             // A level way out: three wide, three long, past the door (ground above the floor is cut
             // with what grows on it, ground below it filled), so the door is never walled by a step.
             for (int a = HALF + 1; a <= HALF + 3; a++)

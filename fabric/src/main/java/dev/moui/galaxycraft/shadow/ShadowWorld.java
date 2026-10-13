@@ -371,10 +371,23 @@ public final class ShadowWorld {
         });
     }
 
+    /** The Toads of p to run in the shadow (replaces the list; any thread). */
+    public static void wantToads(VoxelPlanet p, List<ShadowToads.Wanted> toads) {
+        ops.add(level -> {
+            if (p == planet) ShadowToads.want(toads);
+        });
+    }
+
+    /** A Toad being talked to stands still and looks at Mario (on), or goes on with its day (off). */
+    public static void standToad(String id, boolean on) {
+        ops.add(level -> ShadowToads.stand(id, on));
+    }
+
     /** This planet, of this stage, is the one to run (null: none). */
     public static void attach(VoxelPlanet p, String stage) {
         ops.add(level -> {
             release(level);
+            ShadowToads.release(level);
             planet = p;
             map = p == null ? null : ShadowMap.of(p, stage);
         });
@@ -599,6 +612,7 @@ public final class ShadowWorld {
         flushEdges(level);
         moveProxy(level);
         animate(level);
+        ShadowToads.tick(level, planet, map, mirrored, proxy == null || proxy.isRemoved() ? null : proxy.getEyePosition());
         entities = map == null ? null : new Entities(planet, map, collect(level));
         MarioAt at = marioAt;
         List<LiveBlocks.Live> blocks = map == null ? List.of()
@@ -944,10 +958,22 @@ public final class ShadowWorld {
         BlockPos was = writingPos;
         writingPos = pos;
         try {
+            BlockState old = level.getBlockState(pos);
             level.setBlock(pos, s, flags);
+            if (old != s) pois(level, pos, old, s);
         } finally {
             writingPos = was;
         }
+    }
+
+    /**
+     * Beds and doors known to the villagers' AI: copying in skips Minecraft's own block-change
+     * path, which is where a block's point of interest is registered.
+     */
+    private static void pois(ServerLevel level, BlockPos pos, BlockState old, BlockState now) {
+        var manager = level.getPoiManager();
+        if (net.minecraft.world.entity.ai.village.poi.PoiTypes.forState(old).isPresent()) manager.remove(pos);
+        net.minecraft.world.entity.ai.village.poi.PoiTypes.forState(now).ifPresent(type -> manager.add(pos, type));
     }
 
     /** Cells on a face's edge that changed here: their halo copies take their new state. */
