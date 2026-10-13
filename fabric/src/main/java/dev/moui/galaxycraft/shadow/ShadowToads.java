@@ -134,6 +134,8 @@ public final class ShadowToads {
 
     /** An entity whose feet or head are in a block goes to the nearest free spot. */
     private static void freeIfStuck(ServerLevel level, Entity e) {
+        // A sleeper lies in its bed (a block with a collision box): not stuck, and moving it wakes it.
+        if (e instanceof net.minecraft.world.entity.LivingEntity l && l.isSleeping() || e.isPassenger()) return;
         FreeSpot.Space s = space(level);
         int x = (int) Math.floor(e.getX()), y = (int) Math.floor(e.getY()), z = (int) Math.floor(e.getZ());
         if (!FreeSpot.inside(s, x, y, z)) return;

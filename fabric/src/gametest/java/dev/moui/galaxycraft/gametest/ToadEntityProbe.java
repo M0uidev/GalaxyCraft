@@ -37,7 +37,9 @@ public final class ToadEntityProbe implements FabricClientGameTest {
                 link = new ShadowLink(() -> s);
                 mario = new Vector3d(0, s.planet().surface() + 0.5, 0).add(s.center());
             });
+            int[] bed = ctx.computeOnClient(mc -> house());
             run(ctx, 60); // the shadow takes the planet in
+            sleepInTheHouse(ctx, bed); // first: the only Toad about, so the only bed is its own
             want(ctx, new double[] {0, 0, 0}, 0.5);
             run(ctx, 60);
             Entity toad = find(ctx, "t1");
@@ -56,6 +58,112 @@ public final class ToadEntityProbe implements FabricClientGameTest {
             check(ctx.computeOnClient(mc -> ShadowToads.pollDeath() == null), "unloading kills nobody");
             System.out.println("[GalaxyCraft toadentity] " + (fails.isEmpty() ? "PASS" : "FAIL " + fails));
         }
+    }
+
+    private static final String[] COMPASS = {"up", "down", "north", "south", "west", "east"};
+
+    /** The cell a, b, h steps from o (a along i, b along j, h up). */
+    private int at(int o, int a, int b, int h) {
+        var g = s.planet().grid;
+        int c = o;
+        for (int i = 0; i < Math.abs(a); i++) c = g.neighbor(c, a > 0 ? dev.moui.galaxycraft.voxel.CubeSphere.I_PLUS : dev.moui.galaxycraft.voxel.CubeSphere.I_MINUS);
+        for (int i = 0; i < Math.abs(b); i++) c = g.neighbor(c, b > 0 ? dev.moui.galaxycraft.voxel.CubeSphere.J_PLUS : dev.moui.galaxycraft.voxel.CubeSphere.J_MINUS);
+        for (int i = 0; i < h; i++) c = g.neighbor(c, dev.moui.galaxycraft.voxel.CubeSphere.TOP);
+        return c;
+    }
+
+    private int house;
+
+    /**
+     * A house of stone bricks beside the Toad's spot: 3x3 room, walls 3 high, a roof, a door on the
+     * +i side, a bed along i. Returns {bed foot cell, door cell, room cell for the Toad}.
+     */
+    private int[] house() {
+        var g = s.planet().grid;
+        house = g.cellAt(new Vector3d(0, s.planet().surface() + 0.5, 0).add(new Vector3d(6, 0, 0)).normalize().mul(s.planet().surface() + 0.5));
+        int o = house;
+        int walls = blocks.parse("minecraft:stone_bricks");
+        String east = COMPASS[dev.moui.galaxycraft.voxel.CellSpace.DIRECTION_OF_SIDE[dev.moui.galaxycraft.voxel.CubeSphere.I_PLUS]];
+        for (int a = -2; a <= 2; a++)
+            for (int b = -2; b <= 2; b++) {
+                boolean wall = Math.abs(a) == 2 || Math.abs(b) == 2;
+                for (int h = 0; h <= 3; h++) if (h == 3 || wall) s.planet().set(at(o, a, b, h), walls);
+                for (int h = 0; h < 3 && !wall; h++) s.planet().set(at(o, a, b, h), blocks.parse("minecraft:air"));
+            }
+        s.planet().set(at(o, 2, 0, 0), blocks.parse("minecraft:oak_door[facing=" + east + ",half=lower,hinge=left,open=false]"));
+        s.planet().set(at(o, 2, 0, 1), blocks.parse("minecraft:oak_door[facing=" + east + ",half=upper,hinge=left,open=false]"));
+        s.planet().set(at(o, -1, 0, 0), blocks.parse("minecraft:red_bed[facing=" + east + ",part=foot]"));
+        s.planet().set(at(o, 0, 0, 0), blocks.parse("minecraft:red_bed[facing=" + east + ",part=head]"));
+        return new int[] {at(o, -1, 0, 0), at(o, 2, 0, 0), at(o, 1, 0, 0), at(o, 0, 0, 0)};
+    }
+
+    /** At night a Toad in a house with a bed and a door sleeps; the shadow knows the bed; mob caps do not count it. */
+    private void sleepInTheHouse(ClientGameTestContext ctx, int[] cells) {
+        double[] spot = ctx.computeOnClient(mc -> {
+            Vector3d p = dev.moui.galaxycraft.voxel.CellSpace.point(s.planet().grid, cells[2], 0.5, 0.1, 0.5);
+            return new double[] {p.x, p.y, p.z};
+        });
+        ctx.runOnClient(mc -> ShadowWorld.wantToads(s.planet(), List.of(new ShadowToads.Wanted("t2", spot, 0f))));
+        time(ctx, "day"); // by day it finds its bed (the idle activity claims a home), at dusk it goes there
+        run(ctx, 300);
+        diag(ctx, "day", cells);
+        time(ctx, "night");
+        run(ctx, 600);
+        diag(ctx, "night", cells);
+        Entity t2 = find(ctx, "t2");
+        check(t2 != null, "t2 exists after the night begins");
+        diag(ctx, "night", cells);
+        java.util.concurrent.atomic.AtomicBoolean known = new java.util.concurrent.atomic.AtomicBoolean();
+        ctx.runOnClient(mc -> {
+            var server = mc.getSingleplayerServer();
+            var pos = ShadowWorld.shadowPos(s.planet(), cells[3]); // the bed's head: the villagers' HOME point
+            server.execute(() -> known.set(server.getLevel(ShadowWorld.KEY).getPoiManager()
+                    .existsAtPosition(net.minecraft.world.entity.ai.village.poi.PoiTypes.HOME, pos)));
+        });
+        ctx.waitTicks(5);
+        boolean poi = known.get();
+        check(poi, "the shadow level knows the bed (HOME poi)");
+        if (t2 != null) check(ctx.computeOnClient(mc -> t2 instanceof net.minecraft.world.entity.LivingEntity l && l.isSleeping()), "the Toad is asleep at night");
+        check(find(ctx, "t2") != null, "it was not despawned");
+    }
+
+    private void diag(ClientGameTestContext ctx, String label, int[] cells) {
+        ctx.runOnClient(mc -> {
+            var server = mc.getSingleplayerServer();
+            var bed = ShadowWorld.shadowPos(s.planet(), cells[3]);
+            var door = ShadowWorld.shadowPos(s.planet(), cells[1]);
+            server.execute(() -> {
+                var level = server.getLevel(ShadowWorld.KEY);
+                var es = ShadowWorld.entities();
+                for (Entity e : es.list()) {
+                    if (!"t2".equals(ShadowToads.idOf(e))) continue;
+                    var v = (net.minecraft.world.entity.npc.villager.Villager) level.getEntity(e.getId());
+                    var brain = v.getBrain();
+                    System.out.println("[GalaxyCraft toadentity] diag " + label + " dark=" + level.isDarkOutside() + " activities=" + brain.getActiveActivities()
+                            + " home=" + brain.getMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.HOME)
+                            + " pos=" + v.blockPosition() + " bed=" + bed + " door=" + door + " bedState=" + level.getBlockState(bed)
+                            + " doorState=" + level.getBlockState(door) + " asleep=" + v.isSleeping()
+                            + " poiClosest=" + level.getPoiManager().findClosest(h -> h.is(net.minecraft.world.entity.ai.village.poi.PoiTypes.HOME), bed, 48,
+                                    net.minecraft.world.entity.ai.village.poi.PoiManager.Occupancy.HAS_SPACE)
+                            + " path=" + (v.getNavigation().createPath(bed, 1) != null)
+                            + " canSleepTag=" + level.getBlockState(bed).is(net.minecraft.tags.BlockTags.VILLAGERS_CAN_SLEEP_ON_BED)
+                            + " lastWoken=" + brain.getMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.LAST_WOKEN)
+                            + " walkTarget=" + brain.getMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.WALK_TARGET).isPresent()
+                            + " DIST=" + v.position().distanceTo(net.minecraft.world.phys.Vec3.atCenterOf(bed))
+                            + " HOMEPOS=" + brain.getMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.HOME).map(g -> g.pos().toString()).orElse("-")
+                           );
+                }
+            });
+        });
+        ctx.waitTicks(3);
+    }
+
+    private void time(ClientGameTestContext ctx, String when) {
+        ctx.runOnClient(mc -> {
+            var server = mc.getSingleplayerServer();
+            server.execute(() -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "time set " + when));
+        });
+        ctx.waitTicks(2);
     }
 
     /** t1 wanted at the planet's top, plus offset blocks along the planet's up. */

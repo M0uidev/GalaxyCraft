@@ -953,10 +953,22 @@ public final class ShadowWorld {
         BlockPos was = writingPos;
         writingPos = pos;
         try {
+            BlockState old = level.getBlockState(pos);
             level.setBlock(pos, s, flags);
+            if (old != s) pois(level, pos, old, s);
         } finally {
             writingPos = was;
         }
+    }
+
+    /**
+     * Beds and doors known to the villagers' AI: copying in skips Minecraft's own block-change
+     * path, which is where a block's point of interest is registered.
+     */
+    private static void pois(ServerLevel level, BlockPos pos, BlockState old, BlockState now) {
+        var manager = level.getPoiManager();
+        if (net.minecraft.world.entity.ai.village.poi.PoiTypes.forState(old).isPresent()) manager.remove(pos);
+        net.minecraft.world.entity.ai.village.poi.PoiTypes.forState(now).ifPresent(type -> manager.add(pos, type));
     }
 
     /** Cells on a face's edge that changed here: their halo copies take their new state. */
