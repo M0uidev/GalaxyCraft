@@ -750,9 +750,11 @@ public final class PlanetClient {
             toadClick = true; // still held next tick: not a new press (the box's "go on" is one per click)
         }
         // A flight goes on behind a screen (inventory, chat): only the clicks and Shift are the screen's.
-        if (frame != null && player != null && (!screen || LaunchStarClient.flying()))
+        boolean paused = Minecraft.getInstance().isPaused(); // the pause menu stops the stars and the flight, as the mobs
+        if (frame != null && player != null && !paused && (!screen || LaunchStarClient.flying()))
             buttons &= ~LaunchStarClient.tick(player, frame, !screen && (buttons & MOUSE_RIGHT) != 0, !screen && pressed(buttons, MOUSE_LEFT),
                     !screen && (key(in, SC_LSHIFT) || key(in, SC_RSHIFT) || Minecraft.getInstance().options.keyShift.isDown()), MOUSE_RIGHT, MOUSE_LEFT);
+        else if (screen && !paused) LaunchStarClient.idle();
         PlanetSession was = focus;
         focus = nearest(world.queryPos());
         if (focus != was) {

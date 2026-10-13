@@ -320,6 +320,11 @@ public final class LaunchStarClient {
         return rightMask;
     }
 
+    /** A tick with a screen open (inventory, chest) and no flight: the stars keep turning, nothing else. */
+    static void idle() {
+        age++;
+    }
+
     /** The code screen's Done: the star's new code (stars with the same code are linked). */
     static void setCode(String id, String code) {
         if (store == null) return;
