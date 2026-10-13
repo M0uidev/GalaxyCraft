@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-11 (Toad ship: landing pads, turbo, seated pilot built)
+Last updated: 2026-10-13 (merged: Toad ship, 3D map, progression stage 2, Toad NPCs as villagers, Launch Stars)
 
 ---
 
@@ -23,11 +23,10 @@ Last updated: 2026-10-11 (Toad ship: landing pads, turbo, seated pilot built)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Planets with Minecraft 1.7 terrain | now | User 2026-10-08: today's terrain "not that good", old terrain fits small worlds. 3D density with overhangs, several biomes per planet scaled to its size, oceans, rivers, beaches, cave labyrinths, heights scaled to the radius. Then check whether trees still come out broken (one block above the grass, a trunk missing a log). [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-legacy-terrain-design.md) |
+| Planets with Minecraft 1.7 terrain | now | User 2026-10-08: today's terrain "not that good", old terrain fits small worlds. 3D density with overhangs, several biomes per planet scaled to its size, oceans, rivers, beaches, cave labyrinths, heights scaled to the radius. Trees checked: whole, leaves fall (see Done 2026-10-11). [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-legacy-terrain-design.md) |
 | Swimming and water look | now | User 2026-10-08: swim like Minecraft, characters in water drawn over it, Minecraft's underwater view. Built on `feat/swimming` (water draw order, underwater fog, Minecraft's swimming in F6), awaiting playtest. [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-swimming-water-design.md) |
 | Panorama screenshots, and F2 that works | now | User 2026-10-08: F2 saved a blank blue picture (Dolphin draws the game): now Dolphin takes it. Ctrl+F2 or /panorama takes six 90° shots from the eyes (panorama_0..5 + one equirectangular picture); tools/set_panorama.py makes a capture the title screen's background. Branch feat/panorama, awaiting playtest. |
 | Soundtrack player and space/planet music | now | User 2026-10-09: a music player based on Soundtrack Player; music follows space or planet with a crossfade, a dwell time and a cooldown (all settings, can be turned off); Music Source: both games, SMG2 only, Minecraft only or random; a Station Core option to pick a station's music. Built on `feat/soundtrack` (engine, player screen, settings, Minecraft songs working; probe passes), awaiting your listening test. Your sorting (18 space, 15 planet songs from the 96 on the disc) ships as the default list; the launcher copies the songs from the player's own disc once into a shared folder at install and PLAY. [Spec](docs/superpowers/specs/2026-10-09-galaxycraft-soundtrack-design.md) |
-| Toad Brigade ship (the Starshroom) | now | User 2026-10-11: a craftable, modular ship you build at a Ship Table and pilot (right click to board, Shift to leave), looking like SMG2's own Starshroom, the Toad Brigade's red mushroom ship. Built on `feat/toad-ship`: table, modules and tiers, seats, flying with the stats, real model from the disc; verified in the game. Landing pads and the turbo are in. Missing: seats calibrated, your playtest. [Guide](docs/NAVE.md) [Spec](docs/superpowers/specs/2026-10-11-galaxycraft-toad-ship-design.md) |
 | Video quality while playing, cleaner menus | now | User 2026-10-11: changing the resolution, anti-aliasing and filtering in Super Minecraft Galaxy's settings applies at once (no restart). The pause menu loses the web, friends and reporting icons, the P key, Online and Telemetry; Minecraft's Video settings keeps only what matters here. Branch `feat/live-quality`, awaiting playtest. |
 | First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells; v0.1.3 pushed 2026-10-08 (fe6276a) with Export report and no empty Dolphin window, tested on Windows; v0.1.4 published 2026-10-09 (1.7 terrain, far planets, swimming, soundtrack, station polish), not yet checked on Windows (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
 
@@ -36,6 +35,9 @@ Last updated: 2026-10-11 (Toad ship: landing pads, turbo, seated pilot built)
 | Feature | Status | Notes |
 |---|---|---|
 | Far view bugs | next | User 2026-10-08: chunks right by the player draw their blocks and a far view copy that should be gone; caves look wrong from outside and only draw right once inside. After the terrain rework. |
+| Planet progression stage 3: content by tier | next | Ores by tier, star bias, rare biomes, hazards from tier 3, structures hook (`TierProfile`). [Spec](docs/superpowers/specs/2026-10-11-galaxycraft-planet-progression-design.md) The Warp Core module itself comes with the ship; today it is a setting. |
+| 3D map phase 2: remote ship and orbit | next | Send the Toad ship by remote from the map (also with you aboard), leave it orbiting, land by hand or on a pad. [Spec](docs/superpowers/specs/2026-10-11-galaxycraft-map-3d-design.md) |
+| Launch Stars between systems | next | Linked stars work between planets of a system; flights between systems are being checked (stutter, streaming). |
 
 ---
 
@@ -147,13 +149,37 @@ Last updated: 2026-10-11 (Toad ship: landing pads, turbo, seated pilot built)
 | 2026-10-09 | New title panorama (the 07:09 capture: the planet, small planets and a station's edge under the blue nebula) | c969072 |
 | 2026-10-11 | Entering a world: the planet you land on loses its far planet within seconds (was about a minute), and far planets get room of their own | 981ef82, 3ae5f0f |
 | 2026-10-11 | Less heat and lag: push-out queries a planet's boxes once, Minecraft gets 6 GB by default, Picture Quality kept when playing from the Minecraft Launcher | e42a315, 194634a, e41a32f |
+| 2026-10-11 | Trees whole (no log missing, giant trunks stay with their tree) and leaves that fall once no log holds them, with Minecraft's drops | ef4acc2..68a612b |
+| 2026-10-13 | Toad Brigade ship, the Starshroom: a Ship Table and modules by tier, a ship built from SMG2's own model that you board with right click, pilot seated (hover flight, turbo, tilt), park on landing pads and leave with Shift. [Guide](docs/NAVE.md) | 3d54beb..5faa37c |
+| 2026-10-13 | Planet progression, stage 2: tiers 0-5 and a star type per system, planets 1,500+ blocks apart in new worlds, the Warp Core's reach limits which new systems you can warp to (visited ones are free), Pulse only inside a system | 6b10acf..1fefd5d |
+| 2026-10-13 | 3D map of the universe: systems as glowing stars with their tier and star, orbits, planet list and ships, pick and warp from it (warp only from the map, in creative or with cheats on) | 0e01cf4, cc6d2b0 |
+| 2026-10-13 | Toads: guide, miner, explorer and technician Toads drawn from Kinopio, outposts (a mushroom hut by tier and star) and a technician on each station, a dialogue box on the HUD (typed text, choices, Enter to advance) and trading by tier. They are real Minecraft villagers: a hitbox, they can be hit and killed, sleep in the bed and use the door of their hut (or of the house you build), and never stay stuck in blocks. Huts are three blocks high with a door and a bed. [Guide](docs/TOADS.md) | 72c25ed..6ab56db |
+| 2026-10-13 | Launch Stars: craft two, place them on two planets, link them with a code, hold right click to be flung along a curve around the planets in between with SMG2's own flight effects; Shift cancels, left click picks one up. The flight goes on behind inventory and chat | 3f4f9a4..e30e252 |
+
+
 ---
 
 ## Inbox
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 
-- 2026-10-11: Toad ship, next steps (user, after the playtest): a **3D map** (from a mod, if one fits) to see the
+- 2026-10-12: **Names for galaxies and planets, rename, and an empire** (user): galaxies and planets get random
+  names from a list, in the style "Ares 48" (a name plus a number, maybe with a slash). You can rename the planet you
+  are on. Maybe a conquest system: visit enough planets of a galaxy and you may rename the galaxy (or it unlocks by
+  itself; to review), to build an empire across planets. Decided 2026-10-12: rename a galaxy once all its planets are
+  visited, from the map; rename a visited planet from the map or with `/rename`. Built on `feat/names` (baf2eb9,
+  tests green, not yet run in the game), awaiting your playtest.
+- 2026-10-12: **Toads' own voices** (user, after playtesting the integrated build): Toads should use the game's own
+  voices (the villager sound is not good). Done since: warp only from the map, the 3D map, Toads that walk and act as villagers,
+  Enter to advance, huts with door and bed (see Done 2026-10-13). Voice research brief: `docs/`.
+- 2026-10-11: **Planet generation rework and progression** (user): a full rework of how planets are
+  generated, thinking the game's progression: planets of tiers with different ores (no late ores on
+  the first planets), the ship's reach opens distance and the planet asks for gear (mobs and
+  resources in early tiers, environmental dangers from tier 3 on), advancements in mind, Minecraft
+  biomes 1.7 lacks (Mushroom Fields...), structures, Mario Galaxy mobs inside the Minecraft world.
+  (Broken trees and leaves that do not decay: done, 2026-10-11, see Done.)
+  Meant to feed the **3D map** (which planet is more dangerous). Being designed in a session.
+- 2026-10-11: Toad ship, next steps (user, after the playtest): a **3D map** (phase 1 done, phase 2 in Next) to see the
   world and send the ship by remote, leave it **orbiting**, and choose between landing by hand or on a pad,
   done well; more **interactive items and Ship Table** (tooltips with a module's stats and tier, a table
   screen that shows the ship being built). Done since: solid hull, open portholes with Minecraft's glass,
