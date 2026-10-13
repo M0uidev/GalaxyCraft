@@ -11,7 +11,7 @@ import dev.moui.galaxycraft.ship.CargoCodec;
 import dev.moui.galaxycraft.ship.CargoLayout;
 import dev.moui.galaxycraft.ship.SeatLayout;
 import dev.moui.galaxycraft.ship.ShipCargo;
-import dev.moui.galaxycraft.ship.ShipCargoMenu;
+import dev.moui.galaxycraft.ship.ShipMenu;
 import dev.moui.galaxycraft.ship.ShipHudModel;
 import dev.moui.galaxycraft.ship.ShipBlocks;
 import dev.moui.galaxycraft.ship.ShipBoarding;
@@ -340,8 +340,20 @@ public final class ShipClient {
         ShipCargo cargo = store.cargo(r.id(), r.modules().cabin());
         server.execute(() -> {
             net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayer(me.getUUID());
-            if (sp != null) ShipCargoMenu.open(sp, r.id(), cargo, () -> mc.execute(() -> dirty = true));
+            if (sp != null) ShipMenu.open(sp, r.id(), cargo, r.modules(), m -> mc.execute(() -> setModules(r.id(), m)),
+                    () -> mc.execute(() -> dirty = true));
         });
+    }
+
+    /** A ship's parts changed in its screen: the same ship, new modules (it is drawn from them at once). */
+    private static void setModules(String id, ShipModules m) {
+        if (store == null) return;
+        for (ShipRecord r : store.all())
+            if (r.id().equals(id)) {
+                store.put(new ShipRecord(id, m, r.pos(), r.rot(), r.stage()));
+                dirty = true;
+                return;
+            }
     }
 
     /** The parked ship of this stage the crosshair is on (within reach), or null. */

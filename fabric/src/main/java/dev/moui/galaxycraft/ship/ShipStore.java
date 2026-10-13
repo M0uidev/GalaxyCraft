@@ -58,7 +58,7 @@ public final class ShipStore {
         ships.add(r);
     }
 
-    /** The hold of a ship (empty if it never had one), with the bays a cabin of this tier unlocks. */
+    /** The hold of a ship (empty if it never had one), with the bays a cabin of this tier unlocks (the cabin can change). */
     public ShipCargo cargo(String shipId, int cabinTier) {
         ShipCargo c = cargo.get(shipId);
         if (c == null) {
@@ -66,7 +66,7 @@ public final class ShipStore {
             c = saved == null ? new ShipCargo(ShipCargo.capacity(cabinTier)) : CargoCodec.fromJson(saved, ShipCargo.capacity(cabinTier));
             cargo.put(shipId, c);
         }
-        c.ensureCapacity(ShipCargo.capacity(cabinTier));
+        c.setCapacity(ShipCargo.capacity(cabinTier));
         return c;
     }
 

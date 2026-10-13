@@ -92,7 +92,7 @@ public final class CargoCodec {
             }
             // A chest the file puts in a bay no cabin unlocks still needs the bay.
             for (int i = 0; i < ShipCargo.BAYS; i++)
-                if (cargo.bay(i) != ShipCargo.Bay.EMPTY) cargo.ensureCapacity(i + 1);
+                if (cargo.bay(i) != ShipCargo.Bay.EMPTY) cargo.setCapacity(cargo.capacity());
         } catch (RuntimeException ex) {
             return new ShipCargo(capacity);
         }

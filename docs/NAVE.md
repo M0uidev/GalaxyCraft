@@ -48,32 +48,41 @@ Cada módulo tiene nivel 1 a 3. Por ahora lo único visible es la nave; los mód
 - Mantén **Z** (bajar): la nave va sola hasta la elegida (primero encima, luego baja frenando) y se acopla.
   **Espacio** despega.
 
-## La bodega
+## La pantalla de la nave
 
-La nave lleva una **bodega** con 4 bahías en fila donde instalas cofres. El nivel de la **cabina** abre las bahías:
-nivel 1 una, nivel 2 dos, nivel 3 las cuatro (las cerradas se ven oscuras en la pantalla).
+La nave tiene su propia pantalla, dibujada con arte propio en píxeles (los sprites salen de `tools/ship_ui_textures.py`
+y están en `textures/gui/sprites/ship`). Se abre con **E** estando a bordo, o desde fuera **agachado (Shift) + clic
+derecho** sobre la nave (sin Shift, el clic derecho sigue subiéndote). Tiene dos pestañas:
 
-- **Abrirla:** con **E** estando a bordo, o desde fuera **agachado (Shift) + clic derecho** sobre la nave. (Sin
-  Shift, el clic derecho sigue subiéndote a la nave.)
-- **Instalar un cofre:** arrastra un cofre de tu inventario a una bahía libre, o hazle Shift + clic: entra en la
-  primera bahía libre (uno por clic). Cada cofre guarda 27 espacios.
-- **Cofre grande:** con dos cofres en las bahías 1-2 o 3-4, el botón **+** entre ellos los une en un cofre doble
-  de 54 espacios (ocupa las dos bahías); **-** los vuelve a separar, pero solo si está vacío.
+**Piezas.** Cuatro casillas: casco, motor, timón y cabina, cada una con sus tres puntos de nivel. Arrastra un módulo de tu
+inventario a su casilla (o Shift + clic) y la nave lo usa de inmediato; el que había vuelve a tu inventario. El casco y el
+timón se pueden sacar; el **motor y la cabina solo se cambian** (una nave sin ellos no vuela). La cabina no puede bajar a un
+nivel que deje cofres sin bahía. Abajo se lee lo que la nave hace con esas piezas: velocidad (y con turbo), giro,
+resistencia, asientos y bahías.
+
+**Bodega.** 4 bahías en fila para cofres. El nivel de la **cabina** abre las bahías: nivel 1 una, nivel 2 dos, nivel 3 las
+cuatro (las cerradas se ven rayadas).
+
+- **Instalar un cofre:** arrastra un cofre de tu inventario a una bahía libre, o Shift + clic (uno por clic).
+- **Cofre grande:** con dos cofres en las bahías 1-2 o 3-4, el botón **+** entre ellos los une en un cofre doble de 54
+  espacios (ocupa las dos bahías); **-** los vuelve a separar, pero solo si está vacío.
 - **Sacar un cofre:** arrástralo de vuelta; solo sale si está **vacío**, así no pierdes carga por accidente.
-- **Qué cofre ves:** el botón *View* bajo cada bahía elige cuál se muestra abajo.
+- **Qué cofre ves:** el botón *View* bajo cada bahía elige cuál se muestra; un cofre grande tiene dos páginas (el botón
+  1/2 entre la cuadrícula y tu inventario).
 - Los cofres se dibujan dentro de la nave, detrás de los asientos, a media escala. La carga se guarda con la nave.
 
 ## El panel de vuelo
 
-Al pilotar aparece abajo a la derecha un panel con la cabeza roja de Toad: la **velocidad** en bloques por segundo con un
-medidor (la raya dorada es la velocidad máxima; pasada esa raya el medidor se vuelve naranja, es el turbo y sale la
-palabra TURBO), los **módulos** como tres cuadritos de nivel (motor, timón, casco, cabina), los asientos, la resistencia,
-cuántos cofres lleva de los que la cabina permite, "Docked on a pad" mientras estás acoplado y las teclas.
+Al pilotar aparece una placa pequeña abajo a la derecha con la **velocidad** (bloques por segundo) y su medidor: la raya
+dorada es la velocidad máxima, y pasada esa raya el medidor se vuelve naranja y aparece TURBO. Si estás acoplado dice
+DOCKED. **Mantén I** (se puede cambiar en Controles) para ver el panel completo sobre la placa: los módulos con sus tres
+puntos de nivel, asientos, resistencia y cuántos cofres lleva.
 
 ## Pendiente
 
 - La pose sentada (de momento mantienes la pose de vuelo) y los cojines de la cabina por ajustar.
 - Los módulos aún no cambian el aspecto de la nave.
 - La posición y el tamaño de los cofres dentro del casco se ajustan en `CargoLayout` (no se ha mirado en el juego todavía).
+- Los módulos de nivel 2 y 3 aún no se consiguen en supervivencia (solo hay recetas de nivel 1); la pantalla ya los admite.
 - Equilibrar los niveles y los logros (te toca a ti).
 - Habilidades: aterrizar, remolcar, saltos.

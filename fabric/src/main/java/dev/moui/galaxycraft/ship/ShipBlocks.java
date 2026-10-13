@@ -31,7 +31,7 @@ public final class ShipBlocks {
 
     public static void register() {
         if (TABLE != null) return;
-        ShipCargoMenu.register();
+        ShipMenu.register();
         ResourceKey<Block> tk = ResourceKey.create(Registries.BLOCK, id("ship_table"));
         TABLE = Registry.register(BuiltInRegistries.BLOCK, tk,
                 new ShipTableBlock(BlockBehaviour.Properties.of().setId(tk).strength(3, 6).sound(SoundType.METAL)));

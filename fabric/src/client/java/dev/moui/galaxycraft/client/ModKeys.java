@@ -26,6 +26,8 @@ public final class ModKeys {
     static final KeyMapping TELEPORT = key("teleport");
     /** Flying a ship: down, and docking on a landing pad. */
     static final KeyMapping SHIP_DOWN = key("ship_down");
+    /** Flying a ship: hold to see the whole panel (modules and numbers). */
+    static final KeyMapping SHIP_INFO = key("ship_info");
 
     private ModKeys() {}
 

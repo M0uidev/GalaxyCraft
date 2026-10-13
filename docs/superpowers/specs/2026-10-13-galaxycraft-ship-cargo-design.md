@@ -46,7 +46,7 @@ Decided with the user (2026-10-13):
 - **Outside.** `ShipClient.tick` already sees a right click on an aimed ship (boards it). With Shift held the
   click opens the cargo instead of boarding. `swallowsUse` already keeps an item from being put down.
   A hint ("Shift + right click: cargo") shows while aiming at a ship with Shift held.
-- The menu is a real Minecraft container menu (`ShipCargoMenu`), opened on the integrated server for the local
+- The menu is a real Minecraft container menu (`ShipMenu`), opened on the integrated server for the local
   player, so moving items between the player's inventory and the hold is Minecraft's own and stays in step.
   The game is single player (multiplayer is out of scope), so the client store and the server share the process;
   server-side changes to a chest are applied to the store on the client thread.
@@ -72,3 +72,15 @@ sharing a hold between ships, multiplayer sync.
   `ShipStoreTest` (cargo round trip, ship without `cargo`, damaged `cargo` is an empty hold).
 - Game: a probe (`ShipCargoProbe`) that boards a ship, installs a chest, moves an item in, closes, reloads the store
   and finds the item.
+
+## Addendum (same day, user feedback while building)
+
+- The flight panel must not be invasive: a small plate (speed and gauge) in the bottom right corner, the full panel
+  only while the "full panel" key (I) is held.
+- Custom pixel-art UI for the ship and its chests: one screen, **two tabs**: *Parts* (hull, engine, rudder, cabin as sockets
+  taking module items, swapped on a placed ship; engine and cabin are swapped, never removed; the cabin cannot drop below
+  the bays the chests use) and *Hold* (the bays). Sprites are drawn by `tools/ship_ui_textures.py` into the gui atlas
+  folder and used 1:1.
+- Minecraft cuts screens taller than ~240 GUI pixels, so the hold shows three rows a page (a large chest has two pages).
+- `ShipCargo.setCapacity` replaces `ensureCapacity`: the cabin can now go down, never under a chest.
+- Menu and screen are `ShipMenu` / `ShipScreen` (they hold more than cargo now).

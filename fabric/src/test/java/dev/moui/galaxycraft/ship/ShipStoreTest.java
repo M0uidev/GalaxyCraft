@@ -102,12 +102,14 @@ class ShipStoreTest {
     }
 
     @Test
-    void theCabinCanOnlyGrowTheHold(@TempDir Path dir) {
+    void theCabinSetsTheHoldButNeverUnderAChest(@TempDir Path dir) {
         ShipStore s = ShipStore.load(dir.resolve("ships.json"));
         s.put(ship("a"));
         assertEquals(1, s.cargo("a", 1).capacity());
         assertEquals(4, s.cargo("a", 3).capacity());
-        assertEquals(4, s.cargo("a", 1).capacity()); // never shrinks under chests
+        assertEquals(2, s.cargo("a", 2).capacity()); // a smaller cabin closes bays nothing is in
+        s.cargo("a", 2).install(1);
+        assertEquals(2, s.cargo("a", 1).capacity()); // but not one that holds a chest
     }
 
     @Test

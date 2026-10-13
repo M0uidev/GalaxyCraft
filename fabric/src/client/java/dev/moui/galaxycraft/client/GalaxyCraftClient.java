@@ -170,7 +170,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> dev.moui.galaxycraft.client.music.MusicService.shutdown());
         dev.moui.galaxycraft.client.music.MusicKeys.register();
         ModKeys.register();
-        net.minecraft.client.gui.screens.MenuScreens.register(dev.moui.galaxycraft.ship.ShipCargoMenu.TYPE, ShipCargoScreen::new);
+        net.minecraft.client.gui.screens.MenuScreens.register(dev.moui.galaxycraft.ship.ShipMenu.TYPE, ShipScreen::new);
         ToadKeys.register();
         ToadDialogueHud.register();
         ShipHud.register();

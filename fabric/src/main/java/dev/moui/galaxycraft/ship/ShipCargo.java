@@ -92,9 +92,16 @@ public final class ShipCargo {
         return capacity;
     }
 
-    /** A better cabin unlocks bays; no cabin takes any away from chests already in them. */
-    public void ensureCapacity(int wanted) {
-        capacity = Math.max(capacity, Math.min(BAYS, wanted));
+    /** The bays a cabin unlocks: never fewer than a chest needs (a chest is not left in a locked bay). */
+    public void setCapacity(int wanted) {
+        capacity = Math.max(usedBays(), Math.max(0, Math.min(BAYS, wanted)));
+    }
+
+    /** How many bays from the nose are needed to reach the last chest (0 for an empty hold). */
+    public int usedBays() {
+        int used = 0;
+        for (int i = 0; i < BAYS; i++) if (bays[i] != Bay.EMPTY) used = i + 1;
+        return used;
     }
 
     private static boolean inRange(int i) {

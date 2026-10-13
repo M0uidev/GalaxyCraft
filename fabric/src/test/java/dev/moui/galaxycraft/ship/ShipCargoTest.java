@@ -117,4 +117,17 @@ class ShipCargoTest {
         c.chest(0).markUsedForTest();
         assertFalse(c.canSplit(0));
     }
+
+    @Test
+    void usedBaysReachTheLastChest() {
+        ShipCargo c = new ShipCargo(4);
+        assertEquals(0, c.usedBays());
+        c.install(2);
+        assertEquals(3, c.usedBays());
+        c.setCapacity(1);
+        assertEquals(3, c.capacity()); // a chest in bay 2 keeps three bays open
+        c.remove(2);
+        c.setCapacity(1);
+        assertEquals(1, c.capacity());
+    }
 }

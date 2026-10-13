@@ -4,7 +4,7 @@
 
 **Goal:** Chests you install in the Toad ship's hold (4 bays unlocked by the cabin tier), opened with E aboard or Shift + right click outside, drawn inside the ship.
 
-**Architecture:** A pure `ShipCargo` (bays + chest contents) lives in `ShipStore` next to the ship records and is saved in `ships.json`. A real Minecraft container menu (`ShipCargoMenu`) is opened on the integrated server and edits the cargo; a screen draws it; `ShipClient` draws the chests inside the ship like the cushions.
+**Architecture:** A pure `ShipCargo` (bays + chest contents) lives in `ShipStore` next to the ship records and is saved in `ships.json`. A real Minecraft container menu (`ShipMenu`) is opened on the integrated server and edits the cargo; a screen draws it; `ShipClient` draws the chests inside the ship like the cushions.
 
 **Tech Stack:** Java 25, Fabric (Minecraft 26.3), JUnit 5 (`./test.sh`), Fabric client gametests.
 
@@ -195,12 +195,12 @@ Note: `Chest.markUsedForTest()` sets a flag that makes `isEmpty()` false without
 ### Task 3: The menu (server side)
 
 **Files:**
-- Create: `fabric/src/main/java/dev/moui/galaxycraft/ship/ShipCargoMenu.java`, `CargoView.java`
+- Create: `fabric/src/main/java/dev/moui/galaxycraft/ship/ShipMenu.java`, `CargoView.java`
 - Register: menu type in `ShipBlocks.register()`.
 
 **Interfaces:**
 - Consumes: `ShipCargo`, `ShipStore.cargo`.
-- Produces: `ShipCargoMenu` (`AbstractContainerMenu`): 4 bay slots (chest items only, stack of 1), 54 content slots over `CargoView`
+- Produces: `ShipMenu` (`AbstractContainerMenu`): 4 bay slots (chest items only, stack of 1), 54 content slots over `CargoView`
   (inactive past the selected chest's size), 36 player slots; `clickMenuButton(player, id)` ids: 0..3 select bay, 4 join 0+1, 5 join 2+3,
   6 split 0+1, 7 split 2+3; a `Runnable onChanged` that marks the store dirty on the client thread.
   `static void open(ServerPlayer, String shipId)`.
@@ -211,7 +211,7 @@ Note: `Chest.markUsedForTest()` sets a flag that makes `isEmpty()` false without
 ### Task 4: Screen and opening
 
 **Files:**
-- Create: `fabric/src/client/java/dev/moui/galaxycraft/client/ShipCargoScreen.java` (an `AbstractContainerScreen`)
+- Create: `fabric/src/client/java/dev/moui/galaxycraft/client/ShipScreen.java` (an `AbstractContainerScreen`)
 - Modify: `ShipClient.java` (Shift + right click opens; E while aboard; aim hint), `GalaxyCraftClient.java` (register the screen and the start-of-tick E handler), lang file.
 
 - [ ] Steps: implement; run the game probe; commit.
