@@ -35,10 +35,11 @@ import org.joml.Vector3d;
 
 /**
  * Launch Stars: the star items put down on a planet's ground (two on two planets link), drawn as
- * SMG2's own star with a line of small stars showing the course, and the flight itself. Hold right
- * click on a linked star: it spins up, then flings the player along a course that bends around
- * the planets in the way (Route), as a function of the tick, by sliding the gravity frame like the
- * pulse and the map's autopilot. Shift cancels. Positions are universe units, like ships'.
+ * SMG2's own star (tilted, spinning, glowing) with a line of small stars showing the course, and the
+ * flight itself. Stand by a linked star and hold Shift: it spins up, then flings the player along a
+ * course that bends around the planets in the way (Route), as a function of the tick, by sliding the
+ * gravity frame like the pulse and the map's autopilot. Shift again cancels. Right click names a
+ * star: stars with the same code are linked. Positions are universe units, like ships'.
  */
 public final class LaunchStarClient {
     /** A star is aimed within this many blocks of the eye, by a sphere of this radius. */
@@ -57,7 +58,7 @@ public final class LaunchStarClient {
     public static final LaunchStarHooks HOOKS = LaunchStarClient::place;
 
     /** The course of a flight: from, to, route, speed profile, ticks flown. */
-    private record Fling(String from, String to, Route route, FlightProfile profile) {}
+    private record Fling(String from, String to, Route route, FlightProfile profile, Vector3d upStart, Vector3d upEnd) {}
 
     private static StarStore store;
     private static boolean dirty;
@@ -65,6 +66,10 @@ public final class LaunchStarClient {
     private static String winding;
     private static Fling flight;
     private static int flown;
+    /** Shift must be let go after the fling before it can cancel the flight. */
+    private static boolean sneakFree;
+    /** The star the crosshair was on last tick (its hint is shown once per look). */
+    private static String lastAimed;
     private static final Map<String, Route> routes = new HashMap<>();
 
     private LaunchStarClient() {}
@@ -95,6 +100,29 @@ public final class LaunchStarClient {
     /** The stars (tests). */
     public static List<StarRecord> stars() {
         return store == null ? List.of() : store.all();
+    }
+
+    /**
+     * The player is held by a star (winding up or flying): Minecraft's physics carry them, so Mario
+     * goes where the player is instead of the player following Mario.
+     */
+    public static boolean busy() {
+        return flight != null || winding != null;
+    }
+
+    /** Up for the frame during a flight: it stays through the first half, then turns smoothly to the arrival star's up. */
+    static Vector3d upToward(GravityFrame frame) {
+        Vector3d up = frame.upGal();
+        Fling f = flight;
+        if (f == null) return up;
+        double p = Math.min(1, flown / (double) f.profile().ticks());
+        double x = Math.max(0, Math.min(1, (p - 0.45) / 0.55));
+        double k = x * x * (3 - 2 * x); // smoothstep
+        Vector3d target = new Quaterniond().slerp(new Quaterniond().rotationTo(f.upStart(), f.upEnd()), k).transform(new Vector3d(f.upStart()));
+        double angle = up.angle(target);
+        // a share of what is left, so it eases out, but never faster than 5 degrees a tick
+        double step = Math.min(Math.toRadians(5), angle * 0.07 + Math.toRadians(0.05));
+        return GravityFrame.limitTurn(up, target, step);
     }
 
     /** The player is being flung right now. */
@@ -172,8 +200,9 @@ public final class LaunchStarClient {
         dirty = true;
         routes.clear();
         StationClient.useUp(player, hand, LaunchStarBlocks.LAUNCH_STAR);
-        player.sendOverlayMessage(Component.translatable(stored.partner() != null ? "message.galaxycraft.star.linked" : "message.galaxycraft.star.placed"));
-        GalaxyCraft.LOG.info("A Launch Star {} is down at {} (partner {})", stored.id(), p.center(), stored.partner());
+        player.sendOverlayMessage(Component.translatable(store.partnerOf(stored.id()).isPresent() ? "message.galaxycraft.star.linked"
+                : "message.galaxycraft.star.placed", stored.code()));
+        GalaxyCraft.LOG.info("A Launch Star {} is down at {} (code {})", stored.id(), p.center(), stored.code());
         return true;
     }
 
@@ -221,10 +250,10 @@ public final class LaunchStarClient {
     // ---- each tick ----
 
     /**
-     * Client tick. held: right click is down; attack: left click went down this tick; sneak: Shift
-     * is down. Returns the mouse buttons the star took (so the world does not also act on them).
+     * Client tick. rightDown: right click went down this tick; attack: left click went down; sneak:
+     * Shift is down. Returns the mouse buttons the star took (so the world does not also act on them).
      */
-    static int tick(LocalPlayer player, GravityFrame frame, boolean held, boolean attack, boolean sneak, int rightMask, int leftMask) {
+    static int tick(LocalPlayer player, GravityFrame frame, boolean rightDown, boolean attack, boolean sneak, int rightMask, int leftMask) {
         age++;
         if (store == null || player == null || frame == null) return 0;
         if (++sinceSave >= SAVE_TICKS) {
@@ -232,23 +261,34 @@ public final class LaunchStarClient {
             saveNow();
         }
         if (flight != null) {
-            fly(player, frame, sneak);
+            if (!sneak) sneakFree = true;
+            fly(player, frame, sneak && sneakFree);
             return rightMask | leftMask;
         }
         StarRecord a = aimed(player, frame);
-        if (a == null || !held) {
+        if (a == null) {
+            lastAimed = null;
             if (winding != null) stopWinding(player);
-            if (a != null && attack) {
-                pickUp(player, a);
-                return leftMask;
-            }
-            return a != null ? rightMask : 0;
+            return 0;
         }
         StarRecord to = store.partnerOf(a.id()).orElse(null);
-        if (to == null) {
-            if (windup == 0) player.sendOverlayMessage(Component.translatable("message.galaxycraft.star.alone"));
-            windup = 1; // told once for this hold
-            winding = null;
+        if (!a.id().equals(lastAimed)) {
+            lastAimed = a.id();
+            player.sendOverlayMessage(Component.translatable(to != null ? "message.galaxycraft.star.hint" : "message.galaxycraft.star.alone", a.code()));
+        }
+        if (attack) {
+            pickUp(player, a);
+            return leftMask;
+        }
+        if (rightDown) {
+            if (Minecraft.getInstance().gui.screen() == null) {
+                StarRecord shown = a;
+                Minecraft.getInstance().execute(() -> StarCodeScreen.open(shown));
+            }
+            return rightMask;
+        }
+        if (to == null || !sneak) {
+            if (winding != null) stopWinding(player);
             return rightMask;
         }
         if (winding == null) windup = 0;
@@ -261,6 +301,19 @@ public final class LaunchStarClient {
         frame.slide(d.mul(0.3)); // pulled onto the star
         if (windup >= WINDUP) launch(player, frame, a, to);
         return rightMask;
+    }
+
+    /** The code screen's Done: the star's new code (stars with the same code are linked). */
+    static void setCode(String id, String code) {
+        if (store == null) return;
+        StarRecord r = store.setCode(id, code);
+        if (r == null) return;
+        dirty = true;
+        routes.clear();
+        var me = Minecraft.getInstance().player;
+        if (me != null)
+            me.sendOverlayMessage(Component.translatable(store.partnerOf(id).isPresent() ? "message.galaxycraft.star.linked"
+                    : "message.galaxycraft.star.named", r.code()));
     }
 
     private static void stopWinding(LocalPlayer player) {
@@ -288,8 +341,9 @@ public final class LaunchStarClient {
     private static void launch(LocalPlayer player, GravityFrame frame, StarRecord from, StarRecord to) {
         routes.remove(from.id() + ">" + to.id());
         Route r = routeOf(from, to);
-        flight = new Fling(from.id(), to.id(), r, FlightProfile.of(r.length() * GravityFrame.SCALE));
+        flight = new Fling(from.id(), to.id(), r, FlightProfile.of(r.length() * GravityFrame.SCALE), upOf(from.up()), upOf(to.up()));
         flown = 0;
+        sneakFree = false;
         winding = null;
         windup = 0;
         GalaxyCraft.LOG.info("Launch Star flight: {} blocks, {} ticks", Math.round(r.length() * GravityFrame.SCALE), flight.profile().ticks());
@@ -320,14 +374,28 @@ public final class LaunchStarClient {
         return base;
     }
 
-    private static void drawStar(EntityClient ec, Vector3d pos, Vector3d up, double spin, double scale, int overlay, int tint, List<EntityWire.Piece> out) {
+    /** The star's lean from upright (radians) and how far it wobbles, and how high it bobs (blocks). */
+    private static final double TILT = 0.5, WOBBLE = 0.12, BOB = 0.12;
+
+    /**
+     * One star at pos: leaning and wobbling as it turns, so it is not a flat disc; glow: drawn at
+     * full brightness (not dimmed by the planet's light).
+     */
+    private static void drawStar(EntityClient ec, Vector3d pos, Vector3d up, double spin, double scale, int overlay, int tint, boolean glow,
+            List<EntityWire.Piece> out) {
         double unitsPerPixel = scale / (GravityFrame.SCALE * 16);
-        Matrix4d m = new Matrix4d().translation(pos.x, pos.y, pos.z)
-                .rotate(new Quaterniond().rotationTo(new Vector3d(0, 1, 0), up)).rotateY(spin).scale(unitsPerPixel);
+        double t = age * 0.03;
+        Vector3d at = new Vector3d(pos).fma(Math.sin(t * 1.7) * BOB / GravityFrame.SCALE, up);
+        Matrix4d m = new Matrix4d().translation(at.x, at.y, at.z)
+                .rotate(new Quaterniond().rotationTo(new Vector3d(0, 1, 0), up))
+                .rotateY(t * 0.7) // the lean turns slowly around
+                .rotateX(TILT + Math.sin(t * 2.3) * WOBBLE)
+                .rotateY(spin).scale(unitsPerPixel);
         for (ShipModels.PartModel part : LaunchStarModel.parts()) {
             int model = ec.shipModel(part, part.quads());
             int skin = ec.shipSkin(part.skin(), part.skin().width(), part.skin().height(), part.skin().argb());
             if (model < 0 || skin < 0) continue;
+            if (glow) ec.glowing.add(out.size());
             out.add(new EntityWire.Piece(model, skin, overlay, tint, ShipClient.rows(m)));
         }
     }
@@ -340,18 +408,19 @@ public final class LaunchStarClient {
         Vector3d eye = me != null && fr != null ? fr.toGal(vec(me.getEyePosition())) : null;
         for (StarRecord r : store.all()) {
             if (!r.stage().equals(stage())) continue;
-            boolean linked = r.partner() != null;
-            drawStar(ec, posOf(r), upOf(r.up()), spinOf(r, pt), 1, 0, linked ? 0xFFFFFFFF : 0x909090FF, out);
-            if (linked && eye != null && flight == null && posOf(r).distance(eye) * GravityFrame.SCALE < SHOW) {
-                StarRecord to = store.get(r.partner());
-                if (to != null) dots(ec, r, to, eye, pt, out);
-            }
+            StarRecord to = store.partnerOf(r.id()).orElse(null);
+            boolean linked = to != null;
+            drawStar(ec, posOf(r), upOf(r.up()), spinOf(r, pt), 1, 0, linked ? 0xFFFFFFFF : 0xA0A0A0FF, true, out);
+            if (linked) // a soft halo: a bigger, see-through copy turning the other way
+                drawStar(ec, posOf(r), upOf(r.up()), -spinOf(r, pt) * 0.6, 1.3, 0, 0xFFD04040, true, out);
+            if (linked && eye != null && flight == null && posOf(r).distance(eye) * GravityFrame.SCALE < SHOW)
+                dots(ec, r, to, eye, pt, out);
         }
         if (me != null && flight == null && Minecraft.getInstance().gui.screen() == null && me.getMainHandItem().is(LaunchStarBlocks.LAUNCH_STAR)) {
             ShipClient.Plan p = plan(me);
             if (p != null && !(p.problem() != null && p.center().lengthSquared() == 0)) {
                 Vector3d up = new Vector3d(0, 1, 0).rotate(p.rot());
-                drawStar(ec, p.center(), up, (age + pt) * SPIN_IDLE, 1, p.ok() ? ShipClient.GHOST_OK : ShipClient.GHOST_NO, 0xFFFFFFFF, out);
+                drawStar(ec, p.center(), up, (age + pt) * SPIN_IDLE, 1, p.ok() ? ShipClient.GHOST_OK : ShipClient.GHOST_NO, 0xFFFFFFFF, false, out);
             }
         }
     }
@@ -365,7 +434,7 @@ public final class LaunchStarClient {
         for (int i = 1; i < n; i++) {
             double s = (i + phase) / n * r.length();
             Vector3d p = r.at(Math.min(s, r.length()));
-            drawStar(ec, p, r.tangent(s), (age + pt) * 0.1 + i, DOT_SIZE, 0, 0xFFE070FF, out);
+            drawStar(ec, p, r.tangent(s), (age + pt) * 0.1 + i, DOT_SIZE, 0, 0xFFE070FF, true, out);
         }
     }
 }

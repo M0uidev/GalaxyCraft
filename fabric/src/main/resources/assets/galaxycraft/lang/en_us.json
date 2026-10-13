@@ -48,8 +48,14 @@
   "message.galaxycraft.ship.crowded": "Too close to another ship or pad",
   "item.galaxycraft.launch_star": "Launch Star",
   "message.galaxycraft.star.ground": "A Launch Star goes on the ground: point at it",
-  "message.galaxycraft.star.placed": "Launch Star down. Put the other one on another planet to link them",
-  "message.galaxycraft.star.linked": "Launch Stars linked! Hold right click on one to be launched",
-  "message.galaxycraft.star.alone": "This Launch Star has no partner yet: put another one on a different planet",
-  "message.galaxycraft.star.crowded": "Too close to another Launch Star"
+  "message.galaxycraft.star.placed": "Launch Star \"%s\" down. Put another on a different planet to link them, or right click it to change its code",
+  "message.galaxycraft.star.linked": "Launch Stars linked as \"%s\"! Stand by one and hold Shift to be launched",
+  "message.galaxycraft.star.alone": "Launch Star \"%s\": no partner yet. Right click to change its code; a star with the same code on another planet links to it",
+  "message.galaxycraft.star.crowded": "Too close to another Launch Star",
+  "message.galaxycraft.star.hint": "Linked. Hold Shift to be launched, right click to change the code",
+  "message.galaxycraft.star.named": "Launch Star code is now \"%s\"; a star with the same code on another planet links to it",
+  "screen.galaxycraft.star.title": "Launch Star",
+  "screen.galaxycraft.star.code": "Code",
+  "screen.galaxycraft.star.done": "Done",
+  "screen.galaxycraft.star.info": "Stars with the same code on different planets are linked."
 }

@@ -386,7 +386,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
      * a flight (the elytra, from take-off until landed) in any movement mode.
      */
     public static boolean ownPhysics() {
-        return walking() || Flight.active();
+        return walking() || Flight.active() || LaunchStarClient.busy();
     }
 
     /** Third person's eased distance (blocks, before the player's scale) and when it was last eased. */
@@ -527,6 +527,9 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                 // Flying: up turns (smoothly) to the galaxy's +Y and stays there, whatever pulls.
                 Vector3d up = GravityFrame.limitTurn(frame.upGal(), GALAXY_UP, MAX_TURN_PER_TICK);
                 frame.update(up.negate(), pos);
+            } else if (LaunchStarClient.flying()) {
+                // A Launch Star's flight: up turns slowly to the arrival star's, so the camera rolls into the new planet.
+                frame.update(LaunchStarClient.upToward(frame).negate(), pos);
             } else if (Flight.active() && !player.onGround()) {
                 // Elytra: up turns to the gravity that pulls, at a flight's pace; in the void
                 // (no gravity) it stays as it was.
