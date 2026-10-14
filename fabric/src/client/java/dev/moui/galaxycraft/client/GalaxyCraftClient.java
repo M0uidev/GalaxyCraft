@@ -144,6 +144,13 @@ public final class GalaxyCraftClient implements ClientModInitializer {
                     dev.moui.galaxycraft.voxel.PlanetCollision.boxes(s.planet(), s::galOf, s::localOf, f, q, out);
         });
         ClientTickEvents.START_CLIENT_TICK.register(GalaxyCraftClient::beforeTick);
+        // E aboard a ship opens the ship's screen instead of the inventory (taken before Minecraft handles its keys).
+        ClientTickEvents.START_CLIENT_TICK.register(client -> {
+            if (client.player == null || client.gui.screen() != null) return;
+            var aboard = ShipClient.aboard();
+            if (aboard.isEmpty()) return;
+            while (client.options.keyInventory.consumeClick()) ShipClient.openCargo(aboard.get());
+        });
         ClientTickEvents.END_CLIENT_TICK.register(GalaxyCraftClient::afterTick);
         ClientTickEvents.END_CLIENT_TICK.register(PlanetEditorScreen::openIfRequested);
         ClientTickEvents.END_CLIENT_TICK.register(client -> { // after the chat that ran the command has closed

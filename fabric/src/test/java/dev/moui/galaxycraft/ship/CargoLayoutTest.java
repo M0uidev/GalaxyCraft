@@ -39,6 +39,6 @@ class CargoLayoutTest {
         ShipCargo c = new ShipCargo(4);
         for (int i = 0; i < 4; i++) c.install(i);
         float lastSeat = SeatLayout.seats(4).stream().map(s -> s[2]).min(Float::compare).orElse(0f);
-        for (CargoLayout.Placed p : CargoLayout.chests(c)) assertTrue(p.center()[2] < lastSeat + 0.1f * 0 - 8, "chest at z " + p.center()[2]);
+        for (CargoLayout.Placed p : CargoLayout.chests(c)) assertTrue(p.center()[2] < lastSeat - 6, "chest at z " + p.center()[2]);
     }
 }

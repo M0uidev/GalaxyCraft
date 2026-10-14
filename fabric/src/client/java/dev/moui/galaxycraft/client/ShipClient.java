@@ -331,6 +331,11 @@ public final class ShipClient {
      * Opens a ship's hold: a menu from the integrated server over the cargo the store keeps (single player: the
      * server and the store share this process; the edits are saved with the ships).
      */
+    /** A ship's hold, for the game tests that fill it. */
+    public static ShipCargo cargoForTest(ShipRecord r) {
+        return store.cargo(r.id(), r.modules().cabin());
+    }
+
     static void openCargo(ShipRecord r) {
         Minecraft mc = Minecraft.getInstance();
         var server = mc.getSingleplayerServer();
