@@ -71,7 +71,7 @@ Messages (protocol version `1`; first field of the handshake pair):
 | `Skin` | client -> server -> clients, once per change | player UUID, hash, PNG bytes (<= 24 KB; larger is not sent) for the `/skin` custom skin |
 | `PeerGone` | server -> clients | player UUID (also implied by Minecraft's own player-list removal) |
 
-`State` fields: galaxy position (3 doubles), up vector (3 floats), yaw and pitch of the body / head (2 floats),
+`State` fields: **universe** position (3 doubles; each client has its own floating origin, so the receiver maps it with `GameOrigin.toGame`), up vector (3 floats), yaw and pitch of the body / head (2 floats),
 velocity (3 floats, for extrapolation), mode (Steve / Mario), flags (sneak, sprint, swimming, gliding, on ground,
 on ship), a sequence number. About 60 bytes: 10 Hz x 7 peers is well under 5 KB/s.
 
@@ -98,7 +98,7 @@ Custom payloads from client to server are capped at 32 KB by Minecraft, which is
 
 - `RemotePlayers` (client, pure core + thin Minecraft glue): keeps per player the last states in a ring of 3,
   and computes the pose to draw at render time **100 ms behind** the newest state (one interval + jitter),
-  interpolating position (spherically around the planet's up, not through it), up vector and angles; when
+  interpolating position linearly (100 ms is far too short to bend), the up vector spherically, and the angles by the short way; when
   the newest state is older than 250 ms it extrapolates with the sent velocity for up to 250 ms more, then
   holds, and after 5 s without states hides the player.
 - **Steve mode**: drawn with Minecraft's player renderer using the vanilla remote player entity the client
