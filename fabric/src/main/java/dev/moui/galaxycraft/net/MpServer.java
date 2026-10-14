@@ -107,7 +107,7 @@ public final class MpServer {
         if (p == null || !members.contains(guest)) return;
         var box = outboxes.computeIfAbsent(guest, k -> new PlanetXfer.Outbox<>());
         if (offer == null || offer.data().length == 0 || offer.data().length > PlanetXfer.MAX_BYTES) {
-            hub.cancel(guest, index);
+            cancelPlanet(guest, index);
             box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_FAIL, 0, 0, 0), 32);
             return;
         }
@@ -122,6 +122,13 @@ public final class MpServer {
             box.add(new MpPayloads.PlanetChunk(index, seq, PlanetXfer.slice(data, seq)), Math.min(PlanetXfer.CHUNK, data.length - seq * PlanetXfer.CHUNK));
         hub.deliver(guest, index, offer.seq());
         GalaxyCraft.LOG.info("[GalaxyCraft mp] planet {} ({} KB) queued for {}", index, data.length / 1024, p.getName().getString());
+    }
+
+    /** The guest will not hold that planet after all: no more edits for it, and the host's game may let it go. */
+    private static void cancelPlanet(UUID guest, int index) {
+        hub.cancel(guest, index);
+        EditSink sink = editSink;
+        if (sink != null) sink.dropped(guest, index);
     }
 
     private static void ask(ServerPlayer p, MpPayloads.PlanetAsk ask) {

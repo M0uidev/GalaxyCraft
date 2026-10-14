@@ -151,6 +151,7 @@ final class MpEdits {
 
     /** End of a client tick: what the player changed goes to the host; planets we no longer hold are let go. */
     static void tick() {
+        if (held.isEmpty()) return;
         McBlocks blocks = PlanetClient.blocks();
         if (blocks != null && ClientPlayNetworking.canSend(MpPayloads.Edits.TYPE))
             for (Held h : held.values()) {

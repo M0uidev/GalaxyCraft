@@ -149,6 +149,8 @@ final class MpPlanets {
     private static void fail(Pending p, String why) {
         if (pending.get(p.index) != p) return;
         pending.remove(p.index);
+        seqs.remove(p.index);
+        if (ClientPlayNetworking.canSend(MpPayloads.PlanetDrop.TYPE)) ClientPlayNetworking.send(new MpPayloads.PlanetDrop(p.index)); // the host stops holding it for us
         GalaxyCraft.LOG.warn("[GalaxyCraft mp] planet {} from the host: {}", p.index, why);
         p.done.completeExceptionally(new IllegalStateException(why));
     }
