@@ -88,9 +88,13 @@ case "$QUALITY" in
 esac
 read -r VRES VMSAA VANISO <<< "$VQ"
 VIDEO=(-C "Graphics.Settings.InternalResolution=$VRES" -C "Graphics.Settings.MSAA=$VMSAA" -C "Graphics.Enhancements.MaxAnisotropy=$VANISO")
+# GXC_FOCUS_INPUT=1 (two games on one machine, a multiplayer test): each Dolphin takes the keyboard and the
+# mouse only while its own window is focused, so one game can be played without moving the other.
+FOCUS=(-C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False)
+[ -n "${GXC_FOCUS_INPUT:-}" ] && FOCUS=(-C Dolphin.Input.BackgroundInput=False -C Dolphin.General.HotkeysRequireFocus=True)
 GALAXYCRAFT=1 GALAXYCRAFT_BOOT=space dolphin/build/Binaries/dolphin-emu -u "$DOLPHIN_DIR" \
   -e "syati/build/$MODEL.json" \
-  -C Dolphin.Input.BackgroundInput=True -C Dolphin.General.HotkeysRequireFocus=False \
+  "${FOCUS[@]}" \
   -C Dolphin.Core.RAMOverrideEnable=True -C Dolphin.Core.MEM2Size=268435456 -C Dolphin.Core.CPUThread=True \
   -C Dolphin.Interface.ConfirmStop=False "${VIDEO[@]}" &
 DOLPHIN=$!
