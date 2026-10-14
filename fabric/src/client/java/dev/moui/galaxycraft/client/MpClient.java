@@ -2,15 +2,21 @@ package dev.moui.galaxycraft.client;
 
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.net.GuestFolder;
+import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.net.MpPayloads;
+import dev.moui.galaxycraft.net.PeerState;
 import dev.moui.galaxycraft.net.Protocol;
+import dev.moui.galaxycraft.net.StateSampler;
+import dev.moui.galaxycraft.net.Wire;
 import dev.moui.galaxycraft.voxel.GalaxySave;
 import dev.moui.galaxycraft.voxel.PlanetStore;
 import java.io.IOException;
 import java.nio.file.Path;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
+import org.joml.Vector3d;
 
 /**
  * The player's end of multiplayer: entering the host's galaxy from its Hello (a guest), and the
@@ -26,9 +32,62 @@ final class MpClient {
 
     private MpClient() {}
 
+    /** The other players, as the server last told us. */
+    static final RemotePlayers remotes = new RemotePlayers();
+
+    /** A state every 2 ticks: 10 a second. */
+    private static final int SEND_TICKS = 2;
+    private static final StateSampler sampler = new StateSampler(SEND_TICKS);
+    private static int seq, ticksSinceSend;
+    private static Vector3d lastSent;
+
     static void register() {
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Hello.TYPE,
                 (hello, ctx) -> ctx.client().execute(() -> onHello(ctx.client(), hello)));
+        ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Peer.TYPE,
+                (peer, ctx) -> ctx.client().execute(() -> onPeer(ctx.client(), peer)));
+        ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Gone.TYPE,
+                (gone, ctx) -> ctx.client().execute(() -> remotes.remove(gone.id())));
+    }
+
+    private static void onPeer(Minecraft client, MpPayloads.Peer peer) {
+        if (client.player == null || peer.id().equals(client.player.getUUID())) return;
+        try {
+            remotes.push(peer.id(), Wire.decode(peer.data()), System.nanoTime());
+        } catch (Wire.Malformed e) {
+            GalaxyCraft.LOG.debug("Dropped a malformed peer state: {}", e.getMessage());
+        }
+    }
+
+    /** Whether to tell the others where we are: a guest in a host's galaxy, or a host with its world open to others. */
+    private static boolean sending(Minecraft client) {
+        if (connected) return true;
+        var server = client.getSingleplayerServer();
+        return server != null && server.isPublished();
+    }
+
+    /** This tick's state to the server, every {@link #SEND_TICKS} ticks. */
+    private static void sendState(Minecraft client) {
+        ticksSinceSend++;
+        if (!sampler.due()) return;
+        LocalPlayer p = client.player;
+        Vector3d at = PlanetClient.marioUniverse();
+        GravityFrame frame = GalaxyCraftClient.frame();
+        if (p == null || at == null || frame == null) return;
+        Vector3d up = frame.upGal();
+        float vx = 0, vy = 0, vz = 0;
+        if (lastSent != null) {
+            vx = StateSampler.speed(at.x - lastSent.x, ticksSinceSend);
+            vy = StateSampler.speed(at.y - lastSent.y, ticksSinceSend);
+            vz = StateSampler.speed(at.z - lastSent.z, ticksSinceSend);
+        }
+        lastSent = new Vector3d(at);
+        ticksSinceSend = 0;
+        PeerState s = new PeerState(seq++, at.x, at.y, at.z, (float) up.x, (float) up.y, (float) up.z, p.getYRot(), p.getXRot(),
+                vx, vy, vz, GalaxyCraftClient.walking() ? Protocol.MODE_STEVE : Protocol.MODE_MARIO,
+                StateSampler.flags(p.isShiftKeyDown(), p.isSprinting(), p.isSwimming(), p.isFallFlying(), p.onGround(),
+                        ShipClient.aboard().isPresent()));
+        if (s.valid()) ClientPlayNetworking.send(new MpPayloads.State(Wire.encode(s)));
     }
 
     static boolean connected() {
@@ -50,6 +109,7 @@ final class MpClient {
     }
 
     static void tick(Minecraft client) {
+        if (sending(client)) sendState(client);
         if (helloWait <= 0) return;
         if (connected) {
             helloWait = 0;
@@ -98,5 +158,9 @@ final class MpClient {
     static void reset() {
         connected = false;
         helloWait = 0;
+        remotes.clear();
+        lastSent = null;
+        ticksSinceSend = 0;
+        sampler.restart();
     }
 }
