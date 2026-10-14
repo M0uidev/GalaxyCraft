@@ -1441,7 +1441,7 @@ index 67721e3..9115fa0 100644
  };
  }  // namespace ciface::DInput
 diff --git a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
-index 309ed70..1065124 100644
+index 309ed70..49ec19b 100644
 --- a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
 +++ b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.cpp
 @@ -15,6 +15,7 @@
@@ -1471,7 +1471,17 @@ index 309ed70..1065124 100644
  }
  
  Core::DeviceRemoval KeyboardMouse::UpdateInput()
-@@ -342,6 +348,23 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+@@ -320,6 +326,9 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+   float delta_x = 0.0f, delta_y = 0.0f, delta_z = 0.0f;
+   double delta_delta;
+   bool update_mouse = false, update_keyboard = false;
++  // GalaxyCraft: with GXC_FOCUS_INPUT set (two games on one machine) only the game whose window
++  // has the keyboard focus takes the keyboard and the mouse.
++  const bool galaxycraft_focus = GalaxyCraftHasFocus();
+ 
+   // Iterate through the event queue, processing raw pointer motion events and
+   // noting whether the button or key state has changed.
+@@ -342,6 +351,23 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
        update_mouse = true;
        break;
      case XI_RawKeyPress:
@@ -1483,7 +1493,7 @@ index 309ed70..1065124 100644
 +      XkbStateRec xkb{};
 +      KeySym keysym = NoSymbol;
 +      unsigned int consumed = 0;
-+      if (XkbGetState(m_display, XkbUseCoreKbd, &xkb) == Success &&
++      if (galaxycraft_focus && XkbGetState(m_display, XkbUseCoreKbd, &xkb) == Success &&
 +          (xkb.mods & (ControlMask | Mod1Mask)) == 0 &&
 +          XkbLookupKeySym(m_display, static_cast<KeyCode>(raw_event->detail),
 +                          XkbBuildCoreState(xkb.mods, xkb.group), &consumed, &keysym))
@@ -1495,19 +1505,58 @@ index 309ed70..1065124 100644
      case XI_RawKeyRelease:
        update_keyboard = true;
        break;
-@@ -414,9 +437,49 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
+@@ -414,9 +440,88 @@ Core::DeviceRemoval KeyboardMouse::UpdateInput()
    if (update_keyboard)
      XQueryKeymap(m_display, m_state.keyboard.data());
  
 +  // GalaxyCraft: Minecraft reads keyboard and mouse from here rather than from Qt, which may
 +  // never see the render window as focused (e.g. XWayland under Hyprland).
-+  CaptureForGalaxyCraft(GalaxyCraft::OnXInput2(delta_x, delta_y, delta_z, m_state.buttons,
-+                                               m_state.keyboard.data(), m_galaxycraft_pointer_x,
-+                                               m_galaxycraft_pointer_y));
++  if (galaxycraft_focus)
++  {
++    CaptureForGalaxyCraft(GalaxyCraft::OnXInput2(delta_x, delta_y, delta_z, m_state.buttons,
++                                                 m_state.keyboard.data(), m_galaxycraft_pointer_x,
++                                                 m_galaxycraft_pointer_y));
++  }
++  else
++  {
++    // Not the focused game: it sees no keys, no buttons and no pointer, and lets the cursor go.
++    const char no_keys[32] = {};
++    CaptureForGalaxyCraft(GalaxyCraft::OnXInput2(0.0f, 0.0f, 0.0f, 0, no_keys, -1.0f, -1.0f));
++  }
 +
    return Core::DeviceRemoval::Keep;
  }
  
++// True unless GXC_FOCUS_INPUT is set and the keyboard focus is in another window: the focus is this
++// window or one that holds it (Dolphin's main window around the render widget).
++bool KeyboardMouse::GalaxyCraftHasFocus()
++{
++  static const bool focus_only = std::getenv("GXC_FOCUS_INPUT") != nullptr;
++  if (!focus_only)
++    return true;
++  Window focus = None;
++  int revert = 0;
++  XGetInputFocus(m_display, &focus, &revert);
++  if (focus == None || focus == PointerRoot)
++    return false;
++  Window window = m_window;
++  for (int depth = 0; window != None && depth < 16; ++depth)
++  {
++    if (window == focus)
++      return true;
++    Window root = None, parent = None, *children = nullptr;
++    unsigned int count = 0;
++    if (!XQueryTree(m_display, window, &root, &parent, &children, &count))
++      break;
++    if (children)
++      XFree(children);
++    if (parent == None || parent == root)
++      break;
++    window = parent;
++  }
++  return false;
++}
++
 +void KeyboardMouse::CaptureForGalaxyCraft(bool capture)
 +{
 +  if (capture != m_galaxycraft_capture)
@@ -1546,18 +1595,19 @@ index 309ed70..1065124 100644
  {
    // This is the name string we got from the X server for this master
 diff --git a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
-index 4144805..e283734 100644
+index 4144805..c7f70f5 100644
 --- a/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
 +++ b/Source/Core/InputCommon/ControllerInterface/Xlib/XInput2.h
-@@ -117,6 +117,7 @@ private:
+@@ -117,6 +117,8 @@ private:
  
  private:
    void UpdateCursor(bool should_center_mouse);
 +  void CaptureForGalaxyCraft(bool capture);
++  bool GalaxyCraftHasFocus();
  
  public:
    Core::DeviceRemoval UpdateInput() override;
-@@ -133,6 +134,10 @@ private:
+@@ -133,6 +135,10 @@ private:
    Window m_window;
    Display* m_display;
    State m_state{};
