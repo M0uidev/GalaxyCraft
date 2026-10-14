@@ -756,6 +756,26 @@ final class EntityClient {
     private final RemoteAvatars remoteAvatars = new RemoteAvatars();
     /** A renderer failed for the other players: they are left out (the local player is not affected). */
     private boolean remotesFailed;
+    /** The custom skins of the others as the game's textures: the data they came from, and the texture made of it. */
+    private final Map<java.util.UUID, byte[]> peerSkinData = new HashMap<>();
+    private final Map<java.util.UUID, Integer> peerSkinIds = new HashMap<>();
+
+    /** A player's /skin as one of the game's textures (made again when it changes), -1 none. */
+    private int peerSkin(java.util.UUID id) {
+        byte[] data = MpClient.skinOf(id);
+        if (data == null) {
+            peerSkinData.remove(id);
+            peerSkinIds.remove(id);
+            return -1;
+        }
+        if (data != peerSkinData.get(id)) { // a new array: the skin changed
+            int[] argb = dev.moui.galaxycraft.net.SkinCodec.decode(data);
+            int size = dev.moui.galaxycraft.net.SkinCodec.SIZE;
+            peerSkinIds.put(id, argb == null ? -1 : addSkin(size, size, argb));
+            peerSkinData.put(id, data);
+        }
+        return peerSkinIds.getOrDefault(id, -1);
+    }
 
     /**
      * Every other player in the galaxy, drawn by Minecraft's player renderer where they stand: the
@@ -792,6 +812,7 @@ final class EntityClient {
                     h.isVisuallySwimming = s.swimming();
                 }
                 galaxy = s.matrix();
+                playerSkin = peerSkin(s.id());
                 PoseStack ps = new PoseStack();
                 net.minecraft.world.phys.Vec3 offset = r.getRenderOffset(st);
                 ps.translate(offset.x, offset.y, offset.z);
@@ -802,6 +823,7 @@ final class EntityClient {
                 GalaxyCraft.LOG.warn("Not drawing the other players in the game: {}", ex.toString());
             } finally {
                 galaxy = null;
+                playerSkin = -1;
             }
         }
     }

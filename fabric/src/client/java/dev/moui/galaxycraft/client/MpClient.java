@@ -6,6 +6,7 @@ import dev.moui.galaxycraft.gravity.GravityFrame;
 import dev.moui.galaxycraft.net.MpPayloads;
 import dev.moui.galaxycraft.net.PeerState;
 import dev.moui.galaxycraft.net.Protocol;
+import dev.moui.galaxycraft.net.SkinCodec;
 import dev.moui.galaxycraft.net.StateSampler;
 import dev.moui.galaxycraft.net.Wire;
 import dev.moui.galaxycraft.voxel.GalaxySave;
@@ -41,7 +42,39 @@ final class MpClient {
     private static int seq, ticksSinceSend;
     private static Vector3d lastSent;
 
+    /** The custom skins (deflated pixels) the others wear, as the server last said. */
+    private static final java.util.Map<java.util.UUID, byte[]> skinData = new java.util.HashMap<>();
+    /** The skin we last told the others about (null: none, or nothing said yet). */
+    private static SkinClient.Skin lastSkin;
+    private static boolean wasSending;
+
+    /** Another player's custom skin as sent (SkinCodec), or null. */
+    static byte[] skinOf(java.util.UUID id) {
+        return skinData.get(id);
+    }
+
+    private static void onSkin(MpPayloads.Skin skin) {
+        if (!SkinCodec.acceptable(skin.data())) return;
+        if (SkinCodec.isClear(skin.data())) skinData.remove(skin.id());
+        else if (skinData.containsKey(skin.id()) || skinData.size() < Protocol.MAX_PLAYERS) skinData.put(skin.id(), skin.data());
+    }
+
+    /** Tells the others about our /skin when it changes, and once when we start telling them anything. */
+    private static void syncSkin(Minecraft client) {
+        SkinClient.Skin now = SkinClient.current();
+        if (now == lastSkin || client.player == null) return;
+        lastSkin = now;
+        if (now == null) {
+            ClientPlayNetworking.send(new MpPayloads.Skin(client.player.getUUID(), new byte[0]));
+        } else if (now.argb().length == SkinCodec.PIXELS) {
+            byte[] data = SkinCodec.encode(now.argb());
+            if (data.length <= Protocol.SKIN_MAX) ClientPlayNetworking.send(new MpPayloads.Skin(client.player.getUUID(), data));
+        }
+    }
+
     static void register() {
+        ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Skin.TYPE,
+                (skin, ctx) -> ctx.client().execute(() -> onSkin(skin)));
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Hello.TYPE,
                 (hello, ctx) -> ctx.client().execute(() -> onHello(ctx.client(), hello)));
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Peer.TYPE,
@@ -112,7 +145,13 @@ final class MpClient {
     }
 
     static void tick(Minecraft client) {
-        if (sending(client)) sendState(client);
+        boolean on = sending(client);
+        if (on && !wasSending) lastSkin = null; // a new audience: say again what we wear
+        wasSending = on;
+        if (on) {
+            syncSkin(client);
+            sendState(client);
+        }
         if (helloWait <= 0) return;
         if (connected) {
             helloWait = 0;
@@ -162,6 +201,9 @@ final class MpClient {
         connected = false;
         helloWait = 0;
         remotes.clear();
+        skinData.clear();
+        lastSkin = null;
+        wasSending = false;
         lastSent = null;
         ticksSinceSend = 0;
         sampler.restart();

@@ -83,13 +83,13 @@ public final class MpPayloads {
      * A player's custom skin (PNG), both ways: a player sends theirs (the id is ignored), the server
      * forwards it with the sender's id. Minecraft caps what a client sends at 32 KB.
      */
-    public record Skin(UUID id, byte[] png) implements CustomPacketPayload {
-        public static final int MAX = 24 * 1024;
+    public record Skin(UUID id, byte[] data) implements CustomPacketPayload {
+        public static final int MAX = Protocol.SKIN_MAX;
         public static final Type<Skin> TYPE = typeOf("mp_skin");
         public static final StreamCodec<RegistryFriendlyByteBuf, Skin> CODEC = CustomPacketPayload.codec(
                 (p, b) -> {
                     b.writeUUID(p.id);
-                    b.writeByteArray(p.png);
+                    b.writeByteArray(p.data);
                 },
                 b -> new Skin(b.readUUID(), b.readByteArray(MAX)));
 

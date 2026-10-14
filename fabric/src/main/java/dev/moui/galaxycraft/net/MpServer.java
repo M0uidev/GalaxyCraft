@@ -27,6 +27,9 @@ public final class MpServer {
     private static Relay relay;
     /** Guests that were sent a Hello: the server tick it was sent on. */
     private static final Map<UUID, Integer> waiting = new HashMap<>();
+    /** Each player's latest custom skin, for those who join later; and how often they may change it. */
+    private static final Map<UUID, byte[]> skins = new HashMap<>();
+    private static final Map<UUID, RateLimiter> skinLimits = new HashMap<>();
 
     private MpServer() {}
 
@@ -54,6 +57,12 @@ public final class MpServer {
         }
     };
 
+    /** A player who joins late gets the custom skins already worn. */
+    private static void sendSkinsTo(ServerPlayer p) {
+        for (var e : skins.entrySet())
+            if (!e.getKey().equals(p.getUUID())) ServerPlayNetworking.send(p, new MpPayloads.Skin(e.getKey(), e.getValue()));
+    }
+
     public static void init() {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, srv) -> {
             server = srv;
@@ -74,10 +83,13 @@ public final class MpServer {
             relay.join(p.getUUID());
             waiting.put(p.getUUID(), srv.getTickCount());
             ServerPlayNetworking.send(p, new MpPayloads.Hello(Protocol.VERSION, galaxy.worldId().toString(), json));
+            sendSkinsTo(p);
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, srv) -> {
             UUID id = handler.getPlayer().getUUID();
             waiting.remove(id);
+            skins.remove(id);
+            skinLimits.remove(id);
             if (relay != null) relay.leave(id);
         });
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.HelloAck.TYPE, (payload, ctx) -> {
@@ -92,8 +104,14 @@ public final class MpServer {
         });
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Skin.TYPE, (payload, ctx) -> {
             UUID from = ctx.player().getUUID();
+            byte[] png = payload.data();
+            boolean clear = SkinCodec.isClear(png);
+            if (!SkinCodec.acceptable(png)) return; // junk is dropped, not passed on
+            if (!skinLimits.computeIfAbsent(from, k -> new RateLimiter(1, 3)).allow(System.nanoTime())) return;
+            if (clear) skins.remove(from);
+            else skins.put(from, png);
             for (ServerPlayer other : ctx.server().getPlayerList().getPlayers())
-                if (!other.getUUID().equals(from)) ServerPlayNetworking.send(other, new MpPayloads.Skin(from, payload.png()));
+                if (!other.getUUID().equals(from)) ServerPlayNetworking.send(other, new MpPayloads.Skin(from, png));
         });
         ServerTickEvents.END_SERVER_TICK.register(srv -> {
             if (waiting.isEmpty()) return;
@@ -107,6 +125,8 @@ public final class MpServer {
             relay = null;
             server = null;
             waiting.clear();
+            skins.clear();
+            skinLimits.clear();
         });
         GalaxyCraft.LOG.info("Multiplayer ready (protocol {})", Protocol.VERSION);
     }
