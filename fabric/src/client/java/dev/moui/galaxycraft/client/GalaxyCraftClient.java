@@ -161,7 +161,10 @@ public final class GalaxyCraftClient implements ClientModInitializer {
             EnteringScreen.joining();
             client.execute(() -> GalaxyWorlds.joined(client));
         });
+        MpClient.register();
+        ClientTickEvents.END_CLIENT_TICK.register(MpClient::tick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
+            MpClient.reset();
             PlanetClient.leaveWorld(bridge);
             resetFrame();
             dev.moui.galaxycraft.client.music.MusicService.shutdown();

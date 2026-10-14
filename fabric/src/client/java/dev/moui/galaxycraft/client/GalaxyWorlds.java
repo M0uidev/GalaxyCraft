@@ -21,8 +21,8 @@ final class GalaxyWorlds {
 
     static void joined(Minecraft client) {
         MinecraftServer server = client.getSingleplayerServer();
-        if (server == null) { // another's server: no galaxy of ours
-            EnteringScreen.show(client);
+        if (server == null) { // another's server: its Hello gives us the galaxy, if it has one
+            MpClient.joinedRemote(client);
             return;
         }
         GalaxySave galaxy = GalaxySave.of(server.getWorldPath(LevelResource.ROOT));
