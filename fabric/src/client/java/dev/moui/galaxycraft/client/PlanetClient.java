@@ -686,7 +686,7 @@ public final class PlanetClient {
         marioUniverse = world.queryPos();
         // The floating origin first: what this tick sends is from wherever it is now.
         UniverseClient.tick(bridge, world, landPending || generating != null, landPending ? landCenter() : null);
-        for (ShadowWorld.Bed b; (b = ShadowWorld.pollBed()) != null; ) slept(b, player);
+        for (ShadowWorld.Bed b; (b = ShadowWorld.pollBed()) != null; ) if (player != null && b.player().equals(player.getUUID())) slept(b, player); // a guest's bed is not the host's
         // The player died and came back (Minecraft made it anew): Mario lands at the bed, else where he stood.
         if (space && lastPlayer != null && player != lastPlayer) {
             landOn = respawnSpot();
@@ -1612,7 +1612,15 @@ public final class PlanetClient {
                     ShadowWorld.placedSign(focus.planet(), cell, player.getUUID());
                 if (!creative) useUp(player, hand, held);
             };
-            if (aim == null || !shadow.available()) place.run();
+            if (aim == null) place.run();
+            else if (!shadow.available()) {
+                // A guest: the host's shadow runs the block's use (a door, a chest); what nothing used is placed here.
+                boolean ask = MpUse.guest() && (blocks.usable(focus.planet().get(aim.cell())) || !stack.isEmpty()
+                        && !(stack.getItem() instanceof net.minecraft.world.item.BlockItem
+                                || stack.getItem() instanceof net.minecraft.world.item.BucketItem));
+                if (!ask || !MpUse.ask(indexOf(focus), aim.cell(), aim.face(), aim.hit().x, aim.hit().y, aim.hit().z, hand, place))
+                    place.run();
+            }
             else ShadowWorld.use(focus.planet(), aim.cell(), aim.face(),
                     new net.minecraft.world.phys.Vec3(aim.hit().x, aim.hit().y, aim.hit().z), player.getUUID(), hand, place);
         }
@@ -1726,7 +1734,10 @@ public final class PlanetClient {
     /** A block placed outside creative: one fewer of it in hand (on the server, which syncs back). */
     private static void useUp(LocalPlayer player, InteractionHand hand, ItemStack placed) {
         MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
-        if (server == null) return;
+        if (server == null) {
+            if (MpUse.guest()) MpUse.usedUp(hand); // the inventory is the host server's
+            return;
+        }
         java.util.UUID id = player.getUUID();
         server.execute(() -> {
             ServerPlayer sp = server.getPlayerList().getPlayer(id);

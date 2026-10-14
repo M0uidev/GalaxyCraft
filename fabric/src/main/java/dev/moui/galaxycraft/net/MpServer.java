@@ -41,6 +41,9 @@ public final class MpServer {
         void edits(UUID guest, EditCodec.Msg m);
 
         void dropped(UUID guest, int planet);
+
+        /** A guest right clicked a block (already checked: a planet it holds, a sane cell and hit). Called on the server thread. */
+        void use(UUID guest, MpPayloads.Use u);
     }
 
     private static volatile PlanetSource planetSource;
@@ -177,7 +180,48 @@ public final class MpServer {
         if (hub.subscribed(id, m.planet())) sink.edits(id, m);
     }
 
+    private static final Map<UUID, RateLimiter> useLimits = new HashMap<>();
+
+    private static void use(ServerPlayer p, MpPayloads.Use u) {
+        UUID id = p.getUUID();
+        EditSink sink = editSink;
+        if (sink == null || !members.contains(id)) return;
+        if (!useLimits.computeIfAbsent(id, k -> new RateLimiter(20, 10)).allow(System.nanoTime())) {
+            ServerPlayNetworking.send(p, new MpPayloads.UseDone(u.nonce(), true)); // too fast: the guest places as before
+            return;
+        }
+        if (!hub.subscribed(id, u.planet()) || u.cell() < 0 || u.face() < 0 || u.face() > 5 || (u.hand() != 0 && u.hand() != 1)
+                || !UseCheck.valid(u.cell(), Integer.MAX_VALUE, u.face(), u.hand(), u.hx(), u.hy(), u.hz())) {
+            ServerPlayNetworking.send(p, new MpPayloads.UseDone(u.nonce(), true));
+            return;
+        }
+        sink.use(id, u);
+    }
+
+    /** The host's game answers a guest's block use, from any thread. */
+    public static void useDone(UUID guest, int nonce, boolean passed) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            ServerPlayer p = player(guest);
+            if (p != null) ServerPlayNetworking.send(p, new MpPayloads.UseDone(nonce, passed));
+        });
+    }
+
+    private static final Map<UUID, RateLimiter> usedUpLimits = new HashMap<>();
+
+    private static void usedUp(ServerPlayer p, MpPayloads.UsedUp u) {
+        UUID id = p.getUUID();
+        if (!members.contains(id) || (u.hand() != 0 && u.hand() != 1)) return;
+        if (!usedUpLimits.computeIfAbsent(id, k -> new RateLimiter(20, 10)).allow(System.nanoTime())) return;
+        var hand = u.hand() == 0 ? net.minecraft.world.InteractionHand.MAIN_HAND : net.minecraft.world.InteractionHand.OFF_HAND;
+        var stack = p.getItemInHand(hand);
+        if (!p.hasInfiniteMaterials() && stack.getItem() instanceof net.minecraft.world.item.BlockItem) stack.shrink(1);
+    }
+
     private static void forget(UUID id) {
+        useLimits.remove(id);
+        usedUpLimits.remove(id);
         members.remove(id);
         askLimits.remove(id);
         outstanding.remove(id);
@@ -290,6 +334,8 @@ public final class MpServer {
             EditSink sink = editSink;
             if (sink != null) sink.dropped(id, payload.index());
         });
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Use.TYPE, (payload, ctx) -> use(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.UsedUp.TYPE, (payload, ctx) -> usedUp(ctx.player(), payload));
         ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {
             if (relay != null) relay.state(ctx.player().getUUID(), payload.data(), System.nanoTime());
@@ -326,6 +372,8 @@ public final class MpServer {
             editLimits.clear();
             editBytes.clear();
             editBad.clear();
+            useLimits.clear();
+            usedUpLimits.clear();
             hub = newHub();
         });
         GalaxyCraft.LOG.info("Multiplayer ready (protocol {})", Protocol.VERSION);

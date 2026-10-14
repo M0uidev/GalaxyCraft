@@ -2,7 +2,10 @@ package dev.moui.galaxycraft.client;
 
 import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.net.EditCodec;
+import dev.moui.galaxycraft.net.MpPayloads;
 import dev.moui.galaxycraft.net.MpServer;
+import dev.moui.galaxycraft.net.UseCheck;
+import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.voxel.Blocks;
 import dev.moui.galaxycraft.voxel.PlanetSession;
 import dev.moui.galaxycraft.voxel.PlanetStore;
@@ -88,7 +91,30 @@ final class HostPlanets {
             public void dropped(UUID guest, int planet) {
                 Minecraft.getInstance().execute(() -> release(guest, planet));
             }
+
+            @Override
+            public void use(UUID guest, MpPayloads.Use u) {
+                Minecraft.getInstance().execute(() -> useBlock(guest, u));
+            }
         });
+    }
+
+    /**
+     * A guest right clicked a block: Minecraft's own use of it, in the shadow, as that guest's player (a door opens,
+     * a chest opens its menu on the guest's screen). Works for the planet the shadow runs; for any other the click
+     * passes at once and the guest places its block. What the shadow changes reaches every guest as an ordinary edit.
+     */
+    private static void useBlock(UUID guest, MpPayloads.Use u) {
+        Entry e = shared.get(u.planet());
+        VoxelPlanet p = e == null || !e.holders.contains(guest) ? null : e.planet;
+        if (p == null || !UseCheck.valid(u.cell(), p.grid.cellCount(), u.face(), u.hand(), u.hx(), u.hy(), u.hz())
+                || !ShadowWorld.runs(p)) {
+            MpServer.useDone(guest, u.nonce(), true);
+            return;
+        }
+        ShadowWorld.use(p, u.cell(), u.face(), new net.minecraft.world.phys.Vec3(u.hx(), u.hy(), u.hz()), guest,
+                u.hand() == 0 ? net.minecraft.world.InteractionHand.MAIN_HAND : net.minecraft.world.InteractionHand.OFF_HAND,
+                () -> MpServer.useDone(guest, u.nonce(), true), () -> MpServer.useDone(guest, u.nonce(), false));
     }
 
     private static PlanetSession liveOf(int index) {

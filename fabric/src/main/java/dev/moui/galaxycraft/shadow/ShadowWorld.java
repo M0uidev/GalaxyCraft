@@ -269,6 +269,17 @@ public final class ShadowWorld {
             proxy.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
         });
     }
+    /** Whether the shadow runs this planet (a guest's block use there can be done; elsewhere it passes). Any thread. */
+    public static boolean runs(VoxelPlanet p) {
+        return available && p != null && p == planet;
+    }
+
+    /** Whether sp is the player Mario's stand-in follows (the host's own); a guest's has none yet. */
+    private static boolean isHostPlayer(ServerPlayer sp) {
+        MarioAt at = marioAt;
+        return at != null && at.player().equals(sp.getUUID());
+    }
+
     /** Whether an integrated server with the shadow dimension is running. */
     public static boolean available() {
         return available;
@@ -294,7 +305,7 @@ public final class ShadowWorld {
     private static final java.util.Map<UUID, BlockPos> editing = new java.util.HashMap<>();
 
     /** A bed slept in (any bed, straw too): the player comes back to its cell's top after dying. */
-    public record Bed(VoxelPlanet planet, int cell) {}
+    public record Bed(VoxelPlanet planet, int cell, UUID player) {}
 
     public static Bed pollBed() {
         return beds.poll();
@@ -432,6 +443,12 @@ public final class ShadowWorld {
      * onPass runs on the client thread.
      */
     public static void use(VoxelPlanet p, int cell, int face, Vec3 hit, UUID player, InteractionHand hand, Runnable onPass) {
+        use(p, cell, face, hit, player, hand, onPass, () -> {});
+    }
+
+    /** As above; onUsed runs on the client thread when the block or the item took the click (a guest is told so). */
+    public static void use(VoxelPlanet p, int cell, int face, Vec3 hit, UUID player, InteractionHand hand, Runnable onPass,
+            Runnable onUsed) {
         ops.add(level -> {
             ServerPlayer sp = server.getPlayerList().getPlayer(player);
             if (p != planet || map == null || sp == null) {
@@ -442,7 +459,7 @@ public final class ShadowWorld {
             mirrorNow(level, pos);
             BlockHitResult h = new BlockHitResult(Vec3.atLowerCornerOf(pos).add(hit),
                     Direction.values()[CellSpace.DIRECTION_OF_SIDE[face]], pos, false);
-            if (!use(level, sp, hand, h).consumesAction()) toClient.add(onPass);
+            toClient.add(use(level, sp, hand, h).consumesAction() ? onUsed : onPass);
         });
     }
 
@@ -469,7 +486,7 @@ public final class ShadowWorld {
         if (r.consumesAction() || stack.isEmpty() || stack.getItem() instanceof BlockItem
                 || stack.getItem() instanceof BucketItem || sp.getCooldowns().isOnCooldown(stack))
             return r;
-        if (stack.getItem() instanceof net.minecraft.world.item.BoatItem && proxy != null && !proxy.isRemoved()) {
+        if (stack.getItem() instanceof net.minecraft.world.item.BoatItem && isHostPlayer(sp) && proxy != null && !proxy.isRemoved()) {
             // A boat goes where Mario looks: placed by his stand-in, turned to the spot clicked.
             Vec3 to = h.getLocation().subtract(proxy.getEyePosition());
             proxy.setYRot((float) Math.toDegrees(Math.atan2(-to.x, to.z)));
@@ -497,6 +514,7 @@ public final class ShadowWorld {
     private static InteractionResult editSign(ServerLevel level, ServerPlayer sp, BlockPos pos, BlockState state) {
         if (!(level.getBlockEntity(pos) instanceof net.minecraft.world.level.block.entity.SignBlockEntity sign) || signEditor == null)
             return InteractionResult.PASS;
+        if (!isHostPlayer(sp)) return InteractionResult.SUCCESS; // the editor opens on the host's screen: a guest's sign stays as it is for now
         if (sign.isWaxed()) {
             level.playSound(null, pos, sign.getSignInteractionFailedSoundEvent(), net.minecraft.sounds.SoundSource.BLOCKS);
             return InteractionResult.SUCCESS;
@@ -554,7 +572,7 @@ public final class ShadowWorld {
      */
     private static InteractionResult anchor(ServerPlayer sp, BlockPos pos) {
         int cell = map == null ? -1 : map.cell(pos.getX(), pos.getY(), pos.getZ());
-        if (cell >= 0) beds.add(new Bed(planet, cell));
+        if (cell >= 0) beds.add(new Bed(planet, cell, sp.getUUID()));
         sp.sendSystemMessage(net.minecraft.network.chat.Component.translatable("block.minecraft.set_spawn"), true);
         return InteractionResult.SUCCESS;
     }
@@ -570,7 +588,7 @@ public final class ShadowWorld {
                 == net.minecraft.world.level.block.state.properties.BedPart.HEAD ? pos
                 : pos.relative(state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING));
         int cell = map == null ? -1 : map.cell(head.getX(), head.getY(), head.getZ());
-        if (cell >= 0) beds.add(new Bed(planet, cell));
+        if (cell >= 0) beds.add(new Bed(planet, cell, sp.getUUID()));
         sp.sendSystemMessage(net.minecraft.network.chat.Component.translatable("block.minecraft.set_spawn"), true);
         ServerLevel overworld = server.overworld();
         if (!overworld.isDarkOutside() && !overworld.isThundering()) {

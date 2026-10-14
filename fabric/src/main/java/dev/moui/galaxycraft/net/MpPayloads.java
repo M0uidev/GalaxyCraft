@@ -205,6 +205,57 @@ public final class MpPayloads {
         }
     }
 
+    /** Guest -> server: a right click on a block of a planet the guest holds; the host runs it in the shadow as that guest. */
+    public record Use(int nonce, int planet, int cell, int face, float hx, float hy, float hz, int hand) implements CustomPacketPayload {
+        public static final Type<Use> TYPE = typeOf("mp_use");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Use> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.nonce);
+                    b.writeVarInt(p.planet);
+                    b.writeVarInt(p.cell);
+                    b.writeByte(p.face);
+                    b.writeFloat(p.hx);
+                    b.writeFloat(p.hy);
+                    b.writeFloat(p.hz);
+                    b.writeByte(p.hand);
+                },
+                b -> new Use(b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readByte(), b.readFloat(), b.readFloat(), b.readFloat(),
+                        b.readByte()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Server -> guest: the click of that number was used by the block (passed false) or by nothing (passed: the guest places its block). */
+    public record UseDone(int nonce, boolean passed) implements CustomPacketPayload {
+        public static final Type<UseDone> TYPE = typeOf("mp_use_done");
+        public static final StreamCodec<RegistryFriendlyByteBuf, UseDone> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.nonce);
+                    b.writeBoolean(p.passed);
+                },
+                b -> new UseDone(b.readVarInt(), b.readBoolean()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Guest -> server: a block was placed from this hand outside creative: one fewer in the stack (the inventory is the server's). */
+    public record UsedUp(int hand) implements CustomPacketPayload {
+        public static final Type<UsedUp> TYPE = typeOf("mp_used_up");
+        public static final StreamCodec<RegistryFriendlyByteBuf, UsedUp> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByte(p.hand), b -> new UsedUp(b.readByte()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Both sides must know the types: call from the common entrypoint. */
     public static void register() {
         PayloadTypeRegistry.clientboundPlay().register(Hello.TYPE, Hello.CODEC);
@@ -221,5 +272,8 @@ public final class MpPayloads {
         PayloadTypeRegistry.clientboundPlay().register(Edits.TYPE, Edits.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(PlanetDrop.TYPE, PlanetDrop.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(Resync.TYPE, Resync.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(Use.TYPE, Use.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(UseDone.TYPE, UseDone.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(UsedUp.TYPE, UsedUp.CODEC);
     }
 }
