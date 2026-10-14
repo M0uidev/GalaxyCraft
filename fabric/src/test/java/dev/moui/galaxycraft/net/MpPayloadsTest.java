@@ -78,4 +78,23 @@ class MpPayloadsTest {
         over.writeUtf("y".repeat(MpPayloads.MAX_GALAXY_JSON + 5), MpPayloads.MAX_GALAXY_JSON + 10);
         assertThrows(RuntimeException.class, () -> MpPayloads.Hello.CODEC.decode(over));
     }
+
+    @Test
+    void planetMessagesTravel() {
+        var ask = new MpPayloads.PlanetAsk(70_000, 0x1234_5678_9ABCL);
+        assertEquals(ask, roundTrip(MpPayloads.PlanetAsk.CODEC, ask));
+        var head = new MpPayloads.PlanetHead(3, PlanetXfer.STATE_DATA, -42L, 2_000_000);
+        assertEquals(head, roundTrip(MpPayloads.PlanetHead.CODEC, head));
+        byte[] part = PlanetXferTest.bytes(PlanetXfer.CHUNK, 9);
+        var chunk = roundTrip(MpPayloads.PlanetChunk.CODEC, new MpPayloads.PlanetChunk(3, 7, part));
+        assertEquals(7, chunk.seq());
+        assertArrayEquals(part, chunk.data());
+    }
+
+    @Test
+    void aChunkBiggerThanAChunkIsNotRead() {
+        RegistryFriendlyByteBuf b = buf();
+        MpPayloads.PlanetChunk.CODEC.encode(b, new MpPayloads.PlanetChunk(0, 0, new byte[PlanetXfer.CHUNK + 1]));
+        assertThrows(RuntimeException.class, () -> MpPayloads.PlanetChunk.CODEC.decode(b));
+    }
 }

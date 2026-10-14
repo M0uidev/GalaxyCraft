@@ -25,6 +25,12 @@ public final class PlanetStore {
         public Saved(int n, double core, int layers, int depth, Vector3d center, char[] cells) {
             this(n, core, layers, depth, center, cells, null);
         }
+
+        /** A planet made (not yet a session) as it would be saved; its cells are shared, not copied. */
+        public static Saved of(VoxelPlanet p, Vector3d center) {
+            CubeSphere g = p.sphere();
+            return new Saved(g.n, g.core, g.layers, p.depth, new Vector3d(center), p.cells(), p.biomes());
+        }
     }
 
     /** After the cells, optional ("BIOM"): the biomes' names and, for more than one, a byte per column. */
@@ -74,7 +80,21 @@ public final class PlanetStore {
     public void write(String stage, Saved s, Blocks blocks) throws IOException {
         Files.createDirectories(dir);
         Path tmp = file(stage).resolveSibling(file(stage).getFileName() + ".tmp");
-        try (DataOutputStream out = new DataOutputStream(new GZIPOutputStream(Files.newOutputStream(tmp)))) {
+        try (java.io.OutputStream out = Files.newOutputStream(tmp)) {
+            encode(out, s, blocks);
+        }
+        Files.move(tmp, file(stage), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    /** A planet as the file's bytes (what a guest is sent: the same gzip a save holds). */
+    public static byte[] encode(Saved s, Blocks blocks) throws IOException {
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream(Math.max(1024, s.cells().length / 8));
+        encode(bytes, s, blocks);
+        return bytes.toByteArray();
+    }
+
+    private static void encode(java.io.OutputStream to, Saved s, Blocks blocks) throws IOException {
+        try (DataOutputStream out = new DataOutputStream(new GZIPOutputStream(to))) {
             out.writeInt(MAGIC);
             out.writeInt(s.n());
             out.writeDouble(s.core());
@@ -91,7 +111,6 @@ public final class PlanetStore {
                 if (!s.biomes().uniform()) out.write(s.biomes().columns());
             }
         }
-        Files.move(tmp, file(stage), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 
     /** A planet file's start: its grid, crust and center, without reading its cells. */

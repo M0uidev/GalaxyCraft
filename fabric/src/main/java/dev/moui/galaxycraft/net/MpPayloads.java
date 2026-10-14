@@ -117,6 +117,57 @@ public final class MpPayloads {
         }
     }
 
+    /** Guest -> server: send me that catalog planet; etag is the one of the copy the guest holds (0: none). */
+    public record PlanetAsk(int index, long etag) implements CustomPacketPayload {
+        public static final Type<PlanetAsk> TYPE = typeOf("mp_planet_ask");
+        public static final StreamCodec<RegistryFriendlyByteBuf, PlanetAsk> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.index);
+                    b.writeLong(p.etag);
+                },
+                b -> new PlanetAsk(b.readVarInt(), b.readLong()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Server -> guest: the answer to a PlanetAsk. state: data follows in `total` bytes (chunks), the guest's copy is the same, or failed. */
+    public record PlanetHead(int index, int state, long etag, int total) implements CustomPacketPayload {
+        public static final Type<PlanetHead> TYPE = typeOf("mp_planet_head");
+        public static final StreamCodec<RegistryFriendlyByteBuf, PlanetHead> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.index);
+                    b.writeByte(p.state);
+                    b.writeLong(p.etag);
+                    b.writeVarInt(p.total);
+                },
+                b -> new PlanetHead(b.readVarInt(), b.readByte(), b.readLong(), b.readVarInt()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Server -> guest: the next piece of the planet after its head. */
+    public record PlanetChunk(int index, int seq, byte[] data) implements CustomPacketPayload {
+        public static final Type<PlanetChunk> TYPE = typeOf("mp_planet_chunk");
+        public static final StreamCodec<RegistryFriendlyByteBuf, PlanetChunk> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.index);
+                    b.writeVarInt(p.seq);
+                    b.writeByteArray(p.data);
+                },
+                b -> new PlanetChunk(b.readVarInt(), b.readVarInt(), b.readByteArray(PlanetXfer.CHUNK)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Both sides must know the types: call from the common entrypoint. */
     public static void register() {
         PayloadTypeRegistry.clientboundPlay().register(Hello.TYPE, Hello.CODEC);
@@ -126,5 +177,8 @@ public final class MpPayloads {
         PayloadTypeRegistry.serverboundPlay().register(Skin.TYPE, Skin.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(Skin.TYPE, Skin.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(Gone.TYPE, Gone.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(PlanetAsk.TYPE, PlanetAsk.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(PlanetHead.TYPE, PlanetHead.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(PlanetChunk.TYPE, PlanetChunk.CODEC);
     }
 }

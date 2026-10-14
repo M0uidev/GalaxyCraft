@@ -23,7 +23,7 @@ public final class MpServer {
     /** A guest has this long (server ticks, 5 s) to answer Hello. */
     static final int ACK_TICKS = 100;
 
-    private static MinecraftServer server;
+    private static volatile MinecraftServer server;
     private static Relay relay;
     /** Guests that were sent a Hello: the server tick it was sent on. */
     private static final Map<UUID, Integer> waiting = new HashMap<>();
@@ -31,7 +31,84 @@ public final class MpServer {
     private static final Map<UUID, byte[]> skins = new HashMap<>();
     private static final Map<UUID, RateLimiter> skinLimits = new HashMap<>();
 
+    /** Who makes a planet's bytes for a guest: the host's game (it owns the planets). Called on the server thread. */
+    public interface PlanetSource {
+        void ask(UUID guest, int index, long guestEtag);
+    }
+
+    private static volatile PlanetSource planetSource;
+    /** Guests that entered the galaxy: only they may ask for planets. */
+    private static final java.util.Set<UUID> members = new java.util.HashSet<>();
+    private static final Map<UUID, RateLimiter> askLimits = new HashMap<>();
+    /** Planets asked for and not yet handed to the queue, per guest. */
+    private static final Map<UUID, Integer> outstanding = new HashMap<>();
+    /** What each guest is being sent: a little each tick. */
+    private static final Map<UUID, PlanetXfer.Outbox<net.minecraft.network.protocol.common.custom.CustomPacketPayload>> outboxes = new HashMap<>();
+
     private MpServer() {}
+
+    public static void setPlanetSource(PlanetSource source) {
+        planetSource = source;
+    }
+
+    /**
+     * The host's answer to a guest's ask, from any thread: its planet (null: it could not be made).
+     * Same etag as the guest's copy: just says so; else the bytes are queued, sent a little each tick.
+     */
+    public static void offer(UUID guest, int index, long guestEtag, PlanetXfer.Offer offer) {
+        MinecraftServer srv = server;
+        if (srv != null) srv.execute(() -> deliver(guest, index, guestEtag, offer));
+    }
+
+    private static void deliver(UUID guest, int index, long guestEtag, PlanetXfer.Offer offer) {
+        outstanding.merge(guest, -1, Integer::sum);
+        ServerPlayer p = player(guest);
+        if (p == null || !members.contains(guest)) return;
+        var box = outboxes.computeIfAbsent(guest, k -> new PlanetXfer.Outbox<>());
+        if (offer == null || offer.data().length == 0 || offer.data().length > PlanetXfer.MAX_BYTES) {
+            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_FAIL, 0, 0), 32);
+            return;
+        }
+        if (offer.etag() == guestEtag) {
+            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_SAME, offer.etag(), 0), 32);
+            return;
+        }
+        byte[] data = offer.data();
+        box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_DATA, offer.etag(), data.length), 32);
+        for (int seq = 0; seq < PlanetXfer.chunks(data.length); seq++)
+            box.add(new MpPayloads.PlanetChunk(index, seq, PlanetXfer.slice(data, seq)), Math.min(PlanetXfer.CHUNK, data.length - seq * PlanetXfer.CHUNK));
+        GalaxyCraft.LOG.info("[GalaxyCraft mp] planet {} ({} KB) queued for {}", index, data.length / 1024, p.getName().getString());
+    }
+
+    private static void ask(ServerPlayer p, MpPayloads.PlanetAsk ask) {
+        UUID id = p.getUUID();
+        PlanetSource source = planetSource;
+        if (source == null || !members.contains(id) || ask.index() < 0) return;
+        if (!askLimits.computeIfAbsent(id, k -> new RateLimiter(10, 20)).allow(System.nanoTime())) return;
+        if (outstanding.getOrDefault(id, 0) >= PlanetXfer.MAX_OUTSTANDING) {
+            outboxes.computeIfAbsent(id, k -> new PlanetXfer.Outbox<>()).add(new MpPayloads.PlanetHead(ask.index(), PlanetXfer.STATE_FAIL, 0, 0), 32);
+            return;
+        }
+        outstanding.merge(id, 1, Integer::sum);
+        source.ask(id, ask.index(), ask.etag());
+    }
+
+    private static void pump(MinecraftServer srv) {
+        for (var e : outboxes.entrySet()) {
+            if (e.getValue().isEmpty()) continue;
+            ServerPlayer p = player(e.getKey());
+            if (p != null) e.getValue().drain(PlanetXfer.BUDGET_PER_TICK, payload -> ServerPlayNetworking.send(p, payload));
+            else e.getValue().clear();
+        }
+    }
+
+    private static void forget(UUID id) {
+        members.remove(id);
+        askLimits.remove(id);
+        outstanding.remove(id);
+        var box = outboxes.remove(id);
+        if (box != null) box.clear();
+    }
 
     /** Guests that answered Hello well, and players this server sent away: for tests and the log. */
     private static volatile int entered, kicks;
@@ -107,6 +184,7 @@ public final class MpServer {
             waiting.remove(id);
             skins.remove(id);
             skinLimits.remove(id);
+            forget(id);
             if (relay != null) relay.leave(id);
         });
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.HelloAck.TYPE, (payload, ctx) -> {
@@ -117,9 +195,12 @@ public final class MpServer {
             else if (!payload.ok()) SINK.kick(id, "Your game could not enter the host's galaxy. See its log.");
             else {
                 entered++;
+                members.add(id);
                 GalaxyCraft.LOG.info("[GalaxyCraft mp] {} entered the galaxy", ctx.player().getName().getString());
             }
         });
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.PlanetAsk.TYPE, (payload, ctx) -> ask(ctx.player(), payload));
+        ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {
             if (relay != null) relay.state(ctx.player().getUUID(), payload.data(), System.nanoTime());
         });
@@ -148,6 +229,10 @@ public final class MpServer {
             waiting.clear();
             skins.clear();
             skinLimits.clear();
+            members.clear();
+            askLimits.clear();
+            outstanding.clear();
+            outboxes.clear();
         });
         GalaxyCraft.LOG.info("Multiplayer ready (protocol {})", Protocol.VERSION);
     }

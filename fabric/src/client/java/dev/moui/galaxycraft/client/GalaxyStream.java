@@ -195,7 +195,7 @@ final class GalaxyStream {
         if (universe == null || systems.containsKey(s)) return;
         Universe.Star star = universe.star(s).orElse(null);
         McWorldgen gen = PlanetClient.worldgen();
-        if (star == null || star.home() || gen == null) return;
+        if (star == null || star.home() || gen == null && !MpClient.connected()) return; // a guest has no worldgen: the host sends its planets
         Vector3d c = star.center().minus(UPos.ZERO);
         List<GalaxyCatalog.Entry> planets = new ArrayList<>();
         for (GalaxyCatalog.Entry e : universe.system(star, dev.moui.galaxycraft.voxel.gen.LegacyBiome.land()).entries())
@@ -297,15 +297,11 @@ final class GalaxyStream {
         CompletableFuture<Object> f;
         VoxelPlanet kept = recent.remove(index);
         if (kept != null) f = CompletableFuture.completedFuture(kept);
-        else if (java.nio.file.Files.isRegularFile(store.file(key))) {
-            f = CompletableFuture.supplyAsync(() -> {
-                try {
-                    return store.read(key, blocks, name -> PlanetClient.answer(Minecraft.getInstance().submit(() -> blocks.parse(name)), "block " + name))
-                            .orElseThrow(() -> new IllegalStateException("no file"));
-                } catch (IOException ex) {
-                    throw new java.io.UncheckedIOException(ex);
-                }
-            }, PlanetClient.maker);
+        else if (MpClient.connected()) {
+            // A guest has no server to make planets: the host's copy of this one is fetched (kept from an earlier session if unchanged).
+            f = MpPlanets.fetch(index, store.file(key)).thenApplyAsync(v -> readSaved(key, blocks), PlanetClient.maker);
+        } else if (java.nio.file.Files.isRegularFile(store.file(key))) {
+            f = CompletableFuture.supplyAsync(() -> readSaved(key, blocks), PlanetClient.maker);
         } else {
             PlanetBlueprint bp = recipe(e);
             if (bp == null) {
@@ -320,6 +316,78 @@ final class GalaxyStream {
             } else f = CompletableFuture.completedFuture(bp.build(blocks));
         }
         making.put(index, f);
+    }
+
+    private Object readSaved(String key, McBlocks blocks) {
+        try {
+            return store.read(key, blocks, name -> PlanetClient.answer(Minecraft.getInstance().submit(() -> blocks.parse(name)), "block " + name))
+                    .orElseThrow(() -> new IllegalStateException("no file"));
+        } catch (IOException ex) {
+            throw new java.io.UncheckedIOException(ex);
+        }
+    }
+
+    /** Planets made headlessly for guests, a few kept so that two guests asking for one do not make it twice. */
+    private final Map<Integer, CompletableFuture<byte[]>> served = new java.util.LinkedHashMap<>(4, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Integer, CompletableFuture<byte[]>> eldest) {
+            return size() > 3;
+        }
+    };
+
+    /**
+     * A catalog planet's bytes for a guest (client thread; null: it cannot be told). As it is now:
+     * the one in the game (written first if it was edited), its save, one being made or kept, and
+     * else made for the occasion without taking a place in the game.
+     */
+    CompletableFuture<byte[]> serve(int index) {
+        GalaxyCatalog.Entry e = entry(index).orElse(null);
+        McBlocks blocks = PlanetClient.blocks();
+        if (e == null || blocks == null) return null;
+        String key = PlanetStore.key(stage, index);
+        PlanetSession s = PlanetClient.sessionOf(index);
+        boolean live = s != null && s.active();
+        boolean edited = live && s.unsaved();
+        if (edited) PlanetClient.saveOne(s); // queued on the saver: the read below comes after it
+        if (edited || java.nio.file.Files.isRegularFile(store.file(key))) {
+            return PlanetClient.onSaver(() -> {
+                try {
+                    return java.nio.file.Files.readAllBytes(store.file(key));
+                } catch (IOException ex) {
+                    throw new java.io.UncheckedIOException(ex);
+                }
+            });
+        }
+        if (live) { // never edited, so never saved: its cells as they are
+            PlanetStore.Saved saved = s.save();
+            return CompletableFuture.supplyAsync(() -> encode(saved, blocks), PlanetClient.maker);
+        }
+        VoxelPlanet kept = recent.get(index);
+        if (kept != null) {
+            PlanetStore.Saved saved = PlanetStore.Saved.of(kept, e.center());
+            return CompletableFuture.supplyAsync(() -> encode(saved, blocks), PlanetClient.maker);
+        }
+        CompletableFuture<byte[]> had = served.get(index);
+        if (had != null && !had.isCompletedExceptionally()) return had;
+        PlanetBlueprint bp = recipe(e);
+        if (bp == null) return null;
+        CompletableFuture<VoxelPlanet> made;
+        if (bp.mode() == PlanetBlueprint.Mode.GENERATED) {
+            made = generate(bp, e);
+            if (made == null) return null;
+        } else made = CompletableFuture.completedFuture(bp.build(blocks));
+        Vector3d center = e.center();
+        CompletableFuture<byte[]> out = made.thenApplyAsync(p -> encode(PlanetStore.Saved.of(p, center), blocks), PlanetClient.maker);
+        served.put(index, out);
+        return out;
+    }
+
+    private static byte[] encode(PlanetStore.Saved saved, McBlocks blocks) {
+        try {
+            return PlanetStore.encode(saved, blocks);
+        } catch (IOException ex) {
+            throw new java.io.UncheckedIOException(ex);
+        }
     }
 
     /** A generated planet's making, with the Toad outposts its system's tier and star give it (huts built with its cells). */

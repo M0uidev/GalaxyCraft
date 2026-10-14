@@ -26,6 +26,13 @@ public final class GalaxyCraft implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register(ShadowWorld::stop);
         // Dev only: a LAN world checks each guest's session with Mojang; two accounts-less dev clients can't
         // (GXC_OFFLINE_LAN=1 turns that check off so a second client can join).
+        // Dev only: GXC_LAN_PORT=<port> opens a world to LAN as soon as it starts (a two-game test without menus).
+        String lanPort = System.getenv("GXC_LAN_PORT");
+        if (lanPort != null) {
+            ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+                if (server.isSingleplayer()) server.publishServer(net.minecraft.server.MinecraftServer.MultiplayerScope.LAN, false, Integer.parseInt(lanPort));
+            });
+        }
         if (System.getenv("GXC_OFFLINE_LAN") != null) {
             ServerLifecycleEvents.SERVER_STARTED.register(server -> server.setUsesAuthentication(false));
         }

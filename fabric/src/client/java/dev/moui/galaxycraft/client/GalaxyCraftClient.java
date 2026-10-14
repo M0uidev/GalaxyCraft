@@ -165,8 +165,8 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         MpClient.register();
         ClientTickEvents.END_CLIENT_TICK.register(MpClient::tick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
+            PlanetClient.leaveWorld(bridge); // before the reset: a guest's planets are not saved, and that is known from MpClient
             MpClient.reset();
-            PlanetClient.leaveWorld(bridge);
             resetFrame();
             dev.moui.galaxycraft.client.music.MusicService.shutdown();
         }));

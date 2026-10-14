@@ -694,7 +694,7 @@ public final class PlanetClient {
         }
         lastPlayer = player;
         // A world's galaxy: its catalog (made now on its first visit), its planets streamed from it.
-        if (space && stream == null && !homeAsked && worldgen() != null) {
+        if (space && stream == null && !homeAsked && (worldgen() != null || MpClient.connected())) { // a guest has none: the host sends its planets
             homeAsked = true;
             startGalaxy(player);
         }
@@ -1147,7 +1147,7 @@ public final class PlanetClient {
 
     private static void saveNow() {
         PlanetStore store = PlanetClient.store; // the saves run later, maybe after another world's is in
-        if (stage == null || stage.isEmpty() || store == null) return;
+        if (stage == null || stage.isEmpty() || store == null || MpClient.connected()) return; // a guest's folder only holds the host's copies
         for (PlanetSession p : planets()) {
             if (!p.unsaved()) continue;
             PlanetStore.Saved s = p.save();
@@ -1387,7 +1387,7 @@ public final class PlanetClient {
     /** One planet saved now if it was edited (it is about to go). */
     static void saveOne(PlanetSession p) {
         PlanetStore store = PlanetClient.store;
-        if (stage == null || stage.isEmpty() || store == null || !p.unsaved()) return;
+        if (stage == null || stage.isEmpty() || store == null || !p.unsaved() || MpClient.connected()) return;
         PlanetStore.Saved s = p.save();
         String where = PlanetStore.key(stage, indexOf(p));
         McBlocks b = blocks;
@@ -1398,6 +1398,16 @@ public final class PlanetClient {
                 GalaxyCraft.LOG.warn("Could not save the planet {}: {}", where, e.toString());
             }
         });
+    }
+
+    /** A catalog planet's bytes for a guest, or null if it cannot be told (see GalaxyStream.serve). */
+    static java.util.concurrent.CompletableFuture<byte[]> serve(int index) {
+        return stream == null ? null : stream.serve(index);
+    }
+
+    /** A job on the saver's thread (after the saves asked for before), its result as a future. */
+    static <T> java.util.concurrent.CompletableFuture<T> onSaver(java.util.function.Supplier<T> job) {
+        return java.util.concurrent.CompletableFuture.supplyAsync(job, saver);
     }
 
     /** Runs on the saver's thread, after the saves asked for before. */
