@@ -1,0 +1,113 @@
+package dev.moui.galaxycraft.net;
+
+import dev.moui.galaxycraft.GalaxyCraft;
+import dev.moui.galaxycraft.voxel.GalaxySave;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.storage.LevelResource;
+
+/**
+ * Fabric glue: Relay's players are the server's. Payload handlers and events run on the server thread,
+ * so Relay needs no locking. Nothing happens until a player joins; in plain single player the host is
+ * the only peer and nothing is ever relayed.
+ */
+public final class MpServer {
+    /** A guest has this long (server ticks, 5 s) to answer Hello. */
+    static final int ACK_TICKS = 100;
+
+    private static MinecraftServer server;
+    private static Relay relay;
+    /** Guests that were sent a Hello: the server tick it was sent on. */
+    private static final Map<UUID, Integer> waiting = new HashMap<>();
+
+    private MpServer() {}
+
+    private static ServerPlayer player(UUID id) {
+        return server == null ? null : server.getPlayerList().getPlayer(id);
+    }
+
+    private static final Relay.Sink SINK = new Relay.Sink() {
+        @Override
+        public void peerState(UUID to, UUID from, PeerState s) {
+            ServerPlayer p = player(to);
+            if (p != null) ServerPlayNetworking.send(p, new MpPayloads.Peer(from, Wire.encode(s)));
+        }
+
+        @Override
+        public void peerGone(UUID to, UUID gone) {
+            ServerPlayer p = player(to);
+            if (p != null) ServerPlayNetworking.send(p, new MpPayloads.Gone(gone));
+        }
+
+        @Override
+        public void kick(UUID who, String reason) {
+            ServerPlayer p = player(who);
+            if (p != null) p.connection.disconnect(Component.literal(reason));
+        }
+    };
+
+    public static void init() {
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, srv) -> {
+            server = srv;
+            if (relay == null) relay = new Relay(SINK);
+            ServerPlayer p = handler.getPlayer();
+            // A client without the mod cannot even connect (the payload types are required), so every
+            // player here can speak the protocol. The host's own client owns the galaxy: no Hello.
+            if (srv.isSingleplayerOwner(p.nameAndId())) {
+                relay.join(p.getUUID());
+                return;
+            }
+            GalaxySave galaxy = GalaxySave.of(srv.getWorldPath(LevelResource.ROOT));
+            String json = galaxy.galaxyJson().orElse(null);
+            if (json == null) {
+                SINK.kick(p.getUUID(), "The host's galaxy is not ready yet. Try again in a moment.");
+                return;
+            }
+            relay.join(p.getUUID());
+            waiting.put(p.getUUID(), srv.getTickCount());
+            ServerPlayNetworking.send(p, new MpPayloads.Hello(Protocol.VERSION, galaxy.worldId().toString(), json));
+        });
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, srv) -> {
+            UUID id = handler.getPlayer().getUUID();
+            waiting.remove(id);
+            if (relay != null) relay.leave(id);
+        });
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.HelloAck.TYPE, (payload, ctx) -> {
+            UUID id = ctx.player().getUUID();
+            waiting.remove(id);
+            var refusal = Protocol.refusal(Protocol.VERSION, payload.version());
+            if (refusal.isPresent()) SINK.kick(id, refusal.get());
+            else if (!payload.ok()) SINK.kick(id, "Your game could not enter the host's galaxy. See its log.");
+        });
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {
+            if (relay != null) relay.state(ctx.player().getUUID(), payload.data(), System.nanoTime());
+        });
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Skin.TYPE, (payload, ctx) -> {
+            UUID from = ctx.player().getUUID();
+            for (ServerPlayer other : ctx.server().getPlayerList().getPlayers())
+                if (!other.getUUID().equals(from)) ServerPlayNetworking.send(other, new MpPayloads.Skin(from, payload.png()));
+        });
+        ServerTickEvents.END_SERVER_TICK.register(srv -> {
+            if (waiting.isEmpty()) return;
+            waiting.entrySet().removeIf(e -> {
+                if (srv.getTickCount() - e.getValue() < ACK_TICKS) return false;
+                SINK.kick(e.getKey(), "Your Super Minecraft Galaxy did not answer. Is the mod installed, the same version as the host's?");
+                return true;
+            });
+        });
+        ServerLifecycleEvents.SERVER_STOPPED.register(srv -> {
+            relay = null;
+            server = null;
+            waiting.clear();
+        });
+        GalaxyCraft.LOG.info("Multiplayer ready (protocol {})", Protocol.VERSION);
+    }
+}

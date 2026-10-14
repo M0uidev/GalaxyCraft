@@ -20,6 +20,8 @@ public final class GalaxyCraft implements ModInitializer {
         dev.moui.galaxycraft.ship.ShipBlocks.register();
         dev.moui.galaxycraft.launchstar.LaunchStarBlocks.register();
         LOG.info("GalaxyCraft loaded; waiting for a galaxy on {}", dev.moui.galaxycraft.proto.Layout.SHM_PATH);
+        dev.moui.galaxycraft.net.MpPayloads.register();
+        dev.moui.galaxycraft.net.MpServer.init();
         ServerTickEvents.END_SERVER_TICK.register(ShadowWorld::tick);
         ServerLifecycleEvents.SERVER_STOPPING.register(ShadowWorld::stop);
     }

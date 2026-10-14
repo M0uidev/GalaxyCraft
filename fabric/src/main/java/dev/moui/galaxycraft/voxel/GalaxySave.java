@@ -77,10 +77,41 @@ public final class GalaxySave {
         Path f = dir.resolve("galaxy.json");
         if (!Files.isRegularFile(f)) return Optional.empty();
         try {
-            Galaxy g = GSON.fromJson(Files.readString(f, StandardCharsets.UTF_8), Galaxy.class);
-            return g != null && g.options() != null && g.entries() != null && !g.entries().isEmpty() ? Optional.of(g) : Optional.empty();
-        } catch (IOException | RuntimeException e) {
+            return parseGalaxy(Files.readString(f, StandardCharsets.UTF_8));
+        } catch (IOException e) {
             return Optional.empty();
+        }
+    }
+
+    /** A galaxy.json's text read back; empty if it is not a usable galaxy (also what a guest checks of the host's). */
+    public static Optional<Galaxy> parseGalaxy(String json) {
+        try {
+            Galaxy g = GSON.fromJson(json, Galaxy.class);
+            return g != null && g.options() != null && g.entries() != null && !g.entries().isEmpty() ? Optional.of(g) : Optional.empty();
+        } catch (RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** The galaxy as the text galaxy.json holds (what the host sends a guest). */
+    public Optional<String> galaxyJson() {
+        return galaxy().map(GSON::toJson);
+    }
+
+    /** A stable id for this galaxy, made on first use: how a guest names its cached copy of it. */
+    public java.util.UUID worldId() {
+        Path file = dir.resolve("world-id");
+        try {
+            return java.util.UUID.fromString(Files.readString(file, StandardCharsets.UTF_8).trim());
+        } catch (IOException | IllegalArgumentException e) {
+            java.util.UUID id = java.util.UUID.randomUUID();
+            try {
+                Files.createDirectories(dir);
+                Files.writeString(file, id.toString(), StandardCharsets.UTF_8);
+            } catch (IOException io) {
+                dev.moui.galaxycraft.GalaxyCraft.LOG.warn("Could not save the galaxy's id: {}", io.toString());
+            }
+            return id;
         }
     }
 
