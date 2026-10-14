@@ -124,8 +124,8 @@ Disconnect, `PlanetDrop` and world close remove subscriptions; the last one off 
 ## Efficiency
 
 - No per-tick work when nothing changes: observers append to a per-planet list only when a cell changes.
-- Host: one `hseq` bump and one encode per planet per tick, however many guests; encoded once, queued to each
-  subscribed guest (the origin's copy differs only in the `origin` field).
+- Host: one `hseq` bump per planet per tick and one message built, however many guests; each guest's copy is
+  encoded at send time (its palette defs and the `origin` field differ).
 - Wire: varint deltas + deflate; per-guest edit budget; chunk budget unchanged; planets not held by a guest cost it nothing.
 - Memory: residents only for planets guests hold (max 8); pending maps are per cell, cleared on echo.
 

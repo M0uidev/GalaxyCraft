@@ -1,8 +1,8 @@
-# Multijugador (parte 1): unirse y verse
+# Multijugador (partes 1 y 2): unirse, verse y construir juntos
 
-Puedes jugar con amigos en la misma galaxia. En esta primera parte **os veis moviéndoos**; todavía no se
-comparten los bloques que rompéis o ponéis, ni los mobs, los objetos soltados o la redstone (vienen en las
-partes 2 y 3, ver `ROADMAP.md`).
+Puedes jugar con amigos en la misma galaxia. **Os veis moviéndoos** y **los bloques que rompéis o ponéis
+se comparten** en los planetas del catálogo. Los mobs, los objetos soltados, los fluidos y la redstone
+siguen sin compartirse (parte 3, ver `ROADMAP.md`).
 
 ## Cómo se juega
 
@@ -31,13 +31,26 @@ partes 2 y 3, ver `ROADMAP.md`).
 - Si algún jugador lleva un skin con `/skin`, los demás también lo ven.
 - Al caminar, agacharse o planear, su cuerpo lo muestra.
 
+## Construir juntos (parte 2)
+
+- Lo que un jugador rompe o pone, **los demás lo ven** al momento en cualquier planeta de la galaxia,
+  también si el anfitrión está lejos de ese planeta.
+- **Cualquiera puede romper y poner todo** (por ahora no hay permisos ni zonas protegidas).
+- Manda el anfitrión, como en un servidor de Minecraft: si dos jugadores cambian el mismo bloque a la vez,
+  gana el último que llega al anfitrión y todos acaban viendo lo mismo.
+- Solo el anfitrión simula: las hojas que caen al romper un tronco las quita él y los demás lo ven.
+- **Lo construido se guarda en el mundo del anfitrión**, aunque lo hiciera un invitado en un planeta donde
+  el anfitrión no ha estado. El invitado no guarda sus cambios: la próxima vez recibe el planeta del anfitrión.
+- Un invitado que vuelve a un planeta que dejó lejos puede tener que descargarlo otra vez si alguien lo
+  cambió mientras tanto.
+
 ## Límites de esta versión
 
 - Todos deben tener **la misma versión** del juego. Si no, el anfitrión te echa con un mensaje que dice
   cuáles son las dos versiones.
 - Hasta **8 jugadores** por galaxia.
-- Cada uno ve **sus propios cambios en los planetas**; los de los demás todavía no (parte 2). Los
-  cambios de un invitado no se guardan: al volver a entrar recibe el planeta del anfitrión otra vez.
+- Los **fluidos** (agua y lava que fluyen) y las hojas que caen los simula solo el anfitrión: en un
+  invitado pueden llegar con un pequeño retraso.
 - El invitado no tiene las cosas que vive el servidor del anfitrión: puertas, cofres y redstone, mobs y
   objetos soltados, Toads, estaciones, naves y Launch Stars (parte 3).
 - El anfitrión no limita la velocidad del invitado (se fía de los amigos).
@@ -64,6 +77,12 @@ partes 2 y 3, ver `ROADMAP.md`).
 10. [ ] El invitado recibe los planetas del anfitrión (en el log: `planet N from the host is in`) y camina
     en ellos, en modo Mario y en modo Minecraft, sin que el servidor lo devuelva a su sitio.
 11. [ ] Al entrar otra vez, los planetas que no cambiaron no se descargan de nuevo.
+12. [ ] El invitado rompe y pone bloques: el anfitrión los ve al momento. Y al revés.
+13. [ ] Los dos cambian el mismo bloque a la vez: acaban viendo el mismo bloque.
+14. [ ] El invitado rompe el tronco de un árbol: las hojas caen también para el anfitrión y para él.
+15. [ ] El invitado construye en otro planeta lejos del anfitrión; el anfitrión cierra el mundo y lo abre
+    de nuevo, vuela allí: la construcción está.
+16. [ ] Dos invitados y el anfitrión construyen a la vez en el mismo planeta sin tirones ni pérdidas.
 
 ## Probarlo en un solo ordenador (desarrollo)
 

@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-14 (multiplayer part 1 done; MP-2 next)
+Last updated: 2026-10-14 (multiplayer part 2 built on feat/multiplayer-2, awaiting playtest)
 
 ---
 
@@ -83,7 +83,7 @@ Last updated: 2026-10-14 (multiplayer part 1 done; MP-2 next)
 | Feature | Status | Notes |
 |---|---|---|
 | Windows support | done | Merged 2026-10-07 (feacda7); first played on Windows the same day. Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory ported on `feat/windows`, untested by hand. |
-| Multiplayer | next | User 2026-10-13: play with friends in one world, flying freely between planets. Host-authoritative: one player opens the world to LAN, guests join by direct connection and run their own game. **MP-1** (join, see each other, the host sends its planets) is done; next **MP-2** shared planet edits (planets already travel over the connection), then **MP-3** shared simulation (mobs, drops, fluids, redstone, and what lives on the host's server: doors, chests, Toads, stations, ships, Launch Stars). Missing from MP-1: names over heads, Mario's model for others, a way to go to a friend. [Spec](docs/superpowers/specs/2026-10-13-galaxycraft-multiplayer-mp1-design.md), [plan](docs/superpowers/plans/2026-10-13-multiplayer-mp1.md), [player guide](docs/MULTIJUGADOR.md). |
+| Multiplayer | now | User 2026-10-13: play with friends in one world, flying freely between planets. Host-authoritative: one player opens the world to LAN, guests join by direct connection and run their own game. **MP-1** (join, see each other, the host sends its planets) is done; **MP-2** shared planet edits (everyone breaks and places anything, the host decides and saves it all, guests predict) is built on `feat/multiplayer-2`, awaiting playtest ([spec](docs/superpowers/specs/2026-10-14-galaxycraft-multiplayer-mp2-design.md)); then **MP-3** shared simulation (mobs, drops, fluids, redstone, and what lives on the host's server: doors, chests, Toads, stations, ships, Launch Stars). Missing from MP-1: names over heads, Mario's model for others, a way to go to a friend. [Spec](docs/superpowers/specs/2026-10-13-galaxycraft-multiplayer-mp1-design.md), [plan](docs/superpowers/plans/2026-10-13-multiplayer-mp1.md), [player guide](docs/MULTIJUGADOR.md). |
 | Minecraft on one PC, Dolphin on another | idea | Would need a network transport instead of shared memory. |
 
 ## Polish and tech debt
