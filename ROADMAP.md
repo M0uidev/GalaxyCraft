@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-13 (multiplayer part 1 built, awaiting playtest)
+Last updated: 2026-10-14 (multiplayer part 1 done; MP-2 next)
 
 ---
 
@@ -23,7 +23,6 @@ Last updated: 2026-10-13 (multiplayer part 1 built, awaiting playtest)
 
 | Feature | Status | Notes |
 |---|---|---|
-| Multiplayer, part 1: join and see each other | now | User 2026-10-13: a guest joins a friend's world open to LAN and enters the host's galaxy; everyone sees everyone (Steve with skin). Planet edits and mobs are shared in parts 2 and 3. Branch `feat/multiplayer`. [Spec](docs/superpowers/specs/2026-10-13-galaxycraft-multiplayer-mp1-design.md) |
 | Planets with Minecraft 1.7 terrain | now | User 2026-10-08: today's terrain "not that good", old terrain fits small worlds. 3D density with overhangs, several biomes per planet scaled to its size, oceans, rivers, beaches, cave labyrinths, heights scaled to the radius. Trees checked: whole, leaves fall (see Done 2026-10-11). [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-legacy-terrain-design.md) |
 | Swimming and water look | now | User 2026-10-08: swim like Minecraft, characters in water drawn over it, Minecraft's underwater view. Built on `feat/swimming` (water draw order, underwater fog, Minecraft's swimming in F6), awaiting playtest. [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-swimming-water-design.md) |
 | Panorama screenshots, and F2 that works | now | User 2026-10-08: F2 saved a blank blue picture (Dolphin draws the game): now Dolphin takes it. Ctrl+F2 or /panorama takes six 90° shots from the eyes (panorama_0..5 + one equirectangular picture); tools/set_panorama.py makes a capture the title screen's background. Branch feat/panorama, awaiting playtest. |
@@ -84,7 +83,7 @@ Last updated: 2026-10-13 (multiplayer part 1 built, awaiting playtest)
 | Feature | Status | Notes |
 |---|---|---|
 | Windows support | done | Merged 2026-10-07 (feacda7); first played on Windows the same day. Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory ported on `feat/windows`, untested by hand. |
-| Multiplayer | now | User 2026-10-13: play with friends in one world, flying freely between planets. Host-authoritative: one player opens the world to LAN, guests join by direct connection and run their own game. Three parts, in order: **MP-1** connect and see each other (built on `feat/multiplayer`, unit tests green, awaiting a live two-game test and your playtest), **MP-2** shared planet edits, **MP-3** shared simulation (mobs, drops, fluids, redstone). [Spec](docs/superpowers/specs/2026-10-13-galaxycraft-multiplayer-mp1-design.md), [plan](docs/superpowers/plans/2026-10-13-multiplayer-mp1.md), [player guide](docs/MULTIJUGADOR.md). |
+| Multiplayer | next | User 2026-10-13: play with friends in one world, flying freely between planets. Host-authoritative: one player opens the world to LAN, guests join by direct connection and run their own game. **MP-1** (join, see each other, the host sends its planets) is done; next **MP-2** shared planet edits (planets already travel over the connection), then **MP-3** shared simulation (mobs, drops, fluids, redstone, and what lives on the host's server: doors, chests, Toads, stations, ships, Launch Stars). Missing from MP-1: names over heads, Mario's model for others, a way to go to a friend. [Spec](docs/superpowers/specs/2026-10-13-galaxycraft-multiplayer-mp1-design.md), [plan](docs/superpowers/plans/2026-10-13-multiplayer-mp1.md), [player guide](docs/MULTIJUGADOR.md). |
 | Minecraft on one PC, Dolphin on another | idea | Would need a network transport instead of shared memory. |
 
 ## Polish and tech debt
@@ -156,6 +155,7 @@ Last updated: 2026-10-13 (multiplayer part 1 built, awaiting playtest)
 | 2026-10-13 | 3D map of the universe: systems as glowing stars with their tier and star, orbits, planet list and ships, pick and warp from it (warp only from the map, in creative or with cheats on) | 0e01cf4, cc6d2b0 |
 | 2026-10-13 | Toads: guide, miner, explorer and technician Toads drawn from Kinopio, outposts (a mushroom hut by tier and star) and a technician on each station, a dialogue box on the HUD (typed text, choices, Enter to advance) and trading by tier. They are real Minecraft villagers: a hitbox, they can be hit and killed, sleep in the bed and use the door of their hut (or of the house you build), and never stay stuck in blocks. Huts are three blocks high with a door and a bed. [Guide](docs/TOADS.md) | 72c25ed..6ab56db |
 | 2026-10-13 | Launch Stars: craft two, place them on two planets, link them with a code (right click names a star), hold Shift beside one to be flung along a curve around the planets in between with SMG2's own flight effects; Shift again cancels, left click picks one up. The flight goes on behind inventory and chat | 3f4f9a4..e30e252 |
+| 2026-10-14 | Multiplayer part 1: open a world to LAN, a friend joins by IP and enters your galaxy (you send it your planets, it keeps a copy), you see each other as Steve with skin, walk in Mario or Minecraft mode | |
 
 
 ---
