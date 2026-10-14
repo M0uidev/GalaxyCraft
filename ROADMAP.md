@@ -155,7 +155,7 @@ Last updated: 2026-10-14 (multiplayer part 1 done; MP-2 next)
 | 2026-10-13 | 3D map of the universe: systems as glowing stars with their tier and star, orbits, planet list and ships, pick and warp from it (warp only from the map, in creative or with cheats on) | 0e01cf4, cc6d2b0 |
 | 2026-10-13 | Toads: guide, miner, explorer and technician Toads drawn from Kinopio, outposts (a mushroom hut by tier and star) and a technician on each station, a dialogue box on the HUD (typed text, choices, Enter to advance) and trading by tier. They are real Minecraft villagers: a hitbox, they can be hit and killed, sleep in the bed and use the door of their hut (or of the house you build), and never stay stuck in blocks. Huts are three blocks high with a door and a bed. [Guide](docs/TOADS.md) | 72c25ed..6ab56db |
 | 2026-10-13 | Launch Stars: craft two, place them on two planets, link them with a code (right click names a star), hold Shift beside one to be flung along a curve around the planets in between with SMG2's own flight effects; Shift again cancels, left click picks one up. The flight goes on behind inventory and chat | 3f4f9a4..e30e252 |
-| 2026-10-14 | Multiplayer part 1: open a world to LAN, a friend joins by IP and enters your galaxy (you send it your planets, it keeps a copy), you see each other as Steve with skin, walk in Mario or Minecraft mode | |
+| 2026-10-14 | Multiplayer part 1: open a world to LAN, a friend joins by IP and enters your galaxy (you send it your planets, it keeps a copy), you see each other as Steve with skin, walk in Mario or Minecraft mode | 469321d |
 
 
 ---
