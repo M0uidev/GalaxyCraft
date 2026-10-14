@@ -70,6 +70,16 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             ctx.waitTicks(60);
             shot(ctx, "ship-placed");
 
+            // 1b. A full hold (a large chest and two small), drawn behind the seats.
+            ctx.runOnClient(mc -> {
+                var hold = ShipClient.cargoForTest(r);
+                hold.setCapacity(4);
+                for (int i = 0; i < 4; i++) hold.install(i);
+                hold.join(0);
+            });
+            ctx.waitTicks(40);
+            shot(ctx, "ship-hold-placed");
+
             // 2. From its side and from above, 14 blocks off.
             Vector3d side = new Vector3d(center).fma(units(14), q.transform(new Vector3d(1, 0, 0)));
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(side));
@@ -93,6 +103,21 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             ctx.waitTicks(40);
             aimAt(ctx, center);
             shot(ctx, "ship-near");
+            String[] names = {"ship-hold-px", "ship-hold-nx", "ship-hold-top", "ship-hold-back", "ship-hold-low"};
+            double[][] dirs = {{1, 0.15, 0}, {-1, 0.15, 0}, {0, 1, 0.05}, {0, 0.15, -1}, {1, -0.25, 0.1}};
+            for (int k = 0; k < names.length; k++) {
+                Vector3d at = new Vector3d(center).fma(units(k == 4 ? 5 : 3.6), q.transform(new Vector3d(dirs[k][0], dirs[k][1], dirs[k][2]).normalize()));
+                ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(at));
+                ctx.waitTicks(40);
+                aimAt(ctx, center);
+                ctx.waitTicks(40);
+                aimAt(ctx, center);
+                shot(ctx, names[k]);
+            }
+            ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(close));
+            ctx.waitTicks(40);
+            aimAt(ctx, center);
+            ctx.waitTicks(40);
 
             // 3a. Solid: the galaxy's collision has boxes at the hull, and none far from it.
             ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(side));
@@ -113,6 +138,14 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             gxdev("ctl", "keys");
             waitReal(ctx, 500);
             check(ctx.computeOnClient(mc -> ShipClient.aboard().isPresent()), "right click boards the ship");
+            // E aboard opens the ship's screen.
+            ctx.getInput().pressKey(o -> o.keyInventory);
+            ctx.waitTicks(20);
+            String opened = ctx.computeOnClient(mc -> mc.gui.screen() == null ? "none" : mc.gui.screen().getClass().getSimpleName());
+            check(opened.equals("ShipScreen"), "E aboard opens the ship screen (got " + opened + ")");
+            shot(ctx, "ship-screen-e");
+            ctx.runOnClient(mc -> mc.player.closeContainer());
+            ctx.waitTicks(10);
             Vector3d before = ctx.computeOnClient(mc -> new Vector3d(GalaxyCraftClient.galaxyPos().orElseThrow()));
             ctx.getInput().holdKey(o -> o.keyUp);
             waitReal(ctx, 5000);

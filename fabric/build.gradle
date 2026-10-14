@@ -230,6 +230,10 @@ loom {
 				vmArg "-Dgalaxycraft.ship=true"
 				vmArg "-Dgalaxycraft.hidden=true"
 			}
+			if (project.hasProperty("galaxycraftShipCargo")) { // ShipCargoProbe: the ship's hold through its menu, no game
+				vmArg "-Dgalaxycraft.shipcargo=true"
+				vmArg "-Dgalaxycraft.hidden=true"
+			}
 			if (project.hasProperty("galaxycraftSoundtrack")) { // SoundtrackProbe: synthetic songs, no audio line, no game
 				vmArg "-Dgalaxycraft.soundtrack=true"
 				vmArg "-Dgalaxycraft.soundtrackNull=true"

@@ -7,7 +7,12 @@ import dev.moui.galaxycraft.map.MapShips;
 import dev.moui.galaxycraft.map.Trip;
 import dev.moui.galaxycraft.universe.UPos;
 import dev.moui.galaxycraft.play.PlayConfig;
+import dev.moui.galaxycraft.ship.CargoCodec;
+import dev.moui.galaxycraft.ship.CargoLayout;
 import dev.moui.galaxycraft.ship.SeatLayout;
+import dev.moui.galaxycraft.ship.ShipCargo;
+import dev.moui.galaxycraft.ship.ShipMenu;
+import dev.moui.galaxycraft.ship.ShipHudModel;
 import dev.moui.galaxycraft.ship.ShipBlocks;
 import dev.moui.galaxycraft.ship.ShipBoarding;
 import dev.moui.galaxycraft.ship.ShipHooks;
@@ -294,8 +299,66 @@ public final class ShipClient {
         if (!rightClick) return false;
         ShipRecord target = aimedShip(player, frame);
         if (target == null) return false;
-        board(player, frame, target);
+        if (sneak) openCargo(target);
+        else board(player, frame, target);
         return true;
+    }
+
+    /** The world's registries the cargo's items are saved with (kept: the last save can come after the server has stopped). */
+    private static volatile net.minecraft.core.HolderLookup.Provider registries;
+
+    private static com.mojang.serialization.DynamicOps<com.google.gson.JsonElement> itemOps() {
+        if (registries == null) throw new IllegalStateException("no world's registries yet");
+        return net.minecraft.resources.RegistryOps.create(com.mojang.serialization.JsonOps.INSTANCE, registries);
+    }
+
+    static {
+        CargoCodec.setItemCodec(new CargoCodec.ItemCodec() {
+            @Override
+            public com.google.gson.JsonElement encode(net.minecraft.world.item.ItemStack stack) {
+                return net.minecraft.world.item.ItemStack.CODEC.encodeStart(itemOps(), stack).getOrThrow();
+            }
+
+            @Override
+            public net.minecraft.world.item.ItemStack decode(com.google.gson.JsonElement json) {
+                return net.minecraft.world.item.ItemStack.CODEC.parse(itemOps(), json).result()
+                        .orElse(net.minecraft.world.item.ItemStack.EMPTY);
+            }
+        });
+    }
+
+    /**
+     * Opens a ship's hold: a menu from the integrated server over the cargo the store keeps (single player: the
+     * server and the store share this process; the edits are saved with the ships).
+     */
+    /** A ship's hold, for the game tests that fill it. */
+    public static ShipCargo cargoForTest(ShipRecord r) {
+        return store.cargo(r.id(), r.modules().cabin());
+    }
+
+    static void openCargo(ShipRecord r) {
+        Minecraft mc = Minecraft.getInstance();
+        var server = mc.getSingleplayerServer();
+        LocalPlayer me = mc.player;
+        if (server == null || me == null || store == null || r.isPad()) return;
+        registries = server.registryAccess();
+        ShipCargo cargo = store.cargo(r.id(), r.modules().cabin());
+        server.execute(() -> {
+            net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayer(me.getUUID());
+            if (sp != null) ShipMenu.open(sp, r.id(), cargo, r.modules(), m -> mc.execute(() -> setModules(r.id(), m)),
+                    () -> mc.execute(() -> dirty = true));
+        });
+    }
+
+    /** A ship's parts changed in its screen: the same ship, new modules (it is drawn from them at once). */
+    private static void setModules(String id, ShipModules m) {
+        if (store == null) return;
+        for (ShipRecord r : store.all())
+            if (r.id().equals(id)) {
+                store.put(new ShipRecord(id, m, r.pos(), r.rot(), r.stage()));
+                dirty = true;
+                return;
+            }
     }
 
     /** The parked ship of this stage the crosshair is on (within reach), or null. */
@@ -360,6 +423,11 @@ public final class ShipClient {
         if (docked != null && c.up()) docked = null; // Space lifts off
         velocity = ShipThrust.step(velocity, vec(player.getLookAngle()), keys, ShipStats.of(r.modules()));
         landingAssist(player, frame, c);
+        ShipCargo hold = store.cargo(r.id(), r.modules().cabin());
+        int chests = 0;
+        for (int i = 0; i < ShipCargo.BAYS; i++) if (hold.bay(i) == ShipCargo.Bay.SMALL || hold.bay(i) == ShipCargo.Bay.LARGE_HEAD) chests++;
+        ShipHud.show(ShipHudModel.of(new Vector3d(velocity), c.turbo(), r.modules(), chests, hold.capacity()),
+                docked != null ? Component.translatable("hud.galaxycraft.ship.docked").getString() : null);
         // The move itself waits for the player's own tick (onPlayerTick), after Minecraft has
         // saved the old position: moved before that, the view would not be drawn between the two
         // and the flight would step at 20 Hz.
@@ -520,6 +588,7 @@ public final class ShipClient {
     private static void leaveNow(LocalPlayer player) {
         if (boarded == null) return;
         GalaxyCraft.LOG.info("Left ship {}", boarded);
+        ShipHud.show(null, null);
         Optional<ShipRecord> was = aboard();
         boarded = null;
         velocity = new Vector3d();
@@ -754,6 +823,11 @@ public final class ShipClient {
         Matrix4d blocks = new Matrix4d(base).scale(1 / GravityFrame.SCALE);
         for (float[] s : SeatLayout.seats(ShipStats.of(r.modules()).seats()))
             ec.shipCushion(new Matrix4d(blocks).translate(s[0] / 16.0, s[1] / 16.0 + 0.1, s[2] / 16.0), pt, out);
+        // The hold: the chests installed, behind the seats.
+        if (store != null)
+            for (CargoLayout.Placed c : CargoLayout.chests(store.cargo(r.id(), r.modules().cabin())))
+                ec.shipChest(new Matrix4d(blocks).translate(c.center()[0] / 16.0, c.center()[1] / 16.0, c.center()[2] / 16.0),
+                        c.large(), c.yaw(), CargoLayout.SCALE, pt, out);
     }
 
     /** A matrix as the wire's 3x4 row-major. */

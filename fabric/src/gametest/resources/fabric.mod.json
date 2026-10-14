@@ -45,6 +45,7 @@
 			"dev.moui.galaxycraft.gametest.SpawnProbe",
 			"dev.moui.galaxycraft.gametest.StationProbe",
 			"dev.moui.galaxycraft.gametest.ShipProbe",
+			"dev.moui.galaxycraft.gametest.ShipCargoProbe",
 			"dev.moui.galaxycraft.gametest.SoundtrackProbe"
 		]
 	},

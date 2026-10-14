@@ -20,6 +20,7 @@ public final class ModKeyDefaults {
         MOD.put("movement", "f6");
         MOD.put("teleport", "p");
         MOD.put("ship_down", "z");
+        MOD.put("ship_info", "i");
         MOD.put("music.open", "m");
 
         VANILLA.put("forward", "w");

@@ -156,6 +156,7 @@ Last updated: 2026-10-14 (multiplayer part 1 done; MP-2 next)
 | 2026-10-13 | Toads: guide, miner, explorer and technician Toads drawn from Kinopio, outposts (a mushroom hut by tier and star) and a technician on each station, a dialogue box on the HUD (typed text, choices, Enter to advance) and trading by tier. They are real Minecraft villagers: a hitbox, they can be hit and killed, sleep in the bed and use the door of their hut (or of the house you build), and never stay stuck in blocks. Huts are three blocks high with a door and a bed. [Guide](docs/TOADS.md) | 72c25ed..6ab56db |
 | 2026-10-13 | Launch Stars: craft two, place them on two planets, link them with a code (right click names a star), hold Shift beside one to be flung along a curve around the planets in between with SMG2's own flight effects; Shift again cancels, left click picks one up. The flight goes on behind inventory and chat | 3f4f9a4..e30e252 |
 | 2026-10-14 | Multiplayer part 1: open a world to LAN, a friend joins by IP and enters your galaxy (you send it your planets, it keeps a copy), you see each other as Steve with skin, walk in Mario or Minecraft mode | 469321d |
+| 2026-10-14 | The ship's own screen and hold: E aboard (or Shift + right click outside) opens a pixel-art screen to swap the hull, engine, rudder and cabin, and a hold of chests (4 bays unlocked by the cabin, a large chest takes two) drawn inside the ship; a small flight plate while piloting, the full panel on I | 484544b |
 
 
 ---
@@ -163,6 +164,18 @@ Last updated: 2026-10-14 (multiplayer part 1 done; MP-2 next)
 ## Inbox
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
+
+- 2026-10-13: **Ship and landing pad customization, and ship inventory** (user): (1) a real ship customizer, where you
+  change the ship's parts, e.g. the glass type, with the glass texture fitted to the round porthole so the white
+  Minecraft glass border shows all around; (2) the landing pad becomes a proper station with a small screen
+  where you change its outside look (texture, color, more options to find); (3) ship inventory: chests you install
+  in the ship (4 units of room, a large chest takes 2; the cabin's tier unlocks the room), opened by a key (E) from
+  inside or crouch + right click from outside, drawn inside the ship; everything feeling interactive and well fitted to
+  the 3D model. Split in three: the ship inventory is first (spec `docs/superpowers/specs/2026-10-13-galaxycraft-ship-cargo-design.md`,
+  branch `feat/ship-cargo`); the customizer and the pad's screen come after.
+- 2026-10-13: **Flight UI for the Toad ship** (user): a custom UI while piloting that shows the ship's stats, speed and
+  similar, in a style that fits the game (not a plain Minecraft HUD). Built on `feat/ship-cargo` with the cargo, kept small after your feedback: a plate with the speed gauge, the full
+  panel only while holding I; the same pixel-art style as the ship screen (parts and hold tabs). Awaiting your playtest.
 
 - 2026-10-12: **Names for galaxies and planets, rename, and an empire** (user): galaxies and planets get random
   names from a list, in the style "Ares 48" (a name plus a number, maybe with a slash). You can rename the planet you
