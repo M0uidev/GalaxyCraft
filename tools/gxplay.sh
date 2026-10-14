@@ -58,7 +58,7 @@ stop_minecraft() {
   for _ in 1 2 3 4 5; do sleep 1; pgrep -f "$MC_MATCH" > /dev/null || return 0; done
   pkill -KILL -f "$MC_MATCH" 2> /dev/null
 }
-stop_minecraft
+[ -n "${GXC_KEEP_OTHERS:-}" ] || stop_minecraft  # GXC_KEEP_OTHERS=1: a second game for a multiplayer test
 
 # Dual core (CPUThread): this Dolphin defaults to single core on desktop, which puts the CPU and
 # the GPU on one thread and leaves no headroom on planets.
