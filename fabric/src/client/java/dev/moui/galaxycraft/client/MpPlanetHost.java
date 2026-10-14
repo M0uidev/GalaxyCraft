@@ -29,7 +29,7 @@ final class MpPlanetHost {
             }
             bytes.whenComplete((data, ex) -> {
                 if (ex != null) GalaxyCraft.LOG.warn("[GalaxyCraft mp] planet {} for a guest: {}", index, ex.toString());
-                MpServer.offer(guest, index, guestEtag, data == null ? null : new PlanetXfer.Offer(data, PlanetXfer.etag(data)));
+                MpServer.offer(guest, index, guestEtag, data == null ? null : new PlanetXfer.Offer(data, PlanetXfer.etag(data), 0));
             });
         });
     }

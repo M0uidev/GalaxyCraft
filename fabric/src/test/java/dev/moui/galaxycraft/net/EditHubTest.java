@@ -119,4 +119,15 @@ class EditHubTest {
         assertEquals(5, sent.size());
         assertEquals(List.of(1, 2, 3, 4, 5), sent.stream().map(EditCodec.Msg::seq).toList());
     }
+
+    @Test
+    void aGuestsPlanetsAreListed() {
+        hub.subscribe("g", 4);
+        hub.subscribe("g", 7);
+        hub.deliver("g", 4, 0);
+        assertEquals(java.util.Set.of(4, 7), new java.util.HashSet<>(hub.planetsOf("g")));
+        hub.cancel("g", 4);
+        assertEquals(List.of(7), hub.planetsOf("g"));
+        assertTrue(hub.planetsOf("nobody").isEmpty());
+    }
 }

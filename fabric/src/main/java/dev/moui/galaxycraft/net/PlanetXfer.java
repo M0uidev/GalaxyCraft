@@ -41,7 +41,8 @@ public final class PlanetXfer {
     }
 
     /** What the host has for a guest: the bytes and their etag. */
-    public record Offer(byte[] data, long etag) {}
+    /** seq: the planet's edit sequence when the bytes were taken (every edit up to it is in them). */
+    public record Offer(byte[] data, long etag, int seq) {}
 
     /** The guest's end: chunks in order, bounded by what the head promised. */
     public static final class Assembler {

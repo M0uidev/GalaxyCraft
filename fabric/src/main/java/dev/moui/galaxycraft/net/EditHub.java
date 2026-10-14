@@ -53,6 +53,12 @@ public final class EditHub<G> {
         if (old != null) for (var m : old.buffer) p.bytes -= size(m);
     }
 
+    /** The planets the guest holds (pending or live). */
+    public List<Integer> planetsOf(G g) {
+        Peer p = peers.get(g);
+        return p == null ? List.of() : new ArrayList<>(p.subs.keySet());
+    }
+
     public boolean subscribed(G g, int planet) {
         Peer p = peers.get(g);
         return p != null && p.subs.containsKey(planet);

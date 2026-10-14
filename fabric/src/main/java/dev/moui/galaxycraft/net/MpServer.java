@@ -36,7 +36,23 @@ public final class MpServer {
         void ask(UUID guest, int index, long guestEtag);
     }
 
+    /** The host's game, which owns the planets: applies a guest's edits, hears when a guest lets a planet go. Called on the server thread. */
+    public interface EditSink {
+        void edits(UUID guest, EditCodec.Msg m);
+
+        void dropped(UUID guest, int planet);
+    }
+
     private static volatile PlanetSource planetSource;
+    private static volatile EditSink editSink;
+    /** Who holds which planet, and what waits to be sent them about it. */
+    private static EditHub<UUID> hub = newHub();
+    private static final Map<UUID, RateLimiter> editLimits = new HashMap<>();
+    private static final Map<UUID, RateLimiter> editBytes = new HashMap<>();
+    private static final Map<UUID, Integer> editBad = new HashMap<>();
+    /** What a guest's planet edits may take of each tick's send budget; the planet chunks get the rest. */
+    static final int EDIT_BUDGET = 16 * 1024;
+    private static final int EDIT_BAD_KICK = 5;
     /** Guests that entered the galaxy: only they may ask for planets. */
     private static final java.util.Set<UUID> members = new java.util.HashSet<>();
     private static final Map<UUID, RateLimiter> askLimits = new HashMap<>();
@@ -47,8 +63,33 @@ public final class MpServer {
 
     private MpServer() {}
 
+    private static EditHub<UUID> newHub() {
+        return new EditHub<>((guest, planet) -> {
+            ServerPlayer p = player(guest);
+            if (p != null) ServerPlayNetworking.send(p, new MpPayloads.Resync(planet));
+            EditSink sink = editSink;
+            if (sink != null) sink.dropped(guest, planet);
+        });
+    }
+
     public static void setPlanetSource(PlanetSource source) {
         planetSource = source;
+    }
+
+    public static void setEditSink(EditSink sink) {
+        editSink = sink;
+    }
+
+    /** The host's game made a change to a planet guests may hold, from any thread: it goes to those that hold it. author: the guest whose edit it was (null: not a guest's). */
+    public static void publish(EditCodec.Msg m, UUID author) {
+        MinecraftServer srv = server;
+        if (srv != null) srv.execute(() -> hub.publish(m, author));
+    }
+
+    /** The host's answer to one guest's edit that it could not take as it was: the cells as they are. */
+    public static void correct(UUID guest, EditCodec.Msg m) {
+        MinecraftServer srv = server;
+        if (srv != null) srv.execute(() -> hub.publishTo(guest, m));
     }
 
     /**
@@ -66,17 +107,20 @@ public final class MpServer {
         if (p == null || !members.contains(guest)) return;
         var box = outboxes.computeIfAbsent(guest, k -> new PlanetXfer.Outbox<>());
         if (offer == null || offer.data().length == 0 || offer.data().length > PlanetXfer.MAX_BYTES) {
+            hub.cancel(guest, index);
             box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_FAIL, 0, 0, 0), 32);
             return;
         }
         if (offer.etag() == guestEtag) {
-            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_SAME, offer.etag(), 0, 0), 32);
+            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_SAME, offer.etag(), 0, offer.seq()), 32);
+            hub.deliver(guest, index, offer.seq());
             return;
         }
         byte[] data = offer.data();
-        box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_DATA, offer.etag(), data.length, 0), 32);
+        box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_DATA, offer.etag(), data.length, offer.seq()), 32);
         for (int seq = 0; seq < PlanetXfer.chunks(data.length); seq++)
             box.add(new MpPayloads.PlanetChunk(index, seq, PlanetXfer.slice(data, seq)), Math.min(PlanetXfer.CHUNK, data.length - seq * PlanetXfer.CHUNK));
+        hub.deliver(guest, index, offer.seq());
         GalaxyCraft.LOG.info("[GalaxyCraft mp] planet {} ({} KB) queued for {}", index, data.length / 1024, p.getName().getString());
     }
 
@@ -86,10 +130,12 @@ public final class MpServer {
         if (source == null || !members.contains(id) || ask.index() < 0) return;
         if (!askLimits.computeIfAbsent(id, k -> new RateLimiter(10, 20)).allow(System.nanoTime())) return;
         if (outstanding.getOrDefault(id, 0) >= PlanetXfer.MAX_OUTSTANDING) {
+            hub.cancel(id, ask.index());
             outboxes.computeIfAbsent(id, k -> new PlanetXfer.Outbox<>()).add(new MpPayloads.PlanetHead(ask.index(), PlanetXfer.STATE_FAIL, 0, 0, 0), 32);
             return;
         }
         outstanding.merge(id, 1, Integer::sum);
+        hub.subscribe(id, ask.index()); // edits from now on wait for the planet's bytes
         source.ask(id, ask.index(), ask.etag());
     }
 
@@ -97,9 +143,31 @@ public final class MpServer {
         for (var e : outboxes.entrySet()) {
             if (e.getValue().isEmpty()) continue;
             ServerPlayer p = player(e.getKey());
-            if (p != null) e.getValue().drain(PlanetXfer.BUDGET_PER_TICK, payload -> ServerPlayNetworking.send(p, payload));
+            if (p != null) e.getValue().drain(PlanetXfer.BUDGET_PER_TICK - EDIT_BUDGET, payload -> ServerPlayNetworking.send(p, payload));
             else e.getValue().clear();
         }
+        for (ServerPlayer p : srv.getPlayerList().getPlayers())
+            if (members.contains(p.getUUID()))
+                hub.drain(p.getUUID(), EDIT_BUDGET, m -> ServerPlayNetworking.send(p, new MpPayloads.Edits(EditCodec.encode(m))));
+    }
+
+    private static void edits(ServerPlayer p, MpPayloads.Edits e) {
+        UUID id = p.getUUID();
+        EditSink sink = editSink;
+        if (sink == null || !members.contains(id)) return;
+        if (!editLimits.computeIfAbsent(id, k -> new RateLimiter(20, 40)).allow(System.nanoTime())) return;
+        var bytes = editBytes.computeIfAbsent(id, k -> new RateLimiter(64, 128));
+        for (int kb = 0; kb < Math.max(1, e.data().length / 1024); kb++)
+            if (!bytes.allow(System.nanoTime())) return;
+        EditCodec.Msg m;
+        try {
+            m = EditCodec.decode(e.data());
+        } catch (EditCodec.Bad bad) {
+            if (editBad.merge(id, 1, Integer::sum) >= EDIT_BAD_KICK) SINK.kick(id, "Too many malformed multiplayer packets.");
+            return;
+        }
+        editBad.remove(id);
+        if (hub.subscribed(id, m.planet())) sink.edits(id, m);
     }
 
     private static void forget(UUID id) {
@@ -108,6 +176,12 @@ public final class MpServer {
         outstanding.remove(id);
         var box = outboxes.remove(id);
         if (box != null) box.clear();
+        EditSink sink = editSink;
+        if (sink != null) for (int planet : hub.planetsOf(id)) sink.dropped(id, planet);
+        hub.forget(id);
+        editLimits.remove(id);
+        editBytes.remove(id);
+        editBad.remove(id);
     }
 
     /** Guests that answered Hello well, and players this server sent away: for tests and the log. */
@@ -201,6 +275,14 @@ public final class MpServer {
             }
         });
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.PlanetAsk.TYPE, (payload, ctx) -> ask(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Edits.TYPE, (payload, ctx) -> edits(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.PlanetDrop.TYPE, (payload, ctx) -> {
+            UUID id = ctx.player().getUUID();
+            if (!hub.subscribed(id, payload.index())) return;
+            hub.cancel(id, payload.index());
+            EditSink sink = editSink;
+            if (sink != null) sink.dropped(id, payload.index());
+        });
         ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {
             if (relay != null) relay.state(ctx.player().getUUID(), payload.data(), System.nanoTime());
@@ -234,6 +316,10 @@ public final class MpServer {
             askLimits.clear();
             outstanding.clear();
             outboxes.clear();
+            editLimits.clear();
+            editBytes.clear();
+            editBad.clear();
+            hub = newHub();
         });
         GalaxyCraft.LOG.info("Multiplayer ready (protocol {})", Protocol.VERSION);
     }
