@@ -22,7 +22,7 @@ import org.joml.Vector3d;
 /**
  * GalaxyCraft as the player gets it, only with -Dgalaxycraft.launcher=true (tools/gxvoxel.sh
  * launch, with the dev Dolphin booting by itself into GalaxyCraftSpace): Minecraft's title screen
- * (no Multiplayer), a world made through Create World, the player put on its home planet, a block
+ * (Multiplayer to join a friend, no Realms), a world made through Create World, the player put on its home planet, a block
  * broken; back to the title (Mario held, Dolphin's menu mode), and into the world again: the
  * planet as it was left and the player where they stood.
  */
@@ -36,8 +36,10 @@ public final class LauncherProbe implements FabricClientGameTest {
         if (!Boolean.getBoolean("galaxycraft.launcher")) return;
         ctx.waitForScreen(TitleScreen.class);
         boolean multiplayer = ctx.computeOnClient(mc -> Screens.getWidgets(mc.gui.screen()).stream()
-                .anyMatch(w -> key(w, "menu.multiplayer") || key(w, "menu.online")));
-        check(!multiplayer, "the title screen has no Multiplayer nor Realms");
+                .anyMatch(w -> key(w, "menu.multiplayer")));
+        boolean realms = ctx.computeOnClient(mc -> Screens.getWidgets(mc.gui.screen()).stream()
+                .anyMatch(w -> key(w, "menu.online")));
+        check(multiplayer && !realms, "the title screen has Multiplayer (to join a friend) and no Realms");
         waitReal(ctx, mc -> mbxFlags()[1].equals("GalaxyCraftSpace"), 120);
         String[] mbx = mbxFlags();
         check(mbx[1].equals("GalaxyCraftSpace"), "SMG2 booted into GalaxyCraftSpace by itself");

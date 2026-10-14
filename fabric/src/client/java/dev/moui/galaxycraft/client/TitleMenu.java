@@ -15,13 +15,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 
 /**
- * Minecraft's title screen is GalaxyCraft's: no Multiplayer nor Realms (worlds are galaxies of
+ * Minecraft's title screen is GalaxyCraft's: Multiplayer stays (to join a friend's galaxy) but no Realms (worlds are galaxies of
  * this computer's SMG2), "Super Minecraft Galaxy" and its author under the logo, a button to the
  * Discord server, and how Super Mario Galaxy 2 is doing behind it (Dolphin boots it into
  * GalaxyCraftSpace while this screen shows).
  */
 final class TitleMenu {
-    private static final String[] GONE = {"menu.multiplayer", "menu.online"};
+    private static final String[] GONE = {"menu.online"};
     private static final int GOLD = 0xFFFFD34D, GREY = 0xFFA0A0A0;
     static final String AUTHOR = "@M0uiDev";
     static final URI DISCORD = URI.create("https://discord.gg/NhKmT6cVM7");
@@ -43,7 +43,7 @@ final class TitleMenu {
         });
     }
 
-    /** Takes out the Multiplayer and Realms rows; what was below them moves up. */
+    /** Takes out the Realms row; what was below it moves up. */
     private static void trim(List<AbstractWidget> widgets) {
         for (String key : GONE) {
             AbstractWidget b = widgets.stream().filter(w -> key(w, key)).findFirst().orElse(null);
@@ -56,9 +56,10 @@ final class TitleMenu {
         }
     }
 
-    /** "Join the Discord" right under Singleplayer, where Multiplayer was; what was below moves down. */
+    /** "Join the Discord" right under Multiplayer (under Singleplayer if there is none); what was below moves down. */
     private static void addDiscord(Screen screen, List<AbstractWidget> widgets) {
-        AbstractWidget single = widgets.stream().filter(w -> key(w, "menu.singleplayer")).findFirst().orElse(null);
+        AbstractWidget single = widgets.stream().filter(w -> key(w, "menu.multiplayer")).findFirst()
+                .or(() -> widgets.stream().filter(w -> key(w, "menu.singleplayer")).findFirst()).orElse(null);
         if (single == null) return;
         int row = single.getHeight() + 4, y = single.getY() + row;
         for (AbstractWidget w : widgets)
