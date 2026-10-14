@@ -23,6 +23,17 @@ abstract class ServerGamePacketListenerMixin {
         if (GalaxyCraft.FIELD.hasFrame()) cir.setReturnValue(false);
     }
 
+    /**
+     * A guest in a world opened to LAN is not its single player owner, so Minecraft measures its
+     * speed and says "moved too quickly" and puts it back: the player is placed by SMG2 and by the
+     * galaxy's own scale, which no vanilla speed limit fits. Friends are trusted (as the host's own
+     * player always was): the check is off in a world someone hosts.
+     */
+    @Inject(method = "shouldCheckPlayerMovement", at = @At("HEAD"), cancellable = true)
+    private void galaxycraft$trustHostedPlayers(boolean elytra, CallbackInfoReturnable<Boolean> cir) {
+        if (((ServerGamePacketListenerImpl) (Object) this).player.level().getServer().isSingleplayer()) cir.setReturnValue(false);
+    }
+
     @ModifyExpressionValue(method = "handlePlayerPositionChange", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerPlayer;isInPostImpulseGraceTime()Z"))
     private boolean galaxycraft$trustGalaxyMoves(boolean grace) {

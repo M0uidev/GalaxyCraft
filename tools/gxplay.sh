@@ -53,10 +53,19 @@ mkdir -p "$GAME_DIR"
 # make it lag: stop any first. The game test ignores SIGTERM, so KILL follows. (This also stops
 # a test of tools/gxvoxel.sh, whose Minecraft is hidden too: never play while one runs.)
 MC_MATCH="galaxycraft.hidden=true"
+# With GXC_KEEP_OTHERS (a second game beside this one, for a multiplayer test) only the Minecraft that
+# runs in this game's folder is ours to stop.
+ours() {
+  for p in $(pgrep -f "$MC_MATCH"); do
+    [ -z "${GXC_KEEP_OTHERS:-}" ] || [ "$(readlink "/proc/$p/cwd")" = "$(readlink -f "$GAME_DIR")" ] && echo "$p"
+  done
+}
 stop_minecraft() {
-  pkill -f "$MC_MATCH" 2> /dev/null || return 0
-  for _ in 1 2 3 4 5; do sleep 1; pgrep -f "$MC_MATCH" > /dev/null || return 0; done
-  pkill -KILL -f "$MC_MATCH" 2> /dev/null
+  local pids; pids=$(ours)
+  [ -n "$pids" ] || return 0
+  kill $pids 2> /dev/null
+  for _ in 1 2 3 4 5; do sleep 1; [ -n "$(ours)" ] || return 0; done
+  kill -KILL $(ours) 2> /dev/null
 }
 [ -n "${GXC_KEEP_OTHERS:-}" ] || stop_minecraft  # GXC_KEEP_OTHERS=1: a second game for a multiplayer test
 
