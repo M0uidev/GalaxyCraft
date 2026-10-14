@@ -48,6 +48,7 @@ public final class MpProbe implements FabricClientGameTest {
                 } catch (IOException e) {
                     throw new IllegalStateException(e);
                 }
+                server.setUsesAuthentication(false); // the probe's clients have no Mojang session
                 return server.publishServer(MinecraftServer.MultiplayerScope.LAN, false, port);
             });
             if (!published) throw new AssertionError("the world could not be opened to LAN on port " + port);
@@ -71,7 +72,7 @@ public final class MpProbe implements FabricClientGameTest {
 
             // 2. A guest of another protocol version is sent away.
             int kicksBefore = MpServer.kicks();
-            Process old = launchGuest(fabricDir, guestHome, "Guest2", port, "2");
+            Process old = launchGuest(fabricDir, guestHome, "Guest2", port, String.valueOf(dev.moui.galaxycraft.net.Protocol.VERSION - 1));
             try {
                 waitFor(ctx, () -> MpServer.kicks() > kicksBefore, "the out-of-date guest to be sent away");
                 log("out-of-date guest was sent away");
@@ -103,6 +104,17 @@ public final class MpProbe implements FabricClientGameTest {
         String script = System.getProperty("os.name").startsWith("Windows") ? "gradlew.bat" : "./gradlew";
         List<String> cmd = new java.util.ArrayList<>(List.of(script, "runClient", "--console=plain",
                 "--args=--username " + name + " --quickPlayMultiplayer localhost:" + port));
+        cmd.add("-PgalaxycraftHidden"); // no window on the player's desktop
+        // Gradle clears the host test's run folder (its world) before any client run: not this one. And the guest has its own game folder.
+        cmd.add("-x");
+        cmd.add("deleteGameTestRunDir");
+        cmd.add("-PgalaxycraftGameDir=" + guestHome.resolve("minecraft"));
+        try { // a new game folder starts with Minecraft's accessibility screen, which would hold the quick join back
+            java.nio.file.Files.createDirectories(guestHome.resolve("minecraft"));
+            java.nio.file.Files.writeString(guestHome.resolve("minecraft").resolve("options.txt"), "onboardAccessibility:false\n");
+        } catch (IOException e) {
+            throw new IllegalStateException("could not prepare the guest's folder: " + e, e);
+        }
         if (version != null) cmd.add("-PmpGuestVersion=" + version);
         ProcessBuilder pb = new ProcessBuilder(cmd).directory(fabricDir.toFile()).redirectErrorStream(true);
         pb.environment().put("XDG_DATA_HOME", guestHome.toString());

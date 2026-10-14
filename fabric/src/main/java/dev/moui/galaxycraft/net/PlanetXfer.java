@@ -15,8 +15,9 @@ public final class PlanetXfer {
     public static final int MAX_BYTES = 96 * 1024 * 1024;
     /** What the host's send queue lets out each server tick to one guest: 1.3 MB/s, so the poses and chat keep flowing. */
     public static final int BUDGET_PER_TICK = 64 * 1024;
-    /** Planets a guest may have asked for and not got yet. */
+    /** Planets a guest may have asked for and not got yet: the guest keeps under this (MAX_ASKED) and asks for the rest later. */
     public static final int MAX_OUTSTANDING = 16;
+    public static final int MAX_ASKED = 8;
 
     public static final int STATE_DATA = 0, STATE_SAME = 1, STATE_FAIL = 2;
 

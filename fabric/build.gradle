@@ -245,7 +245,7 @@ loom {
 				vmArg "-Dgalaxycraft.planetDir=" // empty: the world keeps its own galaxy folder, as when playing
 				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
 			}
-			if (project.hasProperty("mpGuestVersion")) { // MpProbe's out-of-date guest (gradlew runClient -PmpGuestVersion=2)
+			if (project.hasProperty("mpGuestVersion")) { // MpProbe's out-of-date guest (gradlew runClient -PmpGuestVersion=<an older protocol version>)
 				vmArg "-Dgalaxycraft.mpVersion=${project.property("mpGuestVersion")}"
 			}
 			if (project.hasProperty("galaxycraftEditor")) { // PlanetEditorProbe: the /galaxycraft editor, no game

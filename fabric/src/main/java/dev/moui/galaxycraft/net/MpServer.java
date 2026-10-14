@@ -61,7 +61,7 @@ public final class MpServer {
     }
 
     private static void deliver(UUID guest, int index, long guestEtag, PlanetXfer.Offer offer) {
-        outstanding.merge(guest, -1, Integer::sum);
+        outstanding.computeIfPresent(guest, (k, n) -> Math.max(0, n - 1));
         ServerPlayer p = player(guest);
         if (p == null || !members.contains(guest)) return;
         var box = outboxes.computeIfAbsent(guest, k -> new PlanetXfer.Outbox<>());
@@ -171,6 +171,7 @@ public final class MpServer {
             GalaxySave galaxy = GalaxySave.of(srv.getWorldPath(LevelResource.ROOT));
             String json = galaxy.galaxyJson().orElse(null);
             if (json == null) {
+                GalaxyCraft.LOG.warn("[GalaxyCraft mp] the world has no usable galaxy.json yet");
                 SINK.kick(p.getUUID(), "The host's galaxy is not ready yet. Try again in a moment.");
                 return;
             }

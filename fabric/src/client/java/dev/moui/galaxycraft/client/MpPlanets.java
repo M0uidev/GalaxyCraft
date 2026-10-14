@@ -52,11 +52,15 @@ final class MpPlanets {
                 (chunk, ctx) -> ctx.client().execute(() -> onChunk(chunk)));
     }
 
-    /** Completes when the planet's file in the guest's folder is the host's of this session. Client thread. */
+    /**
+     * Completes when the planet's file in the guest's folder is the host's of this session; null if
+     * too many are being waited for already (ask again next tick). Client thread.
+     */
     static CompletableFuture<Void> fetch(int index, Path file) {
         if (fresh.contains(index) && Files.isRegularFile(file)) return CompletableFuture.completedFuture(null);
         Pending had = pending.get(index);
         if (had != null) return had.done;
+        if (pending.size() >= PlanetXfer.MAX_ASKED) return null;
         Pending p = new Pending(index, file);
         pending.put(index, p);
         Minecraft mc = Minecraft.getInstance();

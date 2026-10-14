@@ -299,7 +299,9 @@ final class GalaxyStream {
         if (kept != null) f = CompletableFuture.completedFuture(kept);
         else if (MpClient.connected()) {
             // A guest has no server to make planets: the host's copy of this one is fetched (kept from an earlier session if unchanged).
-            f = MpPlanets.fetch(index, store.file(key)).thenApplyAsync(v -> readSaved(key, blocks), PlanetClient.maker);
+            CompletableFuture<Void> got = MpPlanets.fetch(index, store.file(key));
+            if (got == null) return; // too many asked of the host already: tried again next time
+            f = got.thenApplyAsync(v -> readSaved(key, blocks), PlanetClient.maker);
         } else if (java.nio.file.Files.isRegularFile(store.file(key))) {
             f = CompletableFuture.supplyAsync(() -> readSaved(key, blocks), PlanetClient.maker);
         } else {

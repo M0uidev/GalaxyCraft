@@ -18,9 +18,11 @@ partes 2 y 3, ver `ROADMAP.md`).
 
 1. Abre Super Minecraft Galaxy (la misma versión del mod que el anfitrión).
 2. Menú principal → **Multijugador** → **Conexión directa**, y escribe la IP y el puerto.
-3. Entras en **la galaxia del anfitrión**: los mismos planetas y el mismo universo (la semilla viaja con
-   la conexión). Tu partida de invitado guarda una copia en `galaxycraft/guest/` para entrar más rápido
-   la próxima vez; no toca tus propios mundos.
+3. Entras en **la galaxia del anfitrión**: los mismos planetas y el mismo universo. La semilla viaja con
+   la conexión y **el anfitrión te envía cada planeta** que necesitas, igual que lo tiene él (con sus
+   árboles y lo que haya construido). Tarda unos segundos al entrar y al acercarte a un planeta nuevo.
+4. Tu juego guarda una copia en `galaxycraft/guest/` para entrar más rápido la próxima vez: si un planeta
+   no ha cambiado, no se vuelve a descargar. No toca tus propios mundos.
 
 ## Qué se ve
 
@@ -34,7 +36,11 @@ partes 2 y 3, ver `ROADMAP.md`).
 - Todos deben tener **la misma versión** del juego. Si no, el anfitrión te echa con un mensaje que dice
   cuáles son las dos versiones.
 - Hasta **8 jugadores** por galaxia.
-- Cada uno ve **sus propios cambios en los planetas**; los de los demás todavía no (parte 2).
+- Cada uno ve **sus propios cambios en los planetas**; los de los demás todavía no (parte 2). Los
+  cambios de un invitado no se guardan: al volver a entrar recibe el planeta del anfitrión otra vez.
+- El invitado no tiene las cosas que vive el servidor del anfitrión: puertas, cofres y redstone, mobs y
+  objetos soltados, Toads, estaciones, naves y Launch Stars (parte 3).
+- El anfitrión no limita la velocidad del invitado (se fía de los amigos).
 - Un jugador en modo Mario se ve como Steve para los demás (el modelo de Mario remoto queda para más
   adelante). No hay nombres sobre las cabezas todavía.
 - No hay `/tpp` para ir hasta otro jugador: se llega volando (élitros, nave, Launch Stars).
@@ -55,5 +61,20 @@ partes 2 y 3, ver `ROADMAP.md`).
 7. [ ] Un invitado con otra versión del mod es rechazado con el mensaje de versiones.
 8. [ ] El anfitrión cierra el mundo: el invitado vuelve al menú principal sin cuelgue.
 9. [ ] Un jugador con `/skin` otraCuenta: el otro ve ese skin (también si entra después).
+10. [ ] El invitado recibe los planetas del anfitrión (en el log: `planet N from the host is in`) y camina
+    en ellos, en modo Mario y en modo Minecraft, sin que el servidor lo devuelva a su sitio.
+11. [ ] Al entrar otra vez, los planetas que no cambiaron no se descargan de nuevo.
+
+## Probarlo en un solo ordenador (desarrollo)
+
+Dos juegos completos a la vez (cada uno con su Dolphin). Comparten el teclado y el ratón del sistema, así
+que no se pueden jugar a la vez; sirve para ver que se ven y que los planetas llegan.
+
+- Anfitrión: `GXC_OFFLINE_LAN=1 GXC_LAN_PORT=25599 GXC_MC_ARGS="--quickPlaySingleplayer '<mundo>'" tools/gxplay.sh`
+  (abre el mundo a LAN solo, en ese puerto).
+- Invitado: `GXC_KEEP_OTHERS=1 GXC_SHM_DIR=/tmp/g2/shm XDG_DATA_HOME=/tmp/g2 GXC_OFFLINE_LAN=1
+  GXC_MC_ARGS="--username Amigo --quickPlayMultiplayer localhost:25599" tools/gxplay.sh`.
+- `GXC_OFFLINE_LAN` apaga la verificación de sesión de Mojang en el servidor LAN (sin ella, un
+  cliente sin cuenta recibe "Invalid session"). Solo para desarrollo.
 
 Si algo falla, mira `logs/latest.log` y busca las líneas `[GalaxyCraft mp]`.
