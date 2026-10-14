@@ -798,6 +798,7 @@ final class EntityClient {
     // ---- the other players (multiplayer) ----
 
     private final RemoteAvatars remoteAvatars = new RemoteAvatars();
+    private long lastTrace;
     /** A renderer failed for the other players: they are left out (the local player is not affected). */
     private boolean remotesFailed;
     /** The custom skins of the others as the game's textures: the data they came from, and the texture made of it. */
@@ -836,6 +837,17 @@ final class EntityClient {
             return;
         }
         long now = System.nanoTime();
+        if (MpClient.TRACE && now - lastTrace > 1_000_000_000L) {
+            lastTrace = now;
+            Vector3d me = PlanetClient.marioUniverse();
+            for (var e : MpClient.remotes.poses(now).entrySet()) {
+                var p = e.getValue();
+                Vector3d at = new Vector3d(p.x(), p.y(), p.z());
+                GalaxyCraft.LOG.info("[mp trace] peer {} at universe ({}, {}, {}), me ({}), {} blocks away, range {}", e.getKey().toString().substring(0, 8),
+                        (long) at.x, (long) at.y, (long) at.z, me == null ? "?" : (long) me.x + ", " + (long) me.y + ", " + (long) me.z,
+                        me == null ? "?" : (long) (at.distance(me) / (1.0 / GravityFrame.SCALE)), range());
+            }
+        }
         for (RemoteAvatars.Shown s : remoteAvatars.visible(mc, MpClient.remotes.poses(now), now, PlanetClient.marioUniverse(), range())) {
             try {
                 EntityRenderer r = mc.getEntityRenderDispatcher().getRenderer(s.entity());

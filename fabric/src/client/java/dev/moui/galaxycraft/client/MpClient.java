@@ -137,7 +137,13 @@ final class MpClient {
                 StateSampler.flags(p.isShiftKeyDown(), p.isSprinting(), p.isSwimming(), p.isFallFlying(), p.onGround(),
                         ShipClient.aboard().isPresent()));
         if (s.valid()) ClientPlayNetworking.send(new MpPayloads.State(Wire.encode(s)));
+        if (TRACE && seq % 10 == 0)
+            GalaxyCraft.LOG.info("[mp trace] sending at universe ({}, {}, {}) up ({}, {}, {}) mode {} stage {}", (long) at.x, (long) at.y, (long) at.z,
+                    String.format("%.2f", up.x), String.format("%.2f", up.y), String.format("%.2f", up.z), s.mode(), GalaxyCraftClient.frame() != null);
     }
+
+    /** GXC_MP_TRACE=1: once a second, where each player says it is and where the others are (to chase a misplaced avatar). */
+    static final boolean TRACE = System.getenv("GXC_MP_TRACE") != null;
 
     static boolean connected() {
         return connected;
