@@ -33,6 +33,8 @@ public final class VoxelPlanet {
     private final int chunksPerEdge, chunkLayers;
     private float[] spheres; // per chunk: center x y z (blocks), radius; computed on first use
     private Listener listener; // told of every change but those set quietly
+    /** Told of every change, quiet ones too (but not those set from remote): the multiplayer feed. */
+    private final java.util.List<Listener> observers = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final java.util.Map<Long, Boolean> sameLook = new java.util.HashMap<>();
     private PlanetBiomes biomes = PlanetBiomes.uniform(PlanetBiomes.PLAINS);
     private final PlanetLight light;
@@ -353,6 +355,21 @@ public final class VoxelPlanet {
      * dirty; the fluids around it flow on their next tick.
      */
     public void set(int cell, int id) {
+        put(cell, id, true);
+    }
+
+    /** A change that came from another game's planet (multiplayer): done fully, but nobody is told. */
+    public void setFromRemote(int cell, int id) {
+        put(cell, id, false);
+    }
+
+    private void fire(int cell, char b, boolean tell) {
+        if (!tell) return;
+        if (listener != null) listener.changed(cell, b);
+        for (Listener o : observers) o.changed(cell, b);
+    }
+
+    private void put(int cell, int id, boolean tell) {
         char b = (char) id;
         char was = cells[cell];
         if (was == b) return;
@@ -360,7 +377,7 @@ public final class VoxelPlanet {
         if (blocks.lightBlock(was) != blocks.lightBlock(b) || blocks.lightEmission(was) != blocks.lightEmission(b))
             light.update(cell);
         if (sameLook(was, b)) { // nothing to draw or collide anew
-            if (listener != null) listener.changed(cell, b);
+            fire(cell, b, tell);
             return;
         }
         int chunk = chunkOf(cell);
@@ -376,7 +393,7 @@ public final class VoxelPlanet {
             }
         }
         fluids.touched(cell);
-        if (listener != null) listener.changed(cell, b);
+        fire(cell, b, tell);
     }
 
     public interface Listener {
@@ -406,7 +423,7 @@ public final class VoxelPlanet {
         this.listener = listener;
     }
 
-    /** Sets a cell without telling the listener (the change came from where it listens for). */
+    /** Sets a cell without telling the listener (the change came from where it listens for); observers still hear it. */
     public void setQuietly(int cell, int id) {
         var l = listener;
         listener = null;
@@ -415,6 +432,14 @@ public final class VoxelPlanet {
         } finally {
             listener = l;
         }
+    }
+
+    public void addObserver(Listener o) {
+        observers.add(o);
+    }
+
+    public void removeObserver(Listener o) {
+        observers.remove(o);
     }
 
     /**

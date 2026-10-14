@@ -189,6 +189,10 @@ public final class PlanetSession {
     private int scene = Integer.MIN_VALUE, host = Integer.MIN_VALUE;
     private int sinceResidency;
     private boolean unsaved;
+    /** A guest's copy of a host planet: the host simulates fluids and leaf decay, edits arrive from it. */
+    private boolean follower;
+    /** True while the player's own break / place / pour / scoop runs: the changes it makes are the player's. */
+    private boolean playerEditing;
     private final LeafDecay.Queue leaves = new LeafDecay.Queue();
     private final java.util.Set<Integer> touched = new java.util.LinkedHashSet<>(); // searched once per tick, not per change
     private java.util.function.IntConsumer leafRemover;
@@ -369,7 +373,7 @@ public final class PlanetSession {
 
     /** Cells changed (a log broken, a leaf removed): the leaves they no longer hold start to fall. */
     public void touchLeaves(int... cells) {
-        if (planet == null) return;
+        if (planet == null || follower) return;
         for (int c : cells) touched.add(c);
     }
 
@@ -557,12 +561,12 @@ public final class PlanetSession {
             host = hostPid;
             sendAll();
         }
-        if (planet.fluids().tick()) unsaved = true;
+        if (!follower && planet.fluids().tick()) unsaved = true;
         if (!touched.isEmpty()) {
             leaves.touch(planet, touched.stream().mapToInt(Integer::intValue).toArray());
             touched.clear();
         }
-        for (int cell : leaves.tick(planet)) {
+        for (int cell : follower ? new int[0] : leaves.tick(planet)) {
             if (leafRemover != null) leafRemover.accept(cell);
             else {
                 planet.set(cell, Blocks.AIR);
@@ -880,6 +884,15 @@ public final class PlanetSession {
 
     /** False if no block in reach or it is unbreakable. Its neighbors then settle (a door's other half goes). */
     public boolean breakBlock(Vector3d eyeGal, Vector3d lookGal, boolean creative) {
+        playerEditing = true;
+        try {
+            return breakBlock0(eyeGal, lookGal, creative);
+        } finally {
+            playerEditing = false;
+        }
+    }
+
+    private boolean breakBlock0(Vector3d eyeGal, Vector3d lookGal, boolean creative) {
         PlanetRaycast.Hit h = cast(eyeGal, lookGal);
         if (h == null || !planet.info(h.hit()).breakable()) return false;
         boolean melts = !creative && planet.material(h.hit()) == Material.ICE;
@@ -906,6 +919,15 @@ public final class PlanetSession {
 
     /** As above, and no solid block goes in a cell occupied says a creature (a mob, a Toad) is in. */
     public boolean placeBlock(Vector3d eyeGal, Vector3d lookGal, Placer placer, Vector3d marioFeetGal, java.util.function.IntPredicate occupied) {
+        playerEditing = true;
+        try {
+            return placeBlock0(eyeGal, lookGal, placer, marioFeetGal, occupied);
+        } finally {
+            playerEditing = false;
+        }
+    }
+
+    private boolean placeBlock0(Vector3d eyeGal, Vector3d lookGal, Placer placer, Vector3d marioFeetGal, java.util.function.IntPredicate occupied) {
         PlanetRaycast.Hit h = cast(eyeGal, lookGal);
         if (h == null || placer == null) return false;
         CellGrid g = planet.grid;
@@ -1020,6 +1042,34 @@ public final class PlanetSession {
             return new Vector3d[] {galOf(at), up.normalize()};
         }
         return null;
+    }
+
+    /** Whether the changes being made now are the player's own (inside a break, place, pour or scoop). */
+    public boolean playerEditing() {
+        return playerEditing;
+    }
+
+    /** A guest's copy of a host planet: no fluid tick, no leaf decay (the host's changes arrive as edits). */
+    public void setFollower(boolean on) {
+        follower = on;
+    }
+
+    public boolean follower() {
+        return follower;
+    }
+
+    /** The host applies a guest's edit: as a player's change (the shadow world hears it), its leaves start to fall, saved. */
+    public void applyShared(int cell, int id) {
+        if (planet == null) return;
+        planet.set(cell, id);
+        touchLeaves(cell);
+        unsaved = true;
+    }
+
+    /** A guest takes a change the host made: drawn and collided, not told on, not saved. */
+    public void applyRemote(int cell, int id) {
+        if (planet == null) return;
+        planet.setFromRemote(cell, id);
     }
 
     /** A change Minecraft made to the planet (redstone, a door opened): kept, and saved. */
@@ -1163,6 +1213,15 @@ public final class PlanetSession {
 
     /** Empties a bucket of water or lava (a source) against the block the eye looks at. */
     public boolean pour(Vector3d eyeGal, Vector3d lookGal, Material fluid) {
+        playerEditing = true;
+        try {
+            return pour0(eyeGal, lookGal, fluid);
+        } finally {
+            playerEditing = false;
+        }
+    }
+
+    private boolean pour0(Vector3d eyeGal, Vector3d lookGal, Material fluid) {
         PlanetRaycast.Hit h = cast(eyeGal, lookGal);
         if (h == null || h.before() < 0 || fluid == null || !fluid.fluid() || !planet.info(h.before()).replaceable())
             return false;
@@ -1173,6 +1232,15 @@ public final class PlanetSession {
 
     /** Fills an empty bucket from the fluid source the eye looks at: what it got, or null. */
     public Material scoop(Vector3d eyeGal, Vector3d lookGal) {
+        playerEditing = true;
+        try {
+            return scoop0(eyeGal, lookGal);
+        } finally {
+            playerEditing = false;
+        }
+    }
+
+    private Material scoop0(Vector3d eyeGal, Vector3d lookGal) {
         if (planet == null) return null;
         PlanetRaycast.Hit h = PlanetRaycast.cast(planet, local(eyeGal), new Vector3d(lookGal).normalize(), REACH, true);
         if (h == null || !planet.info(h.hit()).isFluid()) return null;
