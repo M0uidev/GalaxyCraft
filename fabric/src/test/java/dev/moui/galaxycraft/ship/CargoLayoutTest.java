@@ -31,8 +31,8 @@ class CargoLayoutTest {
         List<CargoLayout.Placed> p = CargoLayout.chests(c);
         assertEquals(1, p.size());
         assertTrue(p.get(0).large());
-        assertEquals(-27f, p.get(0).center()[0], 1e-6);
-        assertEquals(-11.5f, p.get(0).center()[2], 1e-6);
+        assertEquals(-25f, p.get(0).center()[0], 1e-6);
+        assertEquals(-17.5f, p.get(0).center()[2], 1e-6);
     }
 
     @Test

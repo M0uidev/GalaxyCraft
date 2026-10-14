@@ -103,10 +103,10 @@ public final class ShipDolphinProbe implements FabricClientGameTest {
             ctx.waitTicks(40);
             aimAt(ctx, center);
             shot(ctx, "ship-near");
-            String[] names = {"ship-hold-px", "ship-hold-nx", "ship-hold-top", "ship-hold-back"};
-            double[][] dirs = {{1, 0.15, 0}, {-1, 0.15, 0}, {0, 1, 0.05}, {0, 0.15, -1}};
+            String[] names = {"ship-hold-px", "ship-hold-nx", "ship-hold-top", "ship-hold-back", "ship-hold-low"};
+            double[][] dirs = {{1, 0.15, 0}, {-1, 0.15, 0}, {0, 1, 0.05}, {0, 0.15, -1}, {1, -0.25, 0.1}};
             for (int k = 0; k < names.length; k++) {
-                Vector3d at = new Vector3d(center).fma(units(3.6), q.transform(new Vector3d(dirs[k][0], dirs[k][1], dirs[k][2]).normalize()));
+                Vector3d at = new Vector3d(center).fma(units(k == 4 ? 5 : 3.6), q.transform(new Vector3d(dirs[k][0], dirs[k][1], dirs[k][2]).normalize()));
                 ctx.runOnClient(mc -> GalaxyCraftClient.moveTo(at));
                 ctx.waitTicks(40);
                 aimAt(ctx, center);

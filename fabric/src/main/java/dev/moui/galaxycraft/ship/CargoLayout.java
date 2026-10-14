@@ -11,8 +11,8 @@ import java.util.List;
  */
 public final class CargoLayout {
     /** Chest scale: a block drawn at this fraction of its size. */
-    public static final float SCALE = 0.38f;
-    private static final float SIDE = 27f, FLOOR = 4f, FRONT = -3f, BACK = -20f;
+    public static final float SCALE = 0.52f;
+    private static final float SIDE = 25f, FLOOR = -3f, FRONT = -6f, BACK = -29f;
     private static final float[][] BAYS = {
         {-SIDE, FLOOR, FRONT}, {-SIDE, FLOOR, BACK}, {SIDE, FLOOR, FRONT}, {SIDE, FLOOR, BACK}};
 
