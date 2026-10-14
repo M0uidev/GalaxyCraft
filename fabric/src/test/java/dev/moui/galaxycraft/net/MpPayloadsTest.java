@@ -83,7 +83,7 @@ class MpPayloadsTest {
     void planetMessagesTravel() {
         var ask = new MpPayloads.PlanetAsk(70_000, 0x1234_5678_9ABCL);
         assertEquals(ask, roundTrip(MpPayloads.PlanetAsk.CODEC, ask));
-        var head = new MpPayloads.PlanetHead(3, PlanetXfer.STATE_DATA, -42L, 2_000_000);
+        var head = new MpPayloads.PlanetHead(3, PlanetXfer.STATE_DATA, -42L, 2_000_000, 91);
         assertEquals(head, roundTrip(MpPayloads.PlanetHead.CODEC, head));
         byte[] part = PlanetXferTest.bytes(PlanetXfer.CHUNK, 9);
         var chunk = roundTrip(MpPayloads.PlanetChunk.CODEC, new MpPayloads.PlanetChunk(3, 7, part));
@@ -96,5 +96,20 @@ class MpPayloadsTest {
         RegistryFriendlyByteBuf b = buf();
         MpPayloads.PlanetChunk.CODEC.encode(b, new MpPayloads.PlanetChunk(0, 0, new byte[PlanetXfer.CHUNK + 1]));
         assertThrows(RuntimeException.class, () -> MpPayloads.PlanetChunk.CODEC.decode(b));
+    }
+
+    @Test
+    void editMessagesTravel() {
+        byte[] body = EditCodec.encode(new EditCodec.Msg(2, 5, 0, java.util.List.of(new EditCodec.Def(1, "minecraft:stone")), new int[] {4, 9}, new int[] {1, 1}));
+        assertArrayEquals(body, roundTrip(MpPayloads.Edits.CODEC, new MpPayloads.Edits(body)).data());
+        assertEquals(new MpPayloads.PlanetDrop(12), roundTrip(MpPayloads.PlanetDrop.CODEC, new MpPayloads.PlanetDrop(12)));
+        assertEquals(new MpPayloads.Resync(12), roundTrip(MpPayloads.Resync.CODEC, new MpPayloads.Resync(12)));
+    }
+
+    @Test
+    void anOversizedEditsIsNotRead() {
+        RegistryFriendlyByteBuf b = buf();
+        b.writeByteArray(new byte[EditCodec.MAX_WIRE + 1]);
+        assertThrows(RuntimeException.class, () -> MpPayloads.Edits.CODEC.decode(b));
     }
 }

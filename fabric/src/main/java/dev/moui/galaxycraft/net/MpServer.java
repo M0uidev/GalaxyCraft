@@ -66,15 +66,15 @@ public final class MpServer {
         if (p == null || !members.contains(guest)) return;
         var box = outboxes.computeIfAbsent(guest, k -> new PlanetXfer.Outbox<>());
         if (offer == null || offer.data().length == 0 || offer.data().length > PlanetXfer.MAX_BYTES) {
-            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_FAIL, 0, 0), 32);
+            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_FAIL, 0, 0, 0), 32);
             return;
         }
         if (offer.etag() == guestEtag) {
-            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_SAME, offer.etag(), 0), 32);
+            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_SAME, offer.etag(), 0, 0), 32);
             return;
         }
         byte[] data = offer.data();
-        box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_DATA, offer.etag(), data.length), 32);
+        box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_DATA, offer.etag(), data.length, 0), 32);
         for (int seq = 0; seq < PlanetXfer.chunks(data.length); seq++)
             box.add(new MpPayloads.PlanetChunk(index, seq, PlanetXfer.slice(data, seq)), Math.min(PlanetXfer.CHUNK, data.length - seq * PlanetXfer.CHUNK));
         GalaxyCraft.LOG.info("[GalaxyCraft mp] planet {} ({} KB) queued for {}", index, data.length / 1024, p.getName().getString());
@@ -86,7 +86,7 @@ public final class MpServer {
         if (source == null || !members.contains(id) || ask.index() < 0) return;
         if (!askLimits.computeIfAbsent(id, k -> new RateLimiter(10, 20)).allow(System.nanoTime())) return;
         if (outstanding.getOrDefault(id, 0) >= PlanetXfer.MAX_OUTSTANDING) {
-            outboxes.computeIfAbsent(id, k -> new PlanetXfer.Outbox<>()).add(new MpPayloads.PlanetHead(ask.index(), PlanetXfer.STATE_FAIL, 0, 0), 32);
+            outboxes.computeIfAbsent(id, k -> new PlanetXfer.Outbox<>()).add(new MpPayloads.PlanetHead(ask.index(), PlanetXfer.STATE_FAIL, 0, 0, 0), 32);
             return;
         }
         outstanding.merge(id, 1, Integer::sum);

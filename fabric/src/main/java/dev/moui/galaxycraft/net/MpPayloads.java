@@ -134,7 +134,7 @@ public final class MpPayloads {
     }
 
     /** Server -> guest: the answer to a PlanetAsk. state: data follows in `total` bytes (chunks), the guest's copy is the same, or failed. */
-    public record PlanetHead(int index, int state, long etag, int total) implements CustomPacketPayload {
+    public record PlanetHead(int index, int state, long etag, int total, int seq) implements CustomPacketPayload {
         public static final Type<PlanetHead> TYPE = typeOf("mp_planet_head");
         public static final StreamCodec<RegistryFriendlyByteBuf, PlanetHead> CODEC = CustomPacketPayload.codec(
                 (p, b) -> {
@@ -142,8 +142,9 @@ public final class MpPayloads {
                     b.writeByte(p.state);
                     b.writeLong(p.etag);
                     b.writeVarInt(p.total);
+                    b.writeVarInt(p.seq);
                 },
-                b -> new PlanetHead(b.readVarInt(), b.readByte(), b.readLong(), b.readVarInt()));
+                b -> new PlanetHead(b.readVarInt(), b.readByte(), b.readLong(), b.readVarInt(), b.readVarInt()));
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
@@ -168,6 +169,42 @@ public final class MpPayloads {
         }
     }
 
+    /** Cell changes of one catalog planet (an EditCodec body), both ways: a guest's edit; the host's, in its order. */
+    public record Edits(byte[] data) implements CustomPacketPayload {
+        public static final Type<Edits> TYPE = typeOf("mp_edits");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Edits> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByteArray(p.data), b -> new Edits(b.readByteArray(EditCodec.MAX_WIRE)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Guest -> server: this guest no longer holds that planet; stop sending it edits. */
+    public record PlanetDrop(int index) implements CustomPacketPayload {
+        public static final Type<PlanetDrop> TYPE = typeOf("mp_planet_drop");
+        public static final StreamCodec<RegistryFriendlyByteBuf, PlanetDrop> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeVarInt(p.index), b -> new PlanetDrop(b.readVarInt()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Server -> guest: too far behind on that planet; drop it and ask for it again. */
+    public record Resync(int index) implements CustomPacketPayload {
+        public static final Type<Resync> TYPE = typeOf("mp_resync");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Resync> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeVarInt(p.index), b -> new Resync(b.readVarInt()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Both sides must know the types: call from the common entrypoint. */
     public static void register() {
         PayloadTypeRegistry.clientboundPlay().register(Hello.TYPE, Hello.CODEC);
@@ -180,5 +217,9 @@ public final class MpPayloads {
         PayloadTypeRegistry.serverboundPlay().register(PlanetAsk.TYPE, PlanetAsk.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(PlanetHead.TYPE, PlanetHead.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(PlanetChunk.TYPE, PlanetChunk.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(Edits.TYPE, Edits.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(Edits.TYPE, Edits.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(PlanetDrop.TYPE, PlanetDrop.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(Resync.TYPE, Resync.CODEC);
     }
 }
