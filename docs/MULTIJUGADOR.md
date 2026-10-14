@@ -86,6 +86,11 @@ siguen sin compartirse (parte 3, ver `ROADMAP.md`).
 
 ## Probarlo en un solo ordenador (desarrollo)
 
+**Atajo:** `tools/gxmp.sh both` abre el anfitrión y el invitado en el orden correcto (lee su cabecera: explica las
+trampas conocidas); `tools/gxmp.sh status` y `tools/gxmp.sh stop`. Por defecto cada juego toma el teclado y el
+ratón solo mientras su ventana tiene el foco (`GXC_FOCUS_INPUT=0` para desactivarlo). Lo de abajo es lo que
+hace por dentro.
+
 Dos juegos completos a la vez (cada uno con su Dolphin). Comparten el teclado y el ratón del sistema, así
 que no se pueden jugar a la vez; sirve para ver que se ven y que los planetas llegan.
 

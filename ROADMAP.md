@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-14 (multiplayer part 2 built on feat/multiplayer-2, awaiting playtest)
+Last updated: 2026-10-14 (multiplayer part 2 done; MP-3 next)
 
 ---
 
@@ -83,7 +83,7 @@ Last updated: 2026-10-14 (multiplayer part 2 built on feat/multiplayer-2, awaiti
 | Feature | Status | Notes |
 |---|---|---|
 | Windows support | done | Merged 2026-10-07 (feacda7); first played on Windows the same day. Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory ported on `feat/windows`, untested by hand. |
-| Multiplayer | now | User 2026-10-13: play with friends in one world, flying freely between planets. Host-authoritative: one player opens the world to LAN, guests join by direct connection and run their own game. **MP-1** (join, see each other, the host sends its planets) is done; **MP-2** shared planet edits (everyone breaks and places anything, the host decides and saves it all, guests predict) is built on `feat/multiplayer-2`, awaiting playtest ([spec](docs/superpowers/specs/2026-10-14-galaxycraft-multiplayer-mp2-design.md)); then **MP-3** shared simulation (mobs, drops, fluids, redstone, and what lives on the host's server: doors, chests, Toads, stations, ships, Launch Stars). Missing from MP-1: names over heads, Mario's model for others, a way to go to a friend. [Spec](docs/superpowers/specs/2026-10-13-galaxycraft-multiplayer-mp1-design.md), [plan](docs/superpowers/plans/2026-10-13-multiplayer-mp1.md), [player guide](docs/MULTIJUGADOR.md). |
+| Multiplayer | next | User 2026-10-13: play with friends in one world, flying freely between planets. Host-authoritative: one player opens the world to LAN, guests join by direct connection and run their own game. **MP-1** (join, see each other, the host sends its planets) and **MP-2** (everyone breaks and places, the host decides and saves it) are done. Next **MP-3**, shared simulation: what lives on the host's server and the guest lacks (doors, chests, buttons, redstone, mobs, dropped items, Toads, stations, ships, Launch Stars), the guest using blocks, the others' entities. Missing since MP-1: names over heads, Mario's model for others, a way to go to a friend. [MP-1 spec](docs/superpowers/specs/2026-10-13-galaxycraft-multiplayer-mp1-design.md), [MP-2 spec](docs/superpowers/specs/2026-10-14-galaxycraft-multiplayer-mp2-design.md), [player guide](docs/MULTIJUGADOR.md). |
 | Minecraft on one PC, Dolphin on another | idea | Would need a network transport instead of shared memory. |
 
 ## Polish and tech debt
@@ -156,6 +156,7 @@ Last updated: 2026-10-14 (multiplayer part 2 built on feat/multiplayer-2, awaiti
 | 2026-10-13 | Toads: guide, miner, explorer and technician Toads drawn from Kinopio, outposts (a mushroom hut by tier and star) and a technician on each station, a dialogue box on the HUD (typed text, choices, Enter to advance) and trading by tier. They are real Minecraft villagers: a hitbox, they can be hit and killed, sleep in the bed and use the door of their hut (or of the house you build), and never stay stuck in blocks. Huts are three blocks high with a door and a bed. [Guide](docs/TOADS.md) | 72c25ed..6ab56db |
 | 2026-10-13 | Launch Stars: craft two, place them on two planets, link them with a code (right click names a star), hold Shift beside one to be flung along a curve around the planets in between with SMG2's own flight effects; Shift again cancels, left click picks one up. The flight goes on behind inventory and chat | 3f4f9a4..e30e252 |
 | 2026-10-14 | Multiplayer part 1: open a world to LAN, a friend joins by IP and enters your galaxy (you send it your planets, it keeps a copy), you see each other as Steve with skin, walk in Mario or Minecraft mode | 469321d |
+| 2026-10-14 | Multiplayer part 2: you and your friends see each other's changes to the planets (break and place anything, the host decides and keeps what was built, even on a planet it is not at), and each game takes the keyboard and mouse only while its window is focused when you test with two on one computer | 392276a |
 | 2026-10-14 | The ship's own screen and hold: E aboard (or Shift + right click outside) opens a pixel-art screen to swap the hull, engine, rudder and cabin, and a hold of chests (4 bays unlocked by the cabin, a large chest takes two) drawn inside the ship; a small flight plate while piloting, the full panel on I | 484544b |
 
 
