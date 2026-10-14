@@ -24,5 +24,10 @@ public final class GalaxyCraft implements ModInitializer {
         dev.moui.galaxycraft.net.MpServer.init();
         ServerTickEvents.END_SERVER_TICK.register(ShadowWorld::tick);
         ServerLifecycleEvents.SERVER_STOPPING.register(ShadowWorld::stop);
+        // Dev only: a LAN world checks each guest's session with Mojang; two accounts-less dev clients can't
+        // (GXC_OFFLINE_LAN=1 turns that check off so a second client can join).
+        if (System.getenv("GXC_OFFLINE_LAN") != null) {
+            ServerLifecycleEvents.SERVER_STARTED.register(server -> server.setUsesAuthentication(false));
+        }
     }
 }
