@@ -169,3 +169,10 @@ Custom payloads from client to server are capped at 32 KB by Minecraft, which is
   map and its progression gate); it needs its own small design. Players reach each other by flying.
 - **A server without the mod** is not refused: it plays as plain Minecraft. A guest only waits for `Hello` and
   disconnects after 5 s when the server does speak our channels but never sends it.
+- **A guest trusts nothing of the host's Hello** (review 2026-10-13): one Hello per connection, from a server that is not its own;
+  the galaxy is bounded (1 to 64 planets, radius 16 to 256, finite places) and refused otherwise; a galaxy whose first planet is a
+  blueprint is refused for now (the guest lacks the host's blueprint files); a changed galaxy under a known id drops its cached planets.
+- **Server side:** the host is recognised by UUID; a dedicated server and a client without the mod get no Hello and take no part;
+  skin changes are rate limited before they are inflated; a State of a wrong size is a counted malformed state, not a closed connection.
+- **Not done, noted:** remotes are stamped when the client tick handles them (up to 50 ms jitter against a 100 ms delay); Hello's first
+  fields must stay frozen across protocol versions for the version message to stay readable.

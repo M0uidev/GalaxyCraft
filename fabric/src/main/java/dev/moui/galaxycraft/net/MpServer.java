@@ -83,10 +83,14 @@ public final class MpServer {
             ServerPlayer p = handler.getPlayer();
             // A client without the mod cannot even connect (the payload types are required), so every
             // player here can speak the protocol. The host's own client owns the galaxy: no Hello.
-            if (srv.isSingleplayerOwner(p.nameAndId())) {
+            // Only a world a player opened to LAN has a galaxy to give; a dedicated server has none (not supported yet).
+            if (!srv.isSingleplayer()) return;
+            if (p.getUUID().equals(new net.minecraft.server.players.NameAndId(srv.getSingleplayerProfile()).id())) {
                 relay.join(p.getUUID());
                 return;
             }
+            // A client without the mod joins like any other and cannot take part: it is just not given a Hello.
+            if (!ServerPlayNetworking.canSend(p, MpPayloads.Hello.TYPE)) return;
             GalaxySave galaxy = GalaxySave.of(srv.getWorldPath(LevelResource.ROOT));
             String json = galaxy.galaxyJson().orElse(null);
             if (json == null) {
@@ -123,8 +127,8 @@ public final class MpServer {
             UUID from = ctx.player().getUUID();
             byte[] png = payload.data();
             boolean clear = SkinCodec.isClear(png);
+            if (!skinLimits.computeIfAbsent(from, k -> new RateLimiter(1, 3)).allow(System.nanoTime())) return; // before the inflate
             if (!SkinCodec.acceptable(png)) return; // junk is dropped, not passed on
-            if (!skinLimits.computeIfAbsent(from, k -> new RateLimiter(1, 3)).allow(System.nanoTime())) return;
             if (clear) skins.remove(from);
             else skins.put(from, png);
             for (ServerPlayer other : ctx.server().getPlayerList().getPlayers())

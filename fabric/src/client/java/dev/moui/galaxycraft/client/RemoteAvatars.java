@@ -45,7 +45,7 @@ final class RemoteAvatars {
      * The visible players at nowNanos, nearest first, each with its entity and body frame. A player
      * the server has not told us about yet (no tab list entry, so no skin) waits for the next frame.
      */
-    List<Shown> visible(Minecraft mc, Map<UUID, PeerTrack.Pose> poses, long nowNanos, Vector3d meUniverse) {
+    List<Shown> visible(Minecraft mc, Map<UUID, PeerTrack.Pose> poses, long nowNanos, Vector3d meUniverse, double rangeBlocks) {
         if (mc.level == null || mc.getConnection() == null) return List.of();
         if (level != mc.level) {
             avatars.clear();
@@ -66,6 +66,8 @@ final class RemoteAvatars {
             }
             Vector3d universe = new Vector3d(p.x(), p.y(), p.z());
             animate(a, universe, nowNanos);
+            // Out of the entity range (or at the far end of the universe, where a float cannot place it) is not drawn.
+            if (meUniverse != null && universe.distance(meUniverse) > rangeBlocks * UNITS_PER_BLOCK) continue;
             Vector3d feet = dev.moui.galaxycraft.universe.GameOrigin.toGame(universe);
             Vector3d up = new Vector3d(p.upX(), p.upY(), p.upZ());
             Vector3d look = new Vector3d(p.lookX(), p.lookY(), p.lookZ());

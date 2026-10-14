@@ -30,6 +30,8 @@ final class MpClient {
     /** This connection is a host's galaxy and we are in it. */
     private static boolean connected;
     private static int helloWait;
+    /** This connection is to a server that is not our own, so one Hello is expected (and only one). */
+    private static boolean accepting;
 
     private MpClient() {}
 
@@ -47,6 +49,7 @@ final class MpClient {
     /** The skin we last told the others about (null: none, or nothing said yet). */
     private static SkinClient.Skin lastSkin;
     private static boolean wasSending;
+    private static int skinCooldown;
 
     /** Another player's custom skin as sent (SkinCodec), or null. */
     static byte[] skinOf(java.util.UUID id) {
@@ -56,14 +59,20 @@ final class MpClient {
     private static void onSkin(MpPayloads.Skin skin) {
         if (!SkinCodec.acceptable(skin.data())) return;
         if (SkinCodec.isClear(skin.data())) skinData.remove(skin.id());
+        else if (java.util.Arrays.equals(skinData.get(skin.id()), skin.data())) return; // the same again: keep the texture made
         else if (skinData.containsKey(skin.id()) || skinData.size() < Protocol.MAX_PLAYERS) skinData.put(skin.id(), skin.data());
     }
 
     /** Tells the others about our /skin when it changes, and once when we start telling them anything. */
     private static void syncSkin(Minecraft client) {
+        if (skinCooldown > 0) {
+            skinCooldown--;
+            return;
+        }
         SkinClient.Skin now = SkinClient.current();
         if (now == lastSkin || client.player == null) return;
         lastSkin = now;
+        skinCooldown = 25; // the server takes about one a second: a change made sooner waits for the next turn
         if (now == null) {
             ClientPlayNetworking.send(new MpPayloads.Skin(client.player.getUUID(), new byte[0]));
         } else if (now.argb().length == SkinCodec.PIXELS) {
@@ -130,6 +139,12 @@ final class MpClient {
         return connected;
     }
 
+    /** The moment of joining (before anything the server sends): a server that is not ours may send its Hello. */
+    static void onJoin(Minecraft client) {
+        connected = false;
+        accepting = client.getSingleplayerServer() == null;
+    }
+
     /**
      * Joined a server that is not our own integrated one. If it speaks our protocol its Hello is on
      * the way: wait for it (the dark entering screen stays). If not it is a plain Minecraft server,
@@ -167,6 +182,11 @@ final class MpClient {
     }
 
     static void onHello(Minecraft client, MpPayloads.Hello hello) {
+        if (!accepting || connected) { // one Hello per connection, from a server that is not our own
+            GalaxyCraft.LOG.warn("[GalaxyCraft mp] a Hello that was not expected: ignored");
+            return;
+        }
+        accepting = false;
         var refusal = Protocol.refusal(Protocol.VERSION, hello.version());
         if (refusal.isPresent()) {
             GalaxyCraft.LOG.warn("{}", refusal.get());
@@ -178,11 +198,17 @@ final class MpClient {
                     System.getProperty("user.home")), hello.worldId());
             GalaxySave.Galaxy galaxy = GalaxySave.parseGalaxy(hello.galaxyJson())
                     .orElseThrow(() -> new IllegalArgumentException("the host's galaxy is not usable"));
+            var problem = GalaxySave.problem(galaxy);
+            if (problem.isPresent()) throw new IllegalArgumentException(problem.get());
             GalaxySave save = GalaxySave.of(dir);
+            // The same galaxy as last time keeps its cached planets (and its saved spot). A changed one is
+            // another galaxy under this id (a copied world, an edited one): its cached planets are not its own.
+            boolean same = save.galaxy().map(galaxy::equals).orElse(false);
+            if (!same) deleteTree(save.planets());
             save.markMade();
-            // The same galaxy as last time keeps its cached planets (and its saved spot); a changed one is rewritten.
-            if (!save.galaxy().map(galaxy::equals).orElse(false)) save.writeGalaxy(galaxy);
+            if (!same) save.writeGalaxy(galaxy);
             PlanetClient.enterWorld(save);
+            if (PlanetClient.galaxy() != save) throw new IllegalStateException("this game keeps its planets in a fixed folder");
             connected = true;
             GalaxyCraft.LOG.info("[GalaxyCraft mp] entered the host's galaxy {}", hello.worldId());
             EnteringScreen.show(client);
@@ -193,6 +219,13 @@ final class MpClient {
         }
     }
 
+    private static void deleteTree(Path dir) throws IOException {
+        if (!java.nio.file.Files.exists(dir)) return;
+        try (var walk = java.nio.file.Files.walk(dir)) {
+            for (Path p : walk.sorted(java.util.Comparator.reverseOrder()).toList()) java.nio.file.Files.delete(p);
+        }
+    }
+
     private static void ack(boolean ok) {
         ClientPlayNetworking.send(new MpPayloads.HelloAck(Protocol.VERSION, ok));
     }
@@ -200,6 +233,8 @@ final class MpClient {
     /** Left the world (any way). */
     static void reset() {
         connected = false;
+        accepting = false;
+        skinCooldown = 0;
         helloWait = 0;
         remotes.clear();
         skinData.clear();

@@ -158,6 +158,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         });
         // On the client's thread: DISCONNECT may come from the network's when the connection drops.
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            MpClient.onJoin(client);
             EnteringScreen.joining();
             client.execute(() -> GalaxyWorlds.joined(client));
         });

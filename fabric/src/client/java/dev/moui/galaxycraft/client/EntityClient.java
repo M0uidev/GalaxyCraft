@@ -792,7 +792,7 @@ final class EntityClient {
             return;
         }
         long now = System.nanoTime();
-        for (RemoteAvatars.Shown s : remoteAvatars.visible(mc, MpClient.remotes.poses(now), now, PlanetClient.marioUniverse())) {
+        for (RemoteAvatars.Shown s : remoteAvatars.visible(mc, MpClient.remotes.poses(now), now, PlanetClient.marioUniverse(), range())) {
             try {
                 EntityRenderer r = mc.getEntityRenderDispatcher().getRenderer(s.entity());
                 EntityRenderState st = r.createRenderState(s.entity(), pt);

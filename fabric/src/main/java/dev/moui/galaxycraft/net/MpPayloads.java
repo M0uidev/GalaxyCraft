@@ -11,6 +11,12 @@ import net.minecraft.resources.Identifier;
 public final class MpPayloads {
     /** The galaxy text in Hello: a 64 planet catalog is a few KB; this is generous. */
     public static final int MAX_GALAXY_JSON = 262_144;
+    /**
+     * The most a State may carry on the wire. Wire.decode rejects anything but its exact size; this is
+     * only the bound for reading, wider than that so a wrong size is a counted malformed state, not a
+     * decoding error that closes the connection at once.
+     */
+    public static final int MAX_STATE = 256;
 
     private MpPayloads() {}
 
@@ -55,7 +61,7 @@ public final class MpPayloads {
     public record State(byte[] data) implements CustomPacketPayload {
         public static final Type<State> TYPE = typeOf("mp_state");
         public static final StreamCodec<RegistryFriendlyByteBuf, State> CODEC = CustomPacketPayload.codec(
-                (p, b) -> b.writeByteArray(p.data), b -> new State(b.readByteArray(Wire.SIZE + 8)));
+                (p, b) -> b.writeByteArray(p.data), b -> new State(b.readByteArray(MAX_STATE)));
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
@@ -71,7 +77,7 @@ public final class MpPayloads {
                     b.writeUUID(p.id);
                     b.writeByteArray(p.data);
                 },
-                b -> new Peer(b.readUUID(), b.readByteArray(Wire.SIZE + 8)));
+                b -> new Peer(b.readUUID(), b.readByteArray(MAX_STATE)));
 
         @Override
         public Type<? extends CustomPacketPayload> type() {

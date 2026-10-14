@@ -93,6 +93,28 @@ public final class GalaxySave {
         }
     }
 
+    /**
+     * Why a galaxy a host sent cannot be entered, or empty if it can. A guest trusts nothing of it: the
+     * entries are bounded as Create World bounds them, and a planet that is a blueprint is refused
+     * (the guest does not have the host's blueprint files).
+     */
+    public static Optional<String> problem(Galaxy g) {
+        if (g == null || g.options() == null || g.entries() == null) return Optional.of("the galaxy is empty");
+        if (g.entries().isEmpty() || g.entries().size() > GalaxyCatalog.MAX)
+            return Optional.of("the galaxy has " + g.entries().size() + " planets (1 to " + GalaxyCatalog.MAX + " allowed)");
+        for (GalaxyCatalog.Entry e : g.entries()) {
+            if (e == null) return Optional.of("a planet is missing");
+            if (!Double.isFinite(e.x()) || !Double.isFinite(e.y()) || !Double.isFinite(e.z()) || Math.abs(e.x()) > 1e15
+                    || Math.abs(e.y()) > 1e15 || Math.abs(e.z()) > 1e15) return Optional.of("a planet is somewhere that is not a place");
+            if (e.radius() < GalaxyCatalog.MIN_RADIUS || e.radius() > GalaxyCatalog.MAX_RADIUS)
+                return Optional.of("a planet of radius " + e.radius() + " (" + GalaxyCatalog.MIN_RADIUS + " to " + GalaxyCatalog.MAX_RADIUS + " allowed)");
+            if (e.kind() == null) return Optional.of("a planet of no kind");
+            if (e.kind() == GalaxyCatalog.Kind.BLUEPRINT)
+                return Optional.of("a planet is a blueprint of the host's, which this version cannot share yet");
+        }
+        return Optional.empty();
+    }
+
     /** The galaxy as the text galaxy.json holds (what the host sends a guest). */
     public Optional<String> galaxyJson() {
         return galaxy().map(GSON::toJson);

@@ -57,8 +57,12 @@ class MpPayloadsTest {
 
     @Test
     void anOversizedStateOrSkinIsRefusedWhileReading() {
-        RegistryFriendlyByteBuf b = buf();
-        b.writeByteArray(new byte[Wire.SIZE + 9]);
+        RegistryFriendlyByteBuf slightly = buf(); // a wrong size reads, and Wire.decode counts it as malformed
+        slightly.writeByteArray(new byte[Wire.SIZE + 9]);
+        byte[] wrong = MpPayloads.State.CODEC.decode(slightly).data();
+        assertThrows(Wire.Malformed.class, () -> Wire.decode(wrong));
+        RegistryFriendlyByteBuf b = buf(); // far too big is refused while reading
+        b.writeByteArray(new byte[MpPayloads.MAX_STATE + 1]);
         assertThrows(RuntimeException.class, () -> MpPayloads.State.CODEC.decode(b));
         RegistryFriendlyByteBuf s = buf();
         s.writeUUID(UUID.randomUUID());
