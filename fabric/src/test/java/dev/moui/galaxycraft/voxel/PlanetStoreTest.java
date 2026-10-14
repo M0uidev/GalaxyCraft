@@ -38,4 +38,15 @@ class PlanetStoreTest {
         host.write("stage", saved, blocks);
         assertArrayEquals(bytes, Files.readAllBytes(host.file("stage")), "what the host saves and what it sends are the same bytes");
     }
+
+    @Test void bytesDecodeToTheSamePlanet() throws Exception {
+        Blocks blocks = CubeBlocks.INSTANCE;
+        VoxelPlanet made = VoxelPlanet.ofRadius(12, blocks);
+        made.set(made.grid.cellAt(new Vector3d(0, 13.5, 0)), blocks.id(Material.OBSIDIAN));
+        byte[] bytes = PlanetStore.encode(PlanetStore.Saved.of(made, new Vector3d(4, 5, 6)), blocks);
+        PlanetStore.Saved back = PlanetStore.decode(bytes, blocks, blocks::parse);
+        assertArrayEquals(made.cells(), back.cells());
+        assertEquals(new Vector3d(4, 5, 6), back.center());
+        assertThrows(java.io.IOException.class, () -> PlanetStore.decode(new byte[] {1, 2, 3}, blocks, blocks::parse));
+    }
 }

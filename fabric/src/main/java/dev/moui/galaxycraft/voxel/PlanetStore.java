@@ -143,7 +143,18 @@ public final class PlanetStore {
     public Optional<Saved> read(String stage, Blocks blocks, java.util.function.ToIntFunction<String> parse) throws IOException {
         Path f = file(stage);
         if (!Files.exists(f)) return Optional.empty();
-        try (DataInputStream in = new DataInputStream(new GZIPInputStream(Files.newInputStream(f)))) {
+        try (java.io.InputStream raw = Files.newInputStream(f)) {
+            return Optional.of(readFrom(raw, f.toString(), blocks, parse));
+        }
+    }
+
+    /** A planet from its bytes (the file's own, as encode makes them). */
+    public static Saved decode(byte[] bytes, Blocks blocks, java.util.function.ToIntFunction<String> parse) throws IOException {
+        return readFrom(new java.io.ByteArrayInputStream(bytes), "planet bytes", blocks, parse);
+    }
+
+    private static Saved readFrom(java.io.InputStream raw, String f, Blocks blocks, java.util.function.ToIntFunction<String> parse) throws IOException {
+        try (DataInputStream in = new DataInputStream(new GZIPInputStream(raw))) {
             int magic = in.readInt();
             if (magic != MAGIC && magic != MAGIC_V1) throw new IOException(f + ": not a GalaxyCraft planet");
             int n = in.readInt();
@@ -152,7 +163,7 @@ public final class PlanetStore {
             Vector3d center = new Vector3d(in.readDouble(), in.readDouble(), in.readDouble());
             if (n <= 0 || layers <= 0) throw new IOException(f + ": bad size");
             char[] cells = magic == MAGIC ? readCells(in, 6L * n * n * layers, parse) : readV1Cells(in, 6L * n * n * layers, blocks);
-            return Optional.of(new Saved(n, core, layers, depth, center, cells, biomes(in, 6 * n * n)));
+            return new Saved(n, core, layers, depth, center, cells, biomes(in, 6 * n * n));
         }
     }
 
