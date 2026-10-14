@@ -7,8 +7,13 @@ import org.junit.jupiter.api.Test;
 
 class WireTest {
     static PeerState sample() {
-        return new PeerState(7, 1.5e9, -2.25, 3.0e6, 0f, 1f, 0f, 90f, -10f, 1f, 0f, -2f, Protocol.MODE_STEVE,
+        return new PeerState(7, 1.5e9, -2.25, 3.0e6, 0f, 1f, 0f, 0f, 0f, 1f, 1f, 0f, -2f, Protocol.MODE_STEVE,
                 Protocol.F_SNEAK | Protocol.F_GROUND);
+    }
+
+    /** A state at (x, y, z) with up (ux, uy, uz), looking along +Z, moving at (vx, 0, 0). */
+    static PeerState of(double x, double y, double z, float ux, float uy, float uz, float vx) {
+        return new PeerState(0, x, y, z, ux, uy, uz, 0, 0, 1, vx, 0, 0, 0, 0);
     }
 
     @Test
@@ -38,13 +43,15 @@ class WireTest {
     @Test
     void validRejectsNaNInfiniteAndAbsurd() {
         assertTrue(sample().valid());
-        assertFalse(new PeerState(0, Double.NaN, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0).valid());
-        assertFalse(new PeerState(0, 0, Double.POSITIVE_INFINITY, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0).valid());
-        assertFalse(new PeerState(0, 1e30, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0).valid());
-        assertFalse(new PeerState(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0).valid(), "up vector of length 0");
-        assertFalse(new PeerState(0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0).valid(), "up vector far from unit");
-        assertFalse(new PeerState(0, 0, 0, 0, 0, 1, 0, Float.NaN, 0, 0, 0, 0, 0, 0).valid());
-        assertFalse(new PeerState(0, 0, 0, 0, 0, 1, 0, 0, 0, 1e9f, 0, 0, 0, 0).valid(), "absurd velocity");
+        assertFalse(of(Double.NaN, 0, 0, 0, 1, 0, 0).valid());
+        assertFalse(of(0, Double.POSITIVE_INFINITY, 0, 0, 1, 0, 0).valid());
+        assertFalse(of(1e30, 0, 0, 0, 1, 0, 0).valid());
+        assertFalse(of(0, 0, 0, 0, 0, 0, 0).valid(), "up vector of length 0");
+        assertFalse(of(0, 0, 0, 0, 5, 0, 0).valid(), "up vector far from unit");
+        assertFalse(new PeerState(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0).valid(), "look vector of length 0");
+        assertFalse(new PeerState(0, 0, 0, 0, 0, 1, 0, Float.NaN, 0, 1, 0, 0, 0, 0, 0).valid());
+        assertFalse(of(0, 0, 0, 0, 1, 0, 1e9f).valid(), "absurd velocity");
+        assertFalse(new PeerState(0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 7, 0).valid(), "unknown mode");
     }
 
     @Test

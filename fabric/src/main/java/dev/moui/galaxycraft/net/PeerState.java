@@ -1,7 +1,11 @@
 package dev.moui.galaxycraft.net;
 
-/** What every player tells the others ~10 times a second. Position in universe units. */
-public record PeerState(int seq, double x, double y, double z, float upX, float upY, float upZ, float yaw, float pitch,
+/**
+ * What every player tells the others ~10 times a second. Position in universe units; up (against
+ * gravity) and look (where the player faces, head included) are unit vectors in the universe's axes, which
+ * every client shares (a Minecraft yaw would not be: it depends on each client's own gravity frame).
+ */
+public record PeerState(int seq, double x, double y, double z, float upX, float upY, float upZ, float lookX, float lookY, float lookZ,
         float vx, float vy, float vz, int mode, int flags) {
 
     /** False for anything that could not be a real player's state (NaN, infinities, absurd values). */
@@ -10,7 +14,8 @@ public record PeerState(int seq, double x, double y, double z, float upX, float 
         if (!(Math.abs(x) <= m && Math.abs(y) <= m && Math.abs(z) <= m)) return false; // false for NaN too
         double up = Math.sqrt((double) upX * upX + (double) upY * upY + (double) upZ * upZ);
         if (!(up > 0.5 && up < 1.5)) return false;
-        if (!Float.isFinite(yaw) || !Float.isFinite(pitch)) return false;
+        double look = Math.sqrt((double) lookX * lookX + (double) lookY * lookY + (double) lookZ * lookZ);
+        if (!(look > 0.5 && look < 1.5)) return false;
         float s = Protocol.MAX_SPEED;
         if (!(Math.abs(vx) <= s && Math.abs(vy) <= s && Math.abs(vz) <= s)) return false;
         return mode == Protocol.MODE_STEVE || mode == Protocol.MODE_MARIO;

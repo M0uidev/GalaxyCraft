@@ -27,7 +27,7 @@ class RelayTest {
     }
 
     static byte[] st(int seq) {
-        return Wire.encode(new PeerState(seq, 1, 2, 3, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0));
+        return Wire.encode(new PeerState(seq, 1, 2, 3, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0));
     }
 
     @Test
@@ -98,7 +98,7 @@ class RelayTest {
         Rec r = new Rec();
         Relay relay = new Relay(r);
         relay.join(A); relay.join(B);
-        relay.state(A, Wire.encode(new PeerState(1, Double.NaN, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)), 0);
+        relay.state(A, Wire.encode(new PeerState(1, Double.NaN, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0)), 0);
         assertEquals(List.of(), r.log);
     }
 

@@ -8,7 +8,9 @@ package dev.moui.galaxycraft.net;
 public final class PeerTrack {
     public static final long DELAY_NANOS = 100_000_000L, EXTRAPOLATE_NANOS = 250_000_000L, HIDE_NANOS = 5_000_000_000L;
 
-    public record Pose(double x, double y, double z, double upX, double upY, double upZ, float yaw, float pitch, int mode, int flags) {}
+    /** Position in universe units; up and look are unit vectors in the universe's axes. */
+    public record Pose(double x, double y, double z, double upX, double upY, double upZ, double lookX, double lookY, double lookZ,
+            int mode, int flags) {}
 
     private PeerState older, newest;
     private long olderAt, newestAt;
@@ -30,20 +32,20 @@ public final class PeerTrack {
         if (target >= newestAt) {
             double dt = Math.min(target - newestAt, EXTRAPOLATE_NANOS) / 1e9;
             return new Pose(newest.x() + newest.vx() * dt, newest.y() + newest.vy() * dt, newest.z() + newest.vz() * dt,
-                    newest.upX(), newest.upY(), newest.upZ(), newest.yaw(), newest.pitch(), newest.mode(), newest.flags());
+                    newest.upX(), newest.upY(), newest.upZ(), newest.lookX(), newest.lookY(), newest.lookZ(), newest.mode(), newest.flags());
         }
         return blend(older, newest, (double) (target - olderAt) / (newestAt - olderAt));
     }
 
     private static Pose pose(PeerState s) {
-        return new Pose(s.x(), s.y(), s.z(), s.upX(), s.upY(), s.upZ(), s.yaw(), s.pitch(), s.mode(), s.flags());
+        return new Pose(s.x(), s.y(), s.z(), s.upX(), s.upY(), s.upZ(), s.lookX(), s.lookY(), s.lookZ(), s.mode(), s.flags());
     }
 
     private static Pose blend(PeerState a, PeerState b, double f) {
         double[] up = slerp(a.upX(), a.upY(), a.upZ(), b.upX(), b.upY(), b.upZ(), f);
-        float dyaw = (float) ((((b.yaw() - a.yaw()) % 360) + 540) % 360 - 180); // the short way round
+        double[] look = slerp(a.lookX(), a.lookY(), a.lookZ(), b.lookX(), b.lookY(), b.lookZ(), f);
         return new Pose(a.x() + (b.x() - a.x()) * f, a.y() + (b.y() - a.y()) * f, a.z() + (b.z() - a.z()) * f,
-                up[0], up[1], up[2], a.yaw() + dyaw * (float) f, a.pitch() + (b.pitch() - a.pitch()) * (float) f, b.mode(), b.flags());
+                up[0], up[1], up[2], look[0], look[1], look[2], b.mode(), b.flags());
     }
 
     /** Unit vectors turning the short way; same or opposite inputs fall back to the older one. */

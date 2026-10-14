@@ -71,9 +71,9 @@ Messages (protocol version `1`; first field of the handshake pair):
 | `Skin` | client -> server -> clients, once per change | player UUID, hash, PNG bytes (<= 24 KB; larger is not sent) for the `/skin` custom skin |
 | `PeerGone` | server -> clients | player UUID (also implied by Minecraft's own player-list removal) |
 
-`State` fields: **universe** position (3 doubles; each client has its own floating origin, so the receiver maps it with `GameOrigin.toGame`), up vector (3 floats), yaw and pitch of the body / head (2 floats),
+`State` fields: **universe** position (3 doubles; each client has its own floating origin, so the receiver maps it with `GameOrigin.toGame`), up vector (3 floats), look direction (3 floats, a unit vector in the universe axes; a Minecraft yaw means something different in each client's gravity frame, so it is never sent),
 velocity (3 floats, for extrapolation), mode (Steve / Mario), flags (sneak, sprint, swimming, gliding, on ground,
-on ship), a sequence number. About 60 bytes: 10 Hz x 7 peers is well under 5 KB/s.
+on ship), a sequence number. 67 bytes: 10 Hz x 7 peers is well under 5 KB/s.
 
 Limits (server side, per sender): at most 20 `State` / s (extra dropped), payload size checked before decode,
 unknown / malformed payloads ignored and counted; 5 consecutive malformed ones disconnect the sender.
@@ -160,3 +160,12 @@ Custom payloads from client to server are capped at 32 KB by Minecraft, which is
 - Exact `GalaxyOptions` serialization for `Hello` (reuse `GalaxySave` fields).
 - Where the start spawn of a guest is chosen (host's start planet vs nearest to the host).
 - Whether Mario mode needs the model from the DOL data or from the arc (the spike answers).
+
+## Decisions made while building (2026-10-13)
+
+- **Look, not yaw.** `State` carries a unit look vector in universe axes (see Channel); the receiver derives the body
+  heading (look projected onto the tangent plane of `up`) and the head pitch.
+- **`/tpp` moved out of MP-1.** Teleporting to a point of the universe has no primitive today (warps go through the
+  map and its progression gate); it needs its own small design. Players reach each other by flying.
+- **A server without the mod** is not refused: it plays as plain Minecraft. A guest only waits for `Hello` and
+  disconnects after 5 s when the server does speak our channels but never sends it.

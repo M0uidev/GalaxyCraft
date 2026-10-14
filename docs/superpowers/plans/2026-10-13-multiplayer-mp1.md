@@ -14,7 +14,7 @@
 
 - Protocol version `1`; the mod is required to join (payload channels registered as required).
 - Shared position is in **universe units** (`PlanetClient.marioUniverse()`), mapped by the receiver with `GameOrigin.toGame(Vector3d)`; never Minecraft coordinates.
-- `State` ~10 Hz, <= 20/s accepted per sender, wire size 63 bytes, 8 players max.
+- `State` ~10 Hz, <= 20/s accepted per sender, wire size 67 bytes, 8 players max.
 - Custom payloads client -> server are capped at 32 KB by Minecraft: `Skin` PNG <= 24 KB.
 - Render delay 100 ms, extrapolate at most 250 ms, hide after 5 s without states.
 - 5 consecutive malformed payloads disconnect the sender; `Hello` must be answered within 5 s.
@@ -38,7 +38,7 @@
 | File | Responsibility |
 |---|---|
 | `fabric/src/main/java/dev/moui/galaxycraft/net/PeerState.java` | The shared per-player state record + validity rules |
-| `.../net/Wire.java` | Fixed 63-byte codec for `PeerState`, bounds-checked |
+| `.../net/Wire.java` | Fixed 67-byte codec for `PeerState`, bounds-checked |
 | `.../net/Protocol.java` | Version constant, mode / flag constants, limits, `refusal(server, client)` |
 | `.../net/RateLimiter.java` | Token bucket per sender |
 | `.../net/Relay.java` | Server logic: join / leave / state fan-out, malformed counting, rate limit; talks to a `Sink` |

@@ -8,11 +8,11 @@ class PeerTrackTest {
     static final long MS = 1_000_000L;
 
     static PeerState at(int seq, double x, float vx) {
-        return new PeerState(seq, x, 0, 0, 0, 1, 0, 0, 0, vx, 0, 0, Protocol.MODE_STEVE, 0);
+        return new PeerState(seq, x, 0, 0, 0, 1, 0, 0, 0, 1, vx, 0, 0, Protocol.MODE_STEVE, 0);
     }
 
-    static PeerState facing(int seq, float upX, float upY, float yaw) {
-        return new PeerState(seq, 0, 0, 0, upX, upY, 0, yaw, 0, 0, 0, 0, Protocol.MODE_STEVE, 0);
+    static PeerState facing(int seq, float upX, float upY, float lookX, float lookZ) {
+        return new PeerState(seq, 0, 0, 0, upX, upY, 0, lookX, 0, lookZ, 0, 0, 0, Protocol.MODE_STEVE, 0);
     }
 
     @Test
@@ -68,15 +68,15 @@ class PeerTrackTest {
     @Test
     void invalidStatesNeverEnter() {
         PeerTrack t = new PeerTrack();
-        t.push(new PeerState(1, Double.NaN, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0), 0);
+        t.push(new PeerState(1, Double.NaN, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0), 0);
         assertNull(t.sample(10 * MS));
     }
 
     @Test
     void upVectorTurnsTheShortWayAndStaysUnit() {
         PeerTrack t = new PeerTrack();
-        t.push(facing(1, 0, 1, 0), 0);
-        t.push(facing(2, 1, 0, 0), 100 * MS);
+        t.push(facing(1, 0, 1, 0, 1), 0);
+        t.push(facing(2, 1, 0, 0, 1), 100 * MS);
         PeerTrack.Pose p = t.sample(150 * MS);
         assertEquals(1.0, Math.hypot(Math.hypot(p.upX(), p.upY()), p.upZ()), 1e-6);
         assertEquals(p.upX(), p.upY(), 1e-6, "halfway between +Y and +X");
@@ -85,20 +85,21 @@ class PeerTrackTest {
     @Test
     void oppositeUpVectorsDoNotDivideByZero() {
         PeerTrack t = new PeerTrack();
-        t.push(facing(1, 0, 1, 0), 0);
-        t.push(facing(2, 0, -1, 0), 100 * MS);
+        t.push(facing(1, 0, 1, 0, 1), 0);
+        t.push(facing(2, 0, -1, 0, 1), 100 * MS);
         PeerTrack.Pose p = t.sample(150 * MS);
         assertTrue(Double.isFinite(p.upX()) && Double.isFinite(p.upY()) && Double.isFinite(p.upZ()));
         assertEquals(1.0, Math.hypot(Math.hypot(p.upX(), p.upY()), p.upZ()), 1e-6);
     }
 
     @Test
-    void yawTakesTheShortWayAround() {
+    void lookTurnsTheShortWayAndStaysUnit() {
         PeerTrack t = new PeerTrack();
-        t.push(facing(1, 0, 1, 350), 0);
-        t.push(facing(2, 0, 1, 10), 100 * MS);
-        float wrapped = ((t.sample(150 * MS).yaw() % 360) + 360) % 360;
-        assertEquals(0f, wrapped > 180 ? wrapped - 360 : wrapped, 1e-3);
+        t.push(facing(1, 0, 1, 0, 1), 0); // looking +Z
+        t.push(facing(2, 0, 1, 1, 0), 100 * MS); // looking +X
+        PeerTrack.Pose p = t.sample(150 * MS);
+        assertEquals(1.0, Math.hypot(Math.hypot(p.lookX(), p.lookY()), p.lookZ()), 1e-6);
+        assertEquals(p.lookX(), p.lookZ(), 1e-6, "halfway between +Z and +X");
     }
 
     @Test

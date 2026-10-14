@@ -83,8 +83,11 @@ final class MpClient {
         }
         lastSent = new Vector3d(at);
         ticksSinceSend = 0;
-        PeerState s = new PeerState(seq++, at.x, at.y, at.z, (float) up.x, (float) up.y, (float) up.z, p.getYRot(), p.getXRot(),
-                vx, vy, vz, GalaxyCraftClient.walking() ? Protocol.MODE_STEVE : Protocol.MODE_MARIO,
+        // Where the head points, in the universe's axes: a Minecraft yaw means something different in each client's frame.
+        var eye = p.getLookAngle();
+        Vector3d look = frame.dirToGal(new Vector3d(eye.x, eye.y, eye.z)).normalize();
+        PeerState s = new PeerState(seq++, at.x, at.y, at.z, (float) up.x, (float) up.y, (float) up.z,
+                (float) look.x, (float) look.y, (float) look.z, vx, vy, vz, GalaxyCraftClient.walking() ? Protocol.MODE_STEVE : Protocol.MODE_MARIO,
                 StateSampler.flags(p.isShiftKeyDown(), p.isSprinting(), p.isSwimming(), p.isFallFlying(), p.onGround(),
                         ShipClient.aboard().isPresent()));
         if (s.valid()) ClientPlayNetworking.send(new MpPayloads.State(Wire.encode(s)));
