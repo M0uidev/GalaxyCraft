@@ -273,6 +273,7 @@ final class EntityClient {
         LaunchStarClient.pieces(this, pt, pieces);
         if (self != null) self(self, pt, pieces);
         else if (session().active() && marioFeetGal != null) heldPieces(session().cellAt(marioFeetGal), pieces);
+        remotes(pt, pieces);
         if (pieces.isEmpty() && wasEmpty) return;
         pieces = lit(pieces);
         for (EntityWire.Piece p : pieces) {
@@ -747,6 +748,61 @@ final class EntityClient {
         } finally {
             galaxy = null;
             playerSkin = -1;
+        }
+    }
+
+    // ---- the other players (multiplayer) ----
+
+    private final RemoteAvatars remoteAvatars = new RemoteAvatars();
+    /** A renderer failed for the other players: they are left out (the local player is not affected). */
+    private boolean remotesFailed;
+
+    /**
+     * Every other player in the galaxy, drawn by Minecraft's player renderer where they stand: the
+     * body frame comes from their universe position, up and look (not from any Minecraft coordinate,
+     * which differs in each client), and the render state's own heading is zeroed so the model faces
+     * the frame's front. Their animation comes from what they told us (sneaking, gliding) and how they move.
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void remotes(float pt, List<EntityWire.Piece> out) {
+        if (remotesFailed) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (MpClient.remotes.size() == 0) {
+            remoteAvatars.clear();
+            return;
+        }
+        long now = System.nanoTime();
+        for (RemoteAvatars.Shown s : remoteAvatars.visible(mc, MpClient.remotes.poses(now), now, PlanetClient.marioUniverse())) {
+            try {
+                EntityRenderer r = mc.getEntityRenderDispatcher().getRenderer(s.entity());
+                EntityRenderState st = r.createRenderState(s.entity(), pt);
+                st.nameTag = null; // the entity is not where its tag would be computed for; tags are drawn on their own
+                st.scoreText = null;
+                if (st instanceof net.minecraft.client.renderer.entity.state.LivingEntityRenderState l) {
+                    l.bodyRot = 0; // 0 faces the frame's +Z, the front
+                    l.yRot = 0;
+                    l.xRot = s.pitch();
+                    l.walkAnimationPos = s.walkPos();
+                    l.walkAnimationSpeed = s.walkSpeed();
+                    l.isInWater = s.swimming();
+                }
+                if (st instanceof net.minecraft.client.renderer.entity.state.HumanoidRenderState h) {
+                    h.isCrouching = s.crouching();
+                    h.isFallFlying = s.gliding();
+                    h.isVisuallySwimming = s.swimming();
+                }
+                galaxy = s.matrix();
+                PoseStack ps = new PoseStack();
+                net.minecraft.world.phys.Vec3 offset = r.getRenderOffset(st);
+                ps.translate(offset.x, offset.y, offset.z);
+                capture.begin(new Matrix4d(), out);
+                r.submit(st, ps, capture, camera);
+            } catch (RuntimeException ex) {
+                remotesFailed = true;
+                GalaxyCraft.LOG.warn("Not drawing the other players in the game: {}", ex.toString());
+            } finally {
+                galaxy = null;
+            }
         }
     }
 
