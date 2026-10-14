@@ -29,8 +29,10 @@ public final class GalaxyCraft implements ModInitializer {
         // Dev only: GXC_LAN_PORT=<port> opens a world to LAN as soon as it starts (a two-game test without menus).
         String lanPort = System.getenv("GXC_LAN_PORT");
         if (lanPort != null) {
-            ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-                if (server.isSingleplayer()) server.publishServer(net.minecraft.server.MinecraftServer.MultiplayerScope.LAN, false, Integer.parseInt(lanPort));
+            // A little after the host is in: publishing needs the client's connection to exist.
+            ServerTickEvents.END_SERVER_TICK.register(server -> {
+                if (server.isSingleplayer() && !server.isPublished() && server.getTickCount() > 200 && server.getPlayerList().getPlayerCount() > 0)
+                    server.publishServer(net.minecraft.server.MinecraftServer.MultiplayerScope.LAN, false, Integer.parseInt(lanPort));
             });
         }
         if (System.getenv("GXC_OFFLINE_LAN") != null) {

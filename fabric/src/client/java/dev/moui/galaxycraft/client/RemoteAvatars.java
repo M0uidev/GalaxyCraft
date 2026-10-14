@@ -38,6 +38,9 @@ final class RemoteAvatars {
     record Shown(UUID id, RemotePlayer entity, Matrix4d matrix, float pitch, float walkPos, float walkSpeed, boolean crouching,
             boolean gliding, boolean swimming, int mode) {}
 
+    /** Ids for the avatars: far above any the server gives (they count up from 0), distinct among themselves. */
+    private static int nextId = 0x4D500000;
+
     private final Map<UUID, Avatar> avatars = new HashMap<>();
     private ClientLevel level;
 
@@ -62,6 +65,7 @@ final class RemoteAvatars {
                 if (info == null) continue;
                 a = new Avatar();
                 a.entity = new RemotePlayer(mc.level, info.getProfile());
+                a.entity.setId(nextId++); // the renderer asks for it: an entity that was never added to the level has none
                 avatars.put(id, a);
             }
             Vector3d universe = new Vector3d(p.x(), p.y(), p.z());
