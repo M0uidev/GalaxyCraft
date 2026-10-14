@@ -240,6 +240,14 @@ loom {
 				vmArg "-Dgalaxycraft.spawn=true"
 				vmArg "-Dgalaxycraft.hidden=true"
 			}
+			if (project.hasProperty("galaxycraftMp")) { // MpProbe: a host open to LAN and a second client joining it, no Dolphin
+				vmArg "-Dgalaxycraft.mp=true"
+				vmArg "-Dgalaxycraft.planetDir=" // empty: the world keeps its own galaxy folder, as when playing
+				vmArg "-Dgalaxycraft.repoRoot=${rootDir.parentFile.absolutePath}"
+			}
+			if (project.hasProperty("mpGuestVersion")) { // MpProbe's out-of-date guest (gradlew runClient -PmpGuestVersion=2)
+				vmArg "-Dgalaxycraft.mpVersion=${project.property("mpGuestVersion")}"
+			}
 			if (project.hasProperty("galaxycraftEditor")) { // PlanetEditorProbe: the /galaxycraft editor, no game
 				vmArg "-Dgalaxycraft.editor=true"
 				vmArg "-Dgalaxycraft.planetDir=${buildDir}/test-planets"

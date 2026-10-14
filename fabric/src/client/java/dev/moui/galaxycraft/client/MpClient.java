@@ -184,6 +184,7 @@ final class MpClient {
             if (!save.galaxy().map(galaxy::equals).orElse(false)) save.writeGalaxy(galaxy);
             PlanetClient.enterWorld(save);
             connected = true;
+            GalaxyCraft.LOG.info("[GalaxyCraft mp] entered the host's galaxy {}", hello.worldId());
             EnteringScreen.show(client);
             ack(true);
         } catch (IOException | RuntimeException e) {

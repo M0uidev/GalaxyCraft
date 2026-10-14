@@ -7,6 +7,7 @@
 	"entrypoints": {
 		"fabric-client-gametest": [
 			"dev.moui.galaxycraft.gametest.LauncherProbe",
+			"dev.moui.galaxycraft.gametest.MpProbe",
 			"dev.moui.galaxycraft.gametest.GalaxyProbe",
 			"dev.moui.galaxycraft.gametest.UniverseProbe",
 			"dev.moui.galaxycraft.gametest.OutpostProbe",

@@ -34,7 +34,7 @@ public final class WalkOnStubPlanetTest implements FabricClientGameTest {
                 || Boolean.getBoolean("galaxycraft.blocks") || Boolean.getBoolean("galaxycraft.spawn") || Boolean.getBoolean("galaxycraft.station")
                 || Boolean.getBoolean("galaxycraft.launcher") || Boolean.getBoolean("galaxycraft.universeProbe")
                 || Boolean.getBoolean("galaxycraft.approachProbe") || Boolean.getBoolean("galaxycraft.mapProbe")
-                || Boolean.getBoolean("galaxycraft.launchStarProbe")) return;
+                || Boolean.getBoolean("galaxycraft.launchStarProbe") || Boolean.getBoolean("galaxycraft.mp")) return;
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
             sp.getServer().runCommand("gamemode adventure @a");
             sp.getServer().runCommand("difficulty peaceful");

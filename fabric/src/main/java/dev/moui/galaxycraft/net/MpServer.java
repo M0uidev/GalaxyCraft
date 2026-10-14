@@ -33,6 +33,17 @@ public final class MpServer {
 
     private MpServer() {}
 
+    /** Guests that answered Hello well, and players this server sent away: for tests and the log. */
+    private static volatile int entered, kicks;
+
+    public static int entered() {
+        return entered;
+    }
+
+    public static int kicks() {
+        return kicks;
+    }
+
     private static ServerPlayer player(UUID id) {
         return server == null ? null : server.getPlayerList().getPlayer(id);
     }
@@ -53,6 +64,8 @@ public final class MpServer {
         @Override
         public void kick(UUID who, String reason) {
             ServerPlayer p = player(who);
+            kicks++;
+            GalaxyCraft.LOG.info("[GalaxyCraft mp] sending {} away: {}", who, reason);
             if (p != null) p.connection.disconnect(Component.literal(reason));
         }
     };
@@ -98,6 +111,10 @@ public final class MpServer {
             var refusal = Protocol.refusal(Protocol.VERSION, payload.version());
             if (refusal.isPresent()) SINK.kick(id, refusal.get());
             else if (!payload.ok()) SINK.kick(id, "Your game could not enter the host's galaxy. See its log.");
+            else {
+                entered++;
+                GalaxyCraft.LOG.info("[GalaxyCraft mp] {} entered the galaxy", ctx.player().getName().getString());
+            }
         });
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {
             if (relay != null) relay.state(ctx.player().getUUID(), payload.data(), System.nanoTime());
