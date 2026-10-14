@@ -1401,6 +1401,11 @@ public final class PlanetClient {
         });
     }
 
+    /** A guest's planet the host cut off: dropped, and made again from a fresh copy. */
+    static void resyncPlanet(int index) {
+        if (stream != null) stream.resync(index);
+    }
+
     /** A planet that is not complete, saved as it is now (a guest edited it while the host was away). */
     static void saveCells(int index, dev.moui.galaxycraft.voxel.VoxelPlanet p, org.joml.Vector3d center) {
         PlanetStore store = PlanetClient.store;

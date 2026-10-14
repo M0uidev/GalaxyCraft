@@ -42,6 +42,8 @@ final class MpPlanets {
     private static final Map<Integer, Pending> pending = new HashMap<>();
     /** Planets whose copy is the host's of this session (written by another thread, so concurrent). */
     private static final Set<Integer> fresh = ConcurrentHashMap.newKeySet();
+    /** The host's edit sequence when each planet's bytes were taken (kept while we hold the planet). */
+    private static final Map<Integer, Integer> seqs = new HashMap<>();
 
     private MpPlanets() {}
 
@@ -85,6 +87,7 @@ final class MpPlanets {
         Pending p = pending.get(head.index());
         if (p == null || p.assembler != null) return; // not asked for, or a second head
         p.idle = 0;
+        if (head.state() != PlanetXfer.STATE_FAIL) seqs.put(head.index(), head.seq());
         switch (head.state()) {
             case PlanetXfer.STATE_SAME -> {
                 if (head.etag() != p.etag || !Files.isRegularFile(p.file)) {
@@ -157,9 +160,21 @@ final class MpPlanets {
             if (++p.idle > IDLE_TICKS) fail(p, "the host did not answer");
     }
 
+    /** The host's edit sequence of the copy we hold of that planet; -1 if we hold none. */
+    static int seqOf(int index) {
+        return seqs.getOrDefault(index, -1);
+    }
+
+    /** We let that planet go: the next time we need it, it is asked for again. */
+    static void forgetFresh(int index) {
+        fresh.remove(index);
+        seqs.remove(index);
+    }
+
     /** Left the world: nothing is waited for, nothing is the host's of this session any more. */
     static void reset() {
         for (Pending p : new java.util.ArrayList<>(pending.values())) fail(p, "left the world");
         fresh.clear();
+        seqs.clear();
     }
 }

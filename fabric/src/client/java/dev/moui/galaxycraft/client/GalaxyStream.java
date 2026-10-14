@@ -77,6 +77,17 @@ final class GalaxyStream {
             return size() > RECENT;
         }
     };
+    /** The host cut us off a planet: it is dropped (complete or kept) and made again from a new copy. */
+    void resync(int index) {
+        recent.remove(index);
+        making.remove(index);
+        PlanetSession s = PlanetClient.sessionOf(index);
+        if (s != null && s.active()) {
+            promoting.remove(index);
+            PlanetClient.release(index);
+        }
+    }
+
     /** The planet kept from when it was last complete, if it still is (the host's guests may hold it). */
     VoxelPlanet recentPlanet(int index) {
         return recent.get(index);
@@ -474,6 +485,7 @@ final class GalaxyStream {
                 else s.clean(); // the same again from its recipe: saved only once edited
             }
             promoting.put(index, s);
+            if (MpClient.connected()) MpEdits.attach(index, s); // the host's planet: its changes are followed, ours sent
             GalaxyCraft.LOG.info("Planet {} of the galaxy is complete", index);
         }
     }
