@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-13 (merged: Toad ship, 3D map, progression stage 2, Toad NPCs as villagers, Launch Stars)
+Last updated: 2026-10-13 (multiplayer part 1 built, awaiting playtest)
 
 ---
 
@@ -23,6 +23,7 @@ Last updated: 2026-10-13 (merged: Toad ship, 3D map, progression stage 2, Toad N
 
 | Feature | Status | Notes |
 |---|---|---|
+| Multiplayer, part 1: join and see each other | now | User 2026-10-13: a guest joins a friend's world open to LAN and enters the host's galaxy; everyone sees everyone (Steve with skin). Planet edits and mobs are shared in parts 2 and 3. Branch `feat/multiplayer`. [Spec](docs/superpowers/specs/2026-10-13-galaxycraft-multiplayer-mp1-design.md) |
 | Planets with Minecraft 1.7 terrain | now | User 2026-10-08: today's terrain "not that good", old terrain fits small worlds. 3D density with overhangs, several biomes per planet scaled to its size, oceans, rivers, beaches, cave labyrinths, heights scaled to the radius. Trees checked: whole, leaves fall (see Done 2026-10-11). [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-legacy-terrain-design.md) |
 | Swimming and water look | now | User 2026-10-08: swim like Minecraft, characters in water drawn over it, Minecraft's underwater view. Built on `feat/swimming` (water draw order, underwater fog, Minecraft's swimming in F6), awaiting playtest. [Spec](docs/superpowers/specs/2026-10-08-galaxycraft-swimming-water-design.md) |
 | Panorama screenshots, and F2 that works | now | User 2026-10-08: F2 saved a blank blue picture (Dolphin draws the game): now Dolphin takes it. Ctrl+F2 or /panorama takes six 90° shots from the eyes (panorama_0..5 + one equirectangular picture); tools/set_panorama.py makes a capture the title screen's background. Branch feat/panorama, awaiting playtest. |
@@ -83,7 +84,7 @@ Last updated: 2026-10-13 (merged: Toad ship, 3D map, progression stage 2, Toad N
 | Feature | Status | Notes |
 |---|---|---|
 | Windows support | done | Merged 2026-10-07 (feacda7); first played on Windows the same day. Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory ported on `feat/windows`, untested by hand. |
-| Multiplayer | idea | Out of the first design's scope. |
+| Multiplayer | now | User 2026-10-13: play with friends in one world, flying freely between planets. Host-authoritative: one player opens the world to LAN, guests join by direct connection and run their own game. Three parts, in order: **MP-1** connect and see each other (built on `feat/multiplayer`, unit tests green, awaiting a live two-game test and your playtest), **MP-2** shared planet edits, **MP-3** shared simulation (mobs, drops, fluids, redstone). [Spec](docs/superpowers/specs/2026-10-13-galaxycraft-multiplayer-mp1-design.md), [plan](docs/superpowers/plans/2026-10-13-multiplayer-mp1.md), [player guide](docs/MULTIJUGADOR.md). |
 | Minecraft on one PC, Dolphin on another | idea | Would need a network transport instead of shared memory. |
 
 ## Polish and tech debt
