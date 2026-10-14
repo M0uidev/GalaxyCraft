@@ -22,15 +22,23 @@ final class MpPlanetHost {
     /** On the server's thread: the work goes to the game's, where the planets are. */
     private static void ask(UUID guest, int index, long guestEtag) {
         Minecraft.getInstance().execute(() -> {
+            // The planet becomes shared first, and its edit sequence is read at the same moment the bytes are taken.
+            if (!HostPlanets.admit(guest, index)) {
+                GalaxyCraft.LOG.warn("[GalaxyCraft mp] no room to hold planet {} for a guest", index);
+                MpServer.offer(guest, index, guestEtag, null);
+                return;
+            }
+            int seq = HostPlanets.seq(index);
             CompletableFuture<byte[]> bytes = PlanetClient.serve(index);
             if (bytes == null) {
                 MpServer.offer(guest, index, guestEtag, null);
                 return;
             }
-            bytes.whenComplete((data, ex) -> {
+            bytes.whenComplete((data, ex) -> Minecraft.getInstance().execute(() -> {
                 if (ex != null) GalaxyCraft.LOG.warn("[GalaxyCraft mp] planet {} for a guest: {}", index, ex.toString());
-                MpServer.offer(guest, index, guestEtag, data == null ? null : new PlanetXfer.Offer(data, PlanetXfer.etag(data), 0));
-            });
+                if (data != null) HostPlanets.supply(index, data);
+                MpServer.offer(guest, index, guestEtag, data == null ? null : new PlanetXfer.Offer(data, PlanetXfer.etag(data), seq));
+            }));
         });
     }
 }

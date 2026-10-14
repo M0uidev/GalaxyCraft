@@ -1146,6 +1146,7 @@ public final class PlanetClient {
     }
 
     private static void saveNow() {
+        HostPlanets.flushAll();
         PlanetStore store = PlanetClient.store; // the saves run later, maybe after another world's is in
         if (stage == null || stage.isEmpty() || store == null || MpClient.connected()) return; // a guest's folder only holds the host's copies
         for (PlanetSession p : planets()) {
@@ -1394,6 +1395,23 @@ public final class PlanetClient {
         saver.execute(() -> {
             try {
                 store.write(where, s, b);
+            } catch (IOException e) {
+                GalaxyCraft.LOG.warn("Could not save the planet {}: {}", where, e.toString());
+            }
+        });
+    }
+
+    /** A planet that is not complete, saved as it is now (a guest edited it while the host was away). */
+    static void saveCells(int index, dev.moui.galaxycraft.voxel.VoxelPlanet p, org.joml.Vector3d center) {
+        PlanetStore store = PlanetClient.store;
+        if (stage == null || stage.isEmpty() || store == null || MpClient.connected()) return;
+        PlanetStore.Saved s = PlanetStore.Saved.of(p, center);
+        PlanetStore.Saved copy = new PlanetStore.Saved(s.n(), s.core(), s.layers(), s.depth(), s.center(), s.cells().clone(), s.biomes());
+        String where = PlanetStore.key(stage, index);
+        McBlocks b = blocks;
+        saver.execute(() -> {
+            try {
+                store.write(where, copy, b);
             } catch (IOException e) {
                 GalaxyCraft.LOG.warn("Could not save the planet {}: {}", where, e.toString());
             }

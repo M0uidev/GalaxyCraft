@@ -84,6 +84,7 @@ final class MpClient {
     static void register() {
         MpPlanets.register();
         MpPlanetHost.register();
+        HostPlanets.register();
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Skin.TYPE,
                 (skin, ctx) -> ctx.client().execute(() -> onSkin(skin)));
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Hello.TYPE,
@@ -163,6 +164,7 @@ final class MpClient {
 
     static void tick(Minecraft client) {
         MpPlanets.tick();
+        HostPlanets.tick();
         boolean on = sending(client);
         if (on && !wasSending) lastSkin = null; // a new audience: say again what we wear
         wasSending = on;
@@ -236,6 +238,7 @@ final class MpClient {
     /** Left the world (any way). */
     static void reset() {
         MpPlanets.reset();
+        HostPlanets.reset();
         connected = false;
         accepting = false;
         skinCooldown = 0;

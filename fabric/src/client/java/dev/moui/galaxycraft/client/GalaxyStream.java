@@ -77,6 +77,11 @@ final class GalaxyStream {
             return size() > RECENT;
         }
     };
+    /** The planet kept from when it was last complete, if it still is (the host's guests may hold it). */
+    VoxelPlanet recentPlanet(int index) {
+        return recent.get(index);
+    }
+
     /** Far views by index << 4 | patches; cells: built from the planet itself (not its recipe). */
     private final Map<Integer, PlanetLod.Part[]> meshes = new HashMap<>();
     private final Set<Integer> fromCells = new HashSet<>();
@@ -295,7 +300,9 @@ final class GalaxyStream {
         McBlocks blocks = PlanetClient.blocks();
         if (blocks == null) return;
         CompletableFuture<Object> f;
+        if (HostPlanets.loading(index)) return; // a guest's planet is being made here: not twice, tried again next time
         VoxelPlanet kept = recent.remove(index);
+        if (kept == null) kept = HostPlanets.planetFor(index); // held for guests: the same object, so their edits stay in it
         if (kept != null) f = CompletableFuture.completedFuture(kept);
         else if (MpClient.connected()) {
             // A guest has no server to make planets: the host's copy of this one is fetched (kept from an earlier session if unchanged).
@@ -463,7 +470,8 @@ final class GalaxyStream {
             if (made instanceof PlanetStore.Saved saved) s.load(saved);
             else {
                 s.spawnAt((VoxelPlanet) made, e.center());
-                s.clean(); // the same again from its recipe: saved only once edited
+                if (HostPlanets.takeEdited(index)) s.markEdited(); // guests built on it while it was not complete
+                else s.clean(); // the same again from its recipe: saved only once edited
             }
             promoting.put(index, s);
             GalaxyCraft.LOG.info("Planet {} of the galaxy is complete", index);
