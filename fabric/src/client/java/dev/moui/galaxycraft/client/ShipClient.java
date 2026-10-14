@@ -827,7 +827,7 @@ public final class ShipClient {
         if (store != null)
             for (CargoLayout.Placed c : CargoLayout.chests(store.cargo(r.id(), r.modules().cabin())))
                 ec.shipChest(new Matrix4d(blocks).translate(c.center()[0] / 16.0, c.center()[1] / 16.0, c.center()[2] / 16.0),
-                        c.large(), CargoLayout.SCALE, pt, out);
+                        c.large(), c.yaw(), CargoLayout.SCALE, pt, out);
     }
 
     /** A matrix as the wire's 3x4 row-major. */

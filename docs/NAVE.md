@@ -69,7 +69,7 @@ cuatro (las cerradas se ven rayadas).
 - **Sacar un cofre:** arrástralo de vuelta; solo sale si está **vacío**, así no pierdes carga por accidente.
 - **Qué cofre ves:** el botón *View* bajo cada bahía elige cuál se muestra; un cofre grande tiene dos páginas (el botón
   1/2 entre la cuadrícula y tu inventario).
-- Los cofres se dibujan dentro de la nave, detrás de los asientos, a un tercio de su tamaño para que quepan en la cabina. La carga se guarda con la nave.
+- Los cofres se dibujan dentro de la nave, de pie contra las dos paredes laterales de la cabina, mirando al centro (bahías 1-2 a la izquierda, 3-4 a la derecha; un cofre grande es el par de una pared). La carga se guarda con la nave.
 
 ## El panel de vuelo
 

@@ -4,19 +4,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Where the hold's chests are drawn: in pixels from the cabin's middle (16 a block, nose +z), a 2x2 grid behind
- * the seats at a fifth of a block (the Starshroom is about 80 pixels across; a block drew about 44 of them with the game's chest model). Bays 0 and 1 are side by side
- * (so they join into a double chest across x), 2 and 3 a row behind. Tune the numbers by looking at the ship.
+ * Where the hold's chests are drawn: in pixels from the cabin's middle (16 a block, nose +z), standing on the
+ * cabin's floor against its two side walls, fronts to the middle. Bays 0 and 1 are the left wall (one behind the
+ * other, so they join into a double chest along z), 2 and 3 the right wall. The chest model draws about 44 of the
+ * Starshroom's pixels a block, hence the small scale. Tune the numbers by looking at the ship.
  */
 public final class CargoLayout {
     /** Chest scale: a block drawn at this fraction of its size. */
-    public static final float SCALE = 0.2f;
-    private static final float GAP = 9f; // a scaled chest is about 9 pixels wide in the Starshroom's pixels
+    public static final float SCALE = 0.38f;
+    private static final float SIDE = 27f, FLOOR = 4f, FRONT = -3f, BACK = -20f;
     private static final float[][] BAYS = {
-        {GAP / 2, 10, -30}, {-GAP / 2, 10, -30}, {GAP / 2, 10, -38.5f}, {-GAP / 2, 10, -38.5f}};
+        {-SIDE, FLOOR, FRONT}, {-SIDE, FLOOR, BACK}, {SIDE, FLOOR, FRONT}, {SIDE, FLOOR, BACK}};
 
-    /** One chest to draw: its middle in pixels and whether it is a double one (then `center` is between its two halves). */
-    public record Placed(float[] center, boolean large) {}
+    /**
+     * One chest to draw: its middle in pixels, whether it is a double one (then `center` is between its two halves)
+     * and the turn about the vertical axis, in degrees, from facing the nose to facing the middle of the cabin.
+     */
+    public record Placed(float[] center, boolean large, float yaw) {}
 
     private CargoLayout() {}
 
@@ -24,11 +28,12 @@ public final class CargoLayout {
         List<Placed> out = new ArrayList<>();
         for (int i = 0; i < ShipCargo.BAYS; i++) {
             ShipCargo.Bay b = cargo.bay(i);
+            float yaw = i < 2 ? 90f : -90f;
             if (b == ShipCargo.Bay.SMALL) {
-                out.add(new Placed(BAYS[i].clone(), false));
+                out.add(new Placed(BAYS[i].clone(), false, yaw));
             } else if (b == ShipCargo.Bay.LARGE_HEAD) {
                 float[] a = BAYS[i], c = BAYS[i + 1];
-                out.add(new Placed(new float[] {(a[0] + c[0]) / 2, a[1], a[2]}, true));
+                out.add(new Placed(new float[] {a[0], a[1], (a[2] + c[2]) / 2}, true, yaw));
             }
         }
         return out;

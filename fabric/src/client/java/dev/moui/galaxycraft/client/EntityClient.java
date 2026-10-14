@@ -383,11 +383,11 @@ final class EntityClient {
     }
 
     /**
-     * One of the hold's chests drawn by Minecraft's chest renderer, lid shut, front to the nose (+z). `at` is the
+     * One of the hold's chests drawn by Minecraft's chest renderer, lid shut, front to the nose (+z) turned by `yawDegrees`. `at` is the
      * chest's middle in galaxy units (a block is 1 unit there); a double chest is its two halves side by side.
      */
     @SuppressWarnings({"rawtypes", "unchecked"})
-    void shipChest(Matrix4d at, boolean large, float scale, float pt, List<EntityWire.Piece> out) {
+    void shipChest(Matrix4d at, boolean large, float yawDegrees, float scale, float pt, List<EntityWire.Piece> out) {
         var mc = Minecraft.getInstance();
         if (mc.level == null || failed.contains(net.minecraft.world.level.block.entity.ChestBlockEntity.class)) return;
         try {
@@ -410,7 +410,7 @@ final class EntityClient {
                 r.extractRenderState(be, st, pt, net.minecraft.world.phys.Vec3.ZERO, null);
                 double dx = type == net.minecraft.world.level.block.state.properties.ChestType.LEFT ? 0.5
                         : type == net.minecraft.world.level.block.state.properties.ChestType.RIGHT ? -0.5 : 0;
-                Matrix4d m = new Matrix4d(at).scale(scale).translate(dx, 0, 0).translate(-0.5, -0.5, -0.5);
+                Matrix4d m = new Matrix4d(at).rotateY(Math.toRadians(yawDegrees)).scale(scale).translate(dx, 0, 0).translate(-0.5, -0.5, -0.5);
                 capture.begin(m, out);
                 Matrix4d was = galaxy;
                 galaxy = new Matrix4d(); // `at` is already galaxy units
