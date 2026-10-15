@@ -139,7 +139,7 @@ final class MpClient {
         PeerState s = new PeerState(seq++, at.x, at.y, at.z, (float) up.x, (float) up.y, (float) up.z,
                 (float) look.x, (float) look.y, (float) look.z, vx, vy, vz, GalaxyCraftClient.walking() ? Protocol.MODE_STEVE : Protocol.MODE_MARIO,
                 StateSampler.flags(p.isShiftKeyDown(), p.isSprinting(), p.isSwimming(), p.isFallFlying(), p.onGround(),
-                        ShipClient.aboard().isPresent()));
+                        ShipClient.aboard().isPresent(), dev.moui.galaxycraft.shadow.ShadowWorld.seat() != null));
         if (s.valid()) ClientPlayNetworking.send(new MpPayloads.State(Wire.encode(s)));
         if (TRACE && seq % 10 == 0)
             GalaxyCraft.LOG.info("[mp trace] sending at universe ({}, {}, {}) up ({}, {}, {}) mode {} stage {}", (long) at.x, (long) at.y, (long) at.z,

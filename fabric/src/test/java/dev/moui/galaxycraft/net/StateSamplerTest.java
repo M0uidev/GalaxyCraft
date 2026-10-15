@@ -35,6 +35,7 @@ class StateSamplerTest {
         assertEquals(Protocol.F_SPRINT | Protocol.F_SWIM | Protocol.F_GLIDE | Protocol.F_SHIP,
                 StateSampler.flags(false, true, true, true, false, true));
         assertEquals(0, StateSampler.flags(false, false, false, false, false, false));
+        assertEquals(Protocol.F_RIDE | Protocol.F_GROUND, StateSampler.flags(false, false, false, false, true, false, true));
     }
 
     @Test

@@ -14,6 +14,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.RemotePlayer;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.joml.Matrix4d;
 import org.joml.Vector3d;
 
@@ -27,6 +30,8 @@ final class RemoteAvatars {
     /** Units per Minecraft block in the game. */
     private static final double UNITS_PER_BLOCK = 1.0 / GravityFrame.SCALE;
 
+    private static final ItemStack ELYTRA = new ItemStack(Items.ELYTRA);
+
     private static final class Avatar {
         RemotePlayer entity;
         Vector3d lastPos;
@@ -36,7 +41,7 @@ final class RemoteAvatars {
 
     /** One player to draw this frame. */
     record Shown(UUID id, RemotePlayer entity, Matrix4d matrix, float pitch, float walkPos, float walkSpeed, boolean crouching,
-            boolean gliding, boolean swimming, int mode) {}
+            boolean gliding, boolean swimming, boolean seated, int mode) {}
 
     /** Ids for the avatars: far above any the server gives (they count up from 0), distinct among themselves. */
     private static int nextId = 0x4D500000;
@@ -77,8 +82,12 @@ final class RemoteAvatars {
             Vector3d look = new Vector3d(p.lookX(), p.lookY(), p.lookZ());
             boolean crouch = (p.flags() & Protocol.F_SNEAK) != 0, glide = (p.flags() & Protocol.F_GLIDE) != 0;
             boolean swim = (p.flags() & Protocol.F_SWIM) != 0;
+            boolean seated = (p.flags() & (Protocol.F_RIDE | Protocol.F_SHIP)) != 0;
+            // The wings show while gliding (an elytra in the chest slot); nothing worn otherwise.
+            ItemStack chest = glide ? ELYTRA : ItemStack.EMPTY;
+            if (!ItemStack.matches(a.entity.getItemBySlot(EquipmentSlot.CHEST), chest)) a.entity.setItemSlot(EquipmentSlot.CHEST, chest.copy());
             out.add(new Shown(id, a.entity, AvatarFrame.matrix(feet, up, look, UNITS_PER_BLOCK), AvatarFrame.pitchDegrees(up, look),
-                    a.walkPos, a.walkSpeed, crouch, glide, swim, p.mode()));
+                    a.walkPos, a.walkSpeed, crouch, glide, swim, seated, p.mode()));
         }
         if (meUniverse != null)
             out.sort(Comparator.comparingDouble(s -> distance(s, meUniverse)));
