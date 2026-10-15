@@ -164,6 +164,12 @@ Last updated: 2026-10-15 (multiplayer part 3: guest uses blocks, sees mobs, hits
 
 ## Inbox
 
+- 2026-10-15: **Progression, sensible advancements, and ships, minecarts and Launch Stars work seamlessly between host and
+  friends** (user): the planet progression (tiers, stars, Warp Core) is shared by everyone in the world; advancements make
+  sense in a galaxy of planets (none that fire for absurd reasons, none lost for a friend); ships, minecarts and Launch Stars
+  behave the same for the host and for friends, seen and used by both. Each needs its own look at what lives on the host's
+  server and what on each game (ships and Launch Stars are drawn by the game; minecarts ride in the shadow).
+
 - 2026-10-15: **Friends anywhere work as if the host were there** (user): when a friend goes to another planet or a space
   station, everything must work for them as it does for the host: blocks, doors, chests, mobs, drops, mining, fluids.
   Today the host's shadow runs one planet (the host's), so a friend elsewhere only places and breaks blocks. Needs the
