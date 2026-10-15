@@ -98,3 +98,13 @@ test('Mojang\'s Java runtime: files, folders, links', () => {
   assert.equal(mc.pickRuntime(all, 'java-runtime-epsilon', 'windows-x64'), null);
   assert.equal(mc.javaExecutable('C:\\rt', 'win32'), path.join('C:\\rt', 'bin', 'java.exe'));
 });
+
+test('joining a friend adds quick play multiplayer, and nothing otherwise', () => {
+  const v = mc.merge(fabric, vanilla);
+  const dirs = { libraries: '/mc/libraries', versions: '/mc/versions', assets: '/mc/assets', natives: '/mc/natives', game: '/games/default' };
+  const auth = { name: 'Steve', uuid: '0123', accessToken: 'tok' };
+  const base = { version: v, dirs, auth, java: '/rt/bin/java', platform: 'linux', arch: 'x64' };
+  const joined = mc.command({ ...base, join: '25.4.7.9:25599' }).args;
+  assert.deepEqual(joined.slice(-2), ['--quickPlayMultiplayer', '25.4.7.9:25599']);
+  assert.ok(!mc.command(base).args.includes('--quickPlayMultiplayer'));
+});

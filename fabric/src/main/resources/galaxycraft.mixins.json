@@ -10,6 +10,8 @@
     "ShadowChunkReadMixin",
     "ShadowFluidMixin",
     "LivingEntityAccessor",
+    "ConnectionAccess",
+    "ServerCommonAccess",
     "PlanetWaterLoadedMixin",
     "PlanetWaterMixin",
     "PlayerEdgeMixin",

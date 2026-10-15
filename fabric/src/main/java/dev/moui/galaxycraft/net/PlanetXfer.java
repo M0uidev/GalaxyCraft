@@ -19,6 +19,15 @@ public final class PlanetXfer {
     public static final int MAX_OUTSTANDING = 16;
     public static final int MAX_ASKED = 8;
 
+    /**
+     * What one tick may send a guest: `base`, less when the connection is backed up. A connection that takes less than
+     * `writable` more bytes is a slow link: send at most that (nothing while it is not writable; it drains and the next tick goes on).
+     */
+    public static int sendBudget(int base, long writable) {
+        if (writable >= base) return base;
+        return (int) Math.max(0, writable);
+    }
+
     public static final int STATE_DATA = 0, STATE_SAME = 1, STATE_FAIL = 2;
 
     private PlanetXfer() {}
@@ -80,30 +89,53 @@ public final class PlanetXfer {
         }
     }
 
-    /** A guest's send queue: payloads let out a little each tick (at least one), so a big planet cannot swamp the connection. */
+    /**
+     * A guest's send queue: payloads let out a little each tick (at least one), so a big planet cannot swamp the connection.
+     * Payloads belong to a lane (a planet's index): one lane is served to the end before the next starts (a planet's head and
+     * chunks must stay in order), and the lane the guest stands on goes first, so what it needs now arrives before far views.
+     */
     public static final class Outbox<T> {
         private record Item<T>(T payload, int size) {}
 
-        private final ArrayDeque<Item<T>> queue = new ArrayDeque<>();
+        public static final int NO_LANE = -1;
+
+        private final java.util.LinkedHashMap<Integer, ArrayDeque<Item<T>>> lanes = new java.util.LinkedHashMap<>();
         private long queued;
 
         public void add(T payload, int size) {
-            queue.add(new Item<>(payload, size));
+            add(payload, size, NO_LANE);
+        }
+
+        public void add(T payload, int size, int lane) {
+            lanes.computeIfAbsent(lane, k -> new ArrayDeque<>()).add(new Item<>(payload, size));
             queued += size;
         }
 
         /** Sends from the front while the budget lasts (the first always goes, however big). */
         public void drain(int budget, Consumer<T> send) {
-            while (!queue.isEmpty() && (budget > 0)) {
-                Item<T> i = queue.poll();
+            drain(budget, send, NO_LANE);
+        }
+
+        /** As {@link #drain(int, Consumer)}, the lane `first` (if it has anything) before the others. */
+        public void drain(int budget, Consumer<T> send, int first) {
+            while (budget > 0 && !lanes.isEmpty()) {
+                ArrayDeque<Item<T>> q = lanes.get(NO_LANE); // loose payloads (nobody's planet) never wait
+                if (q == null || q.isEmpty()) q = first != NO_LANE ? lanes.get(first) : null;
+                if (q == null || q.isEmpty()) q = lanes.values().iterator().next();
+                Item<T> i = q.poll();
+                if (i == null) {
+                    lanes.values().removeIf(ArrayDeque::isEmpty);
+                    continue;
+                }
                 queued -= i.size;
                 budget -= i.size;
                 send.accept(i.payload);
+                if (q.isEmpty()) lanes.values().removeIf(ArrayDeque::isEmpty);
             }
         }
 
         public boolean isEmpty() {
-            return queue.isEmpty();
+            return lanes.isEmpty();
         }
 
         public long bytes() {
@@ -111,7 +143,7 @@ public final class PlanetXfer {
         }
 
         public void clear() {
-            queue.clear();
+            lanes.clear();
             queued = 0;
         }
     }
