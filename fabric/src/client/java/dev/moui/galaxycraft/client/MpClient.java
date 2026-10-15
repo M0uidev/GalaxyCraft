@@ -87,6 +87,7 @@ final class MpClient {
         HostPlanets.register();
         MpEdits.register();
         MpUse.register();
+        MpMobs.register();
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Skin.TYPE,
                 (skin, ctx) -> ctx.client().execute(() -> onSkin(skin)));
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Hello.TYPE,
@@ -175,6 +176,7 @@ final class MpClient {
         HostPlanets.tick();
         MpEdits.tick();
         MpUse.tick();
+        MpMobs.tick();
         boolean on = sending(client);
         if (on && !wasSending) lastSkin = null; // a new audience: say again what we wear
         wasSending = on;
@@ -251,6 +253,7 @@ final class MpClient {
         HostPlanets.reset();
         MpEdits.reset();
         MpUse.reset();
+        MpMobs.reset();
         connected = false;
         accepting = false;
         skinCooldown = 0;

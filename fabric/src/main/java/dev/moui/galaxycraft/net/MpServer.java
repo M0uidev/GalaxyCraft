@@ -208,6 +208,16 @@ public final class MpServer {
         });
     }
 
+    /** The host's game sends a guest the shadow's entities near it (a MobsCodec body), from any thread. */
+    public static void mobs(UUID guest, byte[] body) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            ServerPlayer p = members.contains(guest) ? player(guest) : null;
+            if (p != null) ServerPlayNetworking.send(p, new MpPayloads.Mobs(body));
+        });
+    }
+
     private static final Map<UUID, RateLimiter> usedUpLimits = new HashMap<>();
 
     private static void usedUp(ServerPlayer p, MpPayloads.UsedUp u) {

@@ -105,6 +105,18 @@ public final class MpPayloads {
         }
     }
 
+    /** Server -> guest, ~5 Hz: the shadow's entities near it on a planet it holds (a MobsCodec body). */
+    public record Mobs(byte[] data) implements CustomPacketPayload {
+        public static final Type<Mobs> TYPE = typeOf("mp_mobs");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Mobs> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByteArray(p.data), b -> new Mobs(b.readByteArray(MobsCodec.MAX_WIRE)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Server -> players: that player left. */
     public record Gone(UUID id) implements CustomPacketPayload {
         public static final Type<Gone> TYPE = typeOf("mp_gone");
@@ -275,5 +287,6 @@ public final class MpPayloads {
         PayloadTypeRegistry.serverboundPlay().register(Use.TYPE, Use.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(UseDone.TYPE, UseDone.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(UsedUp.TYPE, UsedUp.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(Mobs.TYPE, Mobs.CODEC);
     }
 }

@@ -257,6 +257,10 @@ final class HostPlanets {
     /** End of a client tick: what changed goes out, one message per planet and author, in the host's order. */
     static void tick() {
         now++;
+        dev.moui.galaxycraft.shadow.ShadowWorld.Entities running = dev.moui.galaxycraft.shadow.ShadowWorld.entities();
+        if (running != null)
+            for (Entry e : shared.values())
+                if (e.planet == running.planet() && !e.holders.isEmpty()) MpMobs.hostTick(now, e.index, e.holders);
         List<Map.Entry<Key, Batch>> out;
         synchronized (LOCK) {
             if (batches.isEmpty()) out = List.of();

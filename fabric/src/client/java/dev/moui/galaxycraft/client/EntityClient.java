@@ -258,6 +258,10 @@ final class EntityClient {
             ShadowWorld.Entities shadow = ShadowWorld.entities();
             if (shadow != null && shadow.planet() == session().planet())
                 for (Entity e : shadow.list()) shadowEntity(shadow, e, mario, pt, pieces);
+            else if (shadow == null && MpUse.guest()) {
+                int index = PlanetClient.catalogIndex(session());
+                if (index >= 0) for (MpMobs.Remote m : MpMobs.of(index)) remoteMob(m, mario, pt, pieces);
+            }
             LiveBlocks.Snapshot live = ShadowWorld.live();
             if (live != null && live.planet() == session().planet()) {
                 int mc = session().planet().grid.cellAt(mario);
@@ -467,6 +471,36 @@ final class EntityClient {
             r.submit(st, ps, capture, camera);
         } catch (RuntimeException ex) {
             // Some renderers need what only the client's own entities have: those stay unseen.
+            failed.add(e.getClass());
+            GalaxyCraft.LOG.warn("Not drawing {} in the game: {}", e.getType(), ex.toString());
+        }
+    }
+
+    /** A guest: an entity the host's shadow told of, drawn by its own renderer where the host says it stands. */
+    private void remoteMob(MpMobs.Remote m, Vector3d mario, float pt, List<EntityWire.Piece> out) {
+        Entity e = m.entity;
+        if (failed.contains(e.getClass())) return;
+        float[] f = MpMobs.now(m);
+        if (new Vector3d(f[0], f[1], f[2]).distance(mario) > range()) return;
+        try {
+            float yaw = MpMobs.yaw(m), head = MpMobs.head(m);
+            e.setYRot(yaw);
+            e.setXRot(m.pitch);
+            if (e instanceof net.minecraft.world.entity.LivingEntity l) {
+                l.yBodyRot = l.yBodyRotO = yaw;
+                l.yHeadRot = l.yHeadRotO = head;
+            }
+            e.yRotO = yaw;
+            e.xRotO = m.pitch;
+            EntityRenderer r = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(e);
+            EntityRenderState st = r.createRenderState(e, pt);
+            Matrix4d at = new Matrix4d(f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], 0, f[0], f[1], f[2], 1);
+            PoseStack ps = new PoseStack();
+            net.minecraft.world.phys.Vec3 offset = r.getRenderOffset(st);
+            ps.translate(offset.x, offset.y, offset.z);
+            capture.begin(at, out);
+            r.submit(st, ps, capture, camera);
+        } catch (RuntimeException ex) {
             failed.add(e.getClass());
             GalaxyCraft.LOG.warn("Not drawing {} in the game: {}", e.getType(), ex.toString());
         }
