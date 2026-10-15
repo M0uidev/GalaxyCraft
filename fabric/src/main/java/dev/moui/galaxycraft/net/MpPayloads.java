@@ -105,6 +105,18 @@ public final class MpPayloads {
         }
     }
 
+    /** Server -> guest: what changed among the live blocks near it on a planet it holds (a LiveCodec body). */
+    public record Live(byte[] data) implements CustomPacketPayload {
+        public static final Type<Live> TYPE = typeOf("mp_live");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Live> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByteArray(p.data), b -> new Live(b.readByteArray(LiveCodec.MAX_WIRE)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Server -> guest, ~5 Hz: the shadow's entities near it on a planet it holds (a MobsCodec body). */
     public record Mobs(byte[] data) implements CustomPacketPayload {
         public static final Type<Mobs> TYPE = typeOf("mp_mobs");
@@ -698,6 +710,7 @@ public final class MpPayloads {
         PayloadTypeRegistry.clientboundPlay().register(UseDone.TYPE, UseDone.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(UsedUp.TYPE, UsedUp.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(Mobs.TYPE, Mobs.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(Live.TYPE, Live.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(MobHit.TYPE, MobHit.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(Drops.TYPE, Drops.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(DropTake.TYPE, DropTake.CODEC);

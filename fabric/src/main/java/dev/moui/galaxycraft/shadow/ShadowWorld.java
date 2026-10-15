@@ -119,6 +119,10 @@ public final class ShadowWorld {
         /** The host's seat, for the client thread (a guest's goes to it by the {@link RideSink}). */
         volatile Seat seat;
         volatile LiveBlocks.Snapshot live;
+        /** What the guests on this run are told of the live blocks near them, as of the last pass that made it. */
+        volatile List<dev.moui.galaxycraft.net.LiveCodec.Entry> liveWire = List.of();
+        /** The cells told last time (they leave a little farther than they come). */
+        final Set<Integer> wiredCells = new HashSet<>();
         /** The cells live last tick (they leave a little farther than they come). */
         final Set<Integer> liveCells = new HashSet<>();
         /** Mobs that may despawn, by category, as of the last tick. */
@@ -211,6 +215,12 @@ public final class ShadowWorld {
     /** The running planet's live blocks as of the last server tick (see {@link LiveBlocks}); null: none. */
     public static LiveBlocks.Snapshot live() {
         return primary.live;
+    }
+
+    /** What the guests on a running planet are told of its live blocks near them (see {@link LiveBlocks}); empty: none. */
+    public static List<dev.moui.galaxycraft.net.LiveCodec.Entry> liveWireOf(VoxelPlanet p) {
+        Run r = p == null ? null : runs.get(p);
+        return r == null ? List.of() : r.liveWire;
     }
 
     /** Where Mario is on the running planet (blocks, its space), where he looks, and who plays him. */
@@ -875,8 +885,14 @@ public final class ShadowWorld {
                 ShadowToads.tick(level, cur.planet, cur.map, cur.mirrored, cur.proxy == null || cur.proxy.isRemoved() ? null : cur.proxy.getEyePosition());
             cur.entities = cur.map == null ? null : new Entities(cur.planet, cur.map, collect(level));
             MarioAt at = marioAt;
-            List<LiveBlocks.Live> blocks = cur.map == null ? List.of()
-                    : LiveBlocks.collect(level, cur.planet, cur.map, cur.mirrored, !mine || at == null || at.planet() != cur.planet ? null : at.feet(), cur.liveCells);
+            List<net.minecraft.world.phys.Vec3> guestAt = new ArrayList<>();
+            for (MarioProxy g : cur.guestProxies.values()) if (!g.isRemoved()) guestAt.add(g.position());
+            boolean wire = serverTicks % 4 == 0;
+            LiveBlocks.Pass pass = cur.map == null ? new LiveBlocks.Pass(List.of(), wire ? List.of() : null)
+                    : LiveBlocks.collect(level, cur.planet, cur.map, cur.mirrored, !mine || at == null || at.planet() != cur.planet ? null : at.feet(), cur.liveCells,
+                            guestAt, cur.wiredCells, wire);
+            List<LiveBlocks.Live> blocks = pass.live();
+            if (pass.wire() != null) cur.liveWire = List.copyOf(pass.wire());
             cur.liveCells.clear();
             for (LiveBlocks.Live l : blocks) cur.liveCells.add(l.cell());
             cur.live = cur.map == null ? null : new LiveBlocks.Snapshot(cur.planet, cur.map, List.copyOf(blocks));
