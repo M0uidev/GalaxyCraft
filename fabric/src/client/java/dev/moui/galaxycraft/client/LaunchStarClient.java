@@ -77,6 +77,8 @@ public final class LaunchStarClient {
     /** A world's planets folder: its stars live in its stars.json (null: no world). */
     public static void enterWorld(Path planetsDir) {
         saveNow();
+        mirror = false;
+        awaiting = null;
         flight = null;
         winding = null;
         windup = 0;
@@ -87,8 +89,66 @@ public final class LaunchStarClient {
     }
 
 
+    /** This game is a guest: its stars are a mirror of the host's (never saved); a placing, pickup or new code goes to the host. */
+    private static boolean mirror;
+    /** What a guest asked the host for and waits to hear of ("place", "code"): the hint is shown when the answer comes. */
+    private static String awaiting;
+
+    /** The host sent every star (a guest, once on entering). */
+    static void mirrorList(List<StarRecord> all) {
+        if (!MpUse.guest()) return;
+        mirror = true;
+        store = StarStore.memory();
+        store.replaceAll(all);
+        dirty = false;
+        routes.clear();
+    }
+
+    static void mirrorPut(StarRecord r) {
+        if (!mirror || store == null) return;
+        store.putExact(r);
+        routes.clear();
+        String what = awaiting;
+        awaiting = null;
+        var me = Minecraft.getInstance().player;
+        if (what != null && me != null)
+            me.sendOverlayMessage(Component.translatable(store.partnerOf(r.id()).isPresent() ? "message.galaxycraft.star.linked"
+                    : what.equals("place") ? "message.galaxycraft.star.placed" : "message.galaxycraft.star.named", r.code()));
+    }
+
+    static void mirrorGone(String id) {
+        if (!mirror || store == null) return;
+        store.remove(id);
+        routes.clear();
+    }
+
+    /** The host's game: a guest's request, applied to the truth, and everyone told. */
+    static void hostApply(UUID guest, dev.moui.galaxycraft.launchstar.StarOps.Request req) {
+        if (store == null || mirror) {
+            if (req.kind() == dev.moui.galaxycraft.launchstar.StarOps.PLACE) dev.moui.galaxycraft.net.MpServer.starGive(guest);
+            return;
+        }
+        var res = dev.moui.galaxycraft.launchstar.StarOps.apply(store, req, () -> UUID.randomUUID().toString(), 6 / GravityFrame.SCALE);
+        switch (res.kind()) {
+            case PUT -> {
+                dirty = true;
+                routes.clear();
+                MpStars.published(res.star());
+            }
+            case GONE -> {
+                dirty = true;
+                routes.clear();
+                MpStars.gone(res.star().id());
+                dev.moui.galaxycraft.net.MpServer.starGive(guest);
+            }
+            case REJECT -> {
+                if (req.kind() == dev.moui.galaxycraft.launchstar.StarOps.PLACE) dev.moui.galaxycraft.net.MpServer.starGive(guest);
+            }
+        }
+    }
+
     public static void saveNow() {
-        if (store == null || !dirty) return;
+        if (store == null || !dirty || mirror) return;
         try {
             store.save();
             dirty = false;
@@ -232,10 +292,17 @@ public final class LaunchStarClient {
             return false;
         }
         Vector3d up = new Vector3d(0, 1, 0).rotate(p.rot());
+        if (mirror) { // a guest: the host places it, checks and uses up the item, and answers with a StarPut
+            awaiting = "place";
+            MpStars.send(dev.moui.galaxycraft.launchstar.StarOps.PLACE, hand == InteractionHand.MAIN_HAND ? 0 : 1, "",
+                    new double[] {p.center().x, p.center().y, p.center().z}, new double[] {up.x, up.y, up.z}, stage(), bodyOf(p.center()), "");
+            return true;
+        }
         StarRecord stored = store.place(new StarRecord(UUID.randomUUID().toString(), new double[] {p.center().x, p.center().y, p.center().z},
                 new double[] {up.x, up.y, up.z}, stage(), bodyOf(p.center()), null));
         dirty = true;
         routes.clear();
+        MpStars.published(stored);
         StationClient.useUp(player, hand, LaunchStarBlocks.LAUNCH_STAR);
         player.sendOverlayMessage(Component.translatable(store.partnerOf(stored.id()).isPresent() ? "message.galaxycraft.star.linked"
                 : "message.galaxycraft.star.placed", stored.code()));
@@ -245,9 +312,14 @@ public final class LaunchStarClient {
 
     /** Takes a star away and gives its item back. */
     private static void pickUp(Player player, StarRecord r) {
+        if (mirror) { // the host removes it and gives the item to whoever got there first
+            MpStars.send(dev.moui.galaxycraft.launchstar.StarOps.PICKUP, 0, r.id(), null, null, null, null, null);
+            return;
+        }
         store.remove(r.id());
         dirty = true;
         routes.clear();
+        MpStars.gone(r.id());
         if (player.getAbilities().instabuild) return;
         var server = Minecraft.getInstance().getSingleplayerServer();
         if (server == null) return;
@@ -348,10 +420,17 @@ public final class LaunchStarClient {
     /** The code screen's Done: the star's new code (stars with the same code are linked). */
     static void setCode(String id, String code) {
         if (store == null) return;
+        if (mirror) {
+            if (StarStore.clean(code).isEmpty()) return;
+            awaiting = "code";
+            MpStars.send(dev.moui.galaxycraft.launchstar.StarOps.CODE, 0, id, null, null, null, null, code);
+            return;
+        }
         StarRecord r = store.setCode(id, code);
         if (r == null) return;
         dirty = true;
         routes.clear();
+        MpStars.published(r);
         var me = Minecraft.getInstance().player;
         if (me != null)
             me.sendOverlayMessage(Component.translatable(store.partnerOf(id).isPresent() ? "message.galaxycraft.star.linked"
