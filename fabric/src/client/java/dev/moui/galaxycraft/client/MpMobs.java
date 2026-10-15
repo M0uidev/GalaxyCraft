@@ -183,6 +183,7 @@ final class MpMobs {
 
     /** Guest: hit (kind 0) or use (kind 1) a mob of the host's shadow; look: the way the guest looks, in the planet's space. */
     static void hit(int planetIndex, Entity guestEntity, int kind, org.joml.Vector3d look) {
+        if (planetIndex < 0) return; // a body the host does not know
         ClientPlayNetworking.send(new MpPayloads.MobHit(planetIndex, guestEntity.getId() - ID_BASE, kind,
                 (float) look.x, (float) look.y, (float) look.z));
     }

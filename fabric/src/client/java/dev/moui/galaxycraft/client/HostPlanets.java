@@ -4,6 +4,7 @@ import dev.moui.galaxycraft.GalaxyCraft;
 import dev.moui.galaxycraft.net.EditCodec;
 import dev.moui.galaxycraft.net.MpPayloads;
 import dev.moui.galaxycraft.net.MpServer;
+import dev.moui.galaxycraft.net.StationSlots;
 import dev.moui.galaxycraft.net.UseCheck;
 import dev.moui.galaxycraft.shadow.ShadowColumns;
 import dev.moui.galaxycraft.shadow.ShadowMap;
@@ -41,6 +42,10 @@ final class HostPlanets {
     private static final class Entry {
         final int index;
         VoxelPlanet planet; // null while a resident is being made from its bytes
+        /** A station's: its planet is this one's (replaced when the station grows a new grid). */
+        dev.moui.galaxycraft.voxel.Station station;
+        /** A station that grew and let its guests go: they ask again, or this is dropped (client tick it was left). */
+        int orphaned;
         final Set<UUID> holders = new HashSet<>();
         final List<Queued> queue = new ArrayList<>();
         int editedTick; // 0: nothing unsaved here (a complete planet saves itself)
@@ -193,7 +198,7 @@ final class HostPlanets {
             pr.planet = w.planet();
             pr.followed = GUEST_FOLLOW_TICKS;
         }
-        ShadowWorld.runFor(p, "mp" + w.planet());
+        ShadowWorld.runFor(p, e.station != null ? "station-" + e.station.id : "mp" + w.planet()); // a station's strip is the host's own
         if (!shadowFeeds.containsKey(p)) { // what changes on the planet reaches the shadow that runs for the guests
             VoxelPlanet.Listener feed = (cell, id) -> ShadowWorld.setQuiet(p, cell, id);
             shadowFeeds.put(p, feed);
@@ -343,14 +348,24 @@ final class HostPlanets {
         Entry e = shared.get(index);
         if (e == null) {
             VoxelPlanet have = null;
-            PlanetSession live = liveOf(index);
-            if (live != null) have = live.planet();
-            else if (PlanetClient.stream() != null) have = PlanetClient.stream().recentPlanet(index);
+            dev.moui.galaxycraft.voxel.Station station = null;
+            if (StationSlots.isStation(index)) {
+                String id = StationClient.idOfSlot(index);
+                if (id == null || !StationClient.placed(id)) return false;
+                station = StationClient.stationOfSlot(index);
+                if (station != null) have = station.planet;
+            } else {
+                PlanetSession live = liveOf(index);
+                if (live != null) have = live.planet();
+                else if (PlanetClient.stream() != null) have = PlanetClient.stream().recentPlanet(index);
+            }
             if (have == null && residents() >= MAX_RESIDENTS) return false;
             e = new Entry(index);
+            e.station = station;
             shared.put(index, e);
             if (have != null) watch(e, have);
         }
+        e.orphaned = 0;
         e.holders.add(guest);
         if (e.planet != null && e.editedTick != 0 && liveOf(index) == null) save(e);
         return true;
@@ -360,7 +375,7 @@ final class HostPlanets {
         int n = 0;
         for (Entry e : shared.values()) {
             if (e.planet != null && liveOf(e.index) != null) continue;
-            if (e.planet != null && PlanetClient.stream() != null && PlanetClient.stream().recentPlanet(e.index) == e.planet) continue;
+            if (e.station == null && e.planet != null && PlanetClient.stream() != null && PlanetClient.stream().recentPlanet(e.index) == e.planet) continue;
             n++;
         }
         return n;
@@ -381,6 +396,10 @@ final class HostPlanets {
         if (e == null || e.planet != null) return;
         McBlocks blocks = PlanetClient.blocks();
         if (blocks == null) return;
+        if (StationSlots.isStation(index)) {
+            supplyStation(e, data, blocks);
+            return;
+        }
         java.util.concurrent.CompletableFuture.supplyAsync(() -> {
             try {
                 PlanetStore.Saved s = PlanetStore.decode(data, blocks,
@@ -401,6 +420,34 @@ final class HostPlanets {
             VoxelPlanet live = liveOf(index) != null ? liveOf(index).planet() : null;
             watch(e, live != null ? live : p);
         }));
+    }
+
+    /** A station held for guests while the host's game does not have it: made from its bytes. */
+    private static void supplyStation(Entry e, byte[] data, McBlocks blocks) {
+        java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            try {
+                return dev.moui.galaxycraft.voxel.StationStore.decode(data, blocks,
+                        name -> PlanetClient.answer(Minecraft.getInstance().submit(() -> blocks.parse(name)), "block " + name));
+            } catch (java.io.IOException ex) {
+                throw new java.io.UncheckedIOException(ex);
+            }
+        }, PlanetClient.maker).whenComplete((st, ex) -> Minecraft.getInstance().execute(() -> {
+            if (shared.get(e.index) != e || e.planet != null) return;
+            if (ex != null) {
+                GalaxyCraft.LOG.warn("[GalaxyCraft mp] station {} could not be held for guests: {}", e.index, ex.toString());
+                for (UUID g : new ArrayList<>(e.holders)) release(g, e.index);
+                return;
+            }
+            dev.moui.galaxycraft.voxel.Station live = StationClient.stationOfSlot(e.index); // came into the game meanwhile: its own object
+            e.station = live != null ? live : st;
+            watch(e, e.station.planet);
+        }));
+    }
+
+    /** The station held for guests under that slot (null: none, or still being made). */
+    static dev.moui.galaxycraft.voxel.Station stationFor(int slot) {
+        Entry e = shared.get(slot);
+        return e == null || e.planet == null ? null : e.station;
     }
 
     /** The host's game is about to make this planet complete: the shared one, if any, so no copy forms. Null: none, or still being made (wait). */
@@ -427,6 +474,11 @@ final class HostPlanets {
         if (e == null) return;
         e.holders.remove(guest);
         if (!e.holders.isEmpty()) return;
+        dropEntry(e);
+    }
+
+    private static void dropEntry(Entry e) {
+        int index = e.index;
         shared.remove(index);
         if (e.planet != null) {
             e.planet.removeObserver(e.observer);
@@ -436,6 +488,10 @@ final class HostPlanets {
 
     private static void save(Entry e) {
         e.editedTick = 0;
+        if (e.station != null) {
+            StationClient.writeResident(e.station);
+            return;
+        }
         PlanetClient.entry(e.index).ifPresent(c -> PlanetClient.saveCells(e.index, e.planet, c.center()));
     }
 
@@ -466,6 +522,8 @@ final class HostPlanets {
     static void tick() {
         now++;
         presenceTick();
+        for (Entry e : new ArrayList<>(shared.values()))
+            if (e.orphaned != 0 && e.holders.isEmpty() && now - e.orphaned > 200) dropEntry(e); // its guests did not ask again
         for (Entry e : shared.values()) { // what runs on each planet goes to the guests standing on it
             if (e.planet == null) continue;
             List<UUID> there = guestsOn(e.planet);
@@ -511,7 +569,9 @@ final class HostPlanets {
             List<EditCodec.Def> defs = new ArrayList<>();
             for (int w : used) defs.add(new EditCodec.Def(w, wireNames.get(w)));
             int seq = seqs.merge(k.planet(), 1, Integer::sum);
-            MpServer.publish(new EditCodec.Msg(k.planet(), seq, k.cseq(), defs, java.util.Arrays.copyOf(cells, kept), java.util.Arrays.copyOf(ids, kept)), k.author());
+            Entry on = shared.get(k.planet());
+            int gen = on == null || on.station == null ? 0 : on.station.gridKey(); // the grid these cell numbers go by
+            MpServer.publish(new EditCodec.Msg(k.planet(), seq, k.cseq(), defs, java.util.Arrays.copyOf(cells, kept), java.util.Arrays.copyOf(ids, kept), gen), k.author());
         }
     }
 
@@ -525,9 +585,18 @@ final class HostPlanets {
             if (e.queue.size() < 64) e.queue.add(new Queued(guest, m));
             return;
         }
+        if (e.station != null && StationSlots.stale(m.planet(), m.gen(), e.station.gridKey())) {
+            // Made for a grid the station no longer has: the cell numbers mean other places. Dropped; the guest fetches the station again.
+            GalaxyCraft.LOG.warn("[GalaxyCraft mp] an edit of station {} for an old grid: dropped, the guest is resynced", e.station.id);
+            MpServer.resync(guest, m.planet());
+            release(guest, m.planet());
+            return;
+        }
         String[] names = guestNames.computeIfAbsent(guest, g -> new String[EditCodec.MAX_WIRE_IDS]);
         for (EditCodec.Def d : m.defs()) names[d.wireId()] = d.name();
         VoxelPlanet p = e.planet;
+        dev.moui.galaxycraft.voxel.Station st = e.station;
+        List<Integer> applied = new ArrayList<>();
         PlanetSession live = liveOf(e.index);
         if (live != null && live.planet() != p) live = null;
         int bad = 0;
@@ -547,11 +616,17 @@ final class HostPlanets {
                     record(e.index, cell, p.get(cell)); // the guest gets the cell as it is here
                     continue;
                 }
+                if (st != null && (id != Blocks.AIR && !st.allowedCell(cell) || st.isCore(cell) && id != p.get(cell))) {
+                    bad++; // past the station's limits, or its core
+                    record(e.index, cell, p.get(cell));
+                    continue;
+                }
                 if (live != null) live.applyShared(cell, id);
                 else {
                     p.set(cell, id);
                     e.editedTick = now;
                 }
+                if (st != null && id != Blocks.AIR) applied.add(cell);
                 record(e.index, cell, p.get(cell)); // told even if nothing changed: it settles the author's pending cell
             }
         } finally {
@@ -559,6 +634,47 @@ final class HostPlanets {
             authorCseq = 0;
         }
         if (bad > 0) GalaxyCraft.LOG.warn("[GalaxyCraft mp] {} cells of a guest's edit to planet {} were refused", bad, e.index);
+        if (st != null && !applied.isEmpty() && st.settle(applied.stream().mapToInt(Integer::intValue).toArray())) regrown(e.index, p);
+    }
+
+    /**
+     * A station got a new grid (blocks near its side, from a guest or the host): everything that held its old planet
+     * object moves to the new one, and the guests are cut off to fetch it (their cell numbers are the old grid's).
+     */
+    static void regrown(int slot, VoxelPlanet old) {
+        Entry e = shared.get(slot);
+        if (e == null || e.station == null || e.planet != old || e.station.planet == old) return;
+        VoxelPlanet now = e.station.planet;
+        old.removeObserver(e.observer);
+        e.planet = now;
+        now.addObserver(e.observer);
+        PlanetSession live = liveOf(slot);
+        if (live != null && live.planet() == old) {
+            live.swap(now);
+            StationClient.regrew();
+        }
+        for (Presence pr : presence.values()) if (pr.on == old) pr.on = now;
+        VoxelPlanet.Listener feed = shadowFeeds.remove(old);
+        if (feed != null) {
+            old.removeObserver(feed);
+            VoxelPlanet.Listener again = (cell, id) -> ShadowWorld.setQuiet(now, cell, id);
+            shadowFeeds.put(now, again);
+            now.addObserver(again);
+        }
+        var drops = runDrops.remove(old);
+        if (drops != null) runDrops.put(now, drops);
+        ShadowWorld.rekey(old, now, "station-" + e.station.id);
+        synchronized (LOCK) {
+            batches.keySet().removeIf(k -> k.planet() == slot); // cell numbers of the old grid, not yet told: the new bytes have them
+        }
+        for (UUID g : new ArrayList<>(e.holders)) MpServer.resync(g, slot);
+        e.holders.clear();
+        e.orphaned = now();
+        GalaxyCraft.LOG.info("[GalaxyCraft mp] station {} has a new grid: guests resynced", e.station.id);
+    }
+
+    private static int now() {
+        return Math.max(1, now);
     }
 
     /** Left the world: nothing is shared any more. */

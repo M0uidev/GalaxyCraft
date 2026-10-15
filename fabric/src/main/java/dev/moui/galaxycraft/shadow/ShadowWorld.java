@@ -103,7 +103,7 @@ public final class ShadowWorld {
      * {@link #primary} is the host's own planet.
      */
     private static final class Run {
-        final VoxelPlanet planet;
+        volatile VoxelPlanet planet;
         ShadowMap map;
         final Set<Long> forced = new HashSet<>(), mirrored = new HashSet<>();
         final ArrayDeque<Long> toMirror = new ArrayDeque<>();
@@ -554,6 +554,25 @@ public final class ShadowWorld {
     public static void guest(UUID guest, MarioAt at) {
         if (at == null) guestAt.remove(guest);
         else guestAt.put(guest, at);
+    }
+
+    /**
+     * A station was given a new grid (it grew): its guests-only run follows to the new planet object. The
+     * shadow's blocks stay (a station's strip goes by station coordinate); only the cell numbers change. The
+     * host's own focus is re-attached by ShadowLink instead.
+     */
+    public static void rekey(VoxelPlanet old, VoxelPlanet now, String key) {
+        guestAt.replaceAll((who, at) -> at.planet() == old ? new MarioAt(now, at.feet(), at.look(), at.player()) : at);
+        ops.add(level -> {
+            Run r = runs.get(old);
+            if (r == null || r == primary) return;
+            runs.remove(old);
+            r.planet = now;
+            r.map = ShadowMap.of(now, key);
+            r.liveCells.clear();
+            r.edgeChanged.clear();
+            runs.put(now, r);
+        });
     }
 
     /** Makes planet p run (for a guest on it) if it does not: key names its strip of the shadow. */

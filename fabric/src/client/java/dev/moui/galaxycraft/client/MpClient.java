@@ -85,6 +85,7 @@ final class MpClient {
         MpPlanets.register();
         MpPlanetHost.register();
         HostPlanets.register();
+        StationClient.registerMp();
         MpEdits.register();
         MpUse.register();
         MpMobs.register();

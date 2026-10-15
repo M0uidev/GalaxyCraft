@@ -103,6 +103,13 @@ public final class Station {
         return gridKey(grid());
     }
 
+    /** Whether the cell is the station's core, which nobody breaks. */
+    public boolean isCore(int cell) {
+        if (cell < 0 || cell >= planet.grid.cellCount()) return false;
+        FlatGrid g = grid();
+        return g.stationX(cell) == 0 && g.stationY(cell) == 0 && g.stationZ(cell) == 0;
+    }
+
     /** Whether a block may go at that cell (a cell outside the grid is no place). */
     public boolean allowedCell(int cell) {
         if (cell < 0 || cell >= planet.grid.cellCount()) return false;
