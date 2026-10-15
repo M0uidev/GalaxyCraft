@@ -147,7 +147,7 @@ public final class GalaxyCraftClient implements ClientModInitializer {
         // E aboard a ship opens the ship's screen instead of the inventory (taken before Minecraft handles its keys).
         ClientTickEvents.START_CLIENT_TICK.register(client -> {
             if (client.player == null || client.gui.screen() != null) return;
-            var aboard = ShipClient.aboard();
+            var aboard = ShipClient.riding();
             if (aboard.isEmpty()) return;
             while (client.options.keyInventory.consumeClick()) ShipClient.openCargo(aboard.get());
         });

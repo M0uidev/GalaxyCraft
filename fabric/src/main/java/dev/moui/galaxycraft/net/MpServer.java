@@ -482,6 +482,12 @@ public final class MpServer {
         /** The pilot says where the ship is. */
         void pose(UUID guest, String shipId, double[] pos, double[] rot);
 
+        /** A guest wants a passenger seat in a flown ship. */
+        void sit(UUID guest, String shipId);
+
+        /** A guest gets up from its passenger seat. */
+        void stand(UUID guest, String shipId);
+
         /** A guest wants to open a ship's hold and parts screen. */
         void cargo(UUID guest, String shipId);
 
@@ -531,6 +537,8 @@ public final class MpServer {
             case MpPayloads.ShipDo.BOARD -> sink.board(id, d.id());
             case MpPayloads.ShipDo.LEAVE -> sink.leave(id, d.id(), pos, rot);
             case MpPayloads.ShipDo.CARGO -> sink.cargo(id, d.id());
+            case MpPayloads.ShipDo.SIT -> sink.sit(id, d.id());
+            case MpPayloads.ShipDo.STAND -> sink.stand(id, d.id());
             default -> {}
         }
     }
@@ -599,6 +607,20 @@ public final class MpServer {
         MinecraftServer srv = server;
         if (srv == null) return;
         var m = new MpPayloads.ShipBays(shipId, bays);
+        srv.execute(() -> {
+            for (UUID g : members) {
+                if (to != null && !to.equals(g)) continue;
+                ServerPlayer p = player(g);
+                if (p != null) ServerPlayNetworking.send(p, m);
+            }
+        });
+    }
+
+    /** A passenger seat's holder to every guest (to == null) or to one, from any thread. */
+    public static void shipSeat(String shipId, int seat, String who, UUID to) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        var m = new MpPayloads.ShipSeat(shipId, seat, who);
         srv.execute(() -> {
             for (UUID g : members) {
                 if (to != null && !to.equals(g)) continue;

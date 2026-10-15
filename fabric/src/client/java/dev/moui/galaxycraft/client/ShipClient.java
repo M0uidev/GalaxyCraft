@@ -20,6 +20,7 @@ import dev.moui.galaxycraft.ship.ShipModules;
 import dev.moui.galaxycraft.ship.ShipOps;
 import dev.moui.galaxycraft.ship.ShipPilots;
 import dev.moui.galaxycraft.ship.ShipRecord;
+import dev.moui.galaxycraft.ship.ShipSeats;
 import dev.moui.galaxycraft.ship.ShipStats;
 import dev.moui.galaxycraft.ship.ShipStore;
 import dev.moui.galaxycraft.ship.ShipThrust;
@@ -87,6 +88,11 @@ public final class ShipClient {
     private static final ShipPilots pilots = new ShipPilots();
     /** A guest asked to board this ship; the host's yes arrives as a ShipPilot naming us. */
     private static String awaitingBoard, pendingBoard;
+    /** Who sits where besides the pilots (the host decides; a guest keeps what it was told). */
+    private static final ShipSeats seats = new ShipSeats();
+    /** The ship we ride in as a passenger, and the seat; a guest's ask for a seat waits for the host's answer. */
+    private static String seatedOn, awaitingSit, pendingSit;
+    private static int pendingSeat, mySeat;
     /** Where the pilots of the other ships say their ships are: the record glides to it between the reports. */
     private static final java.util.Map<String, double[][]> targets = new java.util.HashMap<>();
     private static int poseTick;
@@ -125,6 +131,18 @@ public final class ShipClient {
     public static Optional<ShipRecord> aboard() {
         if (store == null || boarded == null) return Optional.empty();
         return store.all().stream().filter(r -> r.id().equals(boarded)).findFirst();
+    }
+
+    /** Pilot or passenger: the player rides a ship (their body is drawn seated, and sent so to friends). */
+    public static boolean seated() {
+        return boarded != null || seatedOn != null;
+    }
+
+    /** The ship the player rides, as pilot or passenger. */
+    public static Optional<ShipRecord> riding() {
+        String id = boarded != null ? boarded : seatedOn;
+        if (store == null || id == null) return Optional.empty();
+        return store.all().stream().filter(r -> r.id().equals(id)).findFirst();
     }
 
     // ---- placing ----
@@ -312,7 +330,19 @@ public final class ShipClient {
             ShipRecord want = store.all().stream().filter(x -> x.id().equals(id)).findFirst().orElse(null);
             if (want != null && boarded == null) board(player, frame, want);
         }
+        if (pendingSit != null) { // the host gave us a cushion
+            String id = pendingSit;
+            pendingSit = awaitingSit = null;
+            ShipRecord want = store.all().stream().filter(x -> x.id().equals(id)).findFirst().orElse(null);
+            if (want != null && boarded == null && seatedOn == null) sitDown(player, frame, want, pendingSeat);
+            else MpShips.send(dev.moui.galaxycraft.net.MpPayloads.ShipDo.STAND, 0, id, null);
+        }
         syncHulls();
+        if (seatedOn != null) { // a passenger: Shift gets up, and so does the pilot landing
+            ShipRecord r = riding().orElse(null);
+            if (r == null || sneakEdge || pilots.pilotOf(seatedOn) == null) standNow(player);
+            return false;
+        }
         if (boarded != null) {
             Optional<ShipRecord> r = aboard();
             if (r.isEmpty() || sneakEdge) {
@@ -333,9 +363,22 @@ public final class ShipClient {
         if (!rightClick) return false;
         ShipRecord target = aimedShip(player, frame);
         if (target == null) return false;
+        String me = player.getUUID().toString(), flier = pilots.pilotOf(target.id());
         if (sneak) openCargo(target);
-        else if (mirror) {
-            String other = pilots.pilotOf(target.id());
+        else if (flier != null && !flier.equals(me)) { // someone flies it: a passenger's cushion
+            if (mirror) {
+                awaitingSit = target.id();
+                MpShips.send(dev.moui.galaxycraft.net.MpPayloads.ShipDo.SIT, 0, target.id(), null);
+            } else {
+                int seat = seats.sit(target.id(), me, ShipStats.of(target.modules()).seats());
+                if (seat < 0) player.sendOverlayMessage(Component.translatable("message.galaxycraft.ship.full"));
+                else {
+                    MpShips.seat(target.id(), seat, me);
+                    sitDown(player, frame, target, seat);
+                }
+            }
+        } else if (mirror) {
+            String other = flier;
             if (other != null) player.sendOverlayMessage(Component.translatable("message.galaxycraft.ship.occupied"));
             else {
                 awaitingBoard = target.id();
@@ -624,6 +667,19 @@ public final class ShipClient {
      * Minecraft's movement so the ground and walls stop it, and the ship at the player's feet.
      */
     static void onPlayerTick(LocalPlayer player) {
+        if (seatedOn != null && store != null) {
+            Optional<ShipRecord> r = riding();
+            GravityFrame fr = GalaxyCraftClient.frame();
+            if (r.isPresent() && fr != null) {
+                Vector3d mc = fr.toMc(seatFeet(r.get(), mySeat));
+                player.setPos(mc.x, mc.y, mc.z);
+                player.setDeltaMovement(Vec3.ZERO);
+                player.setNoGravity(true);
+                player.resetFallDistance();
+                if (player.isFallFlying()) player.stopFallFlying();
+            }
+            return;
+        }
         if (boarded == null || store == null) return;
         Optional<ShipRecord> r = aboard();
         GravityFrame frame = GalaxyCraftClient.frame();
@@ -668,6 +724,44 @@ public final class ShipClient {
         return new ShipRecord(r.id(), r.modules(), new double[] {pos.x, pos.y, pos.z}, new double[] {q.x, q.y, q.z, q.w}, r.stage());
     }
 
+    /** Where a passenger's feet are: the cushion's place in the ship, a pilot's height below it. */
+    private static Vector3d seatFeet(ShipRecord r, int seat) {
+        var all = SeatLayout.seats(ShipStats.of(r.modules()).seats());
+        float[] s = all.get(Math.max(0, Math.min(all.size() - 1, seat)));
+        Quaterniond q = new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]);
+        Vector3d local = q.transform(new Vector3d(s[0] / 16.0, s[1] / 16.0 + SEAT_HEIGHT, s[2] / 16.0));
+        return new Vector3d(r.pos()[0], r.pos()[1], r.pos()[2]).fma(1 / GravityFrame.SCALE, local);
+    }
+
+    private static void sitDown(LocalPlayer player, GravityFrame frame, ShipRecord r, int seat) {
+        seatedOn = r.id();
+        mySeat = seat;
+        Vector3d mc = frame.toMc(seatFeet(r, seat));
+        player.setPos(mc.x, mc.y, mc.z);
+        player.setOldPosAndRot();
+        player.setDeltaMovement(Vec3.ZERO);
+        GalaxyCraft.LOG.info("Sitting in ship {} (seat {})", r.id(), seat);
+    }
+
+    /** The passenger gets up (Shift, or the ship has nobody at the controls, or it is gone) and steps out beside it. */
+    private static void standNow(LocalPlayer player) {
+        if (seatedOn == null) return;
+        String id = seatedOn;
+        seatedOn = null;
+        awaitingSit = pendingSit = null;
+        String me = player == null ? null : player.getUUID().toString();
+        if (player != null) {
+            Optional<ShipRecord> r = store == null ? Optional.empty() : store.all().stream().filter(x -> x.id().equals(id)).findFirst();
+            r.ifPresent(rec -> stepOut(player, rec));
+            player.setNoGravity(false);
+        }
+        if (me != null) {
+            int seat = seats.stand(id, me);
+            if (mirror) MpShips.send(dev.moui.galaxycraft.net.MpPayloads.ShipDo.STAND, 0, id, null);
+            else if (seat >= 0) MpShips.seat(id, seat, "");
+        }
+    }
+
     private static void leaveNow(LocalPlayer player) {
         if (boarded == null) return;
         GalaxyCraft.LOG.info("Left ship {}", boarded);
@@ -690,6 +784,7 @@ public final class ShipClient {
                 if (parked != null) MpShips.send(dev.moui.galaxycraft.net.MpPayloads.ShipDo.LEAVE, 0, leftId, parked);
             } else {
                 pilots.set(leftId, "");
+                emptyCabin(leftId);
                 MpShips.pilot(leftId, "");
                 if (parked != null) MpShips.published(parked);
             }
@@ -738,6 +833,8 @@ public final class ShipClient {
     static void mirrorList(List<ShipRecord> all) {
         if (!MpUse.guest()) return;
         leaveNow(Minecraft.getInstance().player);
+        standNow(Minecraft.getInstance().player);
+        seats.clear();
         mirror = true;
         file = null;
         store = ShipStore.memory();
@@ -758,12 +855,34 @@ public final class ShipClient {
     static void mirrorPilot(String id, String who) {
         if (!mirror) return;
         pilots.set(id, who);
+        if (who.isEmpty()) seats.clearShip(id); // parked: the cabin is empty
         var me = Minecraft.getInstance().player;
         if (!id.equals(awaitingBoard)) return;
         if (me != null && who.equals(me.getUUID().toString())) pendingBoard = id;
         else {
             awaitingBoard = null;
             if (me != null) me.sendOverlayMessage(Component.translatable("message.galaxycraft.ship.occupied"));
+        }
+    }
+
+    /** The host says who sits in a passenger seat (a guest); our own name after we asked is the yes, seat 0 the no. */
+    static void mirrorSeat(String id, int seat, String who) {
+        if (!mirror) return;
+        var me = Minecraft.getInstance().player;
+        String mine = me == null ? "" : me.getUUID().toString();
+        if (seat < 1) {
+            if (id.equals(awaitingSit) && me != null) {
+                awaitingSit = null;
+                me.sendOverlayMessage(Component.translatable("message.galaxycraft.ship.full"));
+            }
+            return;
+        }
+        seats.set(id, seat, who);
+        if (!who.isEmpty() && who.equals(mine) && id.equals(awaitingSit)) {
+            pendingSit = id;
+            pendingSeat = seat;
+        } else if (who.isEmpty() && id.equals(seatedOn) && seat == mySeat) {
+            standNow(me); // the host put us out
         }
     }
 
@@ -825,6 +944,29 @@ public final class ShipClient {
         } else dev.moui.galaxycraft.net.MpServer.shipPilotTo(guest, id, pilots.pilotOf(id));
     }
 
+    /** The host's game: a friend wants a passenger seat. */
+    static void hostSit(UUID guest, String id) {
+        if (store == null || mirror) return;
+        ShipRecord r = store.all().stream().filter(x -> x.id().equals(id)).findFirst().orElse(null);
+        String who = guest.toString(), flier = pilots.pilotOf(id);
+        int seat = r == null || r.isPad() || flier == null || flier.equals(who) ? -1
+                : seats.sit(id, who, ShipStats.of(r.modules()).seats());
+        if (seat < 0) dev.moui.galaxycraft.net.MpServer.shipSeat(id, 0, "", guest);
+        else MpShips.seat(id, seat, who);
+    }
+
+    /** The host's game: a friend got up. */
+    static void hostStand(UUID guest, String id) {
+        if (store == null || mirror) return;
+        int seat = seats.stand(id, guest.toString());
+        if (seat >= 0) MpShips.seat(id, seat, "");
+    }
+
+    /** The cabin of a ship nobody flies is emptied (the host: everyone hears); passengers get up on their own. */
+    private static void emptyCabin(String id) {
+        for (ShipSeats.Freed f : seats.clearShip(id)) MpShips.seat(id, f.seat(), "");
+    }
+
     /** The host's game: the pilot got out; the ship stays where they parked it. */
     static void hostLeave(UUID guest, String id, double[] pos, double[] rot) {
         if (store == null || mirror || !pilots.release(id, guest.toString())) return;
@@ -835,10 +977,12 @@ public final class ShipClient {
     static void hostLeft(UUID guest) {
         if (store == null || mirror) return;
         for (String id : pilots.releaseAll(guest.toString())) park(id, null, null);
+        for (ShipSeats.Freed f : seats.standAll(guest.toString())) MpShips.seat(f.ship(), f.seat(), "");
     }
 
     private static void park(String id, double[] pos, double[] rot) {
         targets.remove(id);
+        emptyCabin(id);
         ShipRecord r = store.all().stream().filter(x -> x.id().equals(id)).findFirst().orElse(null);
         if (r != null) {
             if (pos != null) r = new ShipRecord(id, r.modules(), pos, rot, r.stage());
@@ -862,6 +1006,7 @@ public final class ShipClient {
         if (store == null || mirror) return;
         dev.moui.galaxycraft.net.MpServer.shipList(guest, store.all());
         for (var e : pilots.all().entrySet()) dev.moui.galaxycraft.net.MpServer.shipPilotTo(guest, e.getKey(), e.getValue());
+        for (ShipSeats.Freed f : seats.all()) dev.moui.galaxycraft.net.MpServer.shipSeat(f.ship(), f.seat(), f.who(), guest);
         for (ShipRecord r : store.all()) {
             if (r.isPad()) continue;
             ShipCargo hold = store.cargo(r.id(), r.modules().cabin());

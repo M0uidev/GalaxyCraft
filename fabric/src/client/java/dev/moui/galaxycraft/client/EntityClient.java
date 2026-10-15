@@ -791,7 +791,7 @@ final class EntityClient {
         try {
             EntityRenderer r = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(player);
             EntityRenderState st = r.createRenderState(player, pt);
-            if (ShipClient.aboard().isPresent() && st instanceof net.minecraft.client.renderer.entity.state.HumanoidRenderState h) {
+            if (ShipClient.seated() && st instanceof net.minecraft.client.renderer.entity.state.HumanoidRenderState h) {
                 h.isPassenger = true; // seated on the ship's cushion
                 h.isFallFlying = false;
                 h.walkAnimationSpeed = 0;

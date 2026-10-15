@@ -41,6 +41,8 @@ final class MpShips {
                         new double[] {m.qx(), m.qy(), m.qz(), m.qw()})));
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.ShipBays.TYPE,
                 (m, ctx) -> ctx.client().execute(() -> ShipClient.mirrorBays(m.id(), m.bays())));
+        ClientPlayNetworking.registerGlobalReceiver(MpPayloads.ShipSeat.TYPE,
+                (m, ctx) -> ctx.client().execute(() -> ShipClient.mirrorSeat(m.id(), m.seat(), m.who())));
         MpServer.setShipSink(new MpServer.ShipSink() {
             @Override
             public void place(UUID guest, ShipOps.Request r) {
@@ -60,6 +62,16 @@ final class MpShips {
             @Override
             public void pose(UUID guest, String shipId, double[] pos, double[] rot) {
                 Minecraft.getInstance().execute(() -> ShipClient.hostPose(guest, shipId, pos, rot));
+            }
+
+            @Override
+            public void sit(UUID guest, String shipId) {
+                Minecraft.getInstance().execute(() -> ShipClient.hostSit(guest, shipId));
+            }
+
+            @Override
+            public void stand(UUID guest, String shipId) {
+                Minecraft.getInstance().execute(() -> ShipClient.hostStand(guest, shipId));
             }
 
             @Override
@@ -100,6 +112,11 @@ final class MpShips {
     /** The host's hold changed: the bays go to every guest. */
     static void bays(String shipId, byte[] bays) {
         MpServer.shipBays(shipId, bays, null);
+    }
+
+    /** The host's seats changed: this seat of this ship has this player (empty: nobody). */
+    static void seat(String shipId, int seat, String who) {
+        MpServer.shipSeat(shipId, seat, who, null);
     }
 
     static void pilot(String shipId, String who) {

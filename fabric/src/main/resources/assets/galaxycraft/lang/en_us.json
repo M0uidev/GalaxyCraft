@@ -118,6 +118,7 @@
   "message.galaxycraft.pad.near": "Landing pad %s of %s, %s blocks away: right click for the next, hold the Ship: Descend / Dock key to dock",
   "message.galaxycraft.pad.docked": "Docked. Space to lift off",
   "message.galaxycraft.ship.occupied": "Someone else is flying this ship",
+  "message.galaxycraft.ship.full": "No free seat in this ship",
   "message.galaxycraft.ship.crowded": "Too close to another ship or pad",
   "message.galaxycraft.toad.no_world": "There is no world to put a Toad in.",
   "message.galaxycraft.toad.no_ground": "There is no ground ahead for a Toad.",
