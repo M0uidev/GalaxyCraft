@@ -877,6 +877,7 @@ final class EntityClient {
         Minecraft mc = Minecraft.getInstance();
         if (MpClient.remotes.size() == 0) {
             remoteAvatars.clear();
+            marioPlays.clear();
             return;
         }
         long now = System.nanoTime();
@@ -891,7 +892,21 @@ final class EntityClient {
                         me == null ? "?" : (long) (at.distance(me) / (1.0 / GravityFrame.SCALE)), range());
             }
         }
+        dev.moui.galaxycraft.toad.ToadModels.Loaded mario = null;
+        if (GalaxyOptions.MARIO_MODEL.get() == dev.moui.galaxycraft.settings.MarioModel.ORIGINAL)
+            mario = dev.moui.galaxycraft.toad.MarioModels.get(ShipClient.shipDir());
         for (RemoteAvatars.Shown s : remoteAvatars.visible(mc, MpClient.remotes.poses(now), now, PlanetClient.marioUniverse(), range())) {
+            if (mario != null && s.mode() == dev.moui.galaxycraft.net.Protocol.MODE_MARIO) {
+                try {
+                    drawMario(s, mario, now, out);
+                } catch (RuntimeException ex) {
+                    mario = null; // Steve from now on
+                    GalaxyCraft.LOG.warn("Not drawing the other players as Mario: {}", ex.toString());
+                } finally {
+                    galaxy = null;
+                }
+                if (mario != null) continue;
+            }
             try {
                 EntityRenderer r = mc.getEntityRenderDispatcher().getRenderer(s.entity());
                 EntityRenderState st = r.createRenderState(s.entity(), pt);
@@ -927,6 +942,52 @@ final class EntityClient {
                 playerSkin = -1;
             }
         }
+    }
+
+    /** What animation each peer drawn as Mario plays, and since when (nanoseconds). */
+    private final Map<java.util.UUID, MarioPlay> marioPlays = new HashMap<>();
+
+    private static final class MarioPlay {
+        String name;
+        long since;
+    }
+
+    /**
+     * A peer in Mario movement as SMG2's own Mario: rigid pieces posed by the animation its state asks
+     * for (idle, walk, run, crouch, swim, fall, seated), in the same body frame as the Steve avatar
+     * (blocks, y up, front +Z; the model is 16 pixels a block), with the name tag above.
+     */
+    private void drawMario(RemoteAvatars.Shown s, dev.moui.galaxycraft.toad.ToadModels.Loaded model, long now, List<EntityWire.Piece> out) {
+        String want = dev.moui.galaxycraft.toad.MarioModels.animation(s.flags(), s.walkSpeed());
+        MarioPlay play = marioPlays.computeIfAbsent(s.id(), k -> new MarioPlay());
+        if (!want.equals(play.name)) {
+            play.name = want;
+            play.since = now;
+        }
+        dev.moui.galaxycraft.ship.model.BckReader.Anim anim = model.anims().get(want);
+        if (anim == null) anim = model.anims().get("Wait");
+        double frame = (now - play.since) / 1e9 * 30.0;
+        float[][] srt = new float[model.rest().length][];
+        float[] sample = new float[9];
+        for (int j = 0; j < srt.length; j++) {
+            if (anim != null && anim.joints() == srt.length) {
+                anim.sample(j, (float) frame, sample);
+                srt[j] = sample.clone();
+            } else srt[j] = model.rest()[j];
+        }
+        org.joml.Matrix4f[] world = dev.moui.galaxycraft.toad.ToadPose.worlds(model.parent(), srt);
+        Matrix4d base = new Matrix4d(s.matrix()).scale(1.0 / 16);
+        for (dev.moui.galaxycraft.toad.ToadModels.RigPart rp : model.parts()) {
+            dev.moui.galaxycraft.ship.model.ShipModels.PartModel part = rp.part();
+            int mdl = shipModel(part, part.quads());
+            int skn = shipSkin(part.skin(), part.skin().width(), part.skin().height(), part.skin().argb());
+            if (mdl < 0 || skn < 0) continue;
+            Matrix4d m = new Matrix4d(base).mul(new Matrix4d(dev.moui.galaxycraft.toad.ToadModels.pieceMatrix(model, world[rp.joint()])));
+            out.add(new EntityWire.Piece(mdl, skn, 0, part.tint(), ShipClient.rows(m)));
+        }
+        galaxy = s.matrix();
+        capture.begin(new Matrix4d(), out);
+        capture.nameTag(s.entity().getName(), s.crouching() ? 2.0 : 2.3);
     }
 
     /** EntityWire model id flags: the piece is held in Steve's hand (its matrix in Minecraft's hand frame), the left one. */

@@ -9,7 +9,8 @@ const path = require('node:path');
 const DISC_DIR = 'ObjectData';
 // The Starshroom, the Toad Brigade's ship, a Toad (Kinopio) and the things Toads carry; the Launch Star.
 const ARCS = ['UFOKinoko.arc', 'SuperSpinDriver.arc', 'Kinopio.arc', 'KinopioGoodsGlasses.arc', 'KinopioGoodsPickel.arc',
-  'KinopioGoodsRucksack.arc', 'KinopioGoodsSnorkel.arc', 'KinopioGoodsMailBag.arc'];
+  'KinopioGoodsRucksack.arc', 'KinopioGoodsSnorkel.arc', 'KinopioGoodsMailBag.arc',
+  'Mario.arc', 'MarioCap.arc', 'MarioFace.arc', 'MarioHair.arc', 'MarioHandL.arc', 'MarioHandR.arc', 'MarioAnime.arc'];
 
 function find(dir, name) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

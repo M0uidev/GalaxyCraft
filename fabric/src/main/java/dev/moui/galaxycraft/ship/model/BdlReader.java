@@ -13,7 +13,7 @@ import org.joml.Vector3f;
 /**
  * Reads a J3D model (.bdl / .bmd, SMG2's) as triangles in its rest pose, grouped by the texture of
  * each shape's material. Only what a rigid, textured model needs: vertex positions and texture
- * coordinates, joint transforms (SRT, no weighted vertices), and the first texture of each
+ * coordinates, joint transforms (SRT; a weighted vertex follows its heaviest joint), and the first texture of each
  * material. Anything it does not understand is an {@link IllegalArgumentException}.
  */
 public final class BdlReader {
@@ -82,7 +82,7 @@ public final class BdlReader {
             ch.put(new String(data, o, 4, java.nio.charset.StandardCharsets.US_ASCII), o);
             o += size;
         }
-        for (String need : new String[] {"INF1", "VTX1", "DRW1", "JNT1", "SHP1", "MAT3", "TEX1"})
+        for (String need : new String[] {"INF1", "VTX1", "DRW1", "JNT1", "SHP1", "MAT3", "TEX1"}) // EVP1 only with weighted vertices
             if (!ch.containsKey(need)) throw new IllegalArgumentException("J3D model without " + need);
 
         List<Texture> textures = textures(b, ch.get("TEX1"));
@@ -90,11 +90,12 @@ public final class BdlReader {
         int[] parent = new int[world.length];
         float[][] rest = new float[world.length][];
         int[] shapeMaterial = hierarchy(b, ch.get("INF1"), ch.get("JNT1"), world, parent, rest);
-        int[] drw = drawMatrices(b, ch.get("DRW1"));
+        boolean[] weighted = new boolean[b.getShort(ch.get("DRW1") + 8) & 0xFFFF];
+        int[] drw = drawMatrices(b, ch.get("DRW1"), ch.get("EVP1"), weighted);
         int[] materialTexture = materials(b, ch.get("MAT3"), textures.size());
         List<List<Integer>> joints = rig ? new ArrayList<>() : null;
         textures = new ArrayList<>(textures);
-        List<Shape> shapes = shapes(b, ch.get("VTX1"), ch.get("SHP1"), world, drw, shapeMaterial, materialTexture, joints, textures);
+        List<Shape> shapes = shapes(b, ch.get("VTX1"), ch.get("SHP1"), world, drw, weighted, shapeMaterial, materialTexture, joints, textures);
         if (!rig) return new Parsed(new Model(shapes, textures), null);
         List<Part> parts = new ArrayList<>();
         for (int si = 0; si < shapes.size(); si++) {
@@ -169,13 +170,38 @@ public final class BdlReader {
         return out;
     }
 
-    /** DRW1: for each matrix a rigid joint index (weighted entries are not supported). */
-    private static int[] drawMatrices(ByteBuffer b, int r) {
+    /**
+     * DRW1: for each matrix a joint index. A weighted entry (EVP1: several joints with weights) is
+     * taken as its heaviest joint's, rigidly, and flagged in weighted[]: its vertices are model-space
+     * points (the bind pose), not that joint's.
+     */
+    private static int[] drawMatrices(ByteBuffer b, int r, Integer evpChunk, boolean[] weighted) {
         int n = b.getShort(r + 8) & 0xFFFF, fo = r + b.getInt(r + 0x0C), io = r + b.getInt(r + 0x10);
         int[] out = new int[n];
+        int[] first = null;
         for (int i = 0; i < n; i++) {
-            if (b.get(fo + i) != 0) throw new IllegalArgumentException("weighted vertices are not supported");
-            out[i] = b.getShort(io + 2 * i) & 0xFFFF;
+            int v = b.getShort(io + 2 * i) & 0xFFFF;
+            if (b.get(fo + i) != 0) {
+                if (evpChunk == null) throw new IllegalArgumentException("weighted vertices without EVP1");
+                int e = evpChunk, ne = b.getShort(e + 8) & 0xFFFF, counts = e + b.getInt(e + 0x0C),
+                        idx = e + b.getInt(e + 0x10), wts = e + b.getInt(e + 0x14);
+                if (first == null) {
+                    first = new int[ne + 1];
+                    for (int k = 0; k < ne; k++) first[k + 1] = first[k] + (b.get(counts + k) & 0xFF);
+                }
+                if (v >= ne) throw new IllegalArgumentException("weighted matrix out of range");
+                int best = -1;
+                float bw = -1;
+                for (int k = first[v]; k < first[v + 1]; k++) {
+                    float w = b.getFloat(wts + 4 * k);
+                    if (w > bw) {
+                        bw = w;
+                        best = b.getShort(idx + 2 * k) & 0xFFFF;
+                    }
+                }
+                out[i] = best;
+                weighted[i] = true;
+            } else out[i] = v;
         }
         return out;
     }
@@ -194,7 +220,7 @@ public final class BdlReader {
         return out;
     }
 
-    private static List<Shape> shapes(ByteBuffer b, int v, int s, Matrix4f[] world, int[] drw, int[] shapeMaterial, int[] materialTexture,
+    private static List<Shape> shapes(ByteBuffer b, int v, int s, Matrix4f[] world, int[] drw, boolean[] weighted, int[] shapeMaterial, int[] materialTexture,
             List<List<Integer>> jointsOut, List<Texture> textures) {
         float[][] pos = vertexArray(b, v, 9, 0, 3, 2);
         boolean hasUv = hasAttribute(b, v, 13);
@@ -217,8 +243,14 @@ public final class BdlReader {
             }
             List<Tri> tris = new ArrayList<>();
             List<Integer> triJoints = jointsOut == null ? null : new ArrayList<>();
+            int[] slots = new int[64]; // the matrix in each slot: a packet's table keeps the last one where it says 0xFFFF
+            java.util.Arrays.fill(slots, -1);
             for (int g = 0; g < groups; g++) {
-                int first = b.getInt(mtxdata + (firstMd + g) * 8 + 4);
+                int first = b.getInt(mtxdata + (firstMd + g) * 8 + 4), used = b.getShort(mtxdata + (firstMd + g) * 8 + 2) & 0xFFFF;
+                for (int k = 0; k < used && k < slots.length; k++) {
+                    int m = b.getShort(mtxtab + 2 * (first + k)) & 0xFFFF;
+                    if (m != 0xFFFF) slots[k] = m;
+                }
                 int size = b.getInt(pkt + (firstPkt + g) * 8), off = b.getInt(pkt + (firstPkt + g) * 8 + 4);
                 int p = dl + off, end = p + size;
                 while (p < end) {
@@ -245,10 +277,15 @@ public final class BdlReader {
                             else if (a[0] == 13) ti = val;
                             else if (a[0] == 11) ci = val;
                         }
-                        int draw = b.getShort(mtxtab + 2 * (first + mtx)) & 0xFFFF;
+                        int draw = slots[mtx];
+                        if (draw < 0) throw new IllegalArgumentException("a vertex with no matrix");
                         vj[i] = drw[draw];
                         if (jointsOut == null) {
-                            world[drw[draw]].transformPosition(tmp.set(pos[pi][0], pos[pi][1], pos[pi][2]));
+                            tmp.set(pos[pi][0], pos[pi][1], pos[pi][2]);
+                            if (!weighted[draw]) world[drw[draw]].transformPosition(tmp);
+                            pv[i] = new float[] {tmp.x, tmp.y, tmp.z};
+                        } else if (weighted[draw]) {
+                            new Matrix4f(world[drw[draw]]).invert().transformPosition(tmp.set(pos[pi][0], pos[pi][1], pos[pi][2]));
                             pv[i] = new float[] {tmp.x, tmp.y, tmp.z};
                         } else pv[i] = new float[] {pos[pi][0], pos[pi][1], pos[pi][2]};
                         if (uv != null) tv[i] = ti < 0 ? new float[] {0, 0} : new float[] {uv[ti][0], uv[ti][1]};
