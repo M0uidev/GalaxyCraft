@@ -205,7 +205,7 @@ public final class PlanetClient {
      * coordinates). False: Minecraft drops it as usual.
      */
     public static boolean guestThrow(LocalPlayer player, boolean all) {
-        if (!MpUse.guest() || throwSession == null || !throwSession.active() || throwEye == null || player.getMainHandItem().isEmpty()
+        if (!MpUse.guest() || throwSession == null || catalogIndex(throwSession) < 0 || !throwSession.active() || throwEye == null || player.getMainHandItem().isEmpty()
                 || player.isSpectator())
             return false;
         Vector3d up = throwSession.planet().up(throwEye);
@@ -473,6 +473,7 @@ public final class PlanetClient {
 
     /** The catalog index of a session's planet (the main one is 0, as everywhere here). */
     static int catalogIndex(PlanetSession s) {
+        if (s == null || s.planet() == null || s.planet().grid instanceof dev.moui.galaxycraft.voxel.FlatGrid) return -1; // a station is no catalog planet
         return indexOf(s);
     }
 
@@ -846,7 +847,11 @@ public final class PlanetClient {
             // Minecraft's outline on the block the clicks would act on, only with something in hand.
             session.setOutline(item && target == null ? session.target(eye, look, bucketFirst(player)) : -1);
             // Mario stands where he is in the shadow too, so mobs chase him and his blows land.
-            if (MpUse.guest()) MpUse.where(indexOf(session), session.localOf(world.queryPos()), new Vector3d(look));
+            if (MpUse.guest()) {
+                int where = catalogIndex(session);
+                if (where >= 0) MpUse.where(where, session.localOf(world.queryPos()), new Vector3d(look));
+                else MpUse.whereNone();
+            }
             ShadowWorld.mario(new ShadowWorld.MarioAt(session.planet(), session.localOf(world.queryPos()), new Vector3d(look),
                     player.getUUID()));
             boolean hit = false;
@@ -1691,7 +1696,7 @@ public final class PlanetClient {
             if (aim == null) place.run();
             else if (!shadow.available()) {
                 // A guest: the host's shadow runs the block's use (a door, a chest); what nothing used is placed here.
-                boolean ask = MpUse.guest() && (blocks.usable(focus.planet().get(aim.cell())) || !stack.isEmpty()
+                boolean ask = MpUse.guest() && catalogIndex(focus) >= 0 && (blocks.usable(focus.planet().get(aim.cell())) || !stack.isEmpty()
                         && !(stack.getItem() instanceof net.minecraft.world.item.BlockItem
                                 || stack.getItem() instanceof net.minecraft.world.item.BucketItem));
                 if (!ask || !MpUse.ask(indexOf(focus), aim.cell(), aim.face(), aim.hit().x, aim.hit().y, aim.hit().z, hand, place))
@@ -1805,7 +1810,7 @@ public final class PlanetClient {
         if (!shadow.available()) {
             // A guest: the host's shadow breaks it (drops, the tool worn); where it cannot, the block just goes.
             boolean creative = player.getAbilities().instabuild;
-            if (!MpUse.guest() || aim == null || !focus.planet().info(aim.cell()).breakable()
+            if (!MpUse.guest() || catalogIndex(focus) < 0 || aim == null || !focus.planet().info(aim.cell()).breakable()
                     || !MpUse.askBreak(indexOf(focus), aim.cell(), () -> focus.breakBlock(eye, look, creative)))
                 focus.breakBlock(eye, look, creative);
         } else if (aim != null && focus.planet().info(aim.cell()).breakable())
