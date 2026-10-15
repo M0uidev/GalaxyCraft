@@ -85,3 +85,12 @@ test('Picture Quality becomes Dolphin graphics settings (High when unset)', () =
   assert.equal(levelOf('videoQuality=nonsense'), 'HIGH');
   assert.deepEqual(videoArgs('videoQuality=LOW')[1], 'Graphics.Settings.InternalResolution=1');
 });
+
+test('developers joining a friend: one --args for Gradle, none otherwise', () => {
+  const paths = platformPaths({ platform: 'linux', env: {}, home: '/h' });
+  const inst = store.defaultInstallation();
+  const joined = buildPlan({ root: '/g', paths, inst, javaHome: '/j', dolphinBin: '/d', env: {}, join: '25.4.7.9:25599' }).processes[1].args;
+  assert.ok(joined.includes('--args=--quickPlayMultiplayer 25.4.7.9:25599'));
+  const alone = buildPlan({ root: '/g', paths, inst, javaHome: '/j', dolphinBin: '/d', env: {} }).processes[1].args;
+  assert.ok(!alone.some((a) => a.startsWith('--args')));
+});

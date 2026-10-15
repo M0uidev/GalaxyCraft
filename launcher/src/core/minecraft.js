@@ -190,7 +190,7 @@ function expand(list, os, features, vars) {
  *   jvmArgs   extra JVM arguments (memory, GalaxyCraft's -D flags)
  */
 function command({ version, dirs, auth, java, jvmArgs = [], platform = process.platform, arch = process.arch,
-  launcher = { name: 'super-minecraft-galaxy', version: '0' } }) {
+  launcher = { name: 'super-minecraft-galaxy', version: '0' }, join = null }) {
   const os = mojangOs(platform, arch);
   const sep = platform === 'win32' ? ';' : ':';
   const classpath = [...libraries(version, os).map((l) => path.join(dirs.libraries, ...l.path.split('/'))),
@@ -229,7 +229,8 @@ function command({ version, dirs, auth, java, jvmArgs = [], platform = process.p
     logging.push(fill(c.argument, { path: path.join(dirs.assets, 'log_configs', c.file.id) }));
   }
   // The player's arguments go before -cp so they apply to the JVM, not to Minecraft.
-  return { cmd: java, args: [...jvmArgs, ...logging, ...jvm, version.mainClass, ...game] };
+  // join: a friend's world (host:port, already checked by core/address.js), entered as soon as the game is up.
+  return { cmd: java, args: [...jvmArgs, ...logging, ...jvm, version.mainClass, ...game, ...(join ? ['--quickPlayMultiplayer', join] : [])] };
 }
 
 module.exports = {

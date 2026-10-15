@@ -4,6 +4,46 @@ Puedes jugar con amigos en la misma galaxia. **Os veis moviéndoos** y **los blo
 se comparten** en los planetas del catálogo. Los mobs, los objetos soltados, los fluidos y la redstone
 siguen sin compartirse (parte 3, ver `ROADMAP.md`).
 
+## Jugar con un amigo que no está en tu red (dirección directa y Hamachi)
+
+Funciona como un servidor de Minecraft: el anfitrión abre el mundo y el amigo entra con **IP:puerto**. El juego
+no usa ningún servicio nuestro; solo hace falta que el amigo *llegue* a tu ordenador. Mantiene el login de Mojang
+(cada jugador entra con su cuenta de Minecraft) y no pide aceptar amigos: quien conoce la dirección, entra.
+
+**Anfitrión**
+
+1. Entra en tu mundo, Esc → **Abrir a LAN** (*Open to LAN*). Puedes elegir el **puerto** en esa pantalla (por
+   ejemplo `25599`; también `/publish false 25599` en el chat). El mundo escucha en **todas** las interfaces de
+   red, incluida la de Hamachi.
+2. Al abrirlo, el juego escribe en el chat las direcciones donde tus amigos pueden entrar, por ejemplo:
+   `25.4.7.9:25599 (Hamachi)` y `192.168.1.20:25599 (misma Wi-Fi o router)`. Pásales la que corresponda.
+3. **Hamachi** (red virtual, la más fácil si el router no deja abrir puertos): tú y tu amigo instaláis Hamachi,
+   creáis una red y os unís a ella; tu dirección es la `25.x.x.x` que muestra Hamachi (el juego la marca).
+4. **Abrir puerto en el router** (alternativa): reenvía el puerto TCP elegido a tu ordenador y dile a tu amigo
+   tu IP pública. No funciona detrás de CGNAT (algunos operadores): ahí usa Hamachi.
+5. Si tienes firewall, permite Java/Minecraft en la red de Hamachi o el puerto elegido.
+
+**Amigo**
+
+1. Misma versión del mod que el anfitrión (si no, el juego te lo dice al entrar).
+2. En el **launcher de Super Minecraft Galaxy**: escribe la dirección en el campo **Join a friend**
+   (`25.4.7.9:25599`) y pulsa **Join**: arranca el juego y entra directo. (Con Minecraft desde el launcher oficial
+   de Mojang: Multijugador → Conexión directa.) O, dentro del juego: **Multijugador → Conexión directa**.
+3. La primera vez se descargan los planetas del anfitrión (1-4 MB cada uno); con una conexión lenta tarda
+   más. Se guardan, así que la próxima vez es rápido.
+
+**Si no conecta**
+
+- *"Connection timed out" / no encuentra el servidor*: la dirección o el puerto no llegan al anfitrión. Prueba con
+  Hamachi (¿ambos aparecen "en línea" en la misma red?), revisa el firewall y que el mundo siga abierto (el puerto
+  cambia cada vez que lo abres, salvo que lo elijas tú).
+- *"Invalid session"*: tu cuenta de Minecraft no está iniciada (abre el juego desde el launcher con tu cuenta).
+- *"version differs"*: actualizad el mod a la misma versión.
+- *Entra pero la galaxia tarda*: es la descarga de planetas; el progreso va en la pantalla de carga. El anfitrión
+  envía primero el planeta donde estás.
+- Registro con el tráfico: `GXC_MP_TRACE=1` escribe cada 10 s cuántos KB/s envía cada tipo de mensaje
+  (`[mp bytes]` en `logs/latest.log`), útil para saber qué pesa en una conexión lenta.
+
 ## Cómo se juega
 
 **Quien abre el mundo (anfitrión)**

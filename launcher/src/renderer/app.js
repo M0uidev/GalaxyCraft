@@ -411,7 +411,7 @@ async function chooseGameRoot() {
   if ($('#page-settings').classList.contains('active')) renderSettings();
 }
 
-async function onPlay() {
+async function onPlay(join = null) {
   if (ui.game.state === 'running') {
     api.stop();
     return;
@@ -426,7 +426,7 @@ async function onPlay() {
   ui.game = { state: 'starting' };
   renderPlay();
   if (S().settings.showLogOnPlay) openLog();
-  const r = await api.play(S().selected);
+  const r = await api.play(S().selected, join);
   if (!r.ok) {
     if (r.code === 'expired' || r.code === 'signin') await api.signOut();
     toast(r.error || 'The game did not start.', true);
@@ -873,7 +873,18 @@ async function main() {
   $('#discord-btn').onclick = () => api.openUrl(DISCORD);
   $('#author-link').onclick = (e) => { e.preventDefault(); api.openUrl(AUTHOR); };
   $$('.tab-btn').forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
-  $('#play').onclick = onPlay;
+  $('#play').onclick = () => onPlay();
+  const joinAddr = $('#join-addr');
+  try { joinAddr.value = localStorage.getItem('joinAddress') || ''; } catch { /* no storage: an empty field */ }
+  const join = () => {
+    if (ui.game.state !== 'idle') return; // the game is starting or running: PLAY is its STOP button
+    const text = joinAddr.value.trim();
+    try { localStorage.setItem('joinAddress', text); } catch { /* not remembered */ }
+    if (viaOfficial()) { toast('With the Minecraft Launcher, press Play there and use Multiplayer > Direct Connection in the game.', true); return; }
+    onPlay(text);
+  };
+  $('#join-btn').onclick = join;
+  joinAddr.onkeydown = (e) => { if (e.key === 'Enter') join(); };
   $('#account').onclick = toggleAccountMenu;
   $('#account').onkeydown = (e) => { if (e.key === 'Enter') toggleAccountMenu(); };
   api.onInstallProgress((p) => { ui.progress = p; if (ui.status) ui.status.installing = ui.status.installing || { version: '' }; renderPlay(); });

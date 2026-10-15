@@ -36,7 +36,7 @@ function splitArgs(text) {
  *   dolphinBin the patched Dolphin's binary
  *   env        the launcher's environment (copied into both processes)
  */
-function buildPlan({ root, paths, inst, javaHome, dolphinBin, descriptor = null, env = process.env, settingsText = null }) {
+function buildPlan({ root, paths, inst, javaHome, dolphinBin, descriptor = null, env = process.env, settingsText = null, join = null }) {
   const p = pathFor(paths.platform);
   const win = paths.platform === 'win32';
   const gameDir = gameDirOf(inst, paths);
@@ -100,6 +100,7 @@ function buildPlan({ root, paths, inst, javaHome, dolphinBin, descriptor = null,
       '-jar', p.join(fabric, 'gradle', 'wrapper', 'gradle-wrapper.jar'),
       'runClient', '-PgalaxycraftHidden', `-PgalaxycraftGameDir=${gameDir}`,
       '--console=plain', '-q',
+      ...(join ? [`--args=--quickPlayMultiplayer ${join}`] : []), // a friend's world (host:port, checked)
       ...splitArgs(inst.gradleArgs),
     ],
   };

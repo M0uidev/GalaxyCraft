@@ -161,10 +161,23 @@ public final class PlanetStore {
             double core = in.readDouble();
             int layers = in.readInt(), depth = in.readInt();
             Vector3d center = new Vector3d(in.readDouble(), in.readDouble(), in.readDouble());
-            if (n <= 0 || layers <= 0) throw new IOException(f + ": bad size");
+            checkSize(f, n, layers);
             char[] cells = magic == MAGIC ? readCells(in, 6L * n * n * layers, parse) : readV1Cells(in, 6L * n * n * layers, blocks);
             return new Saved(n, core, layers, depth, center, cells, biomes(in, 6 * n * n));
         }
+    }
+
+    /**
+     * Bounds on a planet file's size, so a file from another player's game (a host sends its planets) cannot make this one
+     * allocate gigabytes: the biggest planet is radius {@link VoxelPlanet#MAX_RADIUS}; these allow it with room to spare.
+     */
+    public static final int MAX_N = 4 * VoxelPlanet.MAX_RADIUS, MAX_LAYERS = 2 * VoxelPlanet.MAX_RADIUS;
+    public static final long MAX_CELLS = 1L << 28;
+
+    /** Throws if a planet of that grid is not one this game could have made. */
+    public static void checkSize(String f, int n, int layers) throws IOException {
+        if (n <= 0 || layers <= 0) throw new IOException(f + ": bad size");
+        if (n > MAX_N || layers > MAX_LAYERS || 6L * n * n * layers > MAX_CELLS) throw new IOException(f + ": too big (" + n + " x " + layers + ")");
     }
 
     /** The biomes after the cells; null for a planet saved before planets had them. */

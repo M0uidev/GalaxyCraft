@@ -620,56 +620,73 @@ public final class MpPayloads {
     }
 
     /** Both sides must know the types: call from the common entrypoint. */
+    /** The codec as it was, plus the bytes it writes added to {@link ByteMeter#GLOBAL} under the message's name. */
+    private static <T extends CustomPacketPayload> StreamCodec<RegistryFriendlyByteBuf, T> counted(String name, StreamCodec<RegistryFriendlyByteBuf, T> inner) {
+        return new StreamCodec<>() {
+            @Override
+            public T decode(RegistryFriendlyByteBuf buf) {
+                return inner.decode(buf);
+            }
+
+            @Override
+            public void encode(RegistryFriendlyByteBuf buf, T value) {
+                int from = buf.writerIndex();
+                inner.encode(buf, value);
+                ByteMeter.GLOBAL.add(name, buf.writerIndex() - from);
+            }
+        };
+    }
+
     public static void register() {
-        PayloadTypeRegistry.clientboundPlay().register(Hello.TYPE, Hello.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(HelloAck.TYPE, HelloAck.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(State.TYPE, State.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(Peer.TYPE, Peer.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(Skin.TYPE, Skin.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(Skin.TYPE, Skin.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(Gone.TYPE, Gone.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(PlanetAsk.TYPE, PlanetAsk.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(PlanetHead.TYPE, PlanetHead.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(PlanetChunk.TYPE, PlanetChunk.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(Edits.TYPE, Edits.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(Edits.TYPE, Edits.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(PlanetDrop.TYPE, PlanetDrop.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(Resync.TYPE, Resync.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(Use.TYPE, Use.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(UseDone.TYPE, UseDone.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(UsedUp.TYPE, UsedUp.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(Mobs.TYPE, Mobs.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(MobHit.TYPE, MobHit.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(Drops.TYPE, Drops.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(DropTake.TYPE, DropTake.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(Break.TYPE, Break.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(Where.TYPE, Where.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(Throw.TYPE, Throw.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(StationUpdate.TYPE, StationUpdate.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(Hello.TYPE, counted("Hello", Hello.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(HelloAck.TYPE, counted("HelloAck", HelloAck.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(State.TYPE, counted("State", State.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(Peer.TYPE, counted("Peer", Peer.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(Skin.TYPE, counted("Skin", Skin.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(Skin.TYPE, counted("Skin", Skin.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(Gone.TYPE, counted("Gone", Gone.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(PlanetAsk.TYPE, counted("PlanetAsk", PlanetAsk.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(PlanetHead.TYPE, counted("PlanetHead", PlanetHead.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(PlanetChunk.TYPE, counted("PlanetChunk", PlanetChunk.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(Edits.TYPE, counted("Edits", Edits.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(Edits.TYPE, counted("Edits", Edits.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(PlanetDrop.TYPE, counted("PlanetDrop", PlanetDrop.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(Resync.TYPE, counted("Resync", Resync.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(Use.TYPE, counted("Use", Use.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(UseDone.TYPE, counted("UseDone", UseDone.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(UsedUp.TYPE, counted("UsedUp", UsedUp.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(Mobs.TYPE, counted("Mobs", Mobs.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(MobHit.TYPE, counted("MobHit", MobHit.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(Drops.TYPE, counted("Drops", Drops.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(DropTake.TYPE, counted("DropTake", DropTake.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(Break.TYPE, counted("Break", Break.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(Where.TYPE, counted("Where", Where.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(Throw.TYPE, counted("Throw", Throw.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(StationUpdate.TYPE, counted("StationUpdate", StationUpdate.CODEC));
         registerStars();
         registerShips();
         registerRiding();
     }
 
     private static void registerStars() {
-        PayloadTypeRegistry.clientboundPlay().register(StarList.TYPE, StarList.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(StarPut.TYPE, StarPut.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(StarGone.TYPE, StarGone.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(StarDo.TYPE, StarDo.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(StarList.TYPE, counted("StarList", StarList.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(StarPut.TYPE, counted("StarPut", StarPut.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(StarGone.TYPE, counted("StarGone", StarGone.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(StarDo.TYPE, counted("StarDo", StarDo.CODEC));
     }
 
     private static void registerShips() {
-        PayloadTypeRegistry.clientboundPlay().register(ShipList.TYPE, ShipList.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(ShipPut.TYPE, ShipPut.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(ShipPilot.TYPE, ShipPilot.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(ShipPose.TYPE, ShipPose.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(ShipDo.TYPE, ShipDo.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(ShipPose.TYPE, ShipPose.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ShipList.TYPE, counted("ShipList", ShipList.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(ShipPut.TYPE, counted("ShipPut", ShipPut.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(ShipPilot.TYPE, counted("ShipPilot", ShipPilot.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(ShipPose.TYPE, counted("ShipPose", ShipPose.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(ShipDo.TYPE, counted("ShipDo", ShipDo.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(ShipPose.TYPE, counted("ShipPose", ShipPose.CODEC));
     }
 
     private static void registerRiding() {
-        PayloadTypeRegistry.serverboundPlay().register(Steer.TYPE, Steer.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(RideSeat.TYPE, RideSeat.CODEC);
-        PayloadTypeRegistry.clientboundPlay().register(RideEnd.TYPE, RideEnd.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(Steer.TYPE, counted("Steer", Steer.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(RideSeat.TYPE, counted("RideSeat", RideSeat.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(RideEnd.TYPE, counted("RideEnd", RideEnd.CODEC));
     }
 }

@@ -27,6 +27,7 @@ const { GameRunner } = require('./runner');
 const { Installer } = require('./installer');
 const mcprofile = require('./mcprofile');
 const { findMinecraftDir } = require('../core/mclauncher');
+const { parseAddress } = require('../core/address');
 const { Accounts } = require('./accounts');
 const updater = require('./updater');
 
@@ -253,10 +254,10 @@ async function playReleaseOfficial(inst) {
 }
 
 /** PLAY for players: the installed release, the player's disc and Minecraft account. */
-async function playRelease(inst) {
+async function playRelease(inst, join = null) {
   const st = status(inst.id).player;
   if (st.action !== 'play' && st.action !== 'update') return { ok: false, error: st.detail };
-  if (minecraftFrom() === 'official') return playReleaseOfficial(inst);
+  if (minecraftFrom() === 'official') return playReleaseOfficial(inst); // joining from there: Multiplayer > Direct Connection in the game
   const sessionInfo = await accounts.session();
   const rom = romInfo();
   const i = await installer.prepare(rom.path);
@@ -266,7 +267,7 @@ async function playRelease(inst) {
   registerInMinecraftLauncher(inst);
   const mcCommand = minecraft.command({
     version: ready.version, java: ready.java, dirs: { ...ready.dirs, game: gameDir }, auth: sessionInfo,
-    jvmArgs: gamepack.minecraftJvmArgs(i.manifest, inst), launcher: { name: 'super-minecraft-galaxy', version: app.getVersion() },
+    jvmArgs: gamepack.minecraftJvmArgs(i.manifest, inst), launcher: { name: 'super-minecraft-galaxy', version: app.getVersion() }, join,
   });
   const lay = mariomodel.layFor({ lay: i.lay, rom: rom.path, propertiesFile: settingsFile(inst) });
   return gamepack.playerPlan({ paths: paths(), inst, lay, dolphinExe: path.join(i.lay.dolphin, i.sys.exe), mcCommand,
@@ -274,7 +275,7 @@ async function playRelease(inst) {
 }
 
 /** PLAY from a game folder (developers): as tools/gxplay.sh, with the chosen disc if there is one. */
-function playFolder(inst) {
+function playFolder(inst, join = null) {
   const pf = check(inst.id);
   if (!pf.ok) throw new Error(`${pf.reason.label}: ${pf.reason.detail}. ${pf.reason.fix}`);
   let descriptor = null;
@@ -285,15 +286,22 @@ function playFolder(inst) {
     fs.writeFileSync(descriptor, JSON.stringify(gamepack.devDescriptor(rom.path, pf.root), null, 2));
   }
   return buildPlan({ root: pf.root, paths: paths(), inst, javaHome: pf.java.home, dolphinBin: pf.dolphinBin, descriptor,
-    settingsText: settingsText(inst) });
+    settingsText: settingsText(inst), join });
 }
 
-async function play(instId) {
+async function play(instId, joinText = null) {
   if (runner.busy) return { ok: false, error: 'The game is already running.' };
   const inst = instOf(instId);
+  let join = null;
+  if (joinText) {
+    const a = parseAddress(joinText);
+    if (a.error) return { ok: false, error: a.error };
+    join = a.text;
+    runner.log('Launcher', `Joining a friend's world at ${join}`);
+  }
   let plan;
   try {
-    plan = mode() === 'folder' ? playFolder(inst) : await playRelease(inst);
+    plan = mode() === 'folder' ? playFolder(inst, join) : await playRelease(inst, join);
     if (plan && plan.ok === false) return plan;
   } catch (e) {
     runner.log('Launcher', e.message, 'stderr');
@@ -447,7 +455,7 @@ handle('rom:choose', async () => {
   if (check.ok) setState({ ...state, settings: { ...state.settings, rom: r.filePaths[0] } });
   return { path: r.filePaths[0], check };
 });
-handle('game:play', (id) => play(id));
+handle('game:play', (id, join) => play(id, join));
 handle('official:open', () => officialLauncher.open());
 handle('game:stop', () => runner.stop());
 handle('game:log', () => logBuffer);

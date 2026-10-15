@@ -49,4 +49,12 @@ class PlanetStoreTest {
         assertEquals(new Vector3d(4, 5, 6), back.center());
         assertThrows(java.io.IOException.class, () -> PlanetStore.decode(new byte[] {1, 2, 3}, blocks, blocks::parse));
     }
+
+    @org.junit.jupiter.api.Test
+    void aPlanetFileTooBigForThisGameIsRefused() throws Exception {
+        PlanetStore.checkSize("real", 382, 76); // the biggest planet saved so far (radius 243)
+        PlanetStore.checkSize("max", 4 * VoxelPlanet.MAX_RADIUS, 32);
+        for (int[] bad : new int[][] {{0, 5}, {5, 0}, {-1, 5}, {100_000, 10}, {400, 100_000}, {1000, 500}})
+            org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class, () -> PlanetStore.checkSize("bad", bad[0], bad[1]));
+    }
 }

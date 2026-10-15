@@ -282,3 +282,25 @@ A friendlier refusal text (`HelloAck.reason`) also needs one. Bump once, at merg
 - tsnet / libtailscale, BSD-3-Clause: https://pkg.go.dev/tailscale.com/tsnet ; https://github.com/tailscale/libtailscale
 - ZeroTier pricing (10 devices on the free plan): https://www.zerotier.com/pricing.md
 - Static Linux build tested here: https://pkgs.tailscale.com/stable/
+
+## 10. Decision of the user (2026-10-15, later): NO relay, nothing paid, no Tailscale; direct IP + Hamachi
+
+The relay of section 9 is **discarded for now** (kept as a future option, section 9.3 stays as its design). Plan:
+exactly what Minecraft servers do today, direct `ip:port` (Direct Connection / Add Server, or the launcher's
+*Join a friend* field), which also works over Hamachi (the host's `25.x.x.x` address). Mojang authentication stays on;
+no accept list. What was verified or done, from the code (Minecraft 26.3 bytecode):
+
+- `IntegratedServer.publishServer` calls `startTcpServerListener(null, port)`: **null address = every interface**, so
+  the Hamachi adapter is reached with no change. The port is chosen by the player in the Open to LAN screen
+  (`WorldOptionsScreen` has a port field) or `/publish [allowCommands] [port]`.
+- Nothing in `Hello`/`HelloAck`/`Protocol` depends on the host name or the address (the version and the world id
+  travel in the handshake; the guest keeps its data in `guest/<worldId>`), so a non-loopback address needs no code.
+  Not run in two real games (the user asked for no games while away).
+- Built: the host's chat shows the addresses friends can use (`HostAddresses`, Hamachi marked); the launcher has a
+  *Join a friend* field (`launcher/src/core/address.js`, validated, `--quickPlayMultiplayer`); `docs/MULTIJUGADOR.md`.
+- Improvements for slow links, none changes a payload (no `Protocol.VERSION` bump): `ByteMeter` (`GXC_MP_TRACE`),
+  back-pressure pacing of planet transfers (`PlanetXfer.sendBudget`, reads the Netty channel through the
+  `ConnectionAccess` mixin), the guest's current planet sent first (`Outbox` lanes), planet-file size limits
+  (`PlanetStore.checkSize`), a per-guest inbound message limit with kick (`InboundGuard`).
+- NOT done, and which need `Protocol.VERSION` (one bump at merge): the planet delta log (`PlanetAsk` carries the
+  guest's last edit seq) and quantized `Mobs` frames; a refusal text in `HelloAck.reason`.

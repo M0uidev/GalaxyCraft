@@ -73,4 +73,38 @@ class PlanetXferTest {
         assertTrue(box.isEmpty());
         assertEquals(0, box.bytes());
     }
+
+    @org.junit.jupiter.api.Test
+    void theLaneTheGuestStandsOnGoesFirstAndEachLaneStaysInOrder() {
+        PlanetXfer.Outbox<String> box = new PlanetXfer.Outbox<>();
+        box.add("2a", 10, 2);
+        box.add("2b", 10, 2);
+        box.add("5a", 10, 5);
+        box.add("5b", 10, 5);
+        java.util.List<String> sent = new java.util.ArrayList<>();
+        box.drain(1000, sent::add, 5);
+        org.junit.jupiter.api.Assertions.assertEquals(java.util.List.of("5a", "5b", "2a", "2b"), sent);
+        org.junit.jupiter.api.Assertions.assertTrue(box.isEmpty());
+        org.junit.jupiter.api.Assertions.assertEquals(0, box.bytes());
+    }
+
+    @org.junit.jupiter.api.Test
+    void withoutAPreferredLaneTheOldestFirstAndBudgetStops() {
+        PlanetXfer.Outbox<String> box = new PlanetXfer.Outbox<>();
+        box.add("a", 10, 1);
+        box.add("b", 10, 1);
+        box.add("c", 10, 2);
+        java.util.List<String> sent = new java.util.ArrayList<>();
+        box.drain(15, sent::add);
+        org.junit.jupiter.api.Assertions.assertEquals(java.util.List.of("a", "b"), sent); // the second goes: budget was left
+        box.drain(15, sent::add);
+        org.junit.jupiter.api.Assertions.assertEquals(java.util.List.of("a", "b", "c"), sent);
+    }
+
+    @org.junit.jupiter.api.Test
+    void aBackedUpConnectionSendsLess() {
+        org.junit.jupiter.api.Assertions.assertEquals(48_000, PlanetXfer.sendBudget(48_000, 1_000_000));
+        org.junit.jupiter.api.Assertions.assertEquals(10_000, PlanetXfer.sendBudget(48_000, 10_000));
+        org.junit.jupiter.api.Assertions.assertEquals(0, PlanetXfer.sendBudget(48_000, 0));
+    }
 }

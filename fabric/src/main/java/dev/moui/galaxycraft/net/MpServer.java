@@ -159,18 +159,18 @@ public final class MpServer {
         var box = outboxes.computeIfAbsent(guest, k -> new PlanetXfer.Outbox<>());
         if (offer == null || offer.data().length == 0 || offer.data().length > PlanetXfer.MAX_BYTES) {
             cancelPlanet(guest, index);
-            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_FAIL, 0, 0, 0), 32);
+            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_FAIL, 0, 0, 0), 32, index);
             return;
         }
         if (offer.etag() == guestEtag) {
-            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_SAME, offer.etag(), 0, offer.seq()), 32);
+            box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_SAME, offer.etag(), 0, offer.seq()), 32, index);
             hub.deliver(guest, index, offer.seq());
             return;
         }
         byte[] data = offer.data();
-        box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_DATA, offer.etag(), data.length, offer.seq()), 32);
+        box.add(new MpPayloads.PlanetHead(index, PlanetXfer.STATE_DATA, offer.etag(), data.length, offer.seq()), 32, index);
         for (int seq = 0; seq < PlanetXfer.chunks(data.length); seq++)
-            box.add(new MpPayloads.PlanetChunk(index, seq, PlanetXfer.slice(data, seq)), Math.min(PlanetXfer.CHUNK, data.length - seq * PlanetXfer.CHUNK));
+            box.add(new MpPayloads.PlanetChunk(index, seq, PlanetXfer.slice(data, seq)), Math.min(PlanetXfer.CHUNK, data.length - seq * PlanetXfer.CHUNK), index);
         hub.deliver(guest, index, offer.seq());
         GalaxyCraft.LOG.info("[GalaxyCraft mp] planet {} ({} KB) queued for {}", index, data.length / 1024, p.getName().getString());
     }
@@ -189,7 +189,7 @@ public final class MpServer {
         if (!askLimits.computeIfAbsent(id, k -> new RateLimiter(10, 20)).allow(System.nanoTime())) return;
         if (outstanding.getOrDefault(id, 0) >= PlanetXfer.MAX_OUTSTANDING) {
             hub.cancel(id, ask.index());
-            outboxes.computeIfAbsent(id, k -> new PlanetXfer.Outbox<>()).add(new MpPayloads.PlanetHead(ask.index(), PlanetXfer.STATE_FAIL, 0, 0, 0), 32);
+            outboxes.computeIfAbsent(id, k -> new PlanetXfer.Outbox<>()).add(new MpPayloads.PlanetHead(ask.index(), PlanetXfer.STATE_FAIL, 0, 0, 0), 32, ask.index());
             return;
         }
         outstanding.merge(id, 1, Integer::sum);
@@ -197,11 +197,22 @@ public final class MpServer {
         source.ask(id, ask.index(), ask.etag());
     }
 
+    /** The planet each guest says it stands on: its bytes are sent first. */
+    private static final Map<UUID, Integer> standingOn = new HashMap<>();
+
+    /** How many more bytes the connection to that player takes before it is backed up (a slow link): unlimited on a local one. */
+    private static long writable(ServerPlayer p) {
+        io.netty.channel.Channel ch = ((dev.moui.galaxycraft.mixin.ConnectionAccess) ((dev.moui.galaxycraft.mixin.ServerCommonAccess) p.connection).galaxycraft$connection()).galaxycraft$channel();
+        if (ch == null) return Long.MAX_VALUE;
+        return ch.isWritable() ? ch.bytesBeforeUnwritable() : 0;
+    }
+
     private static void pump(MinecraftServer srv) {
         for (var e : outboxes.entrySet()) {
             if (e.getValue().isEmpty()) continue;
             ServerPlayer p = player(e.getKey());
-            if (p != null) e.getValue().drain(PlanetXfer.BUDGET_PER_TICK - EDIT_BUDGET, payload -> ServerPlayNetworking.send(p, payload));
+            if (p != null) e.getValue().drain(PlanetXfer.sendBudget(PlanetXfer.BUDGET_PER_TICK - EDIT_BUDGET, writable(p)),
+                    payload -> ServerPlayNetworking.send(p, payload), standingOn.getOrDefault(e.getKey(), PlanetXfer.Outbox.NO_LANE));
             else e.getValue().clear();
         }
         for (ServerPlayer p : srv.getPlayerList().getPlayers())
@@ -339,6 +350,7 @@ public final class MpServer {
                 || w.planet() >= 0 && !hub.subscribed(id, w.planet())
                 || !whereLimits.computeIfAbsent(id, k -> new RateLimiter(30, 30)).allow(System.nanoTime()))
             return;
+        standingOn.put(id, w.planet());
         sink.where(id, w);
     }
 
@@ -615,7 +627,25 @@ public final class MpServer {
         });
     }
 
+    private static final Map<UUID, InboundGuard> inbound = new HashMap<>();
+
+    /** One guest message allowed in, over all message types: a flood is dropped, and a guest that keeps at it is kicked. */
+    private static boolean admit(UUID id) {
+        InboundGuard.Verdict v = inbound.computeIfAbsent(id, k -> new InboundGuard()).admit(System.nanoTime());
+        if (v == InboundGuard.Verdict.KICK) SINK.kick(id, "Too many multiplayer messages.");
+        return v == InboundGuard.Verdict.OK;
+    }
+
+    private static <T extends net.minecraft.network.protocol.common.custom.CustomPacketPayload> void recv(
+            net.minecraft.network.protocol.common.custom.CustomPacketPayload.Type<T> type, ServerPlayNetworking.PlayPayloadHandler<T> handler) {
+        ServerPlayNetworking.registerGlobalReceiver(type, (payload, ctx) -> {
+            if (admit(ctx.player().getUUID())) handler.receive(payload, ctx);
+        });
+    }
+
     private static void forget(UUID id) {
+        inbound.remove(id);
+        standingOn.remove(id);
         ShipSink ships = shipSink;
         if (ships != null && members.contains(id)) ships.left(id);
         shipLimits.remove(id);
@@ -714,7 +744,7 @@ public final class MpServer {
             forget(id);
             if (relay != null) relay.leave(id);
         });
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.HelloAck.TYPE, (payload, ctx) -> {
+        recv(MpPayloads.HelloAck.TYPE, (payload, ctx) -> {
             UUID id = ctx.player().getUUID();
             waiting.remove(id);
             var refusal = Protocol.refusal(Protocol.VERSION, payload.version());
@@ -732,31 +762,31 @@ public final class MpServer {
                 if (ships != null) ships.joined(id);
             }
         });
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.PlanetAsk.TYPE, (payload, ctx) -> ask(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Edits.TYPE, (payload, ctx) -> edits(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.PlanetDrop.TYPE, (payload, ctx) -> {
+        recv(MpPayloads.PlanetAsk.TYPE, (payload, ctx) -> ask(ctx.player(), payload));
+        recv(MpPayloads.Edits.TYPE, (payload, ctx) -> edits(ctx.player(), payload));
+        recv(MpPayloads.PlanetDrop.TYPE, (payload, ctx) -> {
             UUID id = ctx.player().getUUID();
             if (!hub.subscribed(id, payload.index())) return;
             hub.cancel(id, payload.index());
             EditSink sink = editSink;
             if (sink != null) sink.dropped(id, payload.index());
         });
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Use.TYPE, (payload, ctx) -> use(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.MobHit.TYPE, (payload, ctx) -> mobHit(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.DropTake.TYPE, (payload, ctx) -> takeDrop(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Break.TYPE, (payload, ctx) -> breakBlock(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Throw.TYPE, (payload, ctx) -> throwItem(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Where.TYPE, (payload, ctx) -> where(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Steer.TYPE, (payload, ctx) -> steer(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.UsedUp.TYPE, (payload, ctx) -> usedUp(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.StarDo.TYPE, (payload, ctx) -> starDo(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.ShipDo.TYPE, (payload, ctx) -> shipDo(ctx.player(), payload));
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.ShipPose.TYPE, (payload, ctx) -> shipPose(ctx.player(), payload));
+        recv(MpPayloads.Use.TYPE, (payload, ctx) -> use(ctx.player(), payload));
+        recv(MpPayloads.MobHit.TYPE, (payload, ctx) -> mobHit(ctx.player(), payload));
+        recv(MpPayloads.DropTake.TYPE, (payload, ctx) -> takeDrop(ctx.player(), payload));
+        recv(MpPayloads.Break.TYPE, (payload, ctx) -> breakBlock(ctx.player(), payload));
+        recv(MpPayloads.Throw.TYPE, (payload, ctx) -> throwItem(ctx.player(), payload));
+        recv(MpPayloads.Where.TYPE, (payload, ctx) -> where(ctx.player(), payload));
+        recv(MpPayloads.Steer.TYPE, (payload, ctx) -> steer(ctx.player(), payload));
+        recv(MpPayloads.UsedUp.TYPE, (payload, ctx) -> usedUp(ctx.player(), payload));
+        recv(MpPayloads.StarDo.TYPE, (payload, ctx) -> starDo(ctx.player(), payload));
+        recv(MpPayloads.ShipDo.TYPE, (payload, ctx) -> shipDo(ctx.player(), payload));
+        recv(MpPayloads.ShipPose.TYPE, (payload, ctx) -> shipPose(ctx.player(), payload));
         ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {
+        recv(MpPayloads.State.TYPE, (payload, ctx) -> {
             if (relay != null) relay.state(ctx.player().getUUID(), payload.data(), System.nanoTime());
         });
-        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Skin.TYPE, (payload, ctx) -> {
+        recv(MpPayloads.Skin.TYPE, (payload, ctx) -> {
             UUID from = ctx.player().getUUID();
             byte[] png = payload.data();
             boolean clear = SkinCodec.isClear(png);
@@ -786,6 +816,7 @@ public final class MpServer {
             outstanding.clear();
             outboxes.clear();
             editLimits.clear();
+            inbound.clear();
             editBytes.clear();
             editBad.clear();
             useLimits.clear();

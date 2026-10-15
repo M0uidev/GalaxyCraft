@@ -122,6 +122,10 @@ final class MpClient {
 
     /** This tick's state to the server, every {@link #SEND_TICKS} ticks. */
     private static void sendState(Minecraft client) {
+        if (System.getenv("GXC_MP_TRACE") != null) {
+            var lines = dev.moui.galaxycraft.net.ByteMeter.GLOBAL.report(System.nanoTime(), 10);
+            if (lines != null) lines.forEach(GalaxyCraft.LOG::info);
+        }
         ticksSinceSend++;
         if (!sampler.due()) return;
         LocalPlayer p = client.player;
