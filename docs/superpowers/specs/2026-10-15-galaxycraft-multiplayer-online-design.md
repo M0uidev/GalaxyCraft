@@ -43,7 +43,10 @@ Non-goals: public servers, dedicated server hosting, matchmaking, voice, more th
 Third-party tunnels (playit.gg style) are the "relay" column without us paying, but they put an unvetted vendor
 agent and a public address in the path; not recommended as the default.
 
-## 4. Recommendation: private VPN (Tailscale) + invite code in the launcher
+## 4. First recommendation (SUPERSEDED by section 9): private VPN (Tailscale) + invite code in the launcher
+
+> The user's answers (section 9) made Tailscale conditional on a zero-step install; the feasibility study in
+> section 9 found it does not meet that condition. Read section 9 for the current recommendation.
 
 **One option: Tailscale as the transport, wrapped by a short invite code.** Reasoning: it is the only option that
 (a) works for every home connection, including CGNAT, (b) costs nothing to run, (c) is closed by default (only people
@@ -185,9 +188,97 @@ Flying a ship: pilot-authoritative with 10 Hz poses and extrapolation, fine; a r
 No `Protocol.VERSION` bump is needed for 1-5 (they change pacing, UI and the connection path); 6 and 7 change
 payload layouts and need one bump, to be made by the orchestrator at merge time.
 
-## 8. Open questions for the user
+## 8. Open questions for the user (answered, see section 9)
 
 1. Is "the friend installs Tailscale once" acceptable, or is zero-install a hard requirement (then: relay, with its
    cost and upkeep)?
 2. How many friends at once do you expect (2-3 vs 8)? Decides whether the free VPN plan is enough.
 3. Do you want the host's *Accept new friends* prompt, or is the VPN invitation enough?
+
+## 9. Feasibility study and FIRM recommendation (2026-10-15, after the user's answers)
+
+User's answers: (1) Tailscale only if the launcher can install it by itself and it works the same on Windows and
+Linux; otherwise an alternative with **zero manual steps for the friend**. (2) Design for **8 guests** (maybe more).
+(3) **No accept list**: like Minecraft, you join with an address/code and you are in; keep Mojang authentication
+and the per-guest limits.
+
+### 9.1 Tailscale: what is feasible and what is not
+
+Verified (sources at the end; Linux parts tested here):
+
+| Question | Finding |
+|---|---|
+| Install without root, Linux | Works. The static tarball (`tailscale_1.104.1_amd64.tgz`, 42 MB `tailscaled` + 33 MB `tailscale`) ran as uid 1000 with `--tun=userspace-networking --statedir=... --socket=...`: it starts, no TUN, no root, reports `Logged out.` (tested). Needs a short socket path (unix socket limit); TPM and UDP-buffer warnings are harmless. Tested here: starting only. NOT tested: login, joining a tailnet, forwarding (no Tailscale account in this session). |
+| Install, Windows | The MSI takes `/qn /norestart` with `TS_NOLAUNCH=1 TS_UNATTENDEDMODE=always`, but it installs a **system service: UAC elevation is unavoidable** (one click for the friend), and it registers no key by itself: the key goes in a following `tailscale up --authkey=`. Not testable here (no Windows). A user-mode alternative on Windows is the same `tailscaled` in userspace mode from the data folder (not documented as supported; untested). |
+| Embedding | `tsnet` / `libtailscale` are BSD-3-Clause: we may bundle and redistribute with the notice. Go toolchain needed to build a helper (`gxnet`); +about 30 MB per OS in the launcher download. |
+| Login without the friend making an account | Only through **auth keys** (pre-approved, tagged, ephemeral, reusable, max 90 days). A key can be generated only by an Owner/Admin of a tailnet (UI or API/OAuth client). So the **host** needs a Tailscale account and must generate keys; the key travels inside the invite (a secret, long string, not a short code). The friend would otherwise need their own account (Google/Microsoft login) = a manual step. |
+| Safety of that key | A friend joins the **host's** tailnet. Without an ACL restricting the key's tag to `host:25599`, the friend's machine can reach every device of the host's tailnet (SSH, NAS...). The host must edit the tailnet policy file once. Not acceptable as a default for a game. |
+| Free plan limits | Personal plan: 6 users, unlimited devices (older pages say 3 users / 100 devices; the official docs say 6; non-commercial use only). Tagged devices should not count as users (not stated on the page; unverified). 8 guests on a plan that says 6 users is therefore uncertain. |
+
+Verdict: **not viable as "zero manual steps"**: the host needs an account, must mint keys and write an ACL, the
+friend needs UAC on Windows, and "8 guests on the free plan" is unverified. It also makes every host depend on
+Tailscale's account system and terms. Tailscale remains a fine *optional* way to reach a host (the guest field accepts
+`ip:port`), but it is not the product path.
+
+### 9.2 Alternatives without manual installation
+
+| | ZeroTier | Own hole punching (libp2p / STUN + QUIC) | **Minimal relay we run** |
+|---|---|---|---|
+| Friend's steps | Install ZeroTier One (admin / driver install) and join a network id, or embed libzt | None if embedded | **None** |
+| Host's steps | An account at ZeroTier Central and a network; the free plan is now **10 devices** (official pricing page), below 8 guests + host once more people play | None | **None** (one click, gets a code) |
+| Works behind CGNAT / symmetric NAT | Mostly (own relays) | Only about 80-90 % of pairs; the rest **needs a relay anyway** | Always (both sides dial out) |
+| Code to write | Small, but an external install and account | Large (UDP reliable transport, NAT discovery, signaling server, relay fallback): the signaling server and fallback relay are the same server we are trying to avoid | About 300 lines server + a Java client in the mod |
+| Cost | Free up to 10 devices, paid after | Same server cost plus the large code | A small VPS (about 5 USD/month; traffic below) |
+
+Hole punching saves relay bandwidth but cannot remove the relay, so it is a later optimization, not an alternative.
+
+### 9.3 Recommendation: a minimal dumb relay, speaking plain TCP, both ends inside the mod
+
+**Firm recommendation: run one tiny TCP relay (`tools/relay/`) and put the relay client in the mod (Java, so it is the same on
+Windows and Linux, no install, no launcher dependency, also works when started from the Mojang launcher).**
+
+How it works:
+- **Host** ("Open to a friend", pause menu): the mod publishes the LAN world as today, opens one outbound TCP
+  connection to the relay (`HOST <room> <secret>`), and gets a **short code** = the room id (10 base32 chars, 50 bits,
+  random, e.g. `SMG-4KQ7-2MXA-9`; the relay hostname is built in, or carried as a prefix for self-hosters).
+- **Guest** ("Join a friend", in the game and in the launcher): paste the code. The mod starts a loopback listener
+  on `127.0.0.1:<port>` and connects the screen to it; each connection to it goes `JOIN <room>` to the relay, the
+  relay tells the host's control connection `INCOMING <id>`, the host opens a data connection `ACCEPT <id>` and
+  pipes it to its own LAN port. The relay then **splices bytes** between the two data connections.
+- The relay **cannot read or alter the game**: after the Minecraft login handshake the stream is encrypted with a
+  key bound to the Mojang session, so keeping Mojang authentication on (decision 3) also protects the relay path.
+  The host sees every guest as coming from the relay (no guest IP leaks to the host and the host's IP never reaches
+  the guest). No accept list: knowing the code is the join, exactly like a Minecraft address.
+- Per-guest limits (token bucket, decode bounds) are in the game as in section 5/6; the relay adds: max rooms,
+  max connections per room (default 16), max bytes/s per connection and per room, idle timeout, a cap on new
+  rooms per source IP, `HOST` secret so only the creator can claim an id.
+- Not a new protocol for the game: `Protocol.VERSION` is not involved in the relay at all.
+
+Costs and traffic:
+- Server: one small VPS (1 vCPU, 1 GB, 1-20 TB included transfer; prices checked with the user before renting). The
+  relay is I/O bound; thousands of concurrent splices fit.
+- Traffic per 8-guest session: join bursts 8 x (10-25 MB worst case) = 80-200 MB once per session (less with the
+  planet cache and, later, the delta log); steady 8 x 50 KB/s = 0.4 MB/s, both directions through the relay =
+  about 3 GB per hour of play before quantization. Far below a 1 TB/month quota for dozens of hours.
+- Work: relay server 1 day, mod client (host side + guest loopback + screens) 2.5 days, launcher field 0.5 day, abuse
+  limits and tests 1 day. Plus the transport-independent work of section 7 (steps 1-3, 6-7).
+- Operational duties: someone keeps the VPS updated and the domain paid; the relay is replaceable (the code carries
+  the host name, and `--relay` / an env var points the game elsewhere), and the game still works over LAN / direct
+  `ip:port` / Tailscale if the relay is down.
+
+What could go wrong, honestly: the relay is a single point of failure and a recurring cost; the user must rent and
+deploy it (I can write it and test it on loopback and through a throttled link, not deploy it); ISPs that block
+outbound non-443 ports are avoided by also serving the relay on 443.
+
+### 9.4 Which payloads need `Protocol.VERSION`
+None of the relay, pacing, byte counters, decode limits or token bucket changes a payload. Payloads that would:
+`PlanetAsk` (carries the guest's last edit seq, for the delta log), `Mobs` (quantized layout). Everything else stays.
+A friendlier refusal text (`HelloAck.reason`) also needs one. Bump once, at merge.
+
+### 9.5 Sources
+- Tailscale free plans (6 users, node sharing): https://tailscale.com/docs/account/manage-plans/free-plans-discounts.md ; older FAQ (3 users): https://tailscale.com/pricing/faq
+- Auth keys (who can create, 90 days, reusable / ephemeral / pre-approved / tags): https://tailscale.com/kb/1085/auth-keys/
+- Windows MSI properties (`TS_NOLAUNCH`, `TS_UNATTENDEDMODE`, `/qn`): https://tailscale.com/kb/1189/install-windows-msi
+- tsnet / libtailscale, BSD-3-Clause: https://pkg.go.dev/tailscale.com/tsnet ; https://github.com/tailscale/libtailscale
+- ZeroTier pricing (10 devices on the free plan): https://www.zerotier.com/pricing.md
+- Static Linux build tested here: https://pkgs.tailscale.com/stable/
