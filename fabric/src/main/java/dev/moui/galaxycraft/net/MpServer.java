@@ -482,6 +482,9 @@ public final class MpServer {
         /** The pilot says where the ship is. */
         void pose(UUID guest, String shipId, double[] pos, double[] rot);
 
+        /** A guest sends a ship to a planet from the map (or cancels its trip). */
+        void trip(UUID guest, String shipId, boolean cancel, dev.moui.galaxycraft.universe.UPos center, double radiusBlocks);
+
         /** A guest wants a passenger seat in a flown ship. */
         void sit(UUID guest, String shipId);
 
@@ -541,6 +544,33 @@ public final class MpServer {
             case MpPayloads.ShipDo.STAND -> sink.stand(id, d.id());
             default -> {}
         }
+    }
+
+    private static final Map<UUID, RateLimiter> tripLimits = new HashMap<>();
+
+    private static void tripDo(ServerPlayer p, MpPayloads.TripDo d) {
+        UUID id = p.getUUID();
+        ShipSink sink = shipSink;
+        if (sink == null || !members.contains(id) || d.id().length() > 96) return;
+        if (!tripLimits.computeIfAbsent(id, k -> new RateLimiter(2, 4)).allow(System.nanoTime())) return;
+        double[] v = {d.x(), d.y(), d.z(), d.radius()};
+        for (double x : v) if (!Double.isFinite(x) || Math.abs(x) > 1e18) return;
+        if (!d.cancel() && (d.radius() <= 0 || d.radius() > 1e9)) return;
+        sink.trip(id, d.id(), d.cancel(), new dev.moui.galaxycraft.universe.UPos(d.cx(), d.cy(), d.cz(), d.x(), d.y(), d.z()), d.radius());
+    }
+
+    /** A ship's trip (null: none) to every guest, or to one (to), from any thread. */
+    public static void shipTrip(String shipId, dev.moui.galaxycraft.map.Trip t, UUID to) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        var m = new MpPayloads.ShipTrip(shipId, t == null ? new byte[0] : TripCodec.encode(t));
+        srv.execute(() -> {
+            for (UUID g : members) {
+                if (to != null && !to.equals(g)) continue;
+                ServerPlayer p = player(g);
+                if (p != null) ServerPlayNetworking.send(p, m);
+            }
+        });
     }
 
     private static void shipPose(ServerPlayer p, MpPayloads.ShipPose m) {
@@ -660,6 +690,7 @@ public final class MpServer {
         if (ships != null && members.contains(id)) ships.left(id);
         shipLimits.remove(id);
         shipPoseLimits.remove(id);
+        tripLimits.remove(id);
         starLimits.remove(id);
         useLimits.remove(id);
         usedUpLimits.remove(id);
@@ -792,6 +823,7 @@ public final class MpServer {
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.StarDo.TYPE, (payload, ctx) -> starDo(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.ShipDo.TYPE, (payload, ctx) -> shipDo(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.ShipPose.TYPE, (payload, ctx) -> shipPose(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.TripDo.TYPE, (payload, ctx) -> tripDo(ctx.player(), payload));
         ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {
             if (relay != null) relay.state(ctx.player().getUUID(), payload.data(), System.nanoTime());

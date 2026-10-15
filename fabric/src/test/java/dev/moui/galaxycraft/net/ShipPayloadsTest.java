@@ -27,6 +27,15 @@ class ShipPayloadsTest {
         assertEquals(no, MpPayloadsTest.roundTrip(MpPayloads.ShipSeat.CODEC, no));
     }
 
+    @Test void tripsTravel() {
+        var t = new MpPayloads.ShipTrip("id", TripCodec.encode(TripCodecTest.trip()));
+        assertArrayEquals(t.data(), MpPayloadsTest.roundTrip(MpPayloads.ShipTrip.CODEC, t).data());
+        var none = new MpPayloads.ShipTrip("id", new byte[0]);
+        assertEquals(0, MpPayloadsTest.roundTrip(MpPayloads.ShipTrip.CODEC, none).data().length);
+        var d = new MpPayloads.TripDo("id", false, 1, -2, 3, 0.5, 4, -6, 1500);
+        assertEquals(d, MpPayloadsTest.roundTrip(MpPayloads.TripDo.CODEC, d));
+    }
+
     @Test void putAndListTravel() {
         byte[] data = ShipCodec.encode(ShipCodecTest.ship("a"));
         assertArrayEquals(data, MpPayloadsTest.roundTrip(MpPayloads.ShipPut.CODEC, new MpPayloads.ShipPut(data)).data());

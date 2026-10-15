@@ -43,6 +43,13 @@ final class MpShips {
                 (m, ctx) -> ctx.client().execute(() -> ShipClient.mirrorBays(m.id(), m.bays())));
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.ShipSeat.TYPE,
                 (m, ctx) -> ctx.client().execute(() -> ShipClient.mirrorSeat(m.id(), m.seat(), m.who())));
+        ClientPlayNetworking.registerGlobalReceiver(MpPayloads.ShipTrip.TYPE, (m, ctx) -> ctx.client().execute(() -> {
+            try {
+                MapClient.heardTrip(m.id(), m.data().length == 0 ? null : dev.moui.galaxycraft.net.TripCodec.decode(m.data()));
+            } catch (ShipCodec.Bad e) {
+                GalaxyCraft.LOG.warn("[GalaxyCraft mp] a bad trip from the host: {}", e.getMessage());
+            }
+        }));
         MpServer.setShipSink(new MpServer.ShipSink() {
             @Override
             public void place(UUID guest, ShipOps.Request r) {
@@ -62,6 +69,11 @@ final class MpShips {
             @Override
             public void pose(UUID guest, String shipId, double[] pos, double[] rot) {
                 Minecraft.getInstance().execute(() -> ShipClient.hostPose(guest, shipId, pos, rot));
+            }
+
+            @Override
+            public void trip(UUID guest, String shipId, boolean cancel, dev.moui.galaxycraft.universe.UPos center, double radiusBlocks) {
+                Minecraft.getInstance().execute(() -> ShipClient.hostTrip(guest, shipId, cancel, center, radiusBlocks));
             }
 
             @Override
@@ -117,6 +129,16 @@ final class MpShips {
     /** The host's seats changed: this seat of this ship has this player (empty: nobody). */
     static void seat(String shipId, int seat, String who) {
         MpServer.shipSeat(shipId, seat, who, null);
+    }
+
+    /** A guest's map: send a ship to a planet, or stop its trip. */
+    static void tripDo(String shipId, boolean cancel, dev.moui.galaxycraft.universe.UPos c, double radius) {
+        ClientPlayNetworking.send(new MpPayloads.TripDo(shipId, cancel, c.cx(), c.cy(), c.cz(), c.x(), c.y(), c.z(), radius));
+    }
+
+    /** The host's trips changed: everyone hears this ship's (null: no trip). */
+    static void trip(String shipId, dev.moui.galaxycraft.map.Trip t) {
+        MpServer.shipTrip(shipId, t, null);
     }
 
     static void pilot(String shipId, String who) {

@@ -572,6 +572,40 @@ public final class MpPayloads {
         }
     }
 
+    /** Server -> guest: this ship's trip on the map (a TripCodec), or none (empty): the host's sends and cancels. */
+    public record ShipTrip(String id, byte[] data) implements CustomPacketPayload {
+        public static final Type<ShipTrip> TYPE = typeOf("mp_ship_trip");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ShipTrip> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeUtf(p.id, 96).writeByteArray(p.data),
+                b -> new ShipTrip(b.readUtf(96), b.readByteArray(TripCodec.SIZE)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Guest -> server: send a ship to the planet at (center, radius in blocks) from the map, or (cancel) stop its trip.
+     */
+    public record TripDo(String id, boolean cancel, long cx, long cy, long cz, double x, double y, double z, double radius)
+            implements CustomPacketPayload {
+        public static final Type<TripDo> TYPE = typeOf("mp_trip_do");
+        public static final StreamCodec<RegistryFriendlyByteBuf, TripDo> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeUtf(p.id, 96).writeBoolean(p.cancel);
+                    b.writeLong(p.cx).writeLong(p.cy).writeLong(p.cz);
+                    b.writeDouble(p.x).writeDouble(p.y).writeDouble(p.z).writeDouble(p.radius);
+                },
+                b -> new TripDo(b.readUtf(96), b.readBoolean(), b.readLong(), b.readLong(), b.readLong(), b.readDouble(),
+                        b.readDouble(), b.readDouble(), b.readDouble()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Where a flown ship is, ten times a second: the pilot -> server (checked), server -> the others. */
     public record ShipPose(String id, double px, double py, double pz, double qx, double qy, double qz, double qw)
             implements CustomPacketPayload {
@@ -690,6 +724,8 @@ public final class MpPayloads {
         PayloadTypeRegistry.clientboundPlay().register(ShipPose.TYPE, ShipPose.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ShipBays.TYPE, ShipBays.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ShipSeat.TYPE, ShipSeat.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ShipTrip.TYPE, ShipTrip.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(TripDo.TYPE, TripDo.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ShipDo.TYPE, ShipDo.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ShipPose.TYPE, ShipPose.CODEC);
     }

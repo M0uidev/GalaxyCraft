@@ -352,6 +352,7 @@ public final class ShipClient {
             if (MapClient.courses().get(r.get().id()).isPresent() && c.forward()) {
                 MapClient.courses().remove(r.get().id()); // W takes the controls: the map's trip ends here
                 MapClient.save();
+                MpShips.trip(r.get().id(), null);
             }
             if (MapClient.courses().get(r.get().id()).isEmpty()) fly(player, frame, r.get(), c);
             if (rightClick && docked == null) {
@@ -835,6 +836,7 @@ public final class ShipClient {
         leaveNow(Minecraft.getInstance().player);
         standNow(Minecraft.getInstance().player);
         seats.clear();
+        MapClient.mirrorAll(java.util.Map.of());
         mirror = true;
         file = null;
         store = ShipStore.memory();
@@ -944,6 +946,18 @@ public final class ShipClient {
         } else dev.moui.galaxycraft.net.MpServer.shipPilotTo(guest, id, pilots.pilotOf(id));
     }
 
+    /** The host's game: a friend sends a ship to a planet from the map, or stops its trip. */
+    static void hostTrip(UUID guest, String id, boolean cancel, UPos center, double radiusBlocks) {
+        if (store == null || mirror) return;
+        MapShips.Ship ship = MAP_SHIPS.ships().stream().filter(x -> x.id().equals(id)).findFirst().orElse(null);
+        if (ship == null) return;
+        if (cancel) {
+            if (MapClient.courses().get(id).isPresent()) MapClient.cancel(ship);
+        } else if (pilots.pilotOf(id) == null) { // nobody is flying it
+            MapClient.send(ship, center, radiusBlocks);
+        }
+    }
+
     /** The host's game: a friend wants a passenger seat. */
     static void hostSit(UUID guest, String id) {
         if (store == null || mirror) return;
@@ -1006,6 +1020,7 @@ public final class ShipClient {
         if (store == null || mirror) return;
         dev.moui.galaxycraft.net.MpServer.shipList(guest, store.all());
         for (var e : pilots.all().entrySet()) dev.moui.galaxycraft.net.MpServer.shipPilotTo(guest, e.getKey(), e.getValue());
+        for (var e : MapClient.courses().all().entrySet()) dev.moui.galaxycraft.net.MpServer.shipTrip(e.getKey(), e.getValue(), guest);
         for (ShipSeats.Freed f : seats.all()) dev.moui.galaxycraft.net.MpServer.shipSeat(f.ship(), f.seat(), f.who(), guest);
         for (ShipRecord r : store.all()) {
             if (r.isPad()) continue;
@@ -1046,7 +1061,7 @@ public final class ShipClient {
     private static final MapShips MAP_SHIPS = new MapShips() {
         @Override
         public List<Ship> ships() {
-            if (store == null || mirror) return List.of(); // trips from the map are the host's for now
+            if (store == null) return List.of();
             List<Ship> out = new ArrayList<>();
             int n = 0;
             for (ShipRecord r : store.all()) {
@@ -1063,9 +1078,12 @@ public final class ShipClient {
             var p = at.minus(UPos.ZERO);
             for (ShipRecord r : store.all())
                 if (r.id().equals(shipId)) {
-                    store.put(new ShipRecord(r.id(), r.modules(), new double[] {p.x, p.y, p.z}, r.rot(), r.stage()));
+                    if (mirror) return; // the host stops it and tells us
+                    ShipRecord now = new ShipRecord(r.id(), r.modules(), new double[] {p.x, p.y, p.z}, r.rot(), r.stage());
+                    store.put(now);
                     dirty = true;
                     syncHulls();
+                    MpShips.published(now);
                 }
         }
     };
