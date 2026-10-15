@@ -318,7 +318,93 @@ public final class MpServer {
         if (!p.hasInfiniteMaterials() && stack.getItem() instanceof net.minecraft.world.item.BlockItem) stack.shrink(1);
     }
 
+    // ---- Launch Stars: the host's game owns the StarStore; this is the wire around it ----
+
+    /** The host's game, which owns the stars. Called on the server thread; it must hop to the client thread itself. */
+    public interface StarSink {
+        /** A guest asks to place, pick up or rename a star (checked: member, rate, bounded numbers; a placing already used its item up). */
+        void request(UUID guest, dev.moui.galaxycraft.launchstar.StarOps.Request r);
+
+        /** A guest entered the galaxy: it needs the whole list (answer with {@link #starList}). */
+        void joined(UUID guest);
+    }
+
+    private static volatile StarSink starSink;
+    private static final Map<UUID, RateLimiter> starLimits = new HashMap<>();
+
+    public static void setStarSink(StarSink sink) {
+        starSink = sink;
+    }
+
+    private static void starDo(ServerPlayer p, MpPayloads.StarDo d) {
+        UUID id = p.getUUID();
+        StarSink sink = starSink;
+        if (sink == null || !members.contains(id)) return;
+        if (!starLimits.computeIfAbsent(id, k -> new RateLimiter(5, 10)).allow(System.nanoTime())) return;
+        double[] v = {d.px(), d.py(), d.pz(), d.ux(), d.uy(), d.uz()};
+        for (double x : v) if (!Double.isFinite(x)) return;
+        if (d.kind() < 0 || d.kind() > 2 || (d.hand() != 0 && d.hand() != 1)) return;
+        if (d.kind() == dev.moui.galaxycraft.launchstar.StarOps.PLACE) { // the host checks the item and uses it up
+            var hand = d.hand() == 0 ? net.minecraft.world.InteractionHand.MAIN_HAND : net.minecraft.world.InteractionHand.OFF_HAND;
+            var stack = p.getItemInHand(hand);
+            if (dev.moui.galaxycraft.launchstar.LaunchStarBlocks.LAUNCH_STAR == null
+                    || !stack.is(dev.moui.galaxycraft.launchstar.LaunchStarBlocks.LAUNCH_STAR))
+                return;
+            if (!p.hasInfiniteMaterials()) stack.shrink(1);
+        }
+        sink.request(id, new dev.moui.galaxycraft.launchstar.StarOps.Request(d.kind(), d.id(), new double[] {d.px(), d.py(), d.pz()},
+                new double[] {d.ux(), d.uy(), d.uz()}, d.stage(), d.body(), d.code()));
+    }
+
+    /** One star to every guest that entered (placed or renamed), from any thread. */
+    public static void starPut(dev.moui.galaxycraft.launchstar.StarRecord r) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        byte[] data = StarCodec.encode(r);
+        srv.execute(() -> {
+            for (UUID g : members) {
+                ServerPlayer p = player(g);
+                if (p != null) ServerPlayNetworking.send(p, new MpPayloads.StarPut(data));
+            }
+        });
+    }
+
+    /** A star is gone for every guest that entered, from any thread. */
+    public static void starGone(String id) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            for (UUID g : members) {
+                ServerPlayer p = player(g);
+                if (p != null) ServerPlayNetworking.send(p, new MpPayloads.StarGone(id));
+            }
+        });
+    }
+
+    /** All the stars to one guest, from any thread. */
+    public static void starList(UUID guest, java.util.List<dev.moui.galaxycraft.launchstar.StarRecord> all) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        byte[] data = StarCodec.encodeList(all);
+        srv.execute(() -> {
+            ServerPlayer p = members.contains(guest) ? player(guest) : null;
+            if (p != null) ServerPlayNetworking.send(p, new MpPayloads.StarList(data));
+        });
+    }
+
+    /** A Launch Star item to a guest (a pickup, or a placing the host refused); none in creative. From any thread. */
+    public static void starGive(UUID guest) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            ServerPlayer p = player(guest);
+            if (p != null && !p.hasInfiniteMaterials() && dev.moui.galaxycraft.launchstar.LaunchStarBlocks.LAUNCH_STAR != null)
+                p.getInventory().add(new net.minecraft.world.item.ItemStack(dev.moui.galaxycraft.launchstar.LaunchStarBlocks.LAUNCH_STAR));
+        });
+    }
+
     private static void forget(UUID id) {
+        starLimits.remove(id);
         useLimits.remove(id);
         usedUpLimits.remove(id);
         members.remove(id);
@@ -422,6 +508,8 @@ public final class MpServer {
                 entered++;
                 members.add(id);
                 GalaxyCraft.LOG.info("[GalaxyCraft mp] {} entered the galaxy", ctx.player().getName().getString());
+                StarSink stars = starSink;
+                if (stars != null) stars.joined(id);
             }
         });
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.PlanetAsk.TYPE, (payload, ctx) -> ask(ctx.player(), payload));
@@ -440,6 +528,7 @@ public final class MpServer {
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Throw.TYPE, (payload, ctx) -> throwItem(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Where.TYPE, (payload, ctx) -> where(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.UsedUp.TYPE, (payload, ctx) -> usedUp(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.StarDo.TYPE, (payload, ctx) -> starDo(ctx.player(), payload));
         ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {
             if (relay != null) relay.state(ctx.player().getUUID(), payload.data(), System.nanoTime());
@@ -478,6 +567,7 @@ public final class MpServer {
             editBad.clear();
             useLimits.clear();
             usedUpLimits.clear();
+            starLimits.clear();
             hub = newHub();
         });
         GalaxyCraft.LOG.info("Multiplayer ready (protocol {})", Protocol.VERSION);
