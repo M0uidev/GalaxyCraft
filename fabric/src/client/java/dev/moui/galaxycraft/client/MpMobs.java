@@ -6,6 +6,7 @@ import dev.moui.galaxycraft.net.MpPayloads;
 import dev.moui.galaxycraft.net.MpServer;
 import dev.moui.galaxycraft.shadow.ShadowToads;
 import dev.moui.galaxycraft.shadow.ShadowWorld;
+import dev.moui.galaxycraft.voxel.VoxelPlanet;
 import io.netty.buffer.Unpooled;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -71,8 +72,8 @@ final class MpMobs {
     // ---- host
 
     /** Host, every client tick: sends the guests that hold the running planet what stands in the shadow. */
-    static void hostTick(int now, int planetIndex, java.util.Collection<UUID> holders) {
-        ShadowWorld.Entities es = ShadowWorld.entities();
+    static void hostTick(int now, VoxelPlanet planet, int planetIndex, java.util.Collection<UUID> holders) {
+        ShadowWorld.Entities es = ShadowWorld.entitiesOf(planet);
         if (es == null || holders.isEmpty() || now % EVERY != 0) return;
         var server = Minecraft.getInstance().getSingleplayerServer();
         if (server == null) return;

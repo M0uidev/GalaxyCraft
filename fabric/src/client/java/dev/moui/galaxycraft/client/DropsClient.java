@@ -48,6 +48,10 @@ public final class DropsClient {
         ShadowWorld.catchThrown(p != null && frame != null && ShadowWorld.available());
         boolean guest = MpUse.guest();
         for (ShadowWorld.Drop d; (d = ShadowWorld.pollDrop()) != null; ) {
+            if (d.planet() != null && d.planet() != p) { // a planet run only for guests
+                HostPlanets.foreignDrop(d);
+                continue;
+            }
             if (p == null) continue;
             if (d.planet() == p) drops.add(d.pos(), d.vel(), d.stack(), d.delay());
             else if (d.planet() == null && frame != null)

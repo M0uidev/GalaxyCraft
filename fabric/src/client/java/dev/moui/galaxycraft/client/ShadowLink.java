@@ -16,7 +16,7 @@ import org.joml.Vector3d;
  */
 public final class ShadowLink {
     /** Blocks around Mario that Minecraft runs (its simulation distance is about this). */
-    static final double RANGE = 48;
+    public static final double RANGE = 48;
     static final int FOLLOW_TICKS = 20;
 
     /** The planet in focus (the one nearest Mario): it can change from one tick to the next. */
@@ -63,7 +63,9 @@ public final class ShadowLink {
         }
         for (ShadowWorld.Change c; (c = ShadowWorld.pollChange()) != null; ) {
             Integer mine = pending.get(c.cell());
-            if (c.planet() == attached && (mine == null || mine <= c.seq())) session().applyExternal(c.cell(), c.id());
+            if (c.planet() == attached) {
+                if (mine == null || mine <= c.seq()) session().applyExternal(c.cell(), c.id());
+            } else HostPlanets.shadowChange(c);
         }
         int applied = ShadowWorld.applied();
         pending.values().removeIf(s -> s <= applied);
@@ -82,7 +84,8 @@ public final class ShadowLink {
     /** The shadow's columns under the planet's chunks near Mario, with a block more around for the halo. */
     private void follow(VoxelPlanet p, Vector3d marioGal) {
         Set<Long> columns = new HashSet<>();
-        var map = dev.moui.galaxycraft.shadow.ShadowMap.of(p, stage);
+        var map = ShadowWorld.mapOf(p); // a run kept for guests may have been named otherwise
+        if (map == null) map = dev.moui.galaxycraft.shadow.ShadowMap.of(p, stage);
         for (int chunk : session().chunksNear(marioGal, RANGE)) {
             int[] cells = p.cellsOf(chunk);
             int x0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, z0 = Integer.MAX_VALUE, z1 = Integer.MIN_VALUE;

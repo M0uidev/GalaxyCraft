@@ -5,6 +5,8 @@ import dev.moui.galaxycraft.net.EditCodec;
 import dev.moui.galaxycraft.net.MpPayloads;
 import dev.moui.galaxycraft.net.MpServer;
 import dev.moui.galaxycraft.net.UseCheck;
+import dev.moui.galaxycraft.shadow.ShadowColumns;
+import dev.moui.galaxycraft.shadow.ShadowMap;
 import dev.moui.galaxycraft.shadow.ShadowWorld;
 import dev.moui.galaxycraft.voxel.Blocks;
 import dev.moui.galaxycraft.voxel.PlanetSession;
@@ -101,8 +103,15 @@ final class HostPlanets {
             public void takeDrop(UUID guest, MpPayloads.DropTake t) {
                 Minecraft.getInstance().execute(() -> {
                     Entry e = shared.get(t.planet());
-                    if (e != null && e.holders.contains(guest) && e.planet != null && e.planet == focusPlanet()) PlanetClient.drops().take(guest, t.id());
+                    if (e == null || !e.holders.contains(guest) || e.planet == null) return;
+                    if (e.planet == focusPlanet()) PlanetClient.drops().take(guest, t.id());
+                    else takeRunDrop(guest, e, t.id());
                 });
+            }
+
+            @Override
+            public void where(UUID guest, MpPayloads.Where w) {
+                Minecraft.getInstance().execute(() -> guestWhere(guest, w));
             }
 
             @Override
@@ -147,6 +156,141 @@ final class HostPlanets {
         if (p == null || !ShadowWorld.runs(p)) return;
         if (h.kind() == 0) ShadowWorld.attack(h.entity(), guest, new Vector3d(h.lx(), h.ly(), h.lz()));
         else ShadowWorld.interact(h.entity(), guest);
+    }
+
+    // ---- guests' presence in the shadow
+
+    /** Blocks around a guest that Minecraft runs, as around the host's Mario. */
+    private static final double GUEST_RANGE = ShadowLink.RANGE;
+    private static final int GUEST_FOLLOW_TICKS = 20, GUEST_LOST_TICKS = 100;
+
+    private static final class Presence {
+        int planet = -1, heard, followed;
+        VoxelPlanet on;
+    }
+
+    private static final Map<UUID, Presence> presence = new HashMap<>();
+    /** Planets whose edits go to a shadow run kept for guests: the observer that sends them there. */
+    private static final Map<VoxelPlanet, VoxelPlanet.Listener> shadowFeeds = new HashMap<>();
+
+    /** A guest says where it is: on a planet it holds, the host's shadow runs that planet and puts a stand-in there. */
+    private static void guestWhere(UUID guest, MpPayloads.Where w) {
+        Presence pr = presence.computeIfAbsent(guest, g -> new Presence());
+        pr.heard = now;
+        if (w.planet() < 0) {
+            leave(guest, pr);
+            return;
+        }
+        Entry e = shared.get(w.planet());
+        VoxelPlanet p = e == null || !e.holders.contains(guest) ? null : e.planet;
+        if (p == null || !ShadowWorld.available()) {
+            leave(guest, pr);
+            return;
+        }
+        if (pr.on != p) {
+            leave(guest, pr);
+            pr.on = p;
+            pr.planet = w.planet();
+            pr.followed = GUEST_FOLLOW_TICKS;
+        }
+        ShadowWorld.runFor(p, "mp" + w.planet());
+        if (!shadowFeeds.containsKey(p)) { // what changes on the planet reaches the shadow that runs for the guests
+            VoxelPlanet.Listener feed = (cell, id) -> ShadowWorld.setQuiet(p, cell, id);
+            shadowFeeds.put(p, feed);
+            p.addObserver(feed);
+        }
+        Vector3d feet = new Vector3d(w.fx(), w.fy(), w.fz());
+        ShadowWorld.guest(guest, new ShadowWorld.MarioAt(p, feet, new Vector3d(w.lx(), w.ly(), w.lz()), guest));
+        ShadowMap map = ShadowWorld.mapOf(p);
+        if (map != null && ++pr.followed >= GUEST_FOLLOW_TICKS) {
+            pr.followed = 0;
+            ShadowWorld.follow(p, guest, ShadowColumns.near(p, map, feet, GUEST_RANGE), p.grid.cellAt(feet));
+        }
+    }
+
+    /** The guests standing on planet p. */
+    private static List<UUID> guestsOn(VoxelPlanet p) {
+        List<UUID> out = new ArrayList<>();
+        for (var en : presence.entrySet()) if (en.getValue().on == p) out.add(en.getKey());
+        return out;
+    }
+
+    // ---- dropped items on planets the host's game is not on
+
+    private static final Map<VoxelPlanet, dev.moui.galaxycraft.voxel.PlanetDrops<net.minecraft.world.item.ItemStack>> runDrops = new HashMap<>();
+
+    /** The shadow dropped an item on a planet that is not the host's focus: it lies there for the guests on it. */
+    static void foreignDrop(ShadowWorld.Drop d) {
+        if (d.planet() == null || guestsOn(d.planet()).isEmpty()) return;
+        runDrops.computeIfAbsent(d.planet(), k -> new dev.moui.galaxycraft.voxel.PlanetDrops<>()).add(d.pos(), d.vel(), d.stack(), d.delay());
+    }
+
+    private static void sendRunDrops(Entry e, List<UUID> there) {
+        var drops = runDrops.get(e.planet);
+        List<MpPayloads.DropItem> items = new ArrayList<>();
+        if (drops != null)
+            for (var d : drops.all()) {
+                if (items.size() >= MpPayloads.MAX_DROPS) break;
+                items.add(new MpPayloads.DropItem(d.id, (float) d.pos.x, (float) d.pos.y, (float) d.pos.z, (float) d.vel.x, (float) d.vel.y,
+                        (float) d.vel.z, d.delay, d.item));
+            }
+        MpPayloads.Drops body = new MpPayloads.Drops(e.index, items);
+        for (UUID g : there) MpServer.drops(g, body);
+    }
+
+    /** A guest stepped on a drop of a planet that is not the host's focus. */
+    private static void takeRunDrop(UUID guest, Entry e, int id) {
+        var drops = runDrops.get(e.planet);
+        if (drops == null) return;
+        for (var it = drops.all().iterator(); it.hasNext(); ) {
+            var d = it.next();
+            if (d.id != id) continue;
+            if (d.delay > 0) return;
+            it.remove();
+            Vector3d at = new Vector3d(d.pos);
+            ShadowWorld.give(guest, d.item, left -> {
+                var again = runDrops.get(e.planet);
+                if (again != null) again.add(at, new Vector3d(), left, DropsClient.RETRY_DELAY);
+            });
+            return;
+        }
+    }
+
+    private static void leave(UUID guest, Presence pr) {
+        if (pr.on != null) {
+            ShadowWorld.follow(pr.on, guest, java.util.Set.of(), -1);
+            VoxelPlanet was = pr.on;
+            pr.on = null;
+            pr.planet = -1;
+            ShadowWorld.guest(guest, null);
+            boolean others = false;
+            for (Presence o : presence.values()) others |= o.on == was;
+            VoxelPlanet.Listener feed = others ? null : shadowFeeds.remove(was);
+            if (feed != null) was.removeObserver(feed);
+        } else {
+            ShadowWorld.guest(guest, null);
+        }
+    }
+
+    /** Client tick: a guest that stopped saying where it is has left the planet. */
+    private static void presenceTick() {
+        for (var en : presence.entrySet())
+            if (en.getValue().on != null && now - en.getValue().heard > GUEST_LOST_TICKS) leave(en.getKey(), en.getValue());
+    }
+
+    /** The shadow changed a cell of a planet that runs only for guests (the host's own goes through ShadowLink). */
+    static void shadowChange(ShadowWorld.Change c) {
+        for (Entry e : shared.values()) {
+            if (e.planet != c.planet() || e.planet == null) continue;
+            PlanetSession live = liveOf(e.index);
+            if (live != null && live.planet() != e.planet) live = null;
+            if (live != null) live.applyShared(c.cell(), c.id());
+            else {
+                e.planet.set(c.cell(), c.id());
+                e.editedTick = now;
+            }
+            return;
+        }
     }
 
     /** A guest's Q: the item leaves its inventory and lies on the planet where it was thrown (if the shadow runs it; else it stays in hand). */
@@ -321,13 +465,20 @@ final class HostPlanets {
     /** End of a client tick: what changed goes out, one message per planet and author, in the host's order. */
     static void tick() {
         now++;
-        dev.moui.galaxycraft.shadow.ShadowWorld.Entities running = dev.moui.galaxycraft.shadow.ShadowWorld.entities();
-        if (running != null)
-            for (Entry e : shared.values())
-                if (e.planet == running.planet() && !e.holders.isEmpty()) {
-                    MpMobs.hostTick(now, e.index, e.holders);
-                    if (now % 4 == 0) PlanetClient.drops().hostSend(e.index, e.holders);
-                }
+        presenceTick();
+        for (Entry e : shared.values()) { // what runs on each planet goes to the guests standing on it
+            if (e.planet == null) continue;
+            List<UUID> there = guestsOn(e.planet);
+            if (there.isEmpty()) {
+                runDrops.remove(e.planet);
+                continue;
+            }
+            MpMobs.hostTick(now, e.planet, e.index, there);
+            if (now % 4 != 0) continue;
+            if (e.planet == focusPlanet()) PlanetClient.drops().hostSend(e.index, there);
+            else sendRunDrops(e, there);
+        }
+        for (var d : runDrops.entrySet()) d.getValue().tick(d.getKey());
         List<Map.Entry<Key, Batch>> out;
         synchronized (LOCK) {
             if (batches.isEmpty()) out = List.of();

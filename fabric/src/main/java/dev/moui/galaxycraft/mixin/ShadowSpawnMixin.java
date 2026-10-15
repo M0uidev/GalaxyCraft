@@ -19,6 +19,6 @@ abstract class ShadowSpawnMixin {
     @ModifyVariable(method = "spawnForChunk", at = @At("HEAD"), argsOnly = true)
     private static List<MobCategory> galaxycraft$planetCaps(List<MobCategory> categories, ServerLevel level, LevelChunk chunk,
             NaturalSpawner.SpawnState state) {
-        return ShadowWorld.isShadow(level) ? ShadowWorld.underCap(categories) : categories;
+        return ShadowWorld.isShadow(level) ? ShadowWorld.underCap(categories, chunk.getPos().getMinBlockZ()) : categories;
     }
 }

@@ -846,6 +846,7 @@ public final class PlanetClient {
             // Minecraft's outline on the block the clicks would act on, only with something in hand.
             session.setOutline(item && target == null ? session.target(eye, look, bucketFirst(player)) : -1);
             // Mario stands where he is in the shadow too, so mobs chase him and his blows land.
+            if (MpUse.guest()) MpUse.where(indexOf(session), session.localOf(world.queryPos()), new Vector3d(look));
             ShadowWorld.mario(new ShadowWorld.MarioAt(session.planet(), session.localOf(world.queryPos()), new Vector3d(look),
                     player.getUUID()));
             boolean hit = false;
@@ -890,6 +891,7 @@ public final class PlanetClient {
         }
         else {
             ShadowWorld.mario(null);
+            if (MpUse.guest()) MpUse.whereNone();
             mining.stop();
             focus.setCrack(-1, -1, null);
         }

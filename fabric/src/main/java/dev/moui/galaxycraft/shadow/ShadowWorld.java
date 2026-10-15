@@ -76,6 +76,18 @@ public final class ShadowWorld {
     static final int BLOCK_DROP_DELAY = 10, THROWN_DELAY = 40;
 
     private static final ConcurrentLinkedQueue<Consumer<ServerLevel>> ops = new ConcurrentLinkedQueue<>();
+
+    /** A request about one planet: it runs on that planet's run (the host's own if that planet is not running). */
+    private record Tagged(VoxelPlanet planet, Consumer<ServerLevel> op) implements Consumer<ServerLevel> {
+        @Override
+        public void accept(ServerLevel level) {
+            op.accept(level);
+        }
+    }
+
+    private static void opOn(VoxelPlanet p, Consumer<ServerLevel> op) {
+        ops.add(new Tagged(p, op));
+    }
     private static final ConcurrentLinkedQueue<Change> changes = new ConcurrentLinkedQueue<>();
     private static final ConcurrentLinkedQueue<Runnable> toClient = new ConcurrentLinkedQueue<>();
     private static final ConcurrentLinkedQueue<Drop> drops = new ConcurrentLinkedQueue<>();
@@ -109,6 +121,10 @@ public final class ShadowWorld {
         final Set<Integer> liveCells = new HashSet<>();
         /** Mobs that may despawn, by category, as of the last tick. */
         final int[] mobCounts = new int[net.minecraft.world.entity.MobCategory.values().length];
+        /** The columns each player on this planet wants kept running (the host's under HOST). */
+        final java.util.Map<UUID, Set<Long>> wanted = new java.util.HashMap<>();
+        /** The guests' stand-ins on this planet. */
+        final java.util.Map<UUID, MarioProxy> guestProxies = new java.util.HashMap<>();
 
         Run(VoxelPlanet planet) {
             this.planet = planet;
@@ -119,6 +135,23 @@ public final class ShadowWorld {
     private static final java.util.Map<VoxelPlanet, Run> runs = new java.util.concurrent.ConcurrentHashMap<>();
     private static volatile Run primary = new Run(null);
     private static Run cur = primary;
+
+    /** The run whose strip of the shadow holds this z (any thread); null if none. */
+    private static Run runAtZ(double z) {
+        int bz = (int) Math.floor(z);
+        for (Run r : runs.values()) {
+            ShadowMap m = r.map;
+            if (m != null && m.inStrip(bz)) return r;
+        }
+        return null;
+    }
+
+    /** Server thread: works on run r (null: leaves the current one) until restore(prev). */
+    private static Run work(Run r) {
+        Run prev = cur;
+        if (r != null) cur = r;
+        return prev;
+    }
 
     private static BlockPos writingPos;
     private static volatile MarioAt marioAt;
@@ -143,6 +176,12 @@ public final class ShadowWorld {
 
     public static Entities entities() {
         return primary.entities;
+    }
+
+    /** The entities of planet p, if it runs (any planet, not only the host's), as of the last server tick. */
+    public static Entities entitiesOf(VoxelPlanet p) {
+        Run r = p == null ? null : runs.get(p);
+        return r == null ? null : r.entities;
     }
 
     /** Whether a mob (or any creature of the shadow) stands in this cell of p: no block goes there. */
@@ -199,15 +238,16 @@ public final class ShadowWorld {
 
     /** Server thread: Mario's stand-in passed a blow on to the player; the game makes Mario feel it. */
     static void hurt(net.minecraft.world.damagesource.DamageSource source, Entity proxy) {
-        if (cur.map == null) return;
+        Run run = runAtZ(proxy.getZ());
+        if (run == null || proxy != run.proxy || run.map == null) return; // only the host's own stand-in is felt by the host
         Vec3 from = source.getSourcePosition();
-        if (from == null) from = cur.proxy.position().add(cur.proxy.getLookAngle()); // no attacker: from in front
-        double[] f = cur.map.frame(from.x, from.y, from.z);
+        if (from == null) from = proxy.position().add(proxy.getLookAngle()); // no attacker: from in front
+        double[] f = run.map.frame(from.x, from.y, from.z);
         if (f == null) return;
         int kind = source.is(net.minecraft.tags.DamageTypeTags.IS_EXPLOSION) ? dev.moui.galaxycraft.proto.Layout.HURT_EXPLOSION
                 : source.is(net.minecraft.tags.DamageTypeTags.IS_FIRE) ? dev.moui.galaxycraft.proto.Layout.HURT_FIRE
                 : dev.moui.galaxycraft.proto.Layout.HURT_HIT;
-        hurts.add(new Hurt(cur.planet, new org.joml.Vector3d(f[0], f[1], f[2]), kind));
+        hurts.add(new Hurt(run.planet, new org.joml.Vector3d(f[0], f[1], f[2]), kind));
     }
 
     /** Mario's stand-in in the shadow, for tests: where, game mode; "none" if there is none. */
@@ -247,7 +287,7 @@ public final class ShadowWorld {
             if (target == null || p == null || !target.isAlive()) return;
             if (target instanceof net.minecraft.world.entity.vehicle.minecart.AbstractMinecart
                     || target instanceof net.minecraft.world.entity.vehicle.boat.AbstractBoat) {
-                cur.riding = target;
+                if (isHostPlayer(p)) cur.riding = target;
                 return;
             }
             p.interactOn(target, InteractionHand.MAIN_HAND, target.position());
@@ -260,7 +300,7 @@ public final class ShadowWorld {
         // A rocket boosting the player's elytra pushes the player, where it is: not a shot from Mario.
         if (p instanceof net.minecraft.world.entity.projectile.FireworkRocketEntity && owner.isFallFlying()) return false;
         ServerLevel shadow = level.getServer().getLevel(KEY);
-        MarioProxy at = cur.proxy;
+        MarioProxy at = standIn(owner.getUUID());
         if (shadow == null || at == null || at.isRemoved()) return false;
         Entity copy = p.getType().create(shadow, net.minecraft.world.entity.EntitySpawnReason.TRIGGERED);
         if (!(copy instanceof net.minecraft.world.entity.projectile.Projectile moved)) return false;
@@ -286,28 +326,39 @@ public final class ShadowWorld {
         ops.add(level -> {
             Entity target = level.getEntity(entityId);
             ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(player);
-            if (target == null || p == null || cur.proxy == null || cur.proxy.isRemoved()) return;
+            MarioProxy proxy = standIn(player);
+            Run there = target == null ? null : runAtZ(target.getZ());
+            if (target == null || p == null || proxy == null || proxy.isRemoved() || there == null) return;
             // The blow is the player's: what is in hand (the same stack, so it wears out) and how charged it is.
-            cur.proxy.setItemInHand(InteractionHand.MAIN_HAND, p.getMainHandItem());
-            cur.proxy.getAttributes().assignAllValues(p.getAttributes()); // the weapon's damage and speed
-            ((dev.moui.galaxycraft.mixin.LivingEntityAccessor) (Object) cur.proxy).galaxycraft$setAttackStrengthTicker(
+            proxy.setItemInHand(InteractionHand.MAIN_HAND, p.getMainHandItem());
+            proxy.getAttributes().assignAllValues(p.getAttributes()); // the weapon's damage and speed
+            ((dev.moui.galaxycraft.mixin.LivingEntityAccessor) (Object) proxy).galaxycraft$setAttackStrengthTicker(
                     ((dev.moui.galaxycraft.mixin.LivingEntityAccessor) p).galaxycraft$attackStrengthTicker());
-            Vec3 to = target.position().subtract(cur.proxy.position());
-            double[] f = look == null || cur.map == null ? null : cur.map.frame(target.getX(), target.getY(), target.getZ());
+            Vec3 to = target.position().subtract(proxy.position());
+            double[] f = look == null || there.map == null ? null : there.map.frame(target.getX(), target.getY(), target.getZ());
             if (f != null) { // the look in the shadow's directions there: cur.planet = x ax + y ay + z az
                 org.joml.Vector3d d = new org.joml.Matrix3d(f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11]).invert()
                         .transform(new org.joml.Vector3d(look));
                 if (Double.isFinite(d.x) && Double.isFinite(d.z) && d.x * d.x + d.z * d.z > 1e-9) to = new Vec3(d.x, 0, d.z);
             }
-            cur.proxy.setYRot((float) Math.toDegrees(Math.atan2(-to.x, to.z)));
-            cur.proxy.attack(target);
+            proxy.setYRot((float) Math.toDegrees(Math.atan2(-to.x, to.z)));
+            proxy.attack(target);
             p.resetAttackStrengthTicker();
-            cur.proxy.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+            proxy.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
         });
     }
     /** Whether the shadow runs this planet (a guest's block use there can be done; elsewhere it passes). Any thread. */
     public static boolean runs(VoxelPlanet p) {
         return available && p != null && runs.containsKey(p);
+    }
+
+    /** A player's stand-in in the shadow: a guest's own, else the host's Mario (null if none). */
+    private static MarioProxy standIn(UUID player) {
+        for (Run r : runs.values()) {
+            MarioProxy g = r.guestProxies.get(player);
+            if (g != null) return g;
+        }
+        return primary.proxy;
     }
 
     /** Whether sp is the player Mario's stand-in follows (the host's own); a guest's has none yet. */
@@ -367,7 +418,7 @@ public final class ShadowWorld {
 
     /** A leaf the planet says no log holds: out, with the drops Minecraft gives a decayed leaf (saplings, sticks, apples). */
     public static void decay(VoxelPlanet p, int cell) {
-        ops.add(level -> {
+        opOn(p, level -> {
             if (p != cur.planet || cur.map == null) return;
             BlockPos pos = new BlockPos(cur.map.x(cell), cur.map.y(cell), cur.map.z(cell));
             mirrorNow(level, pos);
@@ -383,7 +434,7 @@ public final class ShadowWorld {
      * (a door's other half, ice to water), the tool worn, and outside creative its drops.
      */
     public static void destroy(VoxelPlanet p, int cell, UUID player) {
-        ops.add(level -> {
+        opOn(p, level -> {
             ServerPlayer sp = server.getPlayerList().getPlayer(player);
             if (p != cur.planet || cur.map == null || sp == null) return;
             BlockPos pos = new BlockPos(cur.map.x(cell), cur.map.y(cell), cur.map.z(cell));
@@ -425,7 +476,7 @@ public final class ShadowWorld {
 
     /** The Toads of p to run in the shadow (replaces the list; any thread). */
     public static void wantToads(VoxelPlanet p, List<ShadowToads.Wanted> toads) {
-        ops.add(level -> {
+        opOn(p, level -> {
             if (p == cur.planet) ShadowToads.want(toads);
         });
     }
@@ -440,9 +491,17 @@ public final class ShadowWorld {
         ops.add(level -> {
             Run old = primary;
             if (old.planet != null && old.planet != p) {
-                cur = old;
-                release(level);
-                runs.remove(old.planet);
+                if (guestsOn(old.planet)) { // guests are still there: the run stays, without the host
+                    old.wanted.remove(HOST);
+                    if (old.proxy != null && !old.proxy.isRemoved()) level.removePlayerImmediately(old.proxy, Entity.RemovalReason.DISCARDED);
+                    old.proxy = null;
+                    old.riding = null;
+                    old.seat = null;
+                } else {
+                    cur = old;
+                    release(level);
+                    runs.remove(old.planet);
+                }
             }
             ShadowToads.release(level);
             Run run = p == null ? new Run(null) : runs.get(p);
@@ -458,17 +517,30 @@ public final class ShadowWorld {
 
     /** The columns to keep running (ChunkPos longs) and the cell Mario is in. */
     public static void follow(VoxelPlanet p, Set<Long> columns, int marioCell) {
-        ops.add(level -> {
+        follow(p, HOST, columns, marioCell);
+    }
+
+    /** Who the host's own presence is, among the players a run keeps columns for. */
+    public static final UUID HOST = new UUID(0, 0);
+
+    /** As above for one player (the host, or a guest): the run keeps the columns of all the players on it. */
+    public static void follow(VoxelPlanet p, UUID who, Set<Long> columns, int marioCell) {
+        opOn(p, level -> {
             if (p != cur.planet || cur.map == null) return;
-            if (marioCell >= 0) cur.mario = new BlockPos(cur.map.x(marioCell), cur.map.y(marioCell), cur.map.z(marioCell));
+            if (marioCell >= 0 && HOST.equals(who))
+                cur.mario = new BlockPos(cur.map.x(marioCell), cur.map.y(marioCell), cur.map.z(marioCell));
+            if (columns.isEmpty()) cur.wanted.remove(who);
+            else cur.wanted.put(who, columns);
+            Set<Long> all = new HashSet<>();
+            for (Set<Long> c : cur.wanted.values()) all.addAll(c);
             for (Long c : new HashSet<>(cur.forced))
-                if (!columns.contains(c)) {
+                if (!all.contains(c)) {
                     level.setChunkForced(ChunkPos.getX(c), ChunkPos.getZ(c), false);
                     cur.forced.remove(c);
                     cur.mirrored.remove(c);
                     if (c.equals(cur.mirroring)) cur.mirroring = null;
                 }
-            for (Long c : columns)
+            for (Long c : all)
                 if (cur.forced.add(c)) {
                     level.setChunkForced(ChunkPos.getX(c), ChunkPos.getZ(c), true);
                     cur.toMirror.add(c);
@@ -476,15 +548,55 @@ public final class ShadowWorld {
         });
     }
 
+    /** Guests' places (client thread): who is where on which planet; null leaves. */
+    private static final java.util.concurrent.ConcurrentHashMap<UUID, MarioAt> guestAt = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static void guest(UUID guest, MarioAt at) {
+        if (at == null) guestAt.remove(guest);
+        else guestAt.put(guest, at);
+    }
+
+    /** Makes planet p run (for a guest on it) if it does not: key names its strip of the shadow. */
+    public static void runFor(VoxelPlanet p, String key) {
+        ops.add(level -> {
+            if (runs.containsKey(p)) return;
+            Run r = new Run(p);
+            r.map = ShadowMap.of(p, key);
+            runs.put(p, r);
+        });
+    }
+
+    /** Whether any guest is on p (any thread). */
+    public static boolean guestsOn(VoxelPlanet p) {
+        for (MarioAt at : guestAt.values()) if (at.planet() == p) return true;
+        return false;
+    }
+
     /** The client changed a cell (its change number seq). */
     public static void set(VoxelPlanet p, int cell, int id, int seq) {
-        ops.add(level -> {
+        opOn(p, level -> {
             applied = seq;
             if (p != cur.planet || cur.map == null) return;
             BlockState s = state(id);
             write(level, new BlockPos(cur.map.x(cell), cur.map.y(cell), cur.map.z(cell)), s, Block.UPDATE_ALL);
             for (int[] h : cur.map.halos(cell)) write(level, new BlockPos(h[0], h[1], h[2]), s, Block.UPDATE_ALL);
         });
+    }
+
+    /** A cell of a planet changed by someone else than the client's own session (a guest's edit on a planet run for guests). */
+    public static void setQuiet(VoxelPlanet p, int cell, int id) {
+        opOn(p, level -> {
+            if (p != cur.planet || cur.map == null) return;
+            BlockState s = state(id);
+            write(level, new BlockPos(cur.map.x(cell), cur.map.y(cell), cur.map.z(cell)), s, Block.UPDATE_ALL);
+            for (int[] h : cur.map.halos(cell)) write(level, new BlockPos(h[0], h[1], h[2]), s, Block.UPDATE_ALL);
+        });
+    }
+
+    /** The shadow map of a planet that runs, or null (any thread). */
+    public static ShadowMap mapOf(VoxelPlanet p) {
+        Run r = p == null ? null : runs.get(p);
+        return r == null ? null : r.map;
     }
 
     /**
@@ -501,7 +613,7 @@ public final class ShadowWorld {
     /** As above; onUsed runs on the client thread when the block or the item took the click (a guest is told so). */
     public static void use(VoxelPlanet p, int cell, int face, Vec3 hit, UUID player, InteractionHand hand, Runnable onPass,
             Runnable onUsed) {
-        ops.add(level -> {
+        opOn(p, level -> {
             ServerPlayer sp = server.getPlayerList().getPlayer(player);
             if (p != cur.planet || cur.map == null || sp == null) {
                 toClient.add(onPass);
@@ -579,7 +691,7 @@ public final class ShadowWorld {
 
     /** A sign the player just put down: its editor opens on the front, as Minecraft's sign item opens it. */
     public static void placedSign(VoxelPlanet p, int cell, UUID player) {
-        ops.add(level -> {
+        opOn(p, level -> {
             if (p != cur.planet || cur.map == null) return;
             BlockPos pos = new BlockPos(cur.map.x(cell), cur.map.y(cell), cur.map.z(cell));
             ServerPlayer sp = level.getServer().getPlayerList().getPlayer(player);
@@ -676,7 +788,8 @@ public final class ShadowWorld {
         }
         cur = primary;
         for (Consumer<ServerLevel> op; (op = ops.poll()) != null; ) {
-            cur = primary;
+            Run target = op instanceof Tagged t && t.planet() != null ? runs.get(t.planet()) : null;
+            cur = target != null ? target : primary;
             op.accept(level);
         }
         // Monsters by the gamerules as they are now: Minecraft re-reads them only when difficulty
@@ -688,6 +801,7 @@ public final class ShadowWorld {
             mirrorSome(level);
             flushEdges(level);
             moveProxy(level);
+            moveGuestProxies(level);
             if (mine) animate(level);
             if (mine)
                 ShadowToads.tick(level, cur.planet, cur.map, cur.mirrored, cur.proxy == null || cur.proxy.isRemoved() ? null : cur.proxy.getEyePosition());
@@ -699,6 +813,12 @@ public final class ShadowWorld {
             for (LiveBlocks.Live l : blocks) cur.liveCells.add(l.cell());
             cur.live = cur.map == null ? null : new LiveBlocks.Snapshot(cur.planet, cur.map, List.copyOf(blocks));
         }
+        for (Run run : new ArrayList<>(runs.values()))
+            if (run != primary && run.wanted.isEmpty() && run.guestProxies.isEmpty() && !guestsOn(run.planet)) { // nobody is there any more
+                cur = run;
+                release(level);
+                runs.remove(run.planet);
+            }
         cur = primary;
     }
 
@@ -767,6 +887,52 @@ public final class ShadowWorld {
         ride(level, p);
     }
 
+    /** The guests on this run's planet: each has a stand-in where it is, so mobs see and chase it. */
+    private static void moveGuestProxies(ServerLevel level) {
+        for (var it = cur.guestProxies.entrySet().iterator(); it.hasNext(); ) {
+            var en = it.next();
+            MarioAt at = guestAt.get(en.getKey());
+            if (at == null || at.planet() != cur.planet) {
+                if (!en.getValue().isRemoved()) level.removePlayerImmediately(en.getValue(), Entity.RemovalReason.DISCARDED);
+                it.remove();
+            }
+        }
+        if (cur.map == null) return;
+        for (var en : guestAt.entrySet()) {
+            MarioAt at = en.getValue();
+            if (at.planet() != cur.planet) continue;
+            ServerPlayer p = level.getServer().getPlayerList().getPlayer(en.getKey());
+            int cell = p == null ? -1 : cur.map.grid.cellAt(at.feet());
+            MarioProxy px = cur.guestProxies.get(en.getKey());
+            if (cell < 0) {
+                if (px != null && px.gameMode() != net.minecraft.world.level.GameType.SPECTATOR) {
+                    px.setGameMode(net.minecraft.world.level.GameType.SPECTATOR);
+                    level.getChunkSource().move(px);
+                }
+                continue;
+            }
+            if (px == null || px.isRemoved() || px.level() != level) {
+                px = new MarioProxy(level, en.getKey());
+                cur.guestProxies.put(en.getKey(), px);
+                level.addNewPlayer(px);
+            }
+            px.follow(en.getKey());
+            net.minecraft.world.level.GameType mode = p.isAlive() ? p.gameMode() : net.minecraft.world.level.GameType.SPECTATOR;
+            if (px.gameMode() != mode) px.setGameMode(mode);
+            org.joml.Vector3d m = CellSpace.local(cur.map.grid, cell, at.feet());
+            org.joml.Vector3d d = CellSpace.direction(cur.map.grid, cell, at.look());
+            float yaw = (float) Math.toDegrees(Math.atan2(-d.x, d.z)), pitch = (float) -Math.toDegrees(Math.asin(Math.clamp(d.y, -1, 1)));
+            px.snapTo(cur.map.x(cell) + m.x, cur.map.y(cell) + m.y, cur.map.z(cell) + m.z, yaw, pitch);
+            px.setYHeadRot(yaw);
+            level.getChunkSource().move(px);
+            if (p.isAlive()) px.setHealth(p.getHealth());
+            for (Entity e : level.getEntities(px, px.getBoundingBox().inflate(0.2))) {
+                if (e.isPushable()) e.push(px);
+                if (e instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow) e.playerTouch(p);
+            }
+        }
+    }
+
     /** Mario on a minecart or boat: pushed or paddled by the movement keys, off with sneak. */
     private static void ride(ServerLevel level, ServerPlayer p) {
         Steer s = steer;
@@ -797,6 +963,18 @@ public final class ShadowWorld {
 
     /** One particle made in the shadow at (x, y, z) moving by (vx, vy, vz): to the planet's space. */
     public static void particle(net.minecraft.core.particles.ParticleOptions options, double x, double y, double z, double vx,
+            double vy, double vz) {
+        Run run = runAtZ(z);
+        if (run == null) return;
+        Run prev = work(run);
+        try {
+            particle0(options, x, y, z, vx, vy, vz);
+        } finally {
+            cur = prev;
+        }
+    }
+
+    private static void particle0(net.minecraft.core.particles.ParticleOptions options, double x, double y, double z, double vx,
             double vy, double vz) {
         if (cur.map == null || particles.size() >= MAX_PARTICLES) return;
         double[] f = cur.map.frame(x, y, z);
@@ -852,11 +1030,13 @@ public final class ShadowWorld {
      * The categories still under their cap on this planet: Minecraft's caps (per 17 × 17 chunks)
      * times the planet's columns near Mario over 289.
      */
-    public static List<net.minecraft.world.entity.MobCategory> underCap(List<net.minecraft.world.entity.MobCategory> categories) {
-        int columns = Math.max(1, cur.mirrored.size());
+    public static List<net.minecraft.world.entity.MobCategory> underCap(List<net.minecraft.world.entity.MobCategory> categories, int chunkZ) {
+        Run run = runAtZ(chunkZ);
+        if (run == null) return categories;
+        int columns = Math.max(1, run.mirrored.size());
         List<net.minecraft.world.entity.MobCategory> out = new ArrayList<>(categories.size());
         for (var c : categories)
-            if (cur.mobCounts[c.ordinal()] < Math.max(1, c.getMaxInstancesPerChunk() * columns / 289)) out.add(c);
+            if (run.mobCounts[c.ordinal()] < Math.max(1, c.getMaxInstancesPerChunk() * columns / 289)) out.add(c);
         return out;
     }
 
@@ -865,6 +1045,7 @@ public final class ShadowWorld {
         List<Entity> out = new ArrayList<>();
         java.util.Arrays.fill(cur.mobCounts, 0);
         for (Entity e : level.getAllEntities()) {
+            if (!cur.map.inStrip((int) Math.floor(e.getZ()))) continue; // another planet's
             if (e instanceof Mob mob && !mob.isPersistenceRequired() && !mob.requiresCustomPersistence() && !e.isRemoved())
                 cur.mobCounts[e.getType().getCategory().ordinal()]++;
             // Dying mobs stay until Minecraft removes them: they fall over first.
@@ -917,6 +1098,9 @@ public final class ShadowWorld {
     }
 
     private static void release(ServerLevel level) {
+        for (MarioProxy g : cur.guestProxies.values()) if (!g.isRemoved()) level.removePlayerImmediately(g, Entity.RemovalReason.DISCARDED);
+        cur.guestProxies.clear();
+        cur.wanted.clear();
         if (cur.proxy != null && !cur.proxy.isRemoved()) level.removePlayerImmediately(cur.proxy, Entity.RemovalReason.DISCARDED);
         cur.proxy = null;
         cur.riding = null;
@@ -1104,6 +1288,16 @@ public final class ShadowWorld {
 
     /** Whether Minecraft may change this position: a cell of the running planet, not halo, gaps or other planets. */
     public static boolean writable(BlockPos pos) {
+        Run run = runAtZ(pos.getZ());
+        Run prev = work(run);
+        try {
+            return writable0(pos);
+        } finally {
+            cur = prev;
+        }
+    }
+
+    private static boolean writable0(BlockPos pos) {
         if (pos.equals(writingPos) || pos.getZ() <= SCRATCH_Z) return true;
         return cur.map != null && cur.map.cell(pos.getX(), pos.getY(), pos.getZ()) >= 0;
     }
@@ -1116,6 +1310,17 @@ public final class ShadowWorld {
 
     /** A block of the shadow changed: back to the planet, unless GalaxyCraft itself wrote it there. */
     public static void changed(BlockPos pos, BlockState now) {
+        Run run = runAtZ(pos.getZ());
+        if (run == null) return;
+        Run prev = work(run);
+        try {
+            changed0(pos, now);
+        } finally {
+            cur = prev;
+        }
+    }
+
+    private static void changed0(BlockPos pos, BlockState now) {
         if (cur.map == null || pos.equals(writingPos)) return;
         int cell = cur.map.cell(pos.getX(), pos.getY(), pos.getZ());
         if (cell < 0) return;
@@ -1128,6 +1333,16 @@ public final class ShadowWorld {
      * dropped in the shadow; one thrown near a player while catchThrown).
      */
     public static boolean catchItem(ServerLevel level, net.minecraft.world.entity.item.ItemEntity e) {
+        Run run = isShadow(level) ? runAtZ(e.getZ()) : null;
+        Run prev = work(run);
+        try {
+            return catchItem0(level, e);
+        } finally {
+            cur = prev;
+        }
+    }
+
+    private static boolean catchItem0(ServerLevel level, net.minecraft.world.entity.item.ItemEntity e) {
         Vec3 v = e.getDeltaMovement();
         if (isShadow(level)) {
             if (cur.map == null) return true;
@@ -1199,7 +1414,8 @@ public final class ShadowWorld {
 
     /** Where Mario is in the shadow: sounds made there are heard from this far away. */
     public static double distanceToMario(double x, double y, double z) {
-        BlockPos m = primary.mario;
+        Run run = runAtZ(z);
+        BlockPos m = (run == null ? primary : run).mario;
         return Math.sqrt(m.distToCenterSqr(x, y, z));
     }
 }

@@ -52,11 +52,30 @@ final class MpUse {
         ClientPlayNetworking.send(new MpPayloads.UsedUp(hand == InteractionHand.MAIN_HAND ? 0 : 1));
     }
 
+    private static int whereTick;
+    private static boolean whereSent;
+
+    /** A guest on a planet says where it stands and looks (planet space), ten times a second. */
+    static void where(int planet, org.joml.Vector3d feet, org.joml.Vector3d look) {
+        if (++whereTick % 2 != 0) return;
+        whereSent = true;
+        ClientPlayNetworking.send(new MpPayloads.Where(planet, (float) feet.x, (float) feet.y, (float) feet.z, (float) look.x,
+                (float) look.y, (float) look.z));
+    }
+
+    /** Off the planets (space, a menu): the host stops running a stand-in for this guest. Once. */
+    static void whereNone() {
+        if (!whereSent) return;
+        whereSent = false;
+        ClientPlayNetworking.send(new MpPayloads.Where(-1, 0, 0, 0, 0, 1, 0));
+    }
+
     static void tick() {
         if (book.expire(++tick) > 0) dev.moui.galaxycraft.GalaxyCraft.LOG.warn("[GalaxyCraft mp] a block use got no answer from the host");
     }
 
     static void reset() {
         book.clear();
+        whereSent = false;
     }
 }

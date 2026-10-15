@@ -237,6 +237,27 @@ public final class MpPayloads {
         }
     }
 
+    /** Guest -> server, ~10 Hz while on a planet: which one (-1: none), and where it stands and looks there (planet space). */
+    public record Where(int planet, float fx, float fy, float fz, float lx, float ly, float lz) implements CustomPacketPayload {
+        public static final Type<Where> TYPE = typeOf("mp_where");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Where> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.planet + 1);
+                    b.writeFloat(p.fx);
+                    b.writeFloat(p.fy);
+                    b.writeFloat(p.fz);
+                    b.writeFloat(p.lx);
+                    b.writeFloat(p.ly);
+                    b.writeFloat(p.lz);
+                },
+                b -> new Where(b.readVarInt() - 1, b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Server -> players: that player left. */
     public record Gone(UUID id) implements CustomPacketPayload {
         public static final Type<Gone> TYPE = typeOf("mp_gone");
@@ -412,6 +433,7 @@ public final class MpPayloads {
         PayloadTypeRegistry.clientboundPlay().register(Drops.TYPE, Drops.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(DropTake.TYPE, DropTake.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(Break.TYPE, Break.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(Where.TYPE, Where.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(Throw.TYPE, Throw.CODEC);
     }
 }

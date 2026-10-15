@@ -21,6 +21,11 @@ final class MarioProxy extends FakePlayer {
         super(level, PROFILE);
     }
 
+    /** A guest's stand-in: its own profile, so several can stand in one level. */
+    MarioProxy(ServerLevel level, UUID guest) {
+        super(level, new GameProfile(UUID.nameUUIDFromBytes(("galaxycraft-mario-" + guest).getBytes(java.nio.charset.StandardCharsets.UTF_8)), "Mario"));
+    }
+
     void follow(UUID player) {
         real = player;
     }
