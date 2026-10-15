@@ -110,12 +110,20 @@ final class EntityClient {
 
     // ---- live blocks (LiveBlocks): drawn by their own renderer, not baked ----
 
+    /** The live blocks to draw: the host's shadow's, or (a guest has no shadow) the ones the host told. */
+    private LiveBlocks.Snapshot liveNow() {
+        LiveBlocks.Snapshot own = ShadowWorld.live();
+        if (own != null || !MpUse.guest() || !session().active()) return own;
+        int index = PlanetClient.catalogIndex(session());
+        return index < 0 ? null : MpLive.snapshot(index, session().planet(), PlanetClient.blocks());
+    }
+
     /** The planet whose cells are hidden now (null: none). */
     private dev.moui.galaxycraft.voxel.VoxelPlanet hiddenOn;
 
     private void hideLive() {
         var p = session().active() ? session().planet() : null;
-        LiveBlocks.Snapshot live = ShadowWorld.live();
+        LiveBlocks.Snapshot live = liveNow();
         Set<Integer> want = new HashSet<>();
         McBlocks blocks = PlanetClient.blocks();
         // Only a block its renderer draws whole leaves the mesh: a shelf keeps its own, its items come on top.
@@ -262,7 +270,7 @@ final class EntityClient {
                 int index = PlanetClient.catalogIndex(session());
                 if (index >= 0) for (MpMobs.Remote m : MpMobs.of(index)) remoteMob(m, mario, pt, pieces);
             }
-            LiveBlocks.Snapshot live = ShadowWorld.live();
+            LiveBlocks.Snapshot live = liveNow();
             if (live != null && live.planet() == session().planet()) {
                 int mc = session().planet().grid.cellAt(mario);
                 net.minecraft.world.phys.Vec3 eye = mc < 0 ? net.minecraft.world.phys.Vec3.ZERO

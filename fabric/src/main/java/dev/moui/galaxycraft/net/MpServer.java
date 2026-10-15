@@ -266,6 +266,16 @@ public final class MpServer {
         });
     }
 
+    /** The host's game tells a guest what changed among the live blocks near it (a LiveCodec body), from any thread. */
+    public static void live(UUID guest, byte[] body) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            ServerPlayer p = members.contains(guest) ? player(guest) : null;
+            if (p != null) ServerPlayNetworking.send(p, new MpPayloads.Live(body));
+        });
+    }
+
     private static final Map<UUID, RateLimiter> hitLimits = new HashMap<>();
 
     private static void mobHit(ServerPlayer p, MpPayloads.MobHit h) {

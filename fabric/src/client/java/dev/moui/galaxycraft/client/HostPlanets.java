@@ -558,6 +558,7 @@ final class HostPlanets {
                 continue;
             }
             MpMobs.hostTick(now, e.planet, e.index, there);
+            MpLive.hostTick(now, e.planet, e.index, there);
             if (now % 4 != 0) continue;
             if (e.planet == focusPlanet()) PlanetClient.drops().hostSend(e.index, there);
             else sendRunDrops(e, there);

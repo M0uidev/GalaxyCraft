@@ -90,6 +90,7 @@ final class MpClient {
         MpUse.register();
         MpRide.register();
         MpMobs.register();
+        MpLive.register();
         MpStars.register();
         MpShips.register();
         ClientPlayNetworking.registerGlobalReceiver(dev.moui.galaxycraft.net.MpPayloads.Drops.TYPE,
@@ -185,6 +186,7 @@ final class MpClient {
         MpEdits.tick();
         MpUse.tick();
         MpMobs.tick();
+        MpLive.tick();
         boolean on = sending(client);
         if (on && !wasSending) lastSkin = null; // a new audience: say again what we wear
         wasSending = on;
@@ -263,6 +265,7 @@ final class MpClient {
         MpUse.reset();
         MpRide.reset();
         MpMobs.reset();
+        MpLive.reset();
         connected = false;
         accepting = false;
         skinCooldown = 0;
