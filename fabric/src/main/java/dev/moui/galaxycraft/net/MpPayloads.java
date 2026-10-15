@@ -117,6 +117,26 @@ public final class MpPayloads {
         }
     }
 
+    /** Guest -> server: hit (kind 0) or use (kind 1) a mob of the shadow, by the host's entity id; look: the guest's view in the planet's space. */
+    public record MobHit(int planet, int entity, int kind, float lx, float ly, float lz) implements CustomPacketPayload {
+        public static final Type<MobHit> TYPE = typeOf("mp_mob_hit");
+        public static final StreamCodec<RegistryFriendlyByteBuf, MobHit> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.planet);
+                    b.writeVarInt(p.entity);
+                    b.writeByte(p.kind);
+                    b.writeFloat(p.lx);
+                    b.writeFloat(p.ly);
+                    b.writeFloat(p.lz);
+                },
+                b -> new MobHit(b.readVarInt(), b.readVarInt(), b.readByte(), b.readFloat(), b.readFloat(), b.readFloat()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Server -> players: that player left. */
     public record Gone(UUID id) implements CustomPacketPayload {
         public static final Type<Gone> TYPE = typeOf("mp_gone");
@@ -288,5 +308,6 @@ public final class MpPayloads {
         PayloadTypeRegistry.clientboundPlay().register(UseDone.TYPE, UseDone.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(UsedUp.TYPE, UsedUp.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(Mobs.TYPE, Mobs.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(MobHit.TYPE, MobHit.CODEC);
     }
 }

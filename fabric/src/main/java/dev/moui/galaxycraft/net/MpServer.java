@@ -44,6 +44,9 @@ public final class MpServer {
 
         /** A guest right clicked a block (already checked: a planet it holds, a sane cell and hit). Called on the server thread. */
         void use(UUID guest, MpPayloads.Use u);
+
+        /** A guest hit or used a mob of the shadow (already checked: holds the planet, sane numbers). Called on the server thread. */
+        void mobHit(UUID guest, MpPayloads.MobHit h);
     }
 
     private static volatile PlanetSource planetSource;
@@ -218,6 +221,18 @@ public final class MpServer {
         });
     }
 
+    private static final Map<UUID, RateLimiter> hitLimits = new HashMap<>();
+
+    private static void mobHit(ServerPlayer p, MpPayloads.MobHit h) {
+        UUID id = p.getUUID();
+        EditSink sink = editSink;
+        if (sink == null || !members.contains(id) || !hub.subscribed(id, h.planet()) || (h.kind() != 0 && h.kind() != 1)
+                || !Float.isFinite(h.lx()) || !Float.isFinite(h.ly()) || !Float.isFinite(h.lz())
+                || !hitLimits.computeIfAbsent(id, k -> new RateLimiter(20, 10)).allow(System.nanoTime()))
+            return;
+        sink.mobHit(id, h);
+    }
+
     private static final Map<UUID, RateLimiter> usedUpLimits = new HashMap<>();
 
     private static void usedUp(ServerPlayer p, MpPayloads.UsedUp u) {
@@ -345,6 +360,7 @@ public final class MpServer {
             if (sink != null) sink.dropped(id, payload.index());
         });
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Use.TYPE, (payload, ctx) -> use(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.MobHit.TYPE, (payload, ctx) -> mobHit(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.UsedUp.TYPE, (payload, ctx) -> usedUp(ctx.player(), payload));
         ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {

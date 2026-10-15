@@ -96,6 +96,11 @@ final class HostPlanets {
             public void use(UUID guest, MpPayloads.Use u) {
                 Minecraft.getInstance().execute(() -> useBlock(guest, u));
             }
+
+            @Override
+            public void mobHit(UUID guest, MpPayloads.MobHit h) {
+                Minecraft.getInstance().execute(() -> hitMob(guest, h));
+            }
         });
     }
 
@@ -115,6 +120,15 @@ final class HostPlanets {
         ShadowWorld.use(p, u.cell(), u.face(), new net.minecraft.world.phys.Vec3(u.hx(), u.hy(), u.hz()), guest,
                 u.hand() == 0 ? net.minecraft.world.InteractionHand.MAIN_HAND : net.minecraft.world.InteractionHand.OFF_HAND,
                 () -> MpServer.useDone(guest, u.nonce(), true), () -> MpServer.useDone(guest, u.nonce(), false));
+    }
+
+    /** A guest hit or used a mob of the shadow: as that guest's player (its weapon), from the way it looks. */
+    private static void hitMob(UUID guest, MpPayloads.MobHit h) {
+        Entry e = shared.get(h.planet());
+        VoxelPlanet p = e == null || !e.holders.contains(guest) ? null : e.planet;
+        if (p == null || !ShadowWorld.runs(p)) return;
+        if (h.kind() == 0) ShadowWorld.attack(h.entity(), guest, new Vector3d(h.lx(), h.ly(), h.lz()));
+        else ShadowWorld.interact(h.entity(), guest);
     }
 
     private static PlanetSession liveOf(int index) {

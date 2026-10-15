@@ -812,7 +812,7 @@ public final class PlanetClient {
             // it takes the clicks, whatever is in hand, and the block behind it is not outlined.
             double block = aim == null ? Double.MAX_VALUE
                     : CellSpace.point(session.planet().grid, aim.cell(), aim.hit().x, aim.hit().y, aim.hit().z).distance(eyeLocal);
-            Entity target = screen || !shadow.available() ? null : entities.aimed(eyeLocal, look, Math.min(REACH, block));
+            Entity target = screen || !shadow.available() && !MpUse.guest() ? null : entities.aimed(eyeLocal, look, Math.min(REACH, block));
             aimUsable = target == null && aim != null && shadow.available() && blocks.usable(session.planet().get(aim.cell()));
             boolean item = itemActive(player) && !screen;
             // Minecraft's outline on the block the clicks would act on, only with something in hand.
@@ -822,12 +822,14 @@ public final class PlanetClient {
                     player.getUUID()));
             boolean hit = false;
             if (target != null && pressed(buttons, MOUSE_LEFT)) {
-                ShadowWorld.attack(target.getId(), player.getUUID());
+                if (shadow.available()) ShadowWorld.attack(target.getId(), player.getUUID());
+                else MpMobs.hit(indexOf(session), target, 0, look);
                 hit = true;
             }
             // Right click on a mob or vehicle in reach uses it (rides a minecart or boat).
             if (target != null && pressed(buttons, MOUSE_RIGHT)) {
-                if (!ShadowToads.isToad(target)) ShadowWorld.interact(target.getId(), player.getUUID()); // a Toad is talked to (ToadClient), not used
+                if (!shadow.available()) MpMobs.hit(indexOf(session), target, 1, look);
+                else if (!ShadowToads.isToad(target)) ShadowWorld.interact(target.getId(), player.getUUID()); // a Toad is talked to (ToadClient), not used
                 hit = true; // the click is the mob's: it does not also use the block behind it
             }
             ShadowWorld.steer(new ShadowWorld.Steer(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),

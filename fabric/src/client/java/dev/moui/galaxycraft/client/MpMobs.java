@@ -41,6 +41,7 @@ final class MpMobs {
         final Entity entity;
         float[] from, to;
         float yawFrom, yawTo, headFrom, headTo, pitch, speed;
+        int hurt, death;
         long at; // nanoTime the latest snapshot arrived
         int heard;
 
@@ -96,7 +97,8 @@ final class MpMobs {
                 continue;
             }
             if (data.length > MobsCodec.MAX_DATA) continue;
-            mobs.add(new MobsCodec.Mob(e.getId(), BuiltInRegistries.ENTITY_TYPE.getId(e.getType()), frame, yaw, e.getXRot(), head, 0, speed, data));
+            mobs.add(new MobsCodec.Mob(e.getId(), BuiltInRegistries.ENTITY_TYPE.getId(e.getType()), frame, yaw, e.getXRot(), head, speed,
+                    e instanceof LivingEntity h ? h.hurtTime : 0, e instanceof LivingEntity h ? h.deathTime : 0, data));
         }
         if (TRACE && now % 40 == 0) GalaxyCraft.LOG.info("[mp mobs] host: {} shadow entities, {} sent for planet {} to {} guests", es.list().size(), mobs.size(), planetIndex, holders.size());
         byte[] body = MobsCodec.encode(planetIndex, mobs);
@@ -126,7 +128,7 @@ final class MpMobs {
                     e = null;
                 }
                 if (e == null) continue;
-                e.setId(0x40000000 + m.id()); // never one of the client level's own ids
+                e.setId(ID_BASE + m.id()); // never one of the client level's own ids
                 r = new Remote(m.id(), e);
                 r.from = m.frame();
                 r.yawFrom = m.yaw();
@@ -142,6 +144,8 @@ final class MpMobs {
             r.headTo = m.headYaw();
             r.pitch = m.pitch();
             r.speed = m.walkSpeed();
+            r.hurt = m.hurt();
+            r.death = m.death();
             r.at = nowNs;
             r.heard = tick;
             try {
@@ -166,8 +170,20 @@ final class MpMobs {
             if (r.entity instanceof LivingEntity l) {
                 l.walkAnimation.update(r.speed, 0.4f, 1f);
                 l.tickCount++;
+                if (r.hurt > 0) r.hurt--; // as Minecraft counts it down between the host's reports
+                l.hurtTime = r.hurt;
+                l.deathTime = r.death;
             }
         }
+    }
+
+    /** Mobs have this id offset on the guest: the host's entity id is the guest entity's minus it. */
+    static final int ID_BASE = 0x40000000;
+
+    /** Guest: hit (kind 0) or use (kind 1) a mob of the host's shadow; look: the way the guest looks, in the planet's space. */
+    static void hit(int planetIndex, Entity guestEntity, int kind, org.joml.Vector3d look) {
+        ClientPlayNetworking.send(new MpPayloads.MobHit(planetIndex, guestEntity.getId() - ID_BASE, kind,
+                (float) look.x, (float) look.y, (float) look.z));
     }
 
     /** Guest: the mobs of this planet (by catalog index), or none. */

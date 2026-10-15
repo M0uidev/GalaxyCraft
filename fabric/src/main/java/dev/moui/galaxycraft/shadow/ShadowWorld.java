@@ -253,6 +253,14 @@ public final class ShadowWorld {
 
     /** The player hits a shadow entity (by its id) as Mario, from where he stands there. */
     public static void attack(int entityId, UUID player) {
+        attack(entityId, player, null);
+    }
+
+    /**
+     * A guest's blow: the same, but the blow comes from the way the guest looks (planet space; null: from Mario's own
+     * place), so the mob is pushed away from the guest, not from the host's Mario.
+     */
+    public static void attack(int entityId, UUID player, org.joml.Vector3d look) {
         ops.add(level -> {
             Entity target = level.getEntity(entityId);
             ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(player);
@@ -263,6 +271,12 @@ public final class ShadowWorld {
             ((dev.moui.galaxycraft.mixin.LivingEntityAccessor) (Object) proxy).galaxycraft$setAttackStrengthTicker(
                     ((dev.moui.galaxycraft.mixin.LivingEntityAccessor) p).galaxycraft$attackStrengthTicker());
             Vec3 to = target.position().subtract(proxy.position());
+            double[] f = look == null || map == null ? null : map.frame(target.getX(), target.getY(), target.getZ());
+            if (f != null) { // the look in the shadow's directions there: planet = x ax + y ay + z az
+                org.joml.Vector3d d = new org.joml.Matrix3d(f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11]).invert()
+                        .transform(new org.joml.Vector3d(look));
+                if (Double.isFinite(d.x) && Double.isFinite(d.z) && d.x * d.x + d.z * d.z > 1e-9) to = new Vec3(d.x, 0, d.z);
+            }
             proxy.setYRot((float) Math.toDegrees(Math.atan2(-to.x, to.z)));
             proxy.attack(target);
             p.resetAttackStrengthTicker();

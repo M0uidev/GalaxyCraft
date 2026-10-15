@@ -495,6 +495,7 @@ final class EntityClient {
             EntityRenderer r = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(e);
             EntityRenderState st = r.createRenderState(e, pt);
             Matrix4d at = new Matrix4d(f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], 0, f[0], f[1], f[2], 1);
+            seen.add(new Seen(e, at, new Vector3d(e.getX(), e.getY(), e.getZ()))); // to aim at
             PoseStack ps = new PoseStack();
             net.minecraft.world.phys.Vec3 offset = r.getRenderOffset(st);
             ps.translate(offset.x, offset.y, offset.z);

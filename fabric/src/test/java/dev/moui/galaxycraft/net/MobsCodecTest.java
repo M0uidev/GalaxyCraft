@@ -13,7 +13,7 @@ class MobsCodecTest {
     private static MobsCodec.Mob mob(int id, byte[] data) {
         float[] f = new float[12];
         for (int i = 0; i < 12; i++) f[i] = id + i * 0.5f;
-        return new MobsCodec.Mob(id, 7, f, 90f, -10f, 45f, 1.5f, 0.25f, data);
+        return new MobsCodec.Mob(id, 7, f, 90f, -10f, 45f, 0.25f, 7, 3, data);
     }
 
     @Test
@@ -28,6 +28,8 @@ class MobsCodecTest {
         assertArrayEquals(new byte[] {1, 2, 3}, b.mobs().get(0).data());
         assertEquals(2.0f, b.mobs().get(0).frame()[2], 1e-6);
         assertEquals(0.25f, b.mobs().get(1).walkSpeed());
+        assertEquals(7, b.mobs().get(1).hurt());
+        assertEquals(3, b.mobs().get(1).death());
     }
 
     @Test

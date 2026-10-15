@@ -23,7 +23,7 @@ public final class MobsCodec {
     private MobsCodec() {}
 
     /** frame: 12 numbers (origin, then three axes). */
-    public record Mob(int id, int type, float[] frame, float yaw, float pitch, float headYaw, float walkPos, float walkSpeed,
+    public record Mob(int id, int type, float[] frame, float yaw, float pitch, float headYaw, float walkSpeed, int hurt, int death,
             byte[] data) {}
 
     public static byte[] encode(int planet, List<Mob> mobs) {
@@ -40,8 +40,9 @@ public final class MobsCodec {
                 o.writeFloat(m.yaw);
                 o.writeFloat(m.pitch);
                 o.writeFloat(m.headYaw);
-                o.writeFloat(m.walkPos);
                 o.writeFloat(m.walkSpeed);
+                o.writeByte(m.hurt);
+                o.writeByte(m.death);
                 int len = Math.min(m.data.length, MAX_DATA);
                 o.writeShort(len);
                 o.write(m.data, 0, len);
@@ -69,14 +70,14 @@ public final class MobsCodec {
                     f[k] = in.readFloat();
                     if (!Float.isFinite(f[k]) || Math.abs(f[k]) > 1e7f) return null;
                 }
-                float yaw = in.readFloat(), pitch = in.readFloat(), head = in.readFloat(), wp = in.readFloat(), ws = in.readFloat();
-                if (!Float.isFinite(yaw) || !Float.isFinite(pitch) || !Float.isFinite(head) || !Float.isFinite(wp) || !Float.isFinite(ws))
-                    return null;
+                float yaw = in.readFloat(), pitch = in.readFloat(), head = in.readFloat(), ws = in.readFloat();
+                if (!Float.isFinite(yaw) || !Float.isFinite(pitch) || !Float.isFinite(head) || !Float.isFinite(ws)) return null;
+                int hurt = in.readUnsignedByte(), death = in.readUnsignedByte();
                 int len = in.readUnsignedShort();
                 if (len > MAX_DATA || len > in.available()) return null;
                 byte[] d = new byte[len];
                 in.readFully(d);
-                out.add(new Mob(id, type, f, yaw, pitch, head, wp, ws, d));
+                out.add(new Mob(id, type, f, yaw, pitch, head, ws, hurt, death, d));
             }
             return in.available() == 0 ? new Body(planet, out) : null;
         } catch (IOException e) {
