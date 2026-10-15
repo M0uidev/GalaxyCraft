@@ -39,6 +39,7 @@
   "message.galaxycraft.station.open_space": "Stations go in open space, away from planets",
   "message.galaxycraft.station.too_many": "Too many stations here",
   "message.galaxycraft.station.too_big": "The station can't grow further",
+  "message.galaxycraft.station.host_only": "Only the host can place, pack or rename a station for now",
   "message.galaxycraft.station.core": "The core holds the station together: pack it up from its menu",
   "message.galaxycraft.station.lost": "That station's file is missing",
   "message.galaxycraft.station.packed": "Packed %s",

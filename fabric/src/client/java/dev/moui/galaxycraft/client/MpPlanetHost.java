@@ -29,7 +29,8 @@ final class MpPlanetHost {
                 return;
             }
             int seq = HostPlanets.seq(index);
-            CompletableFuture<byte[]> bytes = PlanetClient.serve(index);
+            CompletableFuture<byte[]> bytes = dev.moui.galaxycraft.net.StationSlots.isStation(index) ? StationClient.serve(index)
+                    : PlanetClient.serve(index);
             if (bytes == null) {
                 MpServer.offer(guest, index, guestEtag, null);
                 return;

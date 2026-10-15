@@ -98,6 +98,36 @@ public final class MpServer {
         editSink = sink;
     }
 
+    private static volatile java.util.function.Consumer<UUID> joinListener;
+
+    /** Called (on the server thread) when a guest has entered the galaxy: the host's game tells it what it keeps for guests (its stations). */
+    public static void setJoinListener(java.util.function.Consumer<UUID> listener) {
+        joinListener = listener;
+    }
+
+    /** From any thread: the host's stations (a StationList body) to one guest, or to every guest that entered the galaxy (null). */
+    public static void sendStations(UUID guest, byte[] data) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            for (UUID id : guest != null ? java.util.List.of(guest) : new java.util.ArrayList<>(members)) {
+                ServerPlayer p = player(id);
+                if (p != null && members.contains(id)) ServerPlayNetworking.send(p, new MpPayloads.StationUpdate(data));
+            }
+        });
+    }
+
+    /** From any thread: the guest's copy of that planet is no good any more (a station grew a new grid): it is cut off and asks again. */
+    public static void resync(UUID guest, int planet) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            hub.cancel(guest, planet);
+            ServerPlayer p = player(guest);
+            if (p != null) ServerPlayNetworking.send(p, new MpPayloads.Resync(planet));
+        });
+    }
+
     /** The host's game made a change to a planet guests may hold, from any thread: it goes to those that hold it. author: the guest whose edit it was (null: not a guest's). */
     public static void publish(EditCodec.Msg m, UUID author) {
         MinecraftServer srv = server;
@@ -274,7 +304,7 @@ public final class MpServer {
         EditSink sink = editSink;
         float[] v = {w.fx(), w.fy(), w.fz(), w.lx(), w.ly(), w.lz()};
         for (float f : v) if (!Float.isFinite(f) || Math.abs(f) > 1e6f) return;
-        if (sink == null || !members.contains(id) || w.planet() < -1 || w.planet() > 4096
+        if (sink == null || !members.contains(id) || w.planet() < -1 || w.planet() > 4096 && !StationSlots.isStation(w.planet())
                 || w.planet() >= 0 && !hub.subscribed(id, w.planet())
                 || !whereLimits.computeIfAbsent(id, k -> new RateLimiter(30, 30)).allow(System.nanoTime()))
             return;
@@ -507,6 +537,8 @@ public final class MpServer {
             else {
                 entered++;
                 members.add(id);
+                var joined = joinListener;
+                if (joined != null) joined.accept(id);
                 GalaxyCraft.LOG.info("[GalaxyCraft mp] {} entered the galaxy", ctx.player().getName().getString());
                 StarSink stars = starSink;
                 if (stars != null) stars.joined(id);

@@ -44,6 +44,16 @@ siguen sin compartirse (parte 3, ver `ROADMAP.md`).
 - Un invitado que vuelve a un planeta que dejó lejos puede tener que descargarlo otra vez si alguien lo
   cambió mientras tanto.
 
+## Estaciones espaciales (fase 1)
+
+El anfitrión envía al invitado la lista de sus estaciones (`StationUpdate`: id, nombre, lugar, giro) y, como un
+planeta, sus bytes (`PlanetAsk` con un número de **ranura** >= 1<<24, que el anfitrión reparte y no guarda). El invitado
+las activa cuando se acerca (a menos de 2000 bloques), las guarda en `mp-cache/stations` y construye en ellas; el
+anfitrión aplica las ediciones, corre la estación en su dimensión sombra (la misma franja que usa para la suya) y,
+cuando una estación crece y estrena rejilla, corta a los invitados con un `Resync` para que la pidan de nuevo
+(las ediciones llevan la clave de la rejilla, `Station.gridKey`, y las viejas se descartan). Todavía solo el
+anfitrión puede colocar, empaquetar o renombrar una estación (fase 2).
+
 ## Límites de esta versión
 
 - Todos deben tener **la misma versión** del juego. Si no, el anfitrión te echa con un mensaje que dice

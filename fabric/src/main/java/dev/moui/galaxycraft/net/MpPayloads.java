@@ -346,6 +346,21 @@ public final class MpPayloads {
         }
     }
 
+    /**
+     * Server -> guest: the host's stations (a {@link StationList} body): all of them after the Hello is answered, then
+     * the ones that changed (placed, packed, renamed). A station's number on the wire is its slot (see StationSlots).
+     */
+    public record StationUpdate(byte[] data) implements CustomPacketPayload {
+        public static final Type<StationUpdate> TYPE = typeOf("mp_stations");
+        public static final StreamCodec<RegistryFriendlyByteBuf, StationUpdate> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByteArray(p.data), b -> new StationUpdate(b.readByteArray(StationList.MAX_WIRE)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Server -> guest: too far behind on that planet; drop it and ask for it again. */
     public record Resync(int index) implements CustomPacketPayload {
         public static final Type<Resync> TYPE = typeOf("mp_resync");
@@ -496,6 +511,7 @@ public final class MpPayloads {
         PayloadTypeRegistry.serverboundPlay().register(Break.TYPE, Break.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(Where.TYPE, Where.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(Throw.TYPE, Throw.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(StationUpdate.TYPE, StationUpdate.CODEC);
         registerStars();
     }
 

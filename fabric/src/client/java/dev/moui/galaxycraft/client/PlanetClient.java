@@ -210,7 +210,7 @@ public final class PlanetClient {
             return false;
         Vector3d up = throwSession.planet().up(throwEye);
         Vector3d at = new Vector3d(throwEye).fma(-0.3, up), vel = new Vector3d(throwLook).mul(0.3);
-        ClientPlayNetworking.send(new dev.moui.galaxycraft.net.MpPayloads.Throw(indexOf(throwSession), all, (float) at.x, (float) at.y,
+        ClientPlayNetworking.send(new dev.moui.galaxycraft.net.MpPayloads.Throw(catalogIndex(throwSession), all, (float) at.x, (float) at.y,
                 (float) at.z, (float) vel.x, (float) vel.y, (float) vel.z));
         return true;
     }
@@ -473,7 +473,11 @@ public final class PlanetClient {
 
     /** The catalog index of a session's planet (the main one is 0, as everywhere here). */
     static int catalogIndex(PlanetSession s) {
-        if (s == null || s.planet() == null || s.planet().grid instanceof dev.moui.galaxycraft.voxel.FlatGrid) return -1; // a station is no catalog planet
+        if (s == null || s.planet() == null) return -1;
+        if (s.station() != null || s.planet().grid instanceof dev.moui.galaxycraft.voxel.FlatGrid) { // a station: its wire slot (a guest's), else none
+            int slot = s.station() == null || !MpUse.guest() ? 0 : StationClient.slotOf(s.station().id);
+            return slot > 0 ? slot : -1;
+        }
         return indexOf(s);
     }
 
@@ -857,12 +861,12 @@ public final class PlanetClient {
             boolean hit = false;
             if (target != null && pressed(buttons, MOUSE_LEFT)) {
                 if (shadow.available()) ShadowWorld.attack(target.getId(), player.getUUID());
-                else MpMobs.hit(indexOf(session), target, 0, look);
+                else MpMobs.hit(catalogIndex(session), target, 0, look);
                 hit = true;
             }
             // Right click on a mob or vehicle in reach uses it (rides a minecart or boat).
             if (target != null && pressed(buttons, MOUSE_RIGHT)) {
-                if (!shadow.available()) MpMobs.hit(indexOf(session), target, 1, look);
+                if (!shadow.available()) MpMobs.hit(catalogIndex(session), target, 1, look);
                 else if (!ShadowToads.isToad(target)) ShadowWorld.interact(target.getId(), player.getUUID()); // a Toad is talked to (ToadClient), not used
                 hit = true; // the click is the mob's: it does not also use the block behind it
             }
@@ -1402,6 +1406,7 @@ public final class PlanetClient {
     }
 
     static PlanetSession sessionOf(int index) {
+        if (dev.moui.galaxycraft.net.StationSlots.isStation(index)) return StationClient.sessionOfSlot(index);
         if (index == 0) return session;
         for (Extra e : extras) if (e.index() == index) return e.s();
         return null;
@@ -1447,6 +1452,10 @@ public final class PlanetClient {
 
     /** A guest's planet the host cut off: dropped, and made again from a fresh copy. */
     static void resyncPlanet(int index) {
+        if (dev.moui.galaxycraft.net.StationSlots.isStation(index)) {
+            StationClient.resyncRemote(index);
+            return;
+        }
         if (stream != null) stream.resync(index);
     }
 
@@ -1699,7 +1708,7 @@ public final class PlanetClient {
                 boolean ask = MpUse.guest() && catalogIndex(focus) >= 0 && (blocks.usable(focus.planet().get(aim.cell())) || !stack.isEmpty()
                         && !(stack.getItem() instanceof net.minecraft.world.item.BlockItem
                                 || stack.getItem() instanceof net.minecraft.world.item.BucketItem));
-                if (!ask || !MpUse.ask(indexOf(focus), aim.cell(), aim.face(), aim.hit().x, aim.hit().y, aim.hit().z, hand, place))
+                if (!ask || !MpUse.ask(catalogIndex(focus), aim.cell(), aim.face(), aim.hit().x, aim.hit().y, aim.hit().z, hand, place))
                     place.run();
             }
             else ShadowWorld.use(focus.planet(), aim.cell(), aim.face(),
@@ -1811,7 +1820,7 @@ public final class PlanetClient {
             // A guest: the host's shadow breaks it (drops, the tool worn); where it cannot, the block just goes.
             boolean creative = player.getAbilities().instabuild;
             if (!MpUse.guest() || catalogIndex(focus) < 0 || aim == null || !focus.planet().info(aim.cell()).breakable()
-                    || !MpUse.askBreak(indexOf(focus), aim.cell(), () -> focus.breakBlock(eye, look, creative)))
+                    || !MpUse.askBreak(catalogIndex(focus), aim.cell(), () -> focus.breakBlock(eye, look, creative)))
                 focus.breakBlock(eye, look, creative);
         } else if (aim != null && focus.planet().info(aim.cell()).breakable())
             ShadowWorld.destroy(focus.planet(), aim.cell(), player.getUUID());

@@ -93,6 +93,11 @@ final class MpEdits {
         if (waiting != null) for (EditCodec.Msg m : waiting) receive(h, m);
     }
 
+    /** A station went out of the game here: its edits are not followed on a planet nobody shows (and the host is told). */
+    static void drop(int index) {
+        detach(index, true);
+    }
+
     private static void detach(int index, boolean tellHost) {
         Held h = held.remove(index);
         if (h != null) h.planet.removeObserver(h.observer);
@@ -133,6 +138,8 @@ final class MpEdits {
 
     private static void receive(Held h, EditCodec.Msg m) {
         if (!h.sync.accepts(m.seq())) return;
+        if (m.gen() != 0 && h.planet.grid instanceof dev.moui.galaxycraft.voxel.FlatGrid g && m.gen() != dev.moui.galaxycraft.voxel.Station.gridKey(g))
+            return; // made for another grid than ours (the station grew): the Resync that follows brings the new one
         McBlocks blocks = PlanetClient.blocks();
         if (blocks == null) return;
         int[] ids = new int[m.ids().length];
@@ -190,8 +197,9 @@ final class MpEdits {
                 h.sync.local(h.cells[from + i], cseq);
             }
             if (kept == 0) continue;
+            int gen = h.planet.grid instanceof dev.moui.galaxycraft.voxel.FlatGrid g ? dev.moui.galaxycraft.voxel.Station.gridKey(g) : 0;
             ClientPlayNetworking.send(new MpPayloads.Edits(EditCodec.encode(new EditCodec.Msg(h.index, 0, cseq, defs,
-                    java.util.Arrays.copyOf(cells, kept), java.util.Arrays.copyOf(ids, kept)))));
+                    java.util.Arrays.copyOf(cells, kept), java.util.Arrays.copyOf(ids, kept), gen))));
         }
         h.n = 0;
     }

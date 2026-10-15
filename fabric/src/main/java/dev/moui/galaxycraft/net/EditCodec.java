@@ -23,13 +23,22 @@ public final class EditCodec {
     public record Def(int wireId, String name) {}
 
     /** planet: catalog index; seq: the host's sequence (0 from a guest); origin: the author's batch number (guest -> host: its own). */
-    public record Msg(int planet, int seq, int origin, List<Def> defs, int[] cells, int[] ids) {
+    public record Msg(int planet, int seq, int origin, List<Def> defs, int[] cells, int[] ids, int gen) {
+        /** gen: for a station, the key of the grid its cell numbers go by (Station.gridKey); 0 for a planet. */
+        public Msg(int planet, int seq, int origin, List<Def> defs, int[] cells, int[] ids) {
+            this(planet, seq, origin, defs, cells, ids, 0);
+        }
+
         public Msg withOrigin(int o) {
-            return o == origin ? this : new Msg(planet, seq, o, defs, cells, ids);
+            return o == origin ? this : new Msg(planet, seq, o, defs, cells, ids, gen);
         }
 
         public Msg withDefs(List<Def> d) {
-            return new Msg(planet, seq, origin, d, cells, ids);
+            return new Msg(planet, seq, origin, d, cells, ids, gen);
+        }
+
+        public Msg withGen(int g) {
+            return g == gen ? this : new Msg(planet, seq, origin, defs, cells, ids, g);
         }
     }
 
@@ -70,6 +79,7 @@ public final class EditCodec {
             varint(body, m.ids()[order[i]]);
             last = cell;
         }
+        if (m.gen() != 0) varint(body, m.gen()); // only a station's edits have one: a trailing field
         byte[] raw = body.toByteArray();
         if (raw.length <= DEFLATE_OVER) return concat((byte) 0, raw);
         Deflater def = new Deflater(Deflater.BEST_SPEED);
@@ -111,8 +121,9 @@ public final class EditCodec {
             cells[i] = (int) cell;
             ids[i] = id;
         }
+        int gen = at[0] < raw.length ? varint(raw, at) : 0;
         if (at[0] != raw.length) throw new Bad("trailing bytes");
-        return new Msg(planet, seq, origin, defs, cells, ids);
+        return new Msg(planet, seq, origin, defs, cells, ids, gen);
     }
 
     private static byte[] inflate(byte[] wire) throws Bad {

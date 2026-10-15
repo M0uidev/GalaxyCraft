@@ -44,7 +44,28 @@ public final class StationStore {
     public void write(Station s, char[] cells, Blocks blocks) throws IOException {
         Files.createDirectories(dir);
         Path f = file(s.id), tmp = f.resolveSibling(f.getFileName() + ".tmp");
-        try (DataOutputStream out = new DataOutputStream(new GZIPOutputStream(Files.newOutputStream(tmp)))) {
+        try (java.io.OutputStream os = Files.newOutputStream(tmp)) {
+            writeTo(os, s, cells, blocks);
+        }
+        Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    /** The file's bytes (what a guest is sent): the station as {@link #write} would keep it. */
+    public static byte[] encode(Station s, char[] cells, Blocks blocks) throws IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        writeTo(out, s, cells, blocks);
+        return out.toByteArray();
+    }
+
+    /** A station from file bytes, made as {@link #read(String, Blocks, java.util.function.ToIntFunction)} makes it. */
+    public static Station decode(byte[] data, Blocks blocks, java.util.function.ToIntFunction<String> parse) throws IOException {
+        try (DataInputStream in = new DataInputStream(new GZIPInputStream(new java.io.ByteArrayInputStream(data)))) {
+            return readFrom(in, Path.of("(bytes)"), blocks, parse);
+        }
+    }
+
+    private static void writeTo(java.io.OutputStream os, Station s, char[] cells, Blocks blocks) throws IOException {
+        try (DataOutputStream out = new DataOutputStream(new GZIPOutputStream(os))) {
             out.writeInt(MAGIC);
             out.writeUTF(s.id);
             out.writeUTF(s.name);
@@ -66,7 +87,6 @@ public final class StationStore {
             out.writeInt(count);
             PlanetStore.writeCells(out, cells, blocks);
         }
-        Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 
     private record Head(Header header, StationShape.Bounds bounds, StationShape.Size size) {}
@@ -92,14 +112,18 @@ public final class StationStore {
     public Station read(String id, Blocks blocks, java.util.function.ToIntFunction<String> parse) throws IOException {
         Path f = file(id);
         try (DataInputStream in = new DataInputStream(new GZIPInputStream(Files.newInputStream(f)))) {
-            Head h = head(in, f);
-            FlatGrid g = Station.grid(h.size(), h.header().rotation());
-            char[] cells = PlanetStore.readCells(in, g.cellCount(), parse);
-            Station s = new Station(h.header().id(), h.header().name(), h.header().rotation(), VoxelPlanet.flat(g, cells, blocks), h.bounds());
-            s.stage = h.header().stage();
-            s.center = h.header().center();
-            return s;
+            return readFrom(in, f, blocks, parse);
         }
+    }
+
+    private static Station readFrom(DataInputStream in, Path f, Blocks blocks, java.util.function.ToIntFunction<String> parse) throws IOException {
+        Head h = head(in, f);
+        FlatGrid g = Station.grid(h.size(), h.header().rotation());
+        char[] cells = PlanetStore.readCells(in, g.cellCount(), parse);
+        Station s = new Station(h.header().id(), h.header().name(), h.header().rotation(), VoxelPlanet.flat(g, cells, blocks), h.bounds());
+        s.stage = h.header().stage();
+        s.center = h.header().center();
+        return s;
     }
 
     /** Every station's header, by id; files that cannot be read are left out (and logged). */
