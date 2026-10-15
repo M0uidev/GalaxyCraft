@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-15 (multiplayer: friends on other planets run in the shadow; stations, riding, Launch Stars and sane advancements built on feat/mp-all, awaiting a two-game playtest)
+Last updated: 2026-10-16 (multiplayer MP-3/MP-4 merged into master after a good two-game playtest)
 
 ---
 
@@ -83,7 +83,7 @@ Last updated: 2026-10-15 (multiplayer: friends on other planets run in the shado
 | Feature | Status | Notes |
 |---|---|---|
 | Windows support | done | Merged 2026-10-07 (feacda7); first played on Windows the same day. Research: [docs/WINDOWS.md](docs/WINDOWS.md). 2026-10-06: wanted seamless: one codebase, every new feature works on both without extra work. Someone asked what they need to build it. 2026-10-07: the launcher (PLAY, `gradlew.bat`) works on both and CI tests it on Windows; Dolphin's input and shared memory ported on `feat/windows`, untested by hand. |
-| Multiplayer | next | User 2026-10-13: play with friends in one world, flying freely between planets. Host-authoritative: one player opens the world to LAN, guests join by direct connection and run their own game. **MP-1** (join, see each other, the host sends its planets) and **MP-2** (everyone breaks and places, the host decides and saves it) are done. **MP-3** (in progress, [spec](docs/superpowers/specs/2026-10-14-galaxycraft-multiplayer-mp3-design.md); step A, the guest using blocks, built, not yet seen in two real games; then entities, then mobs and drops), shared simulation: what lives on the host's server and the guest lacks (doors, chests, buttons, redstone, mobs, dropped items, Toads, stations, ships, Launch Stars), the guest using blocks, the others' entities. Missing since MP-1: names over heads, Mario's model for others, a way to go to a friend. [MP-1 spec](docs/superpowers/specs/2026-10-13-galaxycraft-multiplayer-mp1-design.md), [MP-2 spec](docs/superpowers/specs/2026-10-14-galaxycraft-multiplayer-mp2-design.md), [player guide](docs/MULTIJUGADOR.md). |
+| Multiplayer | now | User 2026-10-13: play with friends in one world, flying freely between planets. Host-authoritative: one player opens the world to LAN, guests join by direct connection and run their own game. **MP-1** (join, see each other, the host sends its planets) and **MP-2** (everyone breaks and places, the host decides and saves it) are done. **MP-3** (in progress, [spec](docs/superpowers/specs/2026-10-14-galaxycraft-multiplayer-mp3-design.md); step A, the guest using blocks, built, not yet seen in two real games; then entities, then mobs and drops), shared simulation: what lives on the host's server and the guest lacks (doors, chests, buttons, redstone, mobs, dropped items, Toads, stations, ships, Launch Stars), the guest using blocks, the others' entities. Shared ships (2026-10-16, on feat/mp-all, untested in two real games): friends see, put down and board the same Starshrooms and landing pads, one pilot at a time, the host keeps them; ship cargo, module changes and map trips stay the host's for now. Names over heads (2026-10-16, built, billboard orientation not yet seen in game). Missing since MP-1: Mario's model for others, a way to go to a friend. [MP-1 spec](docs/superpowers/specs/2026-10-13-galaxycraft-multiplayer-mp1-design.md), [MP-2 spec](docs/superpowers/specs/2026-10-14-galaxycraft-multiplayer-mp2-design.md), [player guide](docs/MULTIJUGADOR.md). |
 | Minecraft on one PC, Dolphin on another | idea | Would need a network transport instead of shared memory. |
 
 ## Polish and tech debt
@@ -101,6 +101,7 @@ Last updated: 2026-10-15 (multiplayer: friends on other planets run in the shado
 
 | When | Feature | Commit |
 |---|---|---|
+| 2026-10-16 | Multiplayer MP-3/MP-4: friends on other planets (the host's shadow runs several), shared drops, mining, Q, doors and chests, Toads, live blocks (signs, banners), stations, riding, Launch Stars, sane advancements, shared Starshroom ships, names over heads, online by IP/Hamachi. Playtested with two games | 3018d92 |
 | 2026-10-02 | Mario mode: first person, keyboard and mouse, perspectives, Steve model | |
 | 2026-10-02 | Voxel planets: cube-sphere, break/place, saved per galaxy, radius up to 256 | |
 | 2026-10-03 | Every Minecraft block, real shapes and placement rules; creative inventory | |
