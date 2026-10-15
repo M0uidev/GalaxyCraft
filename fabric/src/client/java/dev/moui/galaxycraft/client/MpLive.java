@@ -37,7 +37,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * ({@link LiveCodec}); the guest builds plain block entities from that (never added to a level: only for their
  * renderers) and EntityClient draws them where their cells are, as it does the host's own. Client thread only.
  */
-final class MpLive {
+public final class MpLive {
     /** The host looks every this many client ticks (the shadow makes a fresh list every 4). */
     private static final int EVERY = 4;
 
@@ -62,9 +62,24 @@ final class MpLive {
 
     /** Host, every client tick: tells the guests that hold the planet what changed among the live blocks near them. */
     static void hostTick(int now, VoxelPlanet planet, int index, Collection<UUID> holders) {
+        if (now % EVERY != 2) {
+            forgetLeavers(index, holders);
+            return;
+        }
+        for (var m : messages(planet, index, holders).entrySet())
+            for (byte[] body : m.getValue()) MpServer.live(m.getKey(), body);
+    }
+
+    private static void forgetLeavers(int index, Collection<UUID> holders) {
         for (var g : told.entrySet()) // a guest that left the planet is told everything again when it comes back
             if (!holders.contains(g.getKey())) g.getValue().remove(index);
-        if (holders.isEmpty() || now % EVERY != 2) return;
+    }
+
+    /** What each of the holders is told now (nothing: no entry), and remembered as told. Public for the probe. */
+    public static Map<UUID, List<byte[]>> messages(VoxelPlanet planet, int index, Collection<UUID> holders) {
+        Map<UUID, List<byte[]>> out = new HashMap<>();
+        forgetLeavers(index, holders);
+        if (holders.isEmpty()) return out;
         Map<Integer, LiveCodec.Entry> wire = new HashMap<>();
         for (LiveCodec.Entry e : ShadowWorld.liveWireOf(planet)) wire.put(e.cell(), e);
         for (UUID guest : holders) {
@@ -89,18 +104,21 @@ final class MpLive {
             }
             if (!full && ups.isEmpty() && gone.isEmpty()) continue;
             if (TRACE) GalaxyCraft.LOG.info("[mp live] host: planet {} to {}: {} changed, {} gone{}", index, guest, ups.size(), gone.size(), full ? " (all)" : "");
+            List<byte[]> bodies = new ArrayList<>();
             int u = 0, r = 0;
             boolean first = true;
             while (first || u < ups.size() || r < gone.size()) {
                 int nu = Math.min(LiveCodec.MAX_ENTRIES, ups.size() - u), nr = Math.min(LiveCodec.MAX_REMOVED, gone.size() - r);
                 int[] removed = new int[nr];
                 for (int i = 0; i < nr; i++) removed[i] = gone.get(r + i);
-                MpServer.live(guest, LiveCodec.encode(index, full && first, ups.subList(u, u + nu), removed));
+                bodies.add(LiveCodec.encode(index, full && first, ups.subList(u, u + nu), removed));
                 u += nu;
                 r += nr;
                 first = false;
             }
+            out.put(guest, bodies);
         }
+        return out;
     }
 
     // ---- guest
@@ -113,15 +131,20 @@ final class MpLive {
                 (m, ctx) -> ctx.client().execute(() -> receive(m.data())));
     }
 
-    static void reset() {
+    public static void reset() {
         planets.clear();
         maps.clear();
         told.clear();
     }
 
     private static void receive(byte[] bytes) {
+        receive(bytes, false);
+    }
+
+    /** A body from the host (force: the probe plays the guest without a connection). */
+    public static void receive(byte[] bytes, boolean force) {
         LiveCodec.Body b = LiveCodec.decode(bytes);
-        if (b == null || !MpUse.guest()) return;
+        if (b == null || !force && !MpUse.guest()) return;
         Map<Integer, Block> on = planets.computeIfAbsent(b.planet(), k -> new HashMap<>());
         if (b.full()) on.clear();
         for (int cell : b.removed()) on.remove(cell);
@@ -141,7 +164,7 @@ final class MpLive {
     }
 
     /** Every client tick: the lids glide (as Minecraft's do on a client). */
-    static void tick() {
+    public static void tick() {
         var mc = Minecraft.getInstance();
         if (mc.level == null) return;
         for (Map<Integer, Block> on : planets.values())
@@ -153,7 +176,7 @@ final class MpLive {
     }
 
     /** Guest: the live blocks of planet p (catalog index), their entities built for the blocks that stand there now. */
-    static LiveBlocks.Snapshot snapshot(int index, VoxelPlanet p, McBlocks blocks) {
+    public static LiveBlocks.Snapshot snapshot(int index, VoxelPlanet p, McBlocks blocks) {
         Map<Integer, Block> on = planets.get(index);
         var mc = Minecraft.getInstance();
         if (on == null || on.isEmpty() || blocks == null || mc.level == null) return null;
