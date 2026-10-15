@@ -38,6 +38,17 @@ final class MarioProxy extends FakePlayer {
         return ((ServerLevel) level()).getServer();
     }
 
+    /**
+     * What the stand-in does (a boat ridden, an arrow deflected, a trade) counts for the real player: the criteria
+     * triggers look the advancements up on the player they are given, so they get the real player's. Without the real
+     * player (before follow, or after leaving) it keeps its own, which never save or sync.
+     */
+    @Override
+    public net.minecraft.server.PlayerAdvancements getAdvancements() {
+        ServerPlayer p = real == null ? null : real();
+        return p == null ? super.getAdvancements() : p.getAdvancements();
+    }
+
     @Override
     public boolean isInvulnerableTo(ServerLevel level, DamageSource source) {
         ServerPlayer p = real();
