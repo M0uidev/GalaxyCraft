@@ -255,6 +255,33 @@ public final class MpPayloads {
         }
     }
 
+    /**
+     * Guest -> server: a creative-mode guest throws this stack (the creative inventory's own drop, which carries no
+     * menu slot: the stack is made on the spot) onto the planet from here (planet space) with this speed.
+     */
+    public record ThrowStack(int planet, float x, float y, float z, float vx, float vy, float vz, net.minecraft.world.item.ItemStack stack)
+            implements CustomPacketPayload {
+        public static final Type<ThrowStack> TYPE = typeOf("mp_throw_stack");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ThrowStack> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.planet);
+                    b.writeFloat(p.x);
+                    b.writeFloat(p.y);
+                    b.writeFloat(p.z);
+                    b.writeFloat(p.vx);
+                    b.writeFloat(p.vy);
+                    b.writeFloat(p.vz);
+                    net.minecraft.world.item.ItemStack.OPTIONAL_STREAM_CODEC.encode(b, p.stack);
+                },
+                b -> new ThrowStack(b.readVarInt(), b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat(),
+                        net.minecraft.world.item.ItemStack.OPTIONAL_STREAM_CODEC.decode(b)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Guest -> server, ~10 Hz while on a planet: which one (-1: none), and where it stands and looks there (planet space). */
     public record Where(int planet, float fx, float fy, float fz, float lx, float ly, float lz) implements CustomPacketPayload {
         public static final Type<Where> TYPE = typeOf("mp_where");
@@ -770,6 +797,7 @@ public final class MpPayloads {
         PayloadTypeRegistry.serverboundPlay().register(Break.TYPE, counted("Break", Break.CODEC));
         PayloadTypeRegistry.serverboundPlay().register(Where.TYPE, counted("Where", Where.CODEC));
         PayloadTypeRegistry.serverboundPlay().register(Throw.TYPE, counted("Throw", Throw.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(ThrowStack.TYPE, counted("ThrowStack", ThrowStack.CODEC));
         PayloadTypeRegistry.clientboundPlay().register(StationUpdate.TYPE, counted("StationUpdate", StationUpdate.CODEC));
         PayloadTypeRegistry.clientboundPlay().register(Live.TYPE, counted("Live", Live.CODEC));
         PayloadTypeRegistry.clientboundPlay().register(ToadSync.TYPE, counted("ToadSync", ToadSync.CODEC));

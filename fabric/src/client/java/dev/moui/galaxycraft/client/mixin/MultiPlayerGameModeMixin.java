@@ -23,6 +23,13 @@ abstract class MultiPlayerGameModeMixin {
         if (dev.moui.galaxycraft.client.PlanetClient.guestThrow(player, all)) ci.cancel();
     }
 
+    /** A creative guest dropping from the creative inventory (it never goes through handleContainerInput): thrown through the host too. */
+    @Inject(method = "handleCreativeModeItemDrop", at = @At("HEAD"), cancellable = true)
+    private void galaxycraft$guestCreativeDrop(net.minecraft.world.item.ItemStack stack, CallbackInfo ci) {
+        var player = net.minecraft.client.Minecraft.getInstance().player;
+        if (player != null && dev.moui.galaxycraft.client.PlanetClient.guestThrowStack(player, stack)) ci.cancel();
+    }
+
     /** A guest dropping from an open inventory (a click outside it, Q or Ctrl+Q over a slot): thrown through the host like the drop key. */
     @Inject(method = "handleContainerInput", at = @At("HEAD"), cancellable = true)
     private void galaxycraft$guestInventoryDrop(int containerId, int slotNum, int buttonNum, ContainerInput input, Player player,

@@ -122,4 +122,16 @@ class MpPayloadsTest {
         b.writeByteArray(new byte[EditCodec.MAX_WIRE + 1]);
         assertThrows(RuntimeException.class, () -> MpPayloads.Edits.CODEC.decode(b));
     }
+
+    /** The stack itself is Minecraft's own codec (as Drops uses it); an item with components cannot be made without the game's registries, so this pins our fields and that the stack is read to its end. */
+    @Test
+    void aCreativeThrowTravelsWithItsFields() {
+        var t = new MpPayloads.ThrowStack(4, 1f, 2f, 3f, 0.1f, 0.2f, 0.3f, net.minecraft.world.item.ItemStack.EMPTY);
+        var back = roundTrip(MpPayloads.ThrowStack.CODEC, t);
+        assertEquals(4, back.planet());
+        assertEquals(1f, back.x());
+        assertEquals(3f, back.z());
+        assertEquals(0.3f, back.vz());
+        assertTrue(back.stack().isEmpty());
+    }
 }

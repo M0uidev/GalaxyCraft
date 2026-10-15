@@ -213,6 +213,23 @@ public final class PlanetClient {
      * (container is the menu's id; slot the one clicked, -1 the stack on the cursor). False: not a guest on a
      * planet, so Minecraft does it.
      */
+    /** A creative guest dropping a stack from the creative inventory: thrown through the host onto the planet. False: Minecraft does it. */
+    public static boolean guestThrowStack(LocalPlayer player, net.minecraft.world.item.ItemStack stack) {
+        if (!MpUse.guest() || throwSession == null || catalogIndex(throwSession) < 0 || !throwSession.active() || throwEye == null || stack.isEmpty()
+                || player.isSpectator()) {
+            dev.moui.galaxycraft.GalaxyCraft.LOG.info("[mp trace] creative drop left to Minecraft: guest {}, session {}, index {}, active {}, eye {}, empty {}, spectator {}",
+                    MpUse.guest(), throwSession != null, throwSession == null ? -1 : catalogIndex(throwSession),
+                    throwSession != null && throwSession.active(), throwEye != null, stack.isEmpty(), player.isSpectator());
+            return false;
+        }
+        dev.moui.galaxycraft.GalaxyCraft.LOG.info("[mp trace] creative drop sent: {}", stack);
+        Vector3d up = throwSession.planet().up(throwEye);
+        Vector3d at = new Vector3d(throwEye).fma(-0.3, up), vel = new Vector3d(throwLook).mul(0.3);
+        ClientPlayNetworking.send(new dev.moui.galaxycraft.net.MpPayloads.ThrowStack(catalogIndex(throwSession), (float) at.x, (float) at.y,
+                (float) at.z, (float) vel.x, (float) vel.y, (float) vel.z, stack.copy()));
+        return true;
+    }
+
     public static boolean guestThrow(LocalPlayer player, boolean all, int container, int slot) {
         if (!MpUse.guest() || throwSession == null || catalogIndex(throwSession) < 0 || !throwSession.active() || throwEye == null
                 || container < 0 && player.getMainHandItem().isEmpty() || player.isSpectator()) {

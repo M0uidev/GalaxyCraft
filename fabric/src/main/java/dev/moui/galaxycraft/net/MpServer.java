@@ -57,6 +57,9 @@ public final class MpServer {
         /** A guest throws what it holds onto a planet (checked: holds it, finite numbers). */
         void throwItem(UUID guest, MpPayloads.Throw t);
 
+        /** A creative guest throws a stack it made (checked: finite numbers, a planet it holds, a sane stack; the host still checks creative). */
+        void throwStack(UUID guest, MpPayloads.ThrowStack t);
+
         /** Where a guest is on a planet (already checked: finite numbers, a planet it holds or none). */
         void where(UUID guest, MpPayloads.Where w);
 
@@ -377,6 +380,19 @@ public final class MpServer {
                 || !throwLimits.computeIfAbsent(id, k -> new RateLimiter(25, 25)).allow(System.nanoTime()))
             return;
         sink.throwItem(id, t);
+    }
+
+    private static void throwStack(ServerPlayer p, MpPayloads.ThrowStack t) {
+        UUID id = p.getUUID();
+        EditSink sink = editSink;
+        float[] v = {t.x(), t.y(), t.z(), t.vx(), t.vy(), t.vz()};
+        for (float f : v) if (!Float.isFinite(f) || Math.abs(f) > 1e6f) return;
+        if (Math.abs(t.vx()) > 5 || Math.abs(t.vy()) > 5 || Math.abs(t.vz()) > 5) return;
+        if (t.stack().isEmpty() || t.stack().getCount() > t.stack().getMaxStackSize()) return;
+        if (sink == null || !members.contains(id) || !hub.subscribed(id, t.planet())
+                || !throwLimits.computeIfAbsent(id, k -> new RateLimiter(25, 25)).allow(System.nanoTime()))
+            return;
+        sink.throwStack(id, t);
     }
 
     private static void breakBlock(ServerPlayer p, MpPayloads.Break b) {
@@ -897,6 +913,7 @@ public final class MpServer {
         recv(MpPayloads.DropTake.TYPE, (payload, ctx) -> takeDrop(ctx.player(), payload));
         recv(MpPayloads.Break.TYPE, (payload, ctx) -> breakBlock(ctx.player(), payload));
         recv(MpPayloads.Throw.TYPE, (payload, ctx) -> throwItem(ctx.player(), payload));
+        recv(MpPayloads.ThrowStack.TYPE, (payload, ctx) -> throwStack(ctx.player(), payload));
         recv(MpPayloads.Where.TYPE, (payload, ctx) -> where(ctx.player(), payload));
         recv(MpPayloads.Steer.TYPE, (payload, ctx) -> steer(ctx.player(), payload));
         recv(MpPayloads.UsedUp.TYPE, (payload, ctx) -> usedUp(ctx.player(), payload));

@@ -126,6 +126,11 @@ final class HostPlanets {
             }
 
             @Override
+            public void throwStack(UUID guest, MpPayloads.ThrowStack t) {
+                Minecraft.getInstance().execute(() -> throwStackFor(guest, t));
+            }
+
+            @Override
             public void steer(UUID guest, int keys) {
                 ShadowWorld.guestSteer(guest, new ShadowWorld.Steer((keys & MpPayloads.Steer.FORWARD) != 0, (keys & MpPayloads.Steer.BACK) != 0,
                         (keys & MpPayloads.Steer.LEFT) != 0, (keys & MpPayloads.Steer.RIGHT) != 0, (keys & MpPayloads.Steer.SNEAK) != 0));
@@ -335,6 +340,19 @@ final class HostPlanets {
             if (sp == null) return;
             net.minecraft.world.item.ItemStack stack = t.container() < 0 ? sp.getInventory().removeFromSelected(t.all()) : takeFromMenu(sp, t);
             if (!stack.isEmpty()) ShadowWorld.throwOnto(p, new Vector3d(t.x(), t.y(), t.z()), new Vector3d(t.vx(), t.vy(), t.vz()), stack);
+        });
+    }
+
+    /** A creative guest's drop from the creative inventory: the stack it made lies on the planet (only a guest in creative can conjure one). */
+    private static void throwStackFor(UUID guest, MpPayloads.ThrowStack t) {
+        Entry e = shared.get(t.planet());
+        VoxelPlanet p = e == null || !e.holders.contains(guest) ? null : e.planet;
+        var server = Minecraft.getInstance().getSingleplayerServer();
+        if (p == null || server == null || !ShadowWorld.runs(p)) return;
+        server.execute(() -> {
+            var sp = server.getPlayerList().getPlayer(guest);
+            if (sp == null || !sp.isCreative()) return;
+            ShadowWorld.throwOnto(p, new Vector3d(t.x(), t.y(), t.z()), new Vector3d(t.vx(), t.vy(), t.vz()), t.stack().copy());
         });
     }
 
