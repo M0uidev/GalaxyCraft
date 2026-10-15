@@ -2,6 +2,8 @@ package dev.moui.galaxycraft.client.mixin;
 
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.ContainerInput;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -19,5 +21,19 @@ abstract class MultiPlayerGameModeMixin {
             return;
         }
         if (dev.moui.galaxycraft.client.PlanetClient.guestThrow(player, all)) ci.cancel();
+    }
+
+    /** A guest dropping from an open inventory (a click outside it, Q or Ctrl+Q over a slot): thrown through the host like the drop key. */
+    @Inject(method = "handleContainerInput", at = @At("HEAD"), cancellable = true)
+    private void galaxycraft$guestInventoryDrop(int containerId, int slotNum, int buttonNum, ContainerInput input, Player player,
+            CallbackInfo ci) {
+        if (!(player instanceof LocalPlayer local) || containerId != player.containerMenu.containerId) return;
+        boolean outside = input == ContainerInput.PICKUP && slotNum == net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE
+                && !player.containerMenu.getCarried().isEmpty();
+        boolean key = input == ContainerInput.THROW && slotNum >= 0 && player.containerMenu.getSlot(slotNum).hasItem();
+        if (!outside && !key) return;
+        // Outside, the left button throws the whole stack on the cursor and the right one a single item; Q throws one, Ctrl+Q all.
+        boolean all = outside ? buttonNum == 0 : buttonNum != 0;
+        if (dev.moui.galaxycraft.client.PlanetClient.guestThrow(local, all, containerId, outside ? -1 : slotNum)) ci.cancel();
     }
 }

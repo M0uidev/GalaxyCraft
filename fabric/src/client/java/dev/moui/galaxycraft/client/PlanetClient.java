@@ -205,13 +205,22 @@ public final class PlanetClient {
      * coordinates). False: Minecraft drops it as usual.
      */
     public static boolean guestThrow(LocalPlayer player, boolean all) {
-        if (!MpUse.guest() || throwSession == null || catalogIndex(throwSession) < 0 || !throwSession.active() || throwEye == null || player.getMainHandItem().isEmpty()
-                || player.isSpectator())
+        return guestThrow(player, all, -1, -1);
+    }
+
+    /**
+     * A guest throwing onto the planet the host runs: from the hand (container -1), or from an open inventory
+     * (container is the menu's id; slot the one clicked, -1 the stack on the cursor). False: not a guest on a
+     * planet, so Minecraft does it.
+     */
+    public static boolean guestThrow(LocalPlayer player, boolean all, int container, int slot) {
+        if (!MpUse.guest() || throwSession == null || catalogIndex(throwSession) < 0 || !throwSession.active() || throwEye == null
+                || container < 0 && player.getMainHandItem().isEmpty() || player.isSpectator())
             return false;
         Vector3d up = throwSession.planet().up(throwEye);
         Vector3d at = new Vector3d(throwEye).fma(-0.3, up), vel = new Vector3d(throwLook).mul(0.3);
         ClientPlayNetworking.send(new dev.moui.galaxycraft.net.MpPayloads.Throw(catalogIndex(throwSession), all, (float) at.x, (float) at.y,
-                (float) at.z, (float) vel.x, (float) vel.y, (float) vel.z));
+                (float) at.z, (float) vel.x, (float) vel.y, (float) vel.z, container, slot));
         return true;
     }
 

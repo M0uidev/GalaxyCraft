@@ -226,8 +226,12 @@ public final class MpPayloads {
         }
     }
 
-    /** Guest -> server: throw the stack in my hand (or one of it) onto the planet from here (planet space) with this speed. */
-    public record Throw(int planet, boolean all, float x, float y, float z, float vx, float vy, float vz) implements CustomPacketPayload {
+    /**
+     * Guest -> server: throw the stack in my hand (or one of it) onto the planet from here (planet space) with this speed.
+     * From an open inventory, container is the menu's id and slot the slot thrown from (-1: the stack on the cursor);
+     * container -1 is the hand.
+     */
+    public record Throw(int planet, boolean all, float x, float y, float z, float vx, float vy, float vz, int container, int slot) implements CustomPacketPayload {
         public static final Type<Throw> TYPE = typeOf("mp_throw");
         public static final StreamCodec<RegistryFriendlyByteBuf, Throw> CODEC = CustomPacketPayload.codec(
                 (p, b) -> {
@@ -239,9 +243,11 @@ public final class MpPayloads {
                     b.writeFloat(p.vx);
                     b.writeFloat(p.vy);
                     b.writeFloat(p.vz);
+                    b.writeVarInt(p.container + 1);
+                    b.writeVarInt(p.slot + 1);
                 },
                 b -> new Throw(b.readVarInt(), b.readBoolean(), b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat(),
-                        b.readFloat()));
+                        b.readFloat(), b.readVarInt() - 1, b.readVarInt() - 1));
 
         @Override
         public Type<? extends CustomPacketPayload> type() {

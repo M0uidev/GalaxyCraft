@@ -333,9 +333,28 @@ final class HostPlanets {
         server.execute(() -> {
             var sp = server.getPlayerList().getPlayer(guest);
             if (sp == null) return;
-            net.minecraft.world.item.ItemStack stack = sp.getInventory().removeFromSelected(t.all());
+            net.minecraft.world.item.ItemStack stack = t.container() < 0 ? sp.getInventory().removeFromSelected(t.all()) : takeFromMenu(sp, t);
             if (!stack.isEmpty()) ShadowWorld.throwOnto(p, new Vector3d(t.x(), t.y(), t.z()), new Vector3d(t.vx(), t.vy(), t.vz()), stack);
         });
+    }
+
+    /** What an inventory click throws, as Minecraft's own click would take it (the menu is then sent back to the guest). */
+    private static net.minecraft.world.item.ItemStack takeFromMenu(net.minecraft.server.level.ServerPlayer sp, MpPayloads.Throw t) {
+        var menu = sp.containerMenu;
+        if (menu.containerId != t.container()) return net.minecraft.world.item.ItemStack.EMPTY;
+        net.minecraft.world.item.ItemStack stack;
+        if (t.slot() < 0) {
+            var carried = menu.getCarried();
+            stack = carried.isEmpty() ? carried : t.all() ? carried.copyAndClear() : carried.split(1);
+        } else if (t.slot() < menu.slots.size()) {
+            var slot = menu.getSlot(t.slot());
+            stack = slot.hasItem() && slot.mayPickup(sp) ? slot.safeTake(t.all() ? slot.getItem().getCount() : 1, Integer.MAX_VALUE, sp)
+                    : net.minecraft.world.item.ItemStack.EMPTY;
+        } else {
+            stack = net.minecraft.world.item.ItemStack.EMPTY;
+        }
+        menu.broadcastChanges();
+        return stack;
     }
 
     /** The planet the host's game is on (its drops are the shared ones), or null. */
