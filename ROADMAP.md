@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-14 (multiplayer part 3 started: step A, a guest uses blocks, built on feat/multiplayer-3, awaiting a two-game check)
+Last updated: 2026-10-15 (multiplayer part 3: guest uses blocks, sees mobs, hits them, shares drops and mining; friends on other planets and stations added to the Inbox)
 
 ---
 
@@ -163,6 +163,11 @@ Last updated: 2026-10-14 (multiplayer part 3 started: step A, a guest uses block
 ---
 
 ## Inbox
+
+- 2026-10-15: **Friends anywhere work as if the host were there** (user): when a friend goes to another planet or a space
+  station, everything must work for them as it does for the host: blocks, doors, chests, mobs, drops, mining, fluids.
+  Today the host's shadow runs one planet (the host's), so a friend elsewhere only places and breaks blocks. Needs the
+  shadow to run several planets and stations at once, with each guest's stand-in in its own place.
 
 New ideas, unsorted, newest first. Format: `- YYYY-MM-DD: idea (who/where it came from)`.
 

@@ -194,6 +194,10 @@ public final class PlanetClient {
     private static final ShadowLink shadow = new ShadowLink(() -> focus);
     private static boolean aimUsable; // an empty hand aims at a block a click uses
     private static final DropsClient drops = new DropsClient(() -> focus);
+
+    static DropsClient drops() {
+        return drops;
+    }
     private static final EntityClient entities = new EntityClient(() -> focus, drops);
     private static McBlocks blocks;
     private static AtlasLink atlasLink;
@@ -1733,8 +1737,13 @@ public final class PlanetClient {
      */
     private static void breakBlock(LocalPlayer player, Vector3d eye, Vector3d look, PlanetSession.Aim aim) {
         if (aim != null && StationClient.isCore(focus, aim.cell())) return;
-        if (!shadow.available()) focus.breakBlock(eye, look, player.getAbilities().instabuild);
-        else if (aim != null && focus.planet().info(aim.cell()).breakable())
+        if (!shadow.available()) {
+            // A guest: the host's shadow breaks it (drops, the tool worn); where it cannot, the block just goes.
+            boolean creative = player.getAbilities().instabuild;
+            if (!MpUse.guest() || aim == null || !focus.planet().info(aim.cell()).breakable()
+                    || !MpUse.askBreak(indexOf(focus), aim.cell(), () -> focus.breakBlock(eye, look, creative)))
+                focus.breakBlock(eye, look, creative);
+        } else if (aim != null && focus.planet().info(aim.cell()).breakable())
             ShadowWorld.destroy(focus.planet(), aim.cell(), player.getUUID());
     }
 

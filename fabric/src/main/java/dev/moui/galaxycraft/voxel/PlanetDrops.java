@@ -21,6 +21,8 @@ public final class PlanetDrops<T> {
         public final Vector3d pos, vel;
         public T item;
         public int age, delay;
+        /** Names the drop between host and guests (the host numbers them). */
+        public int id;
         public boolean onGround;
 
         Drop(Vector3d pos, Vector3d vel, T item, int delay) {
@@ -32,9 +34,11 @@ public final class PlanetDrops<T> {
     }
 
     private final List<Drop<T>> drops = new ArrayList<>();
+    private int nextId = 1;
 
     public Drop<T> add(Vector3d pos, Vector3d vel, T item, int delay) {
         Drop<T> d = new Drop<>(new Vector3d(pos), new Vector3d(vel), item, delay);
+        d.id = nextId++;
         drops.add(d);
         return d;
     }

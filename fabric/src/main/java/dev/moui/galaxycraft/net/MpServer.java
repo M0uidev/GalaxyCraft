@@ -47,6 +47,12 @@ public final class MpServer {
 
         /** A guest hit or used a mob of the shadow (already checked: holds the planet, sane numbers). Called on the server thread. */
         void mobHit(UUID guest, MpPayloads.MobHit h);
+
+        /** A guest stepped on a drop. */
+        void takeDrop(UUID guest, MpPayloads.DropTake t);
+
+        /** A guest breaks a block (already checked: a planet it holds, a cell number). */
+        void breakBlock(UUID guest, MpPayloads.Break b);
     }
 
     private static volatile PlanetSource planetSource;
@@ -233,6 +239,40 @@ public final class MpServer {
         sink.mobHit(id, h);
     }
 
+    /** The host's game sends a guest the dropped items of the planet it runs, from any thread. */
+    public static void drops(UUID guest, MpPayloads.Drops body) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            ServerPlayer p = members.contains(guest) ? player(guest) : null;
+            if (p != null) ServerPlayNetworking.send(p, body);
+        });
+    }
+
+    private static final Map<UUID, RateLimiter> takeLimits = new HashMap<>();
+    private static final Map<UUID, RateLimiter> breakLimits = new HashMap<>();
+
+    private static void takeDrop(ServerPlayer p, MpPayloads.DropTake t) {
+        UUID id = p.getUUID();
+        EditSink sink = editSink;
+        if (sink == null || !members.contains(id) || !hub.subscribed(id, t.planet())
+                || !takeLimits.computeIfAbsent(id, k -> new RateLimiter(60, 30)).allow(System.nanoTime()))
+            return;
+        sink.takeDrop(id, t);
+    }
+
+    private static void breakBlock(ServerPlayer p, MpPayloads.Break b) {
+        UUID id = p.getUUID();
+        EditSink sink = editSink;
+        if (sink == null || !members.contains(id)) return;
+        if (!breakLimits.computeIfAbsent(id, k -> new RateLimiter(40, 20)).allow(System.nanoTime()) || !hub.subscribed(id, b.planet())
+                || b.cell() < 0) {
+            ServerPlayNetworking.send(p, new MpPayloads.UseDone(b.nonce(), true)); // break it yourself
+            return;
+        }
+        sink.breakBlock(id, b);
+    }
+
     private static final Map<UUID, RateLimiter> usedUpLimits = new HashMap<>();
 
     private static void usedUp(ServerPlayer p, MpPayloads.UsedUp u) {
@@ -361,6 +401,8 @@ public final class MpServer {
         });
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Use.TYPE, (payload, ctx) -> use(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.MobHit.TYPE, (payload, ctx) -> mobHit(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.DropTake.TYPE, (payload, ctx) -> takeDrop(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Break.TYPE, (payload, ctx) -> breakBlock(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.UsedUp.TYPE, (payload, ctx) -> usedUp(ctx.player(), payload));
         ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {

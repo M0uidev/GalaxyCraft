@@ -98,6 +98,19 @@ final class HostPlanets {
             }
 
             @Override
+            public void takeDrop(UUID guest, MpPayloads.DropTake t) {
+                Minecraft.getInstance().execute(() -> {
+                    Entry e = shared.get(t.planet());
+                    if (e != null && e.holders.contains(guest) && e.planet != null && e.planet == focusPlanet()) PlanetClient.drops().take(guest, t.id());
+                });
+            }
+
+            @Override
+            public void breakBlock(UUID guest, MpPayloads.Break b) {
+                Minecraft.getInstance().execute(() -> breakFor(guest, b));
+            }
+
+            @Override
             public void mobHit(UUID guest, MpPayloads.MobHit h) {
                 Minecraft.getInstance().execute(() -> hitMob(guest, h));
             }
@@ -129,6 +142,24 @@ final class HostPlanets {
         if (p == null || !ShadowWorld.runs(p)) return;
         if (h.kind() == 0) ShadowWorld.attack(h.entity(), guest, new Vector3d(h.lx(), h.ly(), h.lz()));
         else ShadowWorld.interact(h.entity(), guest);
+    }
+
+    /** The planet the host's game is on (its drops are the shared ones), or null. */
+    private static VoxelPlanet focusPlanet() {
+        dev.moui.galaxycraft.shadow.ShadowWorld.Entities es = dev.moui.galaxycraft.shadow.ShadowWorld.entities();
+        return es == null ? null : es.planet();
+    }
+
+    /** A guest breaks a block: the shadow does it as that player (drops, tool wear); if the shadow is elsewhere, it is the guest's to do. */
+    private static void breakFor(UUID guest, MpPayloads.Break b) {
+        Entry e = shared.get(b.planet());
+        VoxelPlanet p = e == null || !e.holders.contains(guest) ? null : e.planet;
+        if (p == null || b.cell() >= p.grid.cellCount() || !p.info(b.cell()).breakable() || !ShadowWorld.runs(p)) {
+            MpServer.useDone(guest, b.nonce(), true);
+            return;
+        }
+        ShadowWorld.destroy(p, b.cell(), guest);
+        MpServer.useDone(guest, b.nonce(), false);
     }
 
     private static PlanetSession liveOf(int index) {
@@ -274,7 +305,10 @@ final class HostPlanets {
         dev.moui.galaxycraft.shadow.ShadowWorld.Entities running = dev.moui.galaxycraft.shadow.ShadowWorld.entities();
         if (running != null)
             for (Entry e : shared.values())
-                if (e.planet == running.planet() && !e.holders.isEmpty()) MpMobs.hostTick(now, e.index, e.holders);
+                if (e.planet == running.planet() && !e.holders.isEmpty()) {
+                    MpMobs.hostTick(now, e.index, e.holders);
+                    if (now % 4 == 0) PlanetClient.drops().hostSend(e.index, e.holders);
+                }
         List<Map.Entry<Key, Batch>> out;
         synchronized (LOCK) {
             if (batches.isEmpty()) out = List.of();

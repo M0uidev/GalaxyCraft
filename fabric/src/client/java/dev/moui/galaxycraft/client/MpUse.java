@@ -39,6 +39,14 @@ final class MpUse {
         return true;
     }
 
+    /** Asks the host's shadow to break a block; onPass runs when it cannot (the guest breaks it itself). False if it could not be sent. */
+    static boolean askBreak(int planet, int cell, Runnable onPass) {
+        int n = book.add(onPass, () -> {}, tick);
+        if (n < 0) return false;
+        ClientPlayNetworking.send(new MpPayloads.Break(n, planet, cell));
+        return true;
+    }
+
     /** A block was placed outside creative: the server's inventory loses one. */
     static void usedUp(InteractionHand hand) {
         ClientPlayNetworking.send(new MpPayloads.UsedUp(hand == InteractionHand.MAIN_HAND ? 0 : 1));

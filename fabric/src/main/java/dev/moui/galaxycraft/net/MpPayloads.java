@@ -137,6 +137,83 @@ public final class MpPayloads {
         }
     }
 
+    /** One dropped item as sent: its id, place and speed in the planet's space, ticks until it can be picked up, the stack. */
+    public record DropItem(int id, float x, float y, float z, float vx, float vy, float vz, int delay,
+            net.minecraft.world.item.ItemStack stack) {}
+
+    /** Most drops in one message. */
+    public static final int MAX_DROPS = 200;
+
+    /** Server -> guest, ~5 Hz: the dropped items of the planet the host runs. */
+    public record Drops(int planet, java.util.List<DropItem> items) implements CustomPacketPayload {
+        public static final Type<Drops> TYPE = typeOf("mp_drops");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Drops> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.planet);
+                    int n = Math.min(p.items.size(), MAX_DROPS);
+                    b.writeVarInt(n);
+                    for (int i = 0; i < n; i++) {
+                        DropItem d = p.items.get(i);
+                        b.writeVarInt(d.id);
+                        b.writeFloat(d.x);
+                        b.writeFloat(d.y);
+                        b.writeFloat(d.z);
+                        b.writeFloat(d.vx);
+                        b.writeFloat(d.vy);
+                        b.writeFloat(d.vz);
+                        b.writeVarInt(d.delay);
+                        net.minecraft.world.item.ItemStack.OPTIONAL_STREAM_CODEC.encode(b, d.stack);
+                    }
+                },
+                b -> {
+                    int planet = b.readVarInt(), n = b.readVarInt();
+                    if (n > MAX_DROPS) throw new io.netty.handler.codec.DecoderException("too many drops: " + n);
+                    java.util.List<DropItem> items = new java.util.ArrayList<>(n);
+                    for (int i = 0; i < n; i++)
+                        items.add(new DropItem(b.readVarInt(), b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat(),
+                                b.readFloat(), b.readVarInt(), net.minecraft.world.item.ItemStack.OPTIONAL_STREAM_CODEC.decode(b)));
+                    return new Drops(planet, items);
+                });
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Guest -> server: I stepped on that drop; give it to me. */
+    public record DropTake(int planet, int id) implements CustomPacketPayload {
+        public static final Type<DropTake> TYPE = typeOf("mp_drop_take");
+        public static final StreamCodec<RegistryFriendlyByteBuf, DropTake> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.planet);
+                    b.writeVarInt(p.id);
+                },
+                b -> new DropTake(b.readVarInt(), b.readVarInt()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Guest -> server: break that block (the host's shadow does it as this player); answered with UseDone (passed: nobody did, break it yourself). */
+    public record Break(int nonce, int planet, int cell) implements CustomPacketPayload {
+        public static final Type<Break> TYPE = typeOf("mp_break");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Break> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.nonce);
+                    b.writeVarInt(p.planet);
+                    b.writeVarInt(p.cell);
+                },
+                b -> new Break(b.readVarInt(), b.readVarInt(), b.readVarInt()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Server -> players: that player left. */
     public record Gone(UUID id) implements CustomPacketPayload {
         public static final Type<Gone> TYPE = typeOf("mp_gone");
@@ -309,5 +386,8 @@ public final class MpPayloads {
         PayloadTypeRegistry.serverboundPlay().register(UsedUp.TYPE, UsedUp.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(Mobs.TYPE, Mobs.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(MobHit.TYPE, MobHit.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(Drops.TYPE, Drops.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(DropTake.TYPE, DropTake.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(Break.TYPE, Break.CODEC);
     }
 }
