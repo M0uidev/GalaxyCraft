@@ -1104,8 +1104,9 @@ public final class ShipClient {
         String stage = stageName();
         java.util.Set<String> want = new java.util.HashSet<>();
         for (ShipRecord r : store.all()) {
-            if (!r.stage().equals(stage) || r.id().equals(boarded) || pilots.pilotOf(r.id()) != null
-                    || MapClient.courses().get(r.id()).isPresent()) continue; // flown by someone, or on a trip: no hull left behind
+            if (!r.stage().equals(stage) || r.id().equals(boarded) || r.id().equals(seatedOn)
+                    || MapClient.courses().get(r.id()).isPresent()) continue; // we ride it, or it is on a trip: no hull left behind
+            // (A ship someone else flies keeps its hull: it follows the poses we hear, so we cannot walk through it.)
             want.add(r.id());
             if (solid.get(r.id()) == r) continue;
             solid.put(r.id(), r);
