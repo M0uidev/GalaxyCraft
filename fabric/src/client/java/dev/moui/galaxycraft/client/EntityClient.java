@@ -899,7 +899,8 @@ final class EntityClient {
                 }
                 if (st instanceof net.minecraft.client.renderer.entity.state.HumanoidRenderState h) {
                     h.isCrouching = s.crouching();
-                    h.isFallFlying = s.gliding();
+                    h.isFallFlying = s.gliding() && !s.seated();
+                    h.isPassenger = s.seated();
                     h.isVisuallySwimming = s.swimming();
                 }
                 galaxy = s.matrix();

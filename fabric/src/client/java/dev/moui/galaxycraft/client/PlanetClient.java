@@ -874,6 +874,9 @@ public final class PlanetClient {
             if (target == null && aim != null && pressed(buttons, MOUSE_MIDDLE)) pickBlock(player, session.planet().get(aim.cell()));
             ShadowWorld.steer(new ShadowWorld.Steer(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),
                     key(in, SC_LSHIFT) || key(in, SC_RSHIFT)));
+            if (MpUse.guest())
+                MpRide.tick(player, session, frame, dev.moui.galaxycraft.net.MpPayloads.Steer.pack(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),
+                        key(in, SC_LSHIFT) || key(in, SC_RSHIFT)));
             // A station's core: its menu on a right click (crouching, the click places blocks as on any
             // block), and it never breaks.
             boolean core = aim != null && StationClient.isCore(session, aim.cell());

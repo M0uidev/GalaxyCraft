@@ -59,6 +59,9 @@ public final class MpServer {
 
         /** Where a guest is on a planet (already checked: finite numbers, a planet it holds or none). */
         void where(UUID guest, MpPayloads.Where w);
+
+        /** The keys a guest holds while it rides (checked: a member, rate limited). */
+        default void steer(UUID guest, int keys) {}
     }
 
     private static volatile PlanetSource planetSource;
@@ -283,6 +286,34 @@ public final class MpServer {
             ServerPlayer p = members.contains(guest) ? player(guest) : null;
             if (p != null) ServerPlayNetworking.send(p, body);
         });
+    }
+
+    private static final Map<UUID, RateLimiter> steerLimits = new HashMap<>();
+
+    private static void steer(ServerPlayer p, MpPayloads.Steer s) {
+        UUID id = p.getUUID();
+        EditSink sink = editSink;
+        if (sink == null || !members.contains(id) || !steerLimits.computeIfAbsent(id, k -> new RateLimiter(20, 20)).allow(System.nanoTime())) return;
+        sink.steer(id, s.keys());
+    }
+
+    /** The host's game says where a guest's vehicle seats it, from any thread. */
+    public static void rideSeat(UUID guest, MpPayloads.RideSeat body) {
+        sendTo(guest, body);
+    }
+
+    private static void sendTo(UUID guest, net.minecraft.network.protocol.common.custom.CustomPacketPayload body) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            ServerPlayer p = members.contains(guest) ? player(guest) : null;
+            if (p != null) ServerPlayNetworking.send(p, body);
+        });
+    }
+
+    /** The host's game says a guest is off its vehicle, from any thread. */
+    public static void rideEnd(UUID guest) {
+        sendTo(guest, new MpPayloads.RideEnd());
     }
 
     private static final Map<UUID, RateLimiter> takeLimits = new HashMap<>();
@@ -559,6 +590,7 @@ public final class MpServer {
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Break.TYPE, (payload, ctx) -> breakBlock(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Throw.TYPE, (payload, ctx) -> throwItem(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Where.TYPE, (payload, ctx) -> where(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Steer.TYPE, (payload, ctx) -> steer(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.UsedUp.TYPE, (payload, ctx) -> usedUp(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.StarDo.TYPE, (payload, ctx) -> starDo(ctx.player(), payload));
         ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);

@@ -114,7 +114,9 @@ public final class ShadowWorld {
         volatile BlockPos mario = BlockPos.ZERO;
         volatile Entities entities;
         MarioProxy proxy;
-        Entity riding;
+        /** What each player on this run rides, by player (the host under HOST), in the order they mounted. */
+        final java.util.Map<UUID, Entity> riders = new java.util.LinkedHashMap<>();
+        /** The host's seat, for the client thread (a guest's goes to it by the {@link RideSink}). */
         volatile Seat seat;
         volatile LiveBlocks.Snapshot live;
         /** The cells live last tick (they leave a little farther than they come). */
@@ -270,9 +272,43 @@ public final class ShadowWorld {
         steer = s;
     }
 
+    /** Who hears about a guest's ride (set by the host's game): where it sits, and when it is off. */
+    public interface RideSink {
+        void seat(UUID guest, VoxelPlanet planet, org.joml.Vector3d pos);
+
+        void end(UUID guest);
+    }
+
+    private static volatile RideSink rideSink;
+
+    public static void rideSink(RideSink sink) {
+        rideSink = sink;
+    }
+
+    /** Who rides what and what keys they hold (server thread). */
+    private static final dev.moui.galaxycraft.net.RiderBook<Steer> book = new dev.moui.galaxycraft.net.RiderBook<>();
+    private static final Steer RELEASED = new Steer(false, false, false, false, false);
+    private static long serverTicks;
+
+    /** A guest's keys while it rides (from the host's game, any thread). */
+    public static void guestSteer(UUID guest, Steer s) {
+        ops.add(level -> book.steer(guest, s, serverTicks));
+    }
+
+    /** Takes player id off what it rides (server thread); guests are told. */
+    private static void getOff(Run run, UUID id) {
+        if (run.riders.remove(id) == null) return;
+        book.dismount(id);
+        if (HOST.equals(id)) run.seat = null;
+        else {
+            RideSink sink = rideSink;
+            if (sink != null) sink.end(id);
+        }
+    }
+
     /** Mario gets off what he rides. */
     public static void dismount() {
-        ops.add(level -> cur.riding = null);
+        ops.add(level -> getOff(cur, HOST));
     }
 
     /**
@@ -287,7 +323,15 @@ public final class ShadowWorld {
             if (target == null || p == null || !target.isAlive()) return;
             if (target instanceof net.minecraft.world.entity.vehicle.minecart.AbstractMinecart
                     || target instanceof net.minecraft.world.entity.vehicle.boat.AbstractBoat) {
-                if (isHostPlayer(p)) cur.riding = target;
+                // The host's Mario, or a guest whose stand-in is on this run.
+                boolean host = isHostPlayer(p);
+                Run mine = host ? cur : null;
+                if (!host)
+                    for (Run r : runs.values()) if (r.guestProxies.containsKey(player)) mine = r;
+                if (mine != null && (host || runAtZ(target.getZ()) == mine)) {
+                    UUID key = host ? HOST : player;
+                    if (book.mount(key, target.getId())) mine.riders.put(key, target);
+                }
                 return;
             }
             p.interactOn(target, InteractionHand.MAIN_HAND, target.position());
@@ -495,7 +539,7 @@ public final class ShadowWorld {
                     old.wanted.remove(HOST);
                     if (old.proxy != null && !old.proxy.isRemoved()) level.removePlayerImmediately(old.proxy, Entity.RemovalReason.DISCARDED);
                     old.proxy = null;
-                    old.riding = null;
+                    getOff(old, HOST);
                     old.seat = null;
                 } else {
                     cur = old;
@@ -669,14 +713,15 @@ public final class ShadowWorld {
         if (r.consumesAction() || stack.isEmpty() || stack.getItem() instanceof BlockItem
                 || stack.getItem() instanceof BucketItem || sp.getCooldowns().isOnCooldown(stack))
             return r;
-        if (stack.getItem() instanceof net.minecraft.world.item.BoatItem && isHostPlayer(sp) && cur.proxy != null && !cur.proxy.isRemoved()) {
-            // A boat goes where Mario looks: placed by his stand-in, turned to the spot clicked.
-            Vec3 to = h.getLocation().subtract(cur.proxy.getEyePosition());
-            cur.proxy.setYRot((float) Math.toDegrees(Math.atan2(-to.x, to.z)));
-            cur.proxy.setXRot((float) -Math.toDegrees(Math.atan2(to.y, Math.sqrt(to.x * to.x + to.z * to.z))));
-            cur.proxy.setItemInHand(InteractionHand.MAIN_HAND, stack);
-            r = stack.use(level, cur.proxy, InteractionHand.MAIN_HAND);
-            cur.proxy.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        MarioProxy placer = isHostPlayer(sp) ? cur.proxy : cur.guestProxies.get(sp.getUUID());
+        if (stack.getItem() instanceof net.minecraft.world.item.BoatItem && placer != null && !placer.isRemoved()) {
+            // A boat goes where the player looks: placed by their stand-in, turned to the spot clicked.
+            Vec3 to = h.getLocation().subtract(placer.getEyePosition());
+            placer.setYRot((float) Math.toDegrees(Math.atan2(-to.x, to.z)));
+            placer.setXRot((float) -Math.toDegrees(Math.atan2(to.y, Math.sqrt(to.x * to.x + to.z * to.z))));
+            placer.setItemInHand(InteractionHand.MAIN_HAND, stack);
+            r = stack.use(level, placer, InteractionHand.MAIN_HAND);
+            placer.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
             return r;
         }
         int count = stack.getCount();
@@ -799,6 +844,7 @@ public final class ShadowWorld {
     /** End of each server tick: the client's requests, then copying in, then the edges' copies. */
     public static void tick(MinecraftServer s) {
         server = s;
+        serverTicks++;
         ServerLevel level = s.getLevel(KEY);
         available = level != null;
         if (level == null) {
@@ -899,11 +945,11 @@ public final class ShadowWorld {
         if (p.isAlive()) cur.proxy.setHealth(p.getHealth());
         // Mario's body: what he walks into is pushed, arrows lying there are picked up.
         for (Entity e : level.getEntities(cur.proxy, cur.proxy.getBoundingBox().inflate(0.2))) {
-            if (e == cur.riding) continue;
+            if (e == cur.riders.get(HOST)) continue;
             if (e.isPushable()) e.push(cur.proxy);
             if (e instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow) e.playerTouch(p);
         }
-        ride(level, p);
+        ride(level, HOST, p, cur.proxy, steer);
     }
 
     /** The guests on this run's planet: each has a stand-in where it is, so mobs see and chase it. */
@@ -946,36 +992,54 @@ public final class ShadowWorld {
             level.getChunkSource().move(px);
             if (p.isAlive()) px.setHealth(p.getHealth());
             for (Entity e : level.getEntities(px, px.getBoundingBox().inflate(0.2))) {
+                if (e == cur.riders.get(en.getKey())) continue;
                 if (e.isPushable()) e.push(px);
                 if (e instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow) e.playerTouch(p);
             }
+            ride(level, en.getKey(), p, px, book.keys(en.getKey(), serverTicks, RELEASED));
         }
+        // A guest who left the planet (or the game) rides no more.
+        for (UUID id : new ArrayList<>(cur.riders.keySet()))
+            if (!HOST.equals(id) && !cur.guestProxies.containsKey(id)) getOff(cur, id);
     }
 
     /** Mario on a minecart or boat: pushed or paddled by the movement keys, off with sneak. */
-    private static void ride(ServerLevel level, ServerPlayer p) {
-        Steer s = steer;
-        if (cur.riding != null && (cur.riding.isRemoved() || cur.riding.level() != level || s.sneak() || !p.isAlive())) cur.riding = null;
-        if (cur.riding == null) {
-            cur.seat = null;
+    private static void ride(ServerLevel level, UUID id, ServerPlayer p, MarioProxy proxy, Steer s) {
+        Entity riding = cur.riders.get(id);
+        // Gone, in another level, got off (sneak), dead, or the book says the player moved to another vehicle.
+        if (riding != null && (riding.isRemoved() || riding.level() != level || s.sneak() || !p.isAlive()
+                || book.vehicleOf(id) != riding.getId())) {
+            getOff(cur, id);
+            riding = null;
+        }
+        if (riding == null) {
+            if (HOST.equals(id)) cur.seat = null;
             return;
         }
-        Vec3 look = cur.proxy.getLookAngle();
-        Vec3 flat = new Vec3(look.x, 0, look.z).normalize();
-        if (cur.riding instanceof net.minecraft.world.entity.vehicle.boat.AbstractBoat) {
-            float yaw = cur.riding.getYRot() + (s.left() ? -3 : 0) + (s.right() ? 3 : 0);
-            cur.riding.setYRot(yaw);
-            double r = Math.toRadians(yaw);
-            Vec3 front = new Vec3(-Math.sin(r), 0, Math.cos(r));
-            if (s.forward()) cur.riding.push(front.scale(0.04));
-            if (s.back()) cur.riding.push(front.scale(-0.005));
-        } else {
-            if (s.forward()) cur.riding.push(flat.scale(0.02));
-            if (s.back()) cur.riding.push(flat.scale(-0.02));
+        // With several riders only the first steers or pushes.
+        if (book.steers(id)) {
+            Vec3 look = proxy.getLookAngle();
+            Vec3 flat = new Vec3(look.x, 0, look.z).normalize();
+            if (riding instanceof net.minecraft.world.entity.vehicle.boat.AbstractBoat) {
+                float yaw = riding.getYRot() + (s.left() ? -3 : 0) + (s.right() ? 3 : 0);
+                riding.setYRot(yaw);
+                double r = Math.toRadians(yaw);
+                Vec3 front = new Vec3(-Math.sin(r), 0, Math.cos(r));
+                if (s.forward()) riding.push(front.scale(0.04));
+                if (s.back()) riding.push(front.scale(-0.005));
+            } else {
+                if (s.forward()) riding.push(flat.scale(0.02));
+                if (s.back()) riding.push(flat.scale(-0.02));
+            }
         }
-        Vec3 at = cur.riding.getPassengerRidingPosition(cur.proxy);
+        Vec3 at = riding.getPassengerRidingPosition(proxy);
         double[] f = cur.map.frame(at.x, at.y, at.z);
-        cur.seat = f == null ? null : new Seat(cur.planet, new org.joml.Vector3d(f[0], f[1], f[2]));
+        Seat seat = f == null ? null : new Seat(cur.planet, new org.joml.Vector3d(f[0], f[1], f[2]));
+        if (HOST.equals(id)) cur.seat = seat;
+        else if (seat != null && serverTicks % 2 == 0) {
+            RideSink sink = rideSink;
+            if (sink != null) sink.seat(id, cur.planet, seat.pos());
+        }
     }
 
     // ---- particles (server thread, from the mixins) ----
@@ -1122,7 +1186,7 @@ public final class ShadowWorld {
         cur.wanted.clear();
         if (cur.proxy != null && !cur.proxy.isRemoved()) level.removePlayerImmediately(cur.proxy, Entity.RemovalReason.DISCARDED);
         cur.proxy = null;
-        cur.riding = null;
+        for (UUID id : new ArrayList<>(cur.riders.keySet())) getOff(cur, id);
         cur.seat = null;
         for (Long c : cur.forced) level.setChunkForced(ChunkPos.getX(c), ChunkPos.getZ(c), false);
         cur.forced.clear();

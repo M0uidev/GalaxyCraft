@@ -485,6 +485,59 @@ public final class MpPayloads {
         }
     }
 
+    /**
+     * Guest -> server: the movement keys held while riding a minecart or boat (bits: 1 forward, 2 back, 4 left, 8 right,
+     * 16 sneak = get off). Sent when they change and five times a second while any is held; the host counts a silence
+     * of half a second as released.
+     */
+    public record Steer(int keys) implements CustomPacketPayload {
+        public static final int FORWARD = 1, BACK = 2, LEFT = 4, RIGHT = 8, SNEAK = 16, ALL = 31;
+        public static final Type<Steer> TYPE = typeOf("mp_steer");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Steer> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByte(p.keys), b -> new Steer(b.readByte() & ALL));
+
+        public static int pack(boolean forward, boolean back, boolean left, boolean right, boolean sneak) {
+            return (forward ? FORWARD : 0) | (back ? BACK : 0) | (left ? LEFT : 0) | (right ? RIGHT : 0) | (sneak ? SNEAK : 0);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Server -> guest: where the vehicle the guest rides seats it (planet space of the planet with this catalog index), about ten times a second. */
+    public record RideSeat(int planet, float x, float y, float z) implements CustomPacketPayload {
+        public static final Type<RideSeat> TYPE = typeOf("mp_ride_seat");
+        public static final StreamCodec<RegistryFriendlyByteBuf, RideSeat> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.planet);
+                    b.writeFloat(p.x);
+                    b.writeFloat(p.y);
+                    b.writeFloat(p.z);
+                }, b -> new RideSeat(b.readVarInt(), b.readFloat(), b.readFloat(), b.readFloat()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Server -> guest: the guest is no longer on its vehicle (it got off, the vehicle went, the planet closed). */
+    public record RideEnd() implements CustomPacketPayload {
+        public static final Type<RideEnd> TYPE = typeOf("mp_ride_end");
+        public static final StreamCodec<RegistryFriendlyByteBuf, RideEnd> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByte(0), b -> {
+                    b.readByte();
+                    return new RideEnd();
+                });
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Both sides must know the types: call from the common entrypoint. */
     public static void register() {
         PayloadTypeRegistry.clientboundPlay().register(Hello.TYPE, Hello.CODEC);
@@ -513,6 +566,7 @@ public final class MpPayloads {
         PayloadTypeRegistry.serverboundPlay().register(Throw.TYPE, Throw.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(StationUpdate.TYPE, StationUpdate.CODEC);
         registerStars();
+        registerRiding();
     }
 
     private static void registerStars() {
@@ -520,5 +574,11 @@ public final class MpPayloads {
         PayloadTypeRegistry.clientboundPlay().register(StarPut.TYPE, StarPut.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(StarGone.TYPE, StarGone.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(StarDo.TYPE, StarDo.CODEC);
+    }
+
+    private static void registerRiding() {
+        PayloadTypeRegistry.serverboundPlay().register(Steer.TYPE, Steer.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(RideSeat.TYPE, RideSeat.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(RideEnd.TYPE, RideEnd.CODEC);
     }
 }

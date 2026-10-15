@@ -21,6 +21,10 @@ public final class StateSampler {
         count = 0;
     }
 
+    public static int flags(boolean sneak, boolean sprint, boolean swim, boolean glide, boolean ground, boolean ship, boolean ride) {
+        return flags(sneak, sprint, swim, glide, ground, ship) | (ride ? Protocol.F_RIDE : 0);
+    }
+
     public static int flags(boolean sneak, boolean sprint, boolean swim, boolean glide, boolean ground, boolean ship) {
         return (sneak ? Protocol.F_SNEAK : 0) | (sprint ? Protocol.F_SPRINT : 0) | (swim ? Protocol.F_SWIM : 0)
                 | (glide ? Protocol.F_GLIDE : 0) | (ground ? Protocol.F_GROUND : 0) | (ship ? Protocol.F_SHIP : 0);
