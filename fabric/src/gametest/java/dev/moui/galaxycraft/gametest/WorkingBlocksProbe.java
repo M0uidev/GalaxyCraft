@@ -46,6 +46,9 @@ public final class WorkingBlocksProbe implements FabricClientGameTest {
                 s.spawn(32, new Vector3d(), new Vector3d(0, 1, 0));
                 link = new ShadowLink(() -> s);
                 mario = new Vector3d(0, s.planet().surface() + 0.5, 0).add(s.center());
+                // The player is the host's: only the host's sign editor opens on this screen.
+                dev.moui.galaxycraft.shadow.ShadowWorld.mario(new dev.moui.galaxycraft.shadow.ShadowWorld.MarioAt(s.planet(),
+                        s.localOf(mario), new Vector3d(1, 0, 0), mc.player.getUUID()));
                 return new int[] {place("ender_chest", 2), place("red_bed", 4), place("straw_bed", 7), place("oak_sign", 10),
                         place("oak_shelf", 12), place("rail", 14), place("rail", 15), place("rail", 16), place("rail", 17),
                         place("respawn_anchor", 19)};
