@@ -825,6 +825,7 @@ public final class PlanetClient {
             sinceSpot = 0;
             writeSpot(player);
         }
+        holdDrop(player, screen);
         PlanetSession session = focus; // the clicks, the outline and Minecraft's running of the blocks are its
         if (session.active() && frame != null && player != null) {
             if (p && !lastP && !screen) land(session);
@@ -1598,6 +1599,21 @@ public final class PlanetClient {
     /** Ticks between uses while the right button is held (Minecraft's rightClickDelay). */
     private static final int USE_REPEAT = 4;
     private static int useDelay;
+
+    private static int dropHeld;
+
+    /**
+     * Holding the drop key keeps dropping, as in Minecraft (the keyboard here sends presses and releases, not the
+     * operating system's repeats): after half a second, one item every other tick.
+     */
+    private static void holdDrop(LocalPlayer player, boolean screen) {
+        Minecraft mc = Minecraft.getInstance();
+        if (screen || player == null || mc.gameMode == null || player.isSpectator() || !mc.options.keyDrop.isDown()) {
+            dropHeld = 0;
+            return;
+        }
+        if (++dropHeld > 10 && dropHeld % 2 == 0) mc.gameMode.dropItem(player, false);
+    }
 
     /**
      * Middle click on a block: its item to the hand. In the hotbar already: that slot is selected; in the rest of the
