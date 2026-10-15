@@ -273,7 +273,7 @@ public final class MpServer {
         for (float f : v) if (!Float.isFinite(f) || Math.abs(f) > 1e6f) return;
         if (Math.abs(t.vx()) > 5 || Math.abs(t.vy()) > 5 || Math.abs(t.vz()) > 5) return;
         if (sink == null || !members.contains(id) || !hub.subscribed(id, t.planet())
-                || !throwLimits.computeIfAbsent(id, k -> new RateLimiter(10, 10)).allow(System.nanoTime()))
+                || !throwLimits.computeIfAbsent(id, k -> new RateLimiter(25, 25)).allow(System.nanoTime()))
             return;
         sink.throwItem(id, t);
     }

@@ -67,7 +67,7 @@ public final class PlanetClient {
     static final double REACH = 3;
     /** Keys by their USB HID usage (as the host reports them). */
     private static final int SC_W = 26, SC_A = 4, SC_S = 22, SC_D = 7, SC_LSHIFT = 225, SC_RSHIFT = 229, SC_SPACE = 44, SC_LCTRL = 224;
-    private static final int MOUSE_LEFT = 1 << 1, MOUSE_RIGHT = 1 << 3;
+    private static final int MOUSE_LEFT = 1 << 1, MOUSE_MIDDLE = 1 << 2, MOUSE_RIGHT = 1 << 3;
     /** USB HID usages the Toad dialogue reads from the host's keys (as W, A, S, D above): 1-4, Enter, Down, Up. */
     private static final int SC_1 = 30, SC_ENTER = 40, SC_DOWN = 81, SC_UP = 82;
     public static final int DEFAULT_RADIUS = 32;
@@ -859,6 +859,8 @@ public final class PlanetClient {
                 else if (!ShadowToads.isToad(target)) ShadowWorld.interact(target.getId(), player.getUUID()); // a Toad is talked to (ToadClient), not used
                 hit = true; // the click is the mob's: it does not also use the block behind it
             }
+            // The wheel button picks the block aimed at, as in Minecraft (a mob in front takes the click).
+            if (target == null && aim != null && pressed(buttons, MOUSE_MIDDLE)) pickBlock(player, session.planet().get(aim.cell()));
             ShadowWorld.steer(new ShadowWorld.Steer(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),
                     key(in, SC_LSHIFT) || key(in, SC_RSHIFT)));
             // A station's core: its menu on a right click (crouching, the click places blocks as on any
@@ -1596,6 +1598,28 @@ public final class PlanetClient {
     /** Ticks between uses while the right button is held (Minecraft's rightClickDelay). */
     private static final int USE_REPEAT = 4;
     private static int useDelay;
+
+    /**
+     * Middle click on a block: its item to the hand. In the hotbar already: that slot is selected; in the rest of the
+     * inventory: swapped into the selected slot; otherwise, in creative, a stack of it is made.
+     */
+    private static void pickBlock(LocalPlayer player, int id) {
+        net.minecraft.world.level.block.state.BlockState state = blocks.state(id);
+        Minecraft mc = Minecraft.getInstance();
+        if (state.isAir() || mc.gameMode == null) return;
+        ItemStack stack = new ItemStack(state.getBlock());
+        if (stack.isEmpty()) return;
+        net.minecraft.world.entity.player.Inventory inv = player.getInventory();
+        int slot = inv.findSlotMatchingItem(stack);
+        if (slot >= 0 && net.minecraft.world.entity.player.Inventory.isHotbarSlot(slot)) inv.setSelectedSlot(slot);
+        else if (slot >= 0)
+            mc.gameMode.handleContainerInput(player.inventoryMenu.containerId, slot, inv.getSelectedSlot(),
+                    net.minecraft.world.inventory.ContainerInput.SWAP, player);
+        else if (player.getAbilities().instabuild) {
+            inv.addAndPickItem(stack);
+            mc.gameMode.handleCreativeModeItemAdd(inv.getItem(inv.getSelectedSlot()), 36 + inv.getSelectedSlot());
+        }
+    }
 
     private static boolean pressed(int buttons, int mask) {
         return (buttons & mask) != 0 && (lastButtons & mask) == 0;

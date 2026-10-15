@@ -14,6 +14,7 @@
 		"LocalPlayerMixin",
 		"MusicManagerMixin",
 		"MinecraftMixin",
+		"MultiPlayerGameModeMixin",
 		"ModelPartAccessor",
 		"OptionsMixin",
 		"VideoSettingsScreenMixin",
