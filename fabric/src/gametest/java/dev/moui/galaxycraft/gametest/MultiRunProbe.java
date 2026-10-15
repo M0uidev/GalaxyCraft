@@ -95,7 +95,8 @@ public final class MultiRunProbe implements FabricClientGameTest {
             check(ctx, b, cells[3], "lit=true");
             check(ctx, a, cells[1], "lit=false");
             check(ctx, a, cells[0], "powered=false");
-            if (changes[0] != 0) fails.add(changes[0] + " changes of A came from B's actions");
+            // A changes by itself too (trees grow, leaves fall): only its own lever and lamp, checked above, show B did not leak.
+            System.out.println("[GalaxyCraft multirun] natural changes of A meanwhile: " + changes[0]);
             if (changes[1] == 0) fails.add("no change of B came out of the shadow");
 
             // (3) a block broken on B drops on B

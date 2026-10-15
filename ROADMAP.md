@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-15 (multiplayer part 3: guest uses blocks, sees mobs, hits them, shares drops and mining; friends on other planets and stations added to the Inbox)
+Last updated: 2026-10-15 (multiplayer: friends on other planets run in the shadow; stations, riding, Launch Stars and sane advancements built on feat/mp-all, awaiting a two-game playtest)
 
 ---
 
