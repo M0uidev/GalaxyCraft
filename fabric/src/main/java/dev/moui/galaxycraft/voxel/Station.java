@@ -89,6 +89,38 @@ public final class Station {
         planet = VoxelPlanet.flat(to, cells, planet.blocks);
     }
 
+    /**
+     * Names the grid the cell numbers go by (never 0). A regrow gives the station another grid, so cell
+     * numbers made for the old one mean other places: edits carry this key and are dropped when it differs.
+     */
+    public static int gridKey(FlatGrid g) {
+        int h = 17;
+        for (int v : new int[] {g.n, g.layers, g.ox, g.oy, g.oz}) h = h * 31 + v;
+        return h & 0x7fffffff | 1;
+    }
+
+    public int gridKey() {
+        return gridKey(grid());
+    }
+
+    /** Whether a block may go at that cell (a cell outside the grid is no place). */
+    public boolean allowedCell(int cell) {
+        if (cell < 0 || cell >= planet.grid.cellCount()) return false;
+        FlatGrid g = grid();
+        return allowed(g.stationX(cell), g.stationY(cell), g.stationZ(cell));
+    }
+
+    /**
+     * Cells just changed by someone else (a guest): the bounds grow with the blocks, and the grid is made anew
+     * if one came near its side. True if it was (the planet is then another object).
+     */
+    public boolean settle(int[] cells) {
+        boolean regrow = false;
+        for (int cell : cells) if (cell >= 0 && cell < planet.grid.cellCount()) regrow |= changed(cell);
+        if (regrow) regrow();
+        return regrow;
+    }
+
     public int blockCount() {
         int n = 0;
         for (char c : planet.cells()) if (c != Blocks.AIR) n++;
