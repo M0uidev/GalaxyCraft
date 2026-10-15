@@ -50,6 +50,7 @@ final class MpMobs {
         }
     }
 
+    private static final boolean TRACE = System.getenv("GXC_MP_TRACE") != null;
     private static int planet = -1;
     private static final Map<Integer, Remote> remotes = new HashMap<>();
     private static int tick;
@@ -97,6 +98,7 @@ final class MpMobs {
             if (data.length > MobsCodec.MAX_DATA) continue;
             mobs.add(new MobsCodec.Mob(e.getId(), BuiltInRegistries.ENTITY_TYPE.getId(e.getType()), frame, yaw, e.getXRot(), head, 0, speed, data));
         }
+        if (TRACE && now % 40 == 0) GalaxyCraft.LOG.info("[mp mobs] host: {} shadow entities, {} sent for planet {} to {} guests", es.list().size(), mobs.size(), planetIndex, holders.size());
         byte[] body = MobsCodec.encode(planetIndex, mobs);
         for (UUID g : holders) MpServer.mobs(g, body);
     }
@@ -111,6 +113,7 @@ final class MpMobs {
             remotes.clear();
             planet = b.planet();
         }
+        if (TRACE && tick % 40 == 0) GalaxyCraft.LOG.info("[mp mobs] guest: {} mobs for planet {}", b.mobs().size(), b.planet());
         long nowNs = System.nanoTime();
         for (MobsCodec.Mob m : b.mobs()) {
             Remote r = remotes.get(m.id());
@@ -123,6 +126,7 @@ final class MpMobs {
                     e = null;
                 }
                 if (e == null) continue;
+                e.setId(0x40000000 + m.id()); // never one of the client level's own ids
                 r = new Remote(m.id(), e);
                 r.from = m.frame();
                 r.yawFrom = m.yaw();

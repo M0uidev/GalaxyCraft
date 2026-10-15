@@ -447,10 +447,9 @@ public final class PlanetClient {
         return stage == null ? "" : PlanetStore.key(stage, indexOf(s));
     }
 
-    /** The catalog index of a session's planet, or -1 if it is not one of the catalog's. */
+    /** The catalog index of a session's planet (the main one is 0, as everywhere here). */
     static int catalogIndex(PlanetSession s) {
-        for (Extra e : extras) if (e.s() == s) return e.index();
-        return -1;
+        return indexOf(s);
     }
 
     private static int indexOf(PlanetSession s) {
