@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:husbandry/axolotl_in_a_bucket",
+  "criteria": {
+    "never": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

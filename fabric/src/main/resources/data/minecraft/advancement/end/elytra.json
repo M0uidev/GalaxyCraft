@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:end/find_end_city",
+  "criteria": {
+    "never": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

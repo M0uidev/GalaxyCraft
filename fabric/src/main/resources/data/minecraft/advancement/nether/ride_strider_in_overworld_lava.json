@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:nether/ride_strider",
+  "criteria": {
+    "never": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

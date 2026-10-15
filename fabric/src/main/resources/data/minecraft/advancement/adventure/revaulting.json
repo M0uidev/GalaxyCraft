@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:adventure/under_lock_and_key",
+  "criteria": {
+    "never": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

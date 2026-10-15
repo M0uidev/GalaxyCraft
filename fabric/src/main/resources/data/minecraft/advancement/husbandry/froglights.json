@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:husbandry/leash_all_frog_variants",
+  "criteria": {
+    "never": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

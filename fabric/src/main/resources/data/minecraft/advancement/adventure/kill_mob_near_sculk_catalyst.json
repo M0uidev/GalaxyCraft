@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:adventure/kill_a_mob",
+  "criteria": {
+    "never": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

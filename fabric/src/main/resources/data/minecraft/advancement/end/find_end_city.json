@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:end/enter_end_gateway",
+  "criteria": {
+    "never": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

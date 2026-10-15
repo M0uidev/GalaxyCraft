@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:nether/obtain_crying_obsidian",
+  "criteria": {
+    "never": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}
