@@ -39,6 +39,8 @@ final class MpShips {
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.ShipPose.TYPE,
                 (m, ctx) -> ctx.client().execute(() -> ShipClient.heardPose(m.id(), new double[] {m.px(), m.py(), m.pz()},
                         new double[] {m.qx(), m.qy(), m.qz(), m.qw()})));
+        ClientPlayNetworking.registerGlobalReceiver(MpPayloads.ShipBays.TYPE,
+                (m, ctx) -> ctx.client().execute(() -> ShipClient.mirrorBays(m.id(), m.bays())));
         MpServer.setShipSink(new MpServer.ShipSink() {
             @Override
             public void place(UUID guest, ShipOps.Request r) {
@@ -58,6 +60,11 @@ final class MpShips {
             @Override
             public void pose(UUID guest, String shipId, double[] pos, double[] rot) {
                 Minecraft.getInstance().execute(() -> ShipClient.hostPose(guest, shipId, pos, rot));
+            }
+
+            @Override
+            public void cargo(UUID guest, String shipId) {
+                Minecraft.getInstance().execute(() -> ShipClient.hostCargo(guest, shipId));
             }
 
             @Override
@@ -88,6 +95,11 @@ final class MpShips {
     /** The host's game changed a ship (put down, parked): every guest hears it. */
     static void published(ShipRecord r) {
         MpServer.shipPut(r);
+    }
+
+    /** The host's hold changed: the bays go to every guest. */
+    static void bays(String shipId, byte[] bays) {
+        MpServer.shipBays(shipId, bays, null);
     }
 
     static void pilot(String shipId, String who) {

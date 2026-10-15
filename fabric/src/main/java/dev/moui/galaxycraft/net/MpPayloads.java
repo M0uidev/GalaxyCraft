@@ -529,7 +529,7 @@ public final class MpPayloads {
      */
     public record ShipDo(int kind, int hand, String id, double px, double py, double pz, double qx, double qy, double qz, double qw,
             String stage) implements CustomPacketPayload {
-        public static final int PLACE_SHIP = 0, PLACE_PAD = 1, BOARD = 2, LEAVE = 3;
+        public static final int PLACE_SHIP = 0, PLACE_PAD = 1, BOARD = 2, LEAVE = 3, CARGO = 4;
         public static final Type<ShipDo> TYPE = typeOf("mp_ship_do");
         public static final StreamCodec<RegistryFriendlyByteBuf, ShipDo> CODEC = CustomPacketPayload.codec(
                 (p, b) -> {
@@ -540,6 +540,18 @@ public final class MpPayloads {
                 },
                 b -> new ShipDo(b.readByte(), b.readByte(), b.readUtf(96), b.readDouble(), b.readDouble(), b.readDouble(),
                         b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readUtf(96)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Server -> guest: the bays of a ship's hold (ShipCargo.layout), so the chests are drawn; the items stay with the host. */
+    public record ShipBays(String id, byte[] bays) implements CustomPacketPayload {
+        public static final Type<ShipBays> TYPE = typeOf("mp_ship_bays");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ShipBays> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeUtf(p.id, 96).writeByteArray(p.bays), b -> new ShipBays(b.readUtf(96), b.readByteArray(16)));
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
@@ -663,6 +675,7 @@ public final class MpPayloads {
         PayloadTypeRegistry.clientboundPlay().register(ShipPut.TYPE, ShipPut.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ShipPilot.TYPE, ShipPilot.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ShipPose.TYPE, ShipPose.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ShipBays.TYPE, ShipBays.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ShipDo.TYPE, ShipDo.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ShipPose.TYPE, ShipPose.CODEC);
     }

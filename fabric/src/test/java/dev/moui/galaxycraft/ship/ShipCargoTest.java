@@ -130,4 +130,38 @@ class ShipCargoTest {
         c.setCapacity(1);
         assertEquals(1, c.capacity());
     }
+
+    @Test
+    void aMirrorTakesTheHostsBays() {
+        ShipCargo host = new ShipCargo(4);
+        host.install(0);
+        host.install(1);
+        host.join(0);
+        host.install(2);
+        ShipCargo mirror = new ShipCargo(4);
+        assertTrue(mirror.applyLayout(host.layout()));
+        assertEquals(ShipCargo.Bay.LARGE_HEAD, mirror.bay(0));
+        assertEquals(ShipCargo.Bay.LARGE_TAIL, mirror.bay(1));
+        assertSame(mirror.chest(0), mirror.chest(1));
+        assertEquals(54, mirror.chest(0).size());
+        assertEquals(27, mirror.chest(2).size());
+        assertNull(mirror.chest(3));
+        assertArrayEquals(host.layout(), mirror.layout());
+        // the host empties and splits: the mirror follows
+        host.split(0);
+        assertTrue(mirror.applyLayout(host.layout()));
+        assertEquals(ShipCargo.Bay.SMALL, mirror.bay(1));
+        assertEquals(27, mirror.chest(1).size());
+    }
+
+    @Test
+    void aMirrorRefusesBytesThatAreNotAHold() {
+        ShipCargo m = new ShipCargo(4);
+        assertFalse(m.applyLayout(null));
+        assertFalse(m.applyLayout(new byte[3]));
+        assertFalse(m.applyLayout(new byte[] {9, 0, 0, 0}));
+        assertFalse(m.applyLayout(new byte[] {(byte) ShipCargo.Bay.LARGE_TAIL.ordinal(), 0, 0, 0}));
+        assertFalse(m.applyLayout(new byte[] {0, 0, 0, (byte) ShipCargo.Bay.LARGE_HEAD.ordinal()}));
+        assertEquals(ShipCargo.Bay.EMPTY, m.bay(0));
+    }
 }

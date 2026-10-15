@@ -384,16 +384,45 @@ public final class ShipClient {
 
     static void openCargo(ShipRecord r) {
         Minecraft mc = Minecraft.getInstance();
-        var server = mc.getSingleplayerServer();
         LocalPlayer me = mc.player;
-        if (server == null || me == null || store == null || r.isPad()) return;
+        if (me == null || store == null || r.isPad()) return;
+        if (mirror) { // a guest: the host opens its hold's menu for us (the items stay with the host)
+            MpShips.send(dev.moui.galaxycraft.net.MpPayloads.ShipDo.CARGO, 0, r.id(), null);
+            return;
+        }
+        openCargoFor(me.getUUID(), r);
+    }
+
+    /** The host's game: the screen of a ship's hold for a player (the host itself, or a friend asking). */
+    private static void openCargoFor(UUID who, ShipRecord r) {
+        Minecraft mc = Minecraft.getInstance();
+        var server = mc.getSingleplayerServer();
+        if (server == null || store == null || mirror) return;
         registries = server.registryAccess();
         ShipCargo cargo = store.cargo(r.id(), r.modules().cabin());
         server.execute(() -> {
-            net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayer(me.getUUID());
+            net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayer(who);
             if (sp != null) ShipMenu.open(sp, r.id(), cargo, r.modules(), m -> mc.execute(() -> setModules(r.id(), m)),
-                    () -> mc.execute(() -> dirty = true));
+                    () -> mc.execute(() -> {
+                        dirty = true;
+                        MpShips.bays(r.id(), cargo.layout());
+                    }));
         });
+    }
+
+    /** The host's game: a friend wants a ship's hold open. */
+    static void hostCargo(UUID guest, String id) {
+        if (store == null || mirror) return;
+        ShipRecord r = store.all().stream().filter(x -> x.id().equals(id)).findFirst().orElse(null);
+        if (r == null || r.isPad()) return;
+        openCargoFor(guest, r);
+    }
+
+    /** The host's hold changed (a guest): the bays of this ship, to draw its chests. */
+    static void mirrorBays(String id, byte[] bays) {
+        if (!mirror || store == null) return;
+        ShipRecord r = store.all().stream().filter(x -> x.id().equals(id)).findFirst().orElse(null);
+        if (r != null && !r.isPad()) store.cargo(id, r.modules().cabin()).applyLayout(bays);
     }
 
     /** A ship's parts changed in its screen: the same ship, new modules (it is drawn from them at once). */
@@ -401,8 +430,11 @@ public final class ShipClient {
         if (store == null) return;
         for (ShipRecord r : store.all())
             if (r.id().equals(id)) {
-                store.put(new ShipRecord(id, m, r.pos(), r.rot(), r.stage()));
+                ShipRecord now = new ShipRecord(id, m, r.pos(), r.rot(), r.stage());
+                store.put(now);
                 dirty = true;
+                MpShips.published(now); // a friend's edit of the parts reaches everyone
+                MpShips.bays(id, store.cargo(id, m.cabin()).layout());
                 return;
             }
     }
@@ -830,6 +862,11 @@ public final class ShipClient {
         if (store == null || mirror) return;
         dev.moui.galaxycraft.net.MpServer.shipList(guest, store.all());
         for (var e : pilots.all().entrySet()) dev.moui.galaxycraft.net.MpServer.shipPilotTo(guest, e.getKey(), e.getValue());
+        for (ShipRecord r : store.all()) {
+            if (r.isPad()) continue;
+            ShipCargo hold = store.cargo(r.id(), r.modules().cabin());
+            if (hold.usedBays() > 0) dev.moui.galaxycraft.net.MpServer.shipBays(r.id(), hold.layout(), guest);
+        }
     }
 
     // ---- the map's remote control ----

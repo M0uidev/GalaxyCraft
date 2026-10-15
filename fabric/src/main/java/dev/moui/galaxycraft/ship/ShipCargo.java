@@ -177,6 +177,46 @@ public final class ShipCargo {
         chests[i + 1] = new Chest(SMALL);
     }
 
+    /** The bays as bytes (each {@link Bay#ordinal()}): what a friend needs to draw the chests, not what they hold. */
+    public byte[] layout() {
+        byte[] b = new byte[BAYS];
+        for (int i = 0; i < BAYS; i++) b[i] = (byte) bays[i].ordinal();
+        return b;
+    }
+
+    /**
+     * Takes the bays a friend's host reported (a mirror draws the chests but never holds items); false and nothing
+     * changed if the bytes are not a hold (wrong length, unknown state, a half of a large chest alone).
+     */
+    public boolean applyLayout(byte[] b) {
+        if (b == null || b.length != BAYS) return false;
+        Bay[] to = new Bay[BAYS];
+        Bay[] all = Bay.values();
+        for (int i = 0; i < BAYS; i++) {
+            if (b[i] < 0 || b[i] >= all.length) return false;
+            to[i] = all[b[i]];
+        }
+        for (int i = 0; i < BAYS; i++) {
+            if (to[i] == Bay.LARGE_HEAD && (i + 1 >= BAYS || to[i + 1] != Bay.LARGE_TAIL)) return false;
+            if (to[i] == Bay.LARGE_TAIL && (i == 0 || to[i - 1] != Bay.LARGE_HEAD)) return false;
+        }
+        for (int i = 0; i < BAYS; i++) {
+            if (to[i] == bays[i] && (to[i] == Bay.EMPTY || chests[i] != null)) continue;
+            switch (to[i]) {
+                case EMPTY -> restore(i, Bay.EMPTY, null);
+                case SMALL -> restore(i, Bay.SMALL, new Chest(SMALL));
+                case LARGE_HEAD -> {
+                    Chest large = new Chest(LARGE);
+                    restore(i, Bay.LARGE_HEAD, large);
+                    restore(i + 1, Bay.LARGE_TAIL, large);
+                }
+                case LARGE_TAIL -> {} // set with its head
+            }
+        }
+        capacity = Math.max(capacity, usedBays());
+        return true;
+    }
+
     /** Restores a bay while loading (no rules: the file is trusted to be what a past game saved, then repaired by the caller). */
     void restore(int i, Bay state, Chest chest) {
         bays[i] = state;

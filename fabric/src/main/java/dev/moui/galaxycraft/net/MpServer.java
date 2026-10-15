@@ -482,6 +482,9 @@ public final class MpServer {
         /** The pilot says where the ship is. */
         void pose(UUID guest, String shipId, double[] pos, double[] rot);
 
+        /** A guest wants to open a ship's hold and parts screen. */
+        void cargo(UUID guest, String shipId);
+
         /** A guest entered the galaxy: it needs every ship and who flies them. */
         void joined(UUID guest);
 
@@ -527,6 +530,7 @@ public final class MpServer {
             }
             case MpPayloads.ShipDo.BOARD -> sink.board(id, d.id());
             case MpPayloads.ShipDo.LEAVE -> sink.leave(id, d.id(), pos, rot);
+            case MpPayloads.ShipDo.CARGO -> sink.cargo(id, d.id());
             default -> {}
         }
     }
@@ -584,6 +588,20 @@ public final class MpServer {
         srv.execute(() -> {
             for (UUID g : members) {
                 if (g.equals(except)) continue;
+                ServerPlayer p = player(g);
+                if (p != null) ServerPlayNetworking.send(p, m);
+            }
+        });
+    }
+
+    /** A ship's bays to every guest (to == null) or to one, from any thread. */
+    public static void shipBays(String shipId, byte[] bays, UUID to) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        var m = new MpPayloads.ShipBays(shipId, bays);
+        srv.execute(() -> {
+            for (UUID g : members) {
+                if (to != null && !to.equals(g)) continue;
                 ServerPlayer p = player(g);
                 if (p != null) ServerPlayNetworking.send(p, m);
             }
