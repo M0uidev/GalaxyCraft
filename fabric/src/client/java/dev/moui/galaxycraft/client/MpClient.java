@@ -92,6 +92,7 @@ final class MpClient {
         MpMobs.register();
         MpLive.register();
         MpStars.register();
+        MpToads.register();
         MpShips.register();
         ClientPlayNetworking.registerGlobalReceiver(dev.moui.galaxycraft.net.MpPayloads.Drops.TYPE,
                 (m, ctx) -> ctx.client().execute(() -> PlanetClient.drops().receive(m)));
@@ -269,6 +270,7 @@ final class MpClient {
         MpUse.reset();
         MpRide.reset();
         MpMobs.reset();
+        MpToads.reset();
         MpLive.reset();
         connected = false;
         accepting = false;

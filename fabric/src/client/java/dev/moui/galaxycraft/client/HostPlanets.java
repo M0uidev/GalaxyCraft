@@ -550,6 +550,7 @@ final class HostPlanets {
         presenceTick();
         for (Entry e : new ArrayList<>(shared.values()))
             if (e.orphaned != 0 && e.holders.isEmpty() && now - e.orphaned > 200) dropEntry(e); // its guests did not ask again
+        MpToads.hostTick(now);
         for (Entry e : shared.values()) { // what runs on each planet goes to the guests standing on it
             if (e.planet == null) continue;
             List<UUID> there = guestsOn(e.planet);

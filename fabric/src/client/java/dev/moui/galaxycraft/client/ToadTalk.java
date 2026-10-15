@@ -33,8 +33,13 @@ final class ToadTalk {
     /** Trade chosen: the merchant screen. */
     static void trade(LocalPlayer player, ToadRecord toad, ToadContext ctx) {
         ToadMerchant merchant = ToadMerchant.of(toad.type(), ctx.systemTier());
+        if (merchant == null) return; // it sells nothing here
+        if (MpUse.guest()) { // the host opens the screen on this player
+            MpToads.trade(toad, ctx.systemTier());
+            return;
+        }
         var server = Minecraft.getInstance().getSingleplayerServer();
-        if (merchant == null || server == null) return; // it sells nothing here
+        if (server == null) return;
         java.util.UUID id = player.getUUID();
         server.execute(() -> {
             ServerPlayer sp = server.getPlayerList().getPlayer(id);

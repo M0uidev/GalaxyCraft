@@ -500,6 +500,15 @@ final class EntityClient {
             }
             e.yRotO = yaw;
             e.xRotO = m.pitch;
+            if (m.toadType != null) { // a Toad of the host's: Kinopio, as the host draws it
+                Matrix4d toadAt = new Matrix4d(f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], 0, f[0], f[1], f[2], 1);
+                seen.add(new Seen(e, toadAt, new Vector3d(e.getX(), e.getY(), e.getZ())));
+                var rec = new dev.moui.galaxycraft.toad.ToadRecord(m.toadId, m.toadType, new double[3], new double[] {0, 0, 0, 1}, "");
+                boolean red = m.hurt > 0 || m.death > 0;
+                ToadClient.draw(this, rec, new Matrix4d(toadAt).rotateY(-Math.toRadians(yaw)).scale(1 / 16.0), this::toGal, m.anim,
+                        red ? HURT : 0, out);
+                return;
+            }
             EntityRenderer r = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(e);
             EntityRenderState st = r.createRenderState(e, pt);
             Matrix4d at = new Matrix4d(f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], 0, f[0], f[1], f[2], 1);

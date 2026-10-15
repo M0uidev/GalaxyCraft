@@ -85,7 +85,7 @@ public final class ToadClient {
      * galaxy units, rotation as its grid's.
      */
     public static void putTechnician(PlanetSession session, String stationId, Vector3d center, Quaterniond rotation) {
-        if (store == null) return;
+        if (store == null || MpUse.guest()) return;
         Vector3d up = new Vector3d(0, 1, 0).rotate(rotation), side = new Vector3d(1, 0, 0).rotate(rotation);
         Vector3d from = new Vector3d(center).fma(2.5 / GravityFrame.SCALE, side).fma(6 / GravityFrame.SCALE, up);
         Vector3d[] hit = session.surfaceAlong(from, new Vector3d(up).negate(), 12);
@@ -104,7 +104,7 @@ public final class ToadClient {
 
     /** A station packed: its Technician goes with it. */
     public static void removeTechnician(String stationId) {
-        if (store == null) return;
+        if (store == null || MpUse.guest()) return;
         STATES.remove("toad-station-" + stationId);
         if (store.remove("toad-station-" + stationId).isPresent()) {
             dirty = true;
@@ -119,7 +119,7 @@ public final class ToadClient {
      * few blocks ahead on its ground (marked placed under "home", so it never comes back).
      */
     private static void homeGuide(LocalPlayer me, GravityFrame fr) {
-        if (store == null || me == null || fr == null || store.wasPlaced("home") || ++homeWait < 30) return;
+        if (store == null || MpUse.guest() || me == null || fr == null || store.wasPlaced("home") || ++homeWait < 30) return;
         homeWait = 0;
         PlanetSession home = PlanetClient.sessionOf(0);
         if (home == null || !home.active() || home.planet() == null || home.station() != null) return;
@@ -134,7 +134,7 @@ public final class ToadClient {
     private static void drainOutposts() {
         Outposts o;
         while ((o = OUTPOSTS.poll()) != null) {
-            if (store == null || store.wasPlaced(o.planetKey())) continue;
+            if (store == null || MpUse.guest() || store.wasPlaced(o.planetKey())) continue; // a guest gets the host's Toads
             for (ToadRecord r : o.toads()) store.put(r);
             store.markPlaced(o.planetKey());
             dirty = true;
@@ -143,7 +143,7 @@ public final class ToadClient {
     }
 
     private static void saveNow() {
-        if (store == null || !dirty) return;
+        if (store == null || !dirty || MpUse.guest()) return; // a guest's Toads are the host's: a mirror, never saved
         try {
             store.save();
             dirty = false;
@@ -250,7 +250,7 @@ public final class ToadClient {
         endConversation();
         conv = c;
         with = toad;
-        ShadowWorld.standToad(toad.id(), true);
+        stand(toad.id(), true);
         convContext = ctx;
         savedSlot = player.getInventory().getSelectedSlot();
         shownPage = -1;
@@ -286,6 +286,26 @@ public final class ToadClient {
         return conv;
     }
 
+    /** The Toad stops to listen (or walks again): in the host's shadow, or by asking the host. */
+    private static void stand(String id, boolean on) {
+        if (MpUse.guest()) MpToads.stand(id, on);
+        else ShadowWorld.standToad(id, on);
+    }
+
+    /** A guest's mirror of the host's Toads: all of them (full) or what changed; never saved. */
+    static void mirrorApply(boolean full, List<ToadRecord> puts, List<String> gone) {
+        if (!MpUse.guest()) return;
+        if (store == null || full) store = ToadStore.load(java.nio.file.Path.of("toads-mirror-never-saved.json"));
+        if (full) for (ToadRecord r : store.all()) store.remove(r.id());
+        for (ToadRecord r : puts) store.put(r);
+        for (String id : gone) {
+            store.remove(id);
+            STATES.remove(id);
+            if (with != null && with.id().equals(id)) endConversation();
+        }
+        dirty = false;
+    }
+
     /** The Toad being talked to (tests), or null. */
     public static ToadRecord talkingTo() {
         return with;
@@ -298,7 +318,7 @@ public final class ToadClient {
 
     /** Ends the talk (the box goes). */
     public static void endConversation() {
-        if (with != null) ShadowWorld.standToad(with.id(), false);
+        if (with != null) stand(with.id(), false);
         conv = null;
         with = null;
         ToadDialogueHud.show(null);
@@ -442,7 +462,7 @@ public final class ToadClient {
 
     /** Puts a Toad down with its feet at a galaxy point, turned by q (tests; place() and the world's placing). */
     public static void put(ToadType type, Vector3d feet, Quaterniond q) {
-        if (store == null) return;
+        if (store == null || MpUse.guest()) return;
         store.put(new ToadRecord(UUID.randomUUID().toString(), type, new double[] {feet.x, feet.y, feet.z},
                 new double[] {q.x, q.y, q.z, q.w}, stageName()));
         dirty = true;
@@ -550,7 +570,7 @@ public final class ToadClient {
 
     /** Once a tick: tells the shadow which Toads of this planet to run, takes their positions back, drops the dead. */
     static void syncShadow(PlanetSession s) {
-        if (store == null || !s.active() || s.planet() == null) return;
+        if (store == null || MpUse.guest() || !s.active() || s.planet() == null) return;
         List<ShadowToads.Wanted> want = new ArrayList<>();
         for (ToadRecord r : store.all()) {
             // The Technician stays where it was put: a station is a flat slab with edges to fall off.
@@ -593,8 +613,9 @@ public final class ToadClient {
         Vector3d eye = me != null && fr != null ? fr.toGal(vec(me.getEyePosition())) : null;
         double unitsPerPixel = 1 / (GravityFrame.SCALE * 16);
         java.util.Set<String> running = ShadowToads.running();
+        java.util.Set<String> heard = MpMobs.toadIds(); // a guest: the Toads the host's planet runs, drawn from its shadow
         for (ToadRecord r : store.all()) {
-            if (!r.stage().equals(stageName()) || running.contains(r.id())) continue;
+            if (!r.stage().equals(stageName()) || running.contains(r.id()) || heard.contains(r.id())) continue;
             State st = STATES.computeIfAbsent(r.id(), k -> new State());
             boolean talking = now < st.talkUntil;
             Quaterniond q = new Quaterniond(r.rot()[0], r.rot()[1], r.rot()[2], r.rot()[3]);

@@ -497,6 +497,37 @@ public final class MpPayloads {
         }
     }
 
+    // ---- Toads (the host's ToadStore is the truth; a guest keeps a mirror) ----
+
+    /** Server -> guest: Toads that are new or changed, and gone (a ToadCodec body; full: replace all). */
+    public record ToadSync(byte[] data) implements CustomPacketPayload {
+        public static final Type<ToadSync> TYPE = typeOf("mp_toad_sync");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ToadSync> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByteArray(p.data), b -> new ToadSync(b.readByteArray(ToadCodec.MAX_BYTES)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Guest -> host: what the guest does with a Toad. STAND/FREE: the Toad stops to listen, walks again; TRADE: the host
+     * opens the Toad's merchant screen on the guest (type: the ToadType id, tier: the system's, 0 to 5).
+     */
+    public record ToadDo(int kind, String id, String toadType, int tier) implements CustomPacketPayload {
+        public static final int STAND = 0, FREE = 1, TRADE = 2;
+        public static final Type<ToadDo> TYPE = typeOf("mp_toad_do");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ToadDo> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByte(p.kind).writeUtf(p.id, 96).writeUtf(p.toadType, 32).writeByte(p.tier),
+                b -> new ToadDo(b.readByte(), b.readUtf(96), b.readUtf(32), b.readByte()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     // ---- Ships (the host's ShipStore is the truth; a guest keeps a mirror) ----
 
     /** Server -> guest, once on entering: every ship and pad (a ShipCodec list). */
@@ -735,6 +766,8 @@ public final class MpPayloads {
         PayloadTypeRegistry.serverboundPlay().register(Throw.TYPE, counted("Throw", Throw.CODEC));
         PayloadTypeRegistry.clientboundPlay().register(StationUpdate.TYPE, counted("StationUpdate", StationUpdate.CODEC));
         PayloadTypeRegistry.clientboundPlay().register(Live.TYPE, counted("Live", Live.CODEC));
+        PayloadTypeRegistry.clientboundPlay().register(ToadSync.TYPE, counted("ToadSync", ToadSync.CODEC));
+        PayloadTypeRegistry.serverboundPlay().register(ToadDo.TYPE, counted("ToadDo", ToadDo.CODEC));
         registerStars();
         registerShips();
         registerRiding();

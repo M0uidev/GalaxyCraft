@@ -35,6 +35,8 @@ final class MpMobs {
     private static final int EVERY = 2;
     /** A mob not heard of for this long (client ticks) is gone. */
     private static final int STALE = 40;
+    /** The kind a Toad goes by on the wire (no registry entity has this id). */
+    static final int TOAD_TYPE = 0x7FFE;
 
     /** A mob on the guest: the entity, and the frame it moves from and to between two snapshots. */
     static final class Remote {
@@ -46,6 +48,9 @@ final class MpMobs {
         long at; // nanoTime the latest snapshot arrived
         double glide = 0.1e9; // ns to glide over one snapshot: the time between the last ones, smoothed
         int heard;
+        /** A Toad: its id, type and the animation it plays (the guest draws Kinopio, not the villager). */
+        String toadId, anim;
+        dev.moui.galaxycraft.toad.ToadType toadType;
 
         Remote(int id, Entity entity) {
             this.id = id;
@@ -65,6 +70,14 @@ final class MpMobs {
                 (m, ctx) -> ctx.client().execute(() -> receive(m.data())));
     }
 
+    /** Guest: the Toads the host's running planet sends (their ids), drawn from those and not from the mirror. */
+    static java.util.Set<String> toadIds() {
+        if (remotes.isEmpty()) return java.util.Set.of();
+        java.util.Set<String> out = new java.util.HashSet<>();
+        for (Remote r : remotes.values()) if (r.toadId != null && r.toadType != null) out.add(r.toadId);
+        return out;
+    }
+
     static void reset() {
         remotes.clear();
         planet = -1;
@@ -80,7 +93,8 @@ final class MpMobs {
         if (server == null) return;
         List<MobsCodec.Mob> mobs = new ArrayList<>();
         for (Entity e : es.list()) {
-            if (e.isRemoved() || e instanceof Player || ShadowToads.idOf(e) != null) continue;
+            if (e.isRemoved() || e instanceof Player) continue;
+            String toadId = ShadowToads.idOf(e);
             double[] f = es.map().frame(e.getX(), e.getY(), e.getZ());
             if (f == null) {
                 if (TRACE && now % 40 == 0) GalaxyCraft.LOG.info("[mp mobs] skipped {}: no frame at {}", e, e.position());
@@ -92,6 +106,21 @@ final class MpMobs {
             float head = e instanceof LivingEntity l ? l.yHeadRot : yaw;
             float speed = e instanceof LivingEntity l ? l.walkAnimation.speed() : 0;
             byte[] data;
+            if (toadId != null) { // a Toad: who it is and what it is doing; the guest draws Kinopio from it
+                var rec = ToadClient.recordOf(toadId);
+                if (rec == null) continue;
+                var bo = new java.io.ByteArrayOutputStream();
+                try (var o = new java.io.DataOutputStream(bo)) {
+                    o.writeUTF(toadId);
+                    o.writeUTF(rec.type().name());
+                    o.writeUTF(ToadClient.animFor(e, ToadClient.talkingTo() != null && toadId.equals(ToadClient.talkingTo().id())));
+                } catch (java.io.IOException ex) {
+                    continue;
+                }
+                mobs.add(new MobsCodec.Mob(e.getId(), TOAD_TYPE, frame, yaw, e.getXRot(), head, speed,
+                        e instanceof LivingEntity h ? h.hurtTime : 0, e instanceof LivingEntity h ? h.deathTime : 0, bo.toByteArray()));
+                continue;
+            }
             try {
                 RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), server.registryAccess());
                 List<SynchedEntityData.DataValue<?>> changed = e.getEntityData().getNonDefaultValues(); // null when all are default
@@ -130,7 +159,7 @@ final class MpMobs {
         for (MobsCodec.Mob m : b.mobs()) {
             Remote r = remotes.get(m.id());
             if (r == null) {
-                EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.byId(m.type());
+                EntityType<?> type = m.type() == TOAD_TYPE ? net.minecraft.world.entity.EntityTypes.VILLAGER : BuiltInRegistries.ENTITY_TYPE.byId(m.type());
                 Entity e;
                 try {
                     e = type == null ? null : type.create(mc.level, EntitySpawnReason.LOAD);
@@ -159,6 +188,17 @@ final class MpMobs {
             if (r.at != 0) r.glide = Math.clamp(0.6 * r.glide + 0.4 * 1.1 * (nowNs - r.at), 0.06e9, 0.4e9);
             r.at = nowNs;
             r.heard = tick;
+            if (m.type() == TOAD_TYPE) {
+                try (var in = new java.io.DataInputStream(new java.io.ByteArrayInputStream(m.data()))) {
+                    r.toadId = in.readUTF();
+                    r.toadType = dev.moui.galaxycraft.toad.ToadType.valueOf(in.readUTF());
+                    r.anim = in.readUTF();
+                    r.entity.addTag(ShadowToads.TAG + ":" + r.toadId); // aimed at, it is that Toad (talked to, not used)
+                } catch (java.io.IOException | IllegalArgumentException ex) {
+                    r.toadType = null;
+                }
+                continue;
+            }
             try {
                 RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.wrappedBuffer(m.data()), mc.level.registryAccess());
                 List<SynchedEntityData.DataValue<?>> values = new ArrayList<>();

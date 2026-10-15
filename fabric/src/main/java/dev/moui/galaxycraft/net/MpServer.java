@@ -489,6 +489,45 @@ public final class MpServer {
         });
     }
 
+
+    // ---- Toads: the host's game owns the store; a guest talks and trades through these ----
+
+    private static final Map<UUID, RateLimiter> toadLimits = new HashMap<>();
+
+    /** The guests that entered (a copy), for the host's game to send each its Toads. */
+    public static java.util.List<UUID> memberList() {
+        return new java.util.ArrayList<>(members);
+    }
+
+    /** Toad changes to one guest, from any thread. */
+    public static void toadSync(UUID guest, byte[] data) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            ServerPlayer p = members.contains(guest) ? player(guest) : null;
+            if (p != null) ServerPlayNetworking.send(p, new MpPayloads.ToadSync(data));
+        });
+    }
+
+    private static void toadDo(ServerPlayer p, MpPayloads.ToadDo d) {
+        UUID id = p.getUUID();
+        if (!members.contains(id)) return;
+        if (!toadLimits.computeIfAbsent(id, k -> new RateLimiter(5, 10)).allow(System.nanoTime())) return;
+        switch (d.kind()) {
+            case MpPayloads.ToadDo.STAND -> dev.moui.galaxycraft.shadow.ShadowWorld.standToad(d.id(), true);
+            case MpPayloads.ToadDo.FREE -> dev.moui.galaxycraft.shadow.ShadowWorld.standToad(d.id(), false);
+            case MpPayloads.ToadDo.TRADE -> {
+                dev.moui.galaxycraft.toad.ToadType type = null;
+                for (dev.moui.galaxycraft.toad.ToadType t : dev.moui.galaxycraft.toad.ToadType.values()) if (t.id().equals(d.toadType())) type = t;
+                var merchant = type == null ? null : dev.moui.galaxycraft.toad.ToadMerchant.of(type, Math.clamp(d.tier(), 0, 5));
+                if (merchant == null) return;
+                merchant.setTradingPlayer(p);
+                merchant.openTradingScreen(p, dev.moui.galaxycraft.toad.ToadMerchant.title(type), 1);
+            }
+            default -> { }
+        }
+    }
+
     // ---- Ships: the host's game owns the ShipStore and who flies what; this is the wire around it ----
 
     /** The host's game, which owns the ships. Called on the server thread; it must hop to the client thread itself. */
@@ -863,6 +902,7 @@ public final class MpServer {
         recv(MpPayloads.StarDo.TYPE, (payload, ctx) -> starDo(ctx.player(), payload));
         recv(MpPayloads.ShipDo.TYPE, (payload, ctx) -> shipDo(ctx.player(), payload));
         recv(MpPayloads.ShipPose.TYPE, (payload, ctx) -> shipPose(ctx.player(), payload));
+        recv(MpPayloads.ToadDo.TYPE, (payload, ctx) -> toadDo(ctx.player(), payload));
         recv(MpPayloads.TripDo.TYPE, (payload, ctx) -> tripDo(ctx.player(), payload));
         ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);
         recv(MpPayloads.State.TYPE, (payload, ctx) -> {
