@@ -77,7 +77,7 @@ public final class ToadModels {
 
     /** Uses a rig and its animations (null rig: the box). Tests. */
     static synchronized void use(BdlReader.Rig rig, Map<String, BckReader.Anim> anims) {
-        Loaded l = rig == null ? null : build(rig, anims);
+        Loaded l = rig == null ? null : build(rig, anims, 0);
         loaded = l != null ? l : box();
     }
 
@@ -90,7 +90,12 @@ public final class ToadModels {
         return l;
     }
 
-    private static Loaded build(BdlReader.Rig rig, Map<String, BckReader.Anim> anims) {
+    /**
+     * The pieces of a rig, by joint, posed by worlds of {@link ToadPose}. pxPerUnit &gt; 0 keeps the
+     * model's own size (that many pixels per model unit) and its own origin (the feet, as SMG2 puts
+     * them); 0 scales it to {@link #HEIGHT_PX} standing on the origin. Null if there is nothing to draw.
+     */
+    static Loaded build(BdlReader.Rig rig, Map<String, BckReader.Anim> anims, float pxPerUnit) {
         if (rig.parts().isEmpty()) return null;
         Matrix4f[] w = ToadPose.worlds(rig.parent(), rig.rest());
         float[] lo = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE}, hi = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
@@ -106,7 +111,7 @@ public final class ToadModels {
                     }
                 }
         if (!(hi[1] > lo[1])) return null;
-        float fit = HEIGHT_PX / (hi[1] - lo[1]);
+        float fit = pxPerUnit > 0 ? pxPerUnit : HEIGHT_PX / (hi[1] - lo[1]);
         List<RigPart> parts = new ArrayList<>();
         for (BdlReader.Part p : rig.parts()) {
             BdlReader.Texture tex = p.texture() >= 0 && p.texture() < rig.textures().size() ? rig.textures().get(p.texture()) : null;
@@ -116,7 +121,7 @@ public final class ToadModels {
                 parts.add(new RigPart(p.joint(), p.texture(), new ShipModels.PartModel(ShipModels.quads(chunk, fit), skin, 0xFFFFFFFF)));
             }
         }
-        float[] origin = {(lo[0] + hi[0]) / 2, lo[1], (lo[2] + hi[2]) / 2};
+        float[] origin = pxPerUnit > 0 ? new float[] {0, 0, 0} : new float[] {(lo[0] + hi[0]) / 2, lo[1], (lo[2] + hi[2]) / 2};
         return new Loaded(rig.parent(), rig.rest(), parts, fit, origin, Map.copyOf(anims));
     }
 

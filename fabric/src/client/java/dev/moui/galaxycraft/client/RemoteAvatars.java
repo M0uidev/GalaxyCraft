@@ -39,7 +39,7 @@ final class RemoteAvatars {
 
     /** One player to draw this frame. */
     record Shown(UUID id, RemotePlayer entity, Matrix4d matrix, float pitch, float walkPos, float walkSpeed, boolean crouching,
-            boolean gliding, boolean swimming, boolean seated, int mode) {}
+            boolean gliding, boolean swimming, boolean seated, int mode, int flags) {}
 
     /** Ids for the avatars: far above any the server gives (they count up from 0), distinct among themselves. */
     private static int nextId = 0x4D500000;
@@ -85,7 +85,7 @@ final class RemoteAvatars {
             ItemStack chest = glide ? new ItemStack(Items.ELYTRA) : ItemStack.EMPTY; // made here: items have no components before the game is up
             if (!ItemStack.matches(a.entity.getItemBySlot(EquipmentSlot.CHEST), chest)) a.entity.setItemSlot(EquipmentSlot.CHEST, chest.copy());
             out.add(new Shown(id, a.entity, AvatarFrame.matrix(feet, up, look, UNITS_PER_BLOCK), AvatarFrame.pitchDegrees(up, look),
-                    a.walkPos, a.walkSpeed, crouch, glide, swim, seated, p.mode()));
+                    a.walkPos, a.walkSpeed, crouch, glide, swim, seated, p.mode(), p.flags()));
         }
         if (meUniverse != null)
             out.sort(Comparator.comparingDouble(s -> distance(s, meUniverse)));
