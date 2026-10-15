@@ -409,6 +409,67 @@ public final class MpPayloads {
         }
     }
 
+    // ---- Launch Stars (the host's StarStore is the truth; a guest keeps a mirror) ----
+
+    /** Server -> guest, once on entering: every star (a StarCodec list). */
+    public record StarList(byte[] data) implements CustomPacketPayload {
+        public static final Type<StarList> TYPE = typeOf("mp_star_list");
+        public static final StreamCodec<RegistryFriendlyByteBuf, StarList> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByteArray(p.data), b -> new StarList(b.readByteArray(StarCodec.MAX_LIST)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Server -> guest: a star was placed or changed its code (one StarCodec record). */
+    public record StarPut(byte[] data) implements CustomPacketPayload {
+        public static final Type<StarPut> TYPE = typeOf("mp_star_put");
+        public static final StreamCodec<RegistryFriendlyByteBuf, StarPut> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByteArray(p.data), b -> new StarPut(b.readByteArray(1024)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Server -> guest: a star is gone (picked up, or a placing the host refused). */
+    public record StarGone(String id) implements CustomPacketPayload {
+        public static final Type<StarGone> TYPE = typeOf("mp_star_gone");
+        public static final StreamCodec<RegistryFriendlyByteBuf, StarGone> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeUtf(p.id, 96), b -> new StarGone(b.readUtf(96)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Guest -> server: place (0), pick up (1) or rename (2) a star; the fields as StarOps.Request. hand: the hand
+     * that holds the star item (0 main, 1 off) for a placing, which the host checks and uses up.
+     */
+    public record StarDo(int kind, int hand, String id, double px, double py, double pz, double ux, double uy, double uz,
+            String stage, String body, String code) implements CustomPacketPayload {
+        public static final Type<StarDo> TYPE = typeOf("mp_star_do");
+        public static final StreamCodec<RegistryFriendlyByteBuf, StarDo> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeByte(p.kind).writeByte(p.hand).writeUtf(p.id, 96);
+                    b.writeDouble(p.px).writeDouble(p.py).writeDouble(p.pz);
+                    b.writeDouble(p.ux).writeDouble(p.uy).writeDouble(p.uz);
+                    b.writeUtf(p.stage, 96).writeUtf(p.body, 96).writeUtf(p.code, 96);
+                },
+                b -> new StarDo(b.readByte(), b.readByte(), b.readUtf(96), b.readDouble(), b.readDouble(), b.readDouble(),
+                        b.readDouble(), b.readDouble(), b.readDouble(), b.readUtf(96), b.readUtf(96), b.readUtf(96)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Both sides must know the types: call from the common entrypoint. */
     public static void register() {
         PayloadTypeRegistry.clientboundPlay().register(Hello.TYPE, Hello.CODEC);
@@ -435,5 +496,13 @@ public final class MpPayloads {
         PayloadTypeRegistry.serverboundPlay().register(Break.TYPE, Break.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(Where.TYPE, Where.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(Throw.TYPE, Throw.CODEC);
+        registerStars();
+    }
+
+    private static void registerStars() {
+        PayloadTypeRegistry.clientboundPlay().register(StarList.TYPE, StarList.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(StarPut.TYPE, StarPut.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(StarGone.TYPE, StarGone.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(StarDo.TYPE, StarDo.CODEC);
     }
 }

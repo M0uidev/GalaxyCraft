@@ -24,6 +24,11 @@ public final class StarStore {
         this.file = file;
     }
 
+    /** A store with no file: a guest's mirror of the host's stars. Saving it does nothing. */
+    public static StarStore memory() {
+        return new StarStore(null);
+    }
+
     public static StarStore load(Path file) {
         StarStore s = new StarStore(file);
         try {
@@ -48,6 +53,7 @@ public final class StarStore {
     }
 
     public void save() throws IOException {
+        if (file == null) return;
         JsonArray a = new JsonArray();
         for (StarRecord r : stars) {
             JsonObject o = new JsonObject();
@@ -135,6 +141,22 @@ public final class StarStore {
         StarRecord n = r.withCode(c);
         stars.set(stars.indexOf(r), n);
         return n;
+    }
+
+    /** A mirror takes a star as the host made it (same id replaces it). */
+    public void putExact(StarRecord r) {
+        for (int i = 0; i < stars.size(); i++)
+            if (stars.get(i).id().equals(r.id())) {
+                stars.set(i, r);
+                return;
+            }
+        stars.add(r);
+    }
+
+    /** A mirror takes the host's whole list. */
+    public void replaceAll(List<StarRecord> all) {
+        stars.clear();
+        stars.addAll(all);
     }
 
     public Optional<StarRecord> remove(String id) {

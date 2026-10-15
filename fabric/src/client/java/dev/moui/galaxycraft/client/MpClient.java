@@ -88,6 +88,7 @@ final class MpClient {
         MpEdits.register();
         MpUse.register();
         MpMobs.register();
+        MpStars.register();
         ClientPlayNetworking.registerGlobalReceiver(dev.moui.galaxycraft.net.MpPayloads.Drops.TYPE,
                 (m, ctx) -> ctx.client().execute(() -> PlanetClient.drops().receive(m)));
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Skin.TYPE,
@@ -136,9 +137,11 @@ final class MpClient {
         // Where the head points, in the universe's axes: a Minecraft yaw means something different in each client's frame.
         var eye = p.getLookAngle();
         Vector3d look = frame.dirToGal(new Vector3d(eye.x, eye.y, eye.z)).normalize();
+        Vector3d fling = LaunchStarClient.heading(0); // flung by a Launch Star: lie along the course
+        if (fling != null && fling.isFinite() && fling.lengthSquared() > 1e-9) look = fling.normalize(new Vector3d());
         PeerState s = new PeerState(seq++, at.x, at.y, at.z, (float) up.x, (float) up.y, (float) up.z,
                 (float) look.x, (float) look.y, (float) look.z, vx, vy, vz, GalaxyCraftClient.walking() ? Protocol.MODE_STEVE : Protocol.MODE_MARIO,
-                StateSampler.flags(p.isShiftKeyDown(), p.isSprinting(), p.isSwimming(), p.isFallFlying(), p.onGround(),
+                StateSampler.flags(p.isShiftKeyDown(), p.isSprinting(), p.isSwimming(), p.isFallFlying() || LaunchStarClient.flying(), p.onGround(),
                         ShipClient.aboard().isPresent()));
         if (s.valid()) ClientPlayNetworking.send(new MpPayloads.State(Wire.encode(s)));
         if (TRACE && seq % 10 == 0)
