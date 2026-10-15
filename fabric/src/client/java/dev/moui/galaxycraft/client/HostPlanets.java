@@ -83,6 +83,7 @@ final class HostPlanets {
     private HostPlanets() {}
 
     static void register() {
+        ShadowWorld.rideSink(RIDE_SINK);
         MpServer.setEditSink(new MpServer.EditSink() {
             @Override
             public void edits(UUID guest, EditCodec.Msg m) {
@@ -120,6 +121,12 @@ final class HostPlanets {
             }
 
             @Override
+            public void steer(UUID guest, int keys) {
+                ShadowWorld.guestSteer(guest, new ShadowWorld.Steer((keys & MpPayloads.Steer.FORWARD) != 0, (keys & MpPayloads.Steer.BACK) != 0,
+                        (keys & MpPayloads.Steer.LEFT) != 0, (keys & MpPayloads.Steer.RIGHT) != 0, (keys & MpPayloads.Steer.SNEAK) != 0));
+            }
+
+            @Override
             public void breakBlock(UUID guest, MpPayloads.Break b) {
                 Minecraft.getInstance().execute(() -> breakFor(guest, b));
             }
@@ -130,6 +137,25 @@ final class HostPlanets {
             }
         });
     }
+
+    /** The shadow's word about a guest's ride goes to that guest (the shadow runs on the server thread: the planet's index is read on the client thread). */
+    static final ShadowWorld.RideSink RIDE_SINK = new ShadowWorld.RideSink() {
+        @Override
+        public void seat(UUID guest, VoxelPlanet planet, Vector3d pos) {
+            Minecraft.getInstance().execute(() -> {
+                for (Entry e : shared.values())
+                    if (e.planet == planet && e.holders.contains(guest)) {
+                        MpServer.rideSeat(guest, new MpPayloads.RideSeat(e.index, (float) pos.x, (float) pos.y, (float) pos.z));
+                        return;
+                    }
+            });
+        }
+
+        @Override
+        public void end(UUID guest) {
+            MpServer.rideEnd(guest);
+        }
+    };
 
     /**
      * A guest right clicked a block: Minecraft's own use of it, in the shadow, as that guest's player (a door opens,

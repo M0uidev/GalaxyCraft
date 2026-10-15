@@ -107,6 +107,16 @@ class MpPayloadsTest {
     }
 
     @Test
+    void ridingMessagesTravel() {
+        int keys = MpPayloads.Steer.pack(true, false, true, false, true);
+        assertEquals(new MpPayloads.Steer(keys), roundTrip(MpPayloads.Steer.CODEC, new MpPayloads.Steer(keys)));
+        assertEquals(MpPayloads.Steer.FORWARD | MpPayloads.Steer.LEFT | MpPayloads.Steer.SNEAK, keys);
+        var seat = new MpPayloads.RideSeat(5, 1.5f, -2f, 300f);
+        assertEquals(seat, roundTrip(MpPayloads.RideSeat.CODEC, seat));
+        assertEquals(new MpPayloads.RideEnd(), roundTrip(MpPayloads.RideEnd.CODEC, new MpPayloads.RideEnd()));
+    }
+
+    @Test
     void anOversizedEditsIsNotRead() {
         RegistryFriendlyByteBuf b = buf();
         b.writeByteArray(new byte[EditCodec.MAX_WIRE + 1]);

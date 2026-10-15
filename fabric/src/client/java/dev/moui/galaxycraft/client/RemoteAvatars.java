@@ -30,8 +30,6 @@ final class RemoteAvatars {
     /** Units per Minecraft block in the game. */
     private static final double UNITS_PER_BLOCK = 1.0 / GravityFrame.SCALE;
 
-    private static final ItemStack ELYTRA = new ItemStack(Items.ELYTRA);
-
     private static final class Avatar {
         RemotePlayer entity;
         Vector3d lastPos;
@@ -84,7 +82,7 @@ final class RemoteAvatars {
             boolean swim = (p.flags() & Protocol.F_SWIM) != 0;
             boolean seated = (p.flags() & (Protocol.F_RIDE | Protocol.F_SHIP)) != 0;
             // The wings show while gliding (an elytra in the chest slot); nothing worn otherwise.
-            ItemStack chest = glide ? ELYTRA : ItemStack.EMPTY;
+            ItemStack chest = glide ? new ItemStack(Items.ELYTRA) : ItemStack.EMPTY; // made here: items have no components before the game is up
             if (!ItemStack.matches(a.entity.getItemBySlot(EquipmentSlot.CHEST), chest)) a.entity.setItemSlot(EquipmentSlot.CHEST, chest.copy());
             out.add(new Shown(id, a.entity, AvatarFrame.matrix(feet, up, look, UNITS_PER_BLOCK), AvatarFrame.pitchDegrees(up, look),
                     a.walkPos, a.walkSpeed, crouch, glide, swim, seated, p.mode()));
