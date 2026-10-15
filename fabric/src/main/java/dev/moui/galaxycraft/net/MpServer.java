@@ -53,6 +53,9 @@ public final class MpServer {
 
         /** A guest breaks a block (already checked: a planet it holds, a cell number). */
         void breakBlock(UUID guest, MpPayloads.Break b);
+
+        /** A guest throws what it holds onto a planet (checked: holds it, finite numbers). */
+        void throwItem(UUID guest, MpPayloads.Throw t);
     }
 
     private static volatile PlanetSource planetSource;
@@ -261,6 +264,20 @@ public final class MpServer {
         sink.takeDrop(id, t);
     }
 
+    private static final Map<UUID, RateLimiter> throwLimits = new HashMap<>();
+
+    private static void throwItem(ServerPlayer p, MpPayloads.Throw t) {
+        UUID id = p.getUUID();
+        EditSink sink = editSink;
+        float[] v = {t.x(), t.y(), t.z(), t.vx(), t.vy(), t.vz()};
+        for (float f : v) if (!Float.isFinite(f) || Math.abs(f) > 1e6f) return;
+        if (Math.abs(t.vx()) > 5 || Math.abs(t.vy()) > 5 || Math.abs(t.vz()) > 5) return;
+        if (sink == null || !members.contains(id) || !hub.subscribed(id, t.planet())
+                || !throwLimits.computeIfAbsent(id, k -> new RateLimiter(10, 10)).allow(System.nanoTime()))
+            return;
+        sink.throwItem(id, t);
+    }
+
     private static void breakBlock(ServerPlayer p, MpPayloads.Break b) {
         UUID id = p.getUUID();
         EditSink sink = editSink;
@@ -403,6 +420,7 @@ public final class MpServer {
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.MobHit.TYPE, (payload, ctx) -> mobHit(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.DropTake.TYPE, (payload, ctx) -> takeDrop(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Break.TYPE, (payload, ctx) -> breakBlock(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Throw.TYPE, (payload, ctx) -> throwItem(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.UsedUp.TYPE, (payload, ctx) -> usedUp(ctx.player(), payload));
         ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {

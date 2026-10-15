@@ -214,6 +214,29 @@ public final class MpPayloads {
         }
     }
 
+    /** Guest -> server: throw the stack in my hand (or one of it) onto the planet from here (planet space) with this speed. */
+    public record Throw(int planet, boolean all, float x, float y, float z, float vx, float vy, float vz) implements CustomPacketPayload {
+        public static final Type<Throw> TYPE = typeOf("mp_throw");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Throw> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeVarInt(p.planet);
+                    b.writeBoolean(p.all);
+                    b.writeFloat(p.x);
+                    b.writeFloat(p.y);
+                    b.writeFloat(p.z);
+                    b.writeFloat(p.vx);
+                    b.writeFloat(p.vy);
+                    b.writeFloat(p.vz);
+                },
+                b -> new Throw(b.readVarInt(), b.readBoolean(), b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat(), b.readFloat(),
+                        b.readFloat()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Server -> players: that player left. */
     public record Gone(UUID id) implements CustomPacketPayload {
         public static final Type<Gone> TYPE = typeOf("mp_gone");
@@ -389,5 +412,6 @@ public final class MpPayloads {
         PayloadTypeRegistry.clientboundPlay().register(Drops.TYPE, Drops.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(DropTake.TYPE, DropTake.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(Break.TYPE, Break.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(Throw.TYPE, Throw.CODEC);
     }
 }

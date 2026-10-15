@@ -329,6 +329,11 @@ public final class ShadowWorld {
         return toClient.poll();
     }
 
+    /** A guest's thrown item: lies on planet p from pos (planet space), moving at vel. */
+    public static void throwOnto(VoxelPlanet p, org.joml.Vector3d pos, org.joml.Vector3d vel, ItemStack stack) {
+        drops.add(new Drop(p, pos, vel, stack, THROWN_DELAY));
+    }
+
     public static Drop pollDrop() {
         return drops.poll();
     }

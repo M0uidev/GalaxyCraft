@@ -1,5 +1,6 @@
 package dev.moui.galaxycraft.client;
 
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import dev.moui.galaxycraft.settings.Movement;
 import dev.moui.galaxycraft.universe.GameOrigin;
 import dev.moui.galaxycraft.universe.SystemIndex;
@@ -194,6 +195,25 @@ public final class PlanetClient {
     private static final ShadowLink shadow = new ShadowLink(() -> focus);
     private static boolean aimUsable; // an empty hand aims at a block a click uses
     private static final DropsClient drops = new DropsClient(() -> focus);
+
+    /** Where the guest's player looks from, on the planet in focus (planet space), as of this tick; null: none. */
+    private static Vector3d throwEye, throwLook;
+    private static PlanetSession throwSession;
+
+    /**
+     * A guest's Q while standing on a planet: the host throws the item (its server cannot place it from the guest's
+     * coordinates). False: Minecraft drops it as usual.
+     */
+    public static boolean guestThrow(LocalPlayer player, boolean all) {
+        if (!MpUse.guest() || throwSession == null || !throwSession.active() || throwEye == null || player.getMainHandItem().isEmpty()
+                || player.isSpectator())
+            return false;
+        Vector3d up = throwSession.planet().up(throwEye);
+        Vector3d at = new Vector3d(throwEye).fma(-0.3, up), vel = new Vector3d(throwLook).mul(0.3);
+        ClientPlayNetworking.send(new dev.moui.galaxycraft.net.MpPayloads.Throw(indexOf(throwSession), all, (float) at.x, (float) at.y,
+                (float) at.z, (float) vel.x, (float) vel.y, (float) vel.z));
+        return true;
+    }
 
     static DropsClient drops() {
         return drops;
@@ -812,6 +832,9 @@ public final class PlanetClient {
             Vector3d look = frame.dirToGal(LookMath.direction(player.getYRot(), player.getXRot()));
             PlanetSession.Aim aim = screen ? null : session.aim(eye, look);
             Vector3d eyeLocal = session.localOf(eye);
+            throwEye = eyeLocal;
+            throwLook = new Vector3d(look).normalize();
+            throwSession = session;
             // A mob in reach in front of the block hit is what the crosshair is on, as in Minecraft:
             // it takes the clicks, whatever is in hand, and the block behind it is not outlined.
             double block = aim == null ? Double.MAX_VALUE

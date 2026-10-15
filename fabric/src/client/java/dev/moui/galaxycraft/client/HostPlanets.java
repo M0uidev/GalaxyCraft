@@ -106,6 +106,11 @@ final class HostPlanets {
             }
 
             @Override
+            public void throwItem(UUID guest, MpPayloads.Throw t) {
+                Minecraft.getInstance().execute(() -> throwFor(guest, t));
+            }
+
+            @Override
             public void breakBlock(UUID guest, MpPayloads.Break b) {
                 Minecraft.getInstance().execute(() -> breakFor(guest, b));
             }
@@ -142,6 +147,20 @@ final class HostPlanets {
         if (p == null || !ShadowWorld.runs(p)) return;
         if (h.kind() == 0) ShadowWorld.attack(h.entity(), guest, new Vector3d(h.lx(), h.ly(), h.lz()));
         else ShadowWorld.interact(h.entity(), guest);
+    }
+
+    /** A guest's Q: the item leaves its inventory and lies on the planet where it was thrown (if the shadow runs it; else it stays in hand). */
+    private static void throwFor(UUID guest, MpPayloads.Throw t) {
+        Entry e = shared.get(t.planet());
+        VoxelPlanet p = e == null || !e.holders.contains(guest) ? null : e.planet;
+        var server = Minecraft.getInstance().getSingleplayerServer();
+        if (p == null || server == null || !ShadowWorld.runs(p)) return;
+        server.execute(() -> {
+            var sp = server.getPlayerList().getPlayer(guest);
+            if (sp == null) return;
+            net.minecraft.world.item.ItemStack stack = sp.getInventory().removeFromSelected(t.all());
+            if (!stack.isEmpty()) ShadowWorld.throwOnto(p, new Vector3d(t.x(), t.y(), t.z()), new Vector3d(t.vx(), t.vy(), t.vz()), stack);
+        });
     }
 
     /** The planet the host's game is on (its drops are the shared ones), or null. */
