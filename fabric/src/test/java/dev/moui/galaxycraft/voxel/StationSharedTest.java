@@ -49,6 +49,17 @@ class StationSharedTest {
         assertNotEquals(a.gridKey(), b.gridKey());
     }
 
+    @Test void aGuestEditMadeBeforeTheRegrowIsStaleAndOneAfterIsNot() {
+        Station host = StationTest.station("abcd1234");
+        int slot = dev.moui.galaxycraft.net.StationSlots.BASE;
+        int guestKey = host.gridKey(); // the guest holds the first grid
+        int near = host.grid().cellOf(host.grid().ox + 2, 0, 0);
+        host.planet.set(near, StationTest.STONE);
+        assertTrue(host.settle(new int[] {near})); // someone else's block regrows it
+        assertTrue(dev.moui.galaxycraft.net.StationSlots.stale(slot, guestKey, host.gridKey()), "the guest's old numbers are dropped");
+        assertFalse(dev.moui.galaxycraft.net.StationSlots.stale(slot, host.gridKey(), host.gridKey()), "after it fetched the new grid");
+    }
+
     @Test void theBytesAGuestIsSentGiveTheStationBack() throws Exception {
         Station s = Station.create("cafe0001", "Farm", new Quaterniond().rotateXYZ(0.1, 0.2, 0.3), CubeBlocks.INSTANCE,
                 StationTest.STONE, StationTest.CORE);
