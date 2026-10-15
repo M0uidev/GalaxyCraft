@@ -485,6 +485,87 @@ public final class MpPayloads {
         }
     }
 
+    // ---- Ships (the host's ShipStore is the truth; a guest keeps a mirror) ----
+
+    /** Server -> guest, once on entering: every ship and pad (a ShipCodec list). */
+    public record ShipList(byte[] data) implements CustomPacketPayload {
+        public static final Type<ShipList> TYPE = typeOf("mp_ship_list");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ShipList> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByteArray(p.data), b -> new ShipList(b.readByteArray(ShipCodec.MAX_LIST)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Server -> guest: a ship or pad was put down, or parked in a new place (one ShipCodec record). */
+    public record ShipPut(byte[] data) implements CustomPacketPayload {
+        public static final Type<ShipPut> TYPE = typeOf("mp_ship_put");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ShipPut> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeByteArray(p.data), b -> new ShipPut(b.readByteArray(1024)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Server -> guest: this ship is flown by that player (a UUID text), or by nobody (empty). */
+    public record ShipPilot(String id, String who) implements CustomPacketPayload {
+        public static final Type<ShipPilot> TYPE = typeOf("mp_ship_pilot");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ShipPilot> CODEC = CustomPacketPayload.codec(
+                (p, b) -> b.writeUtf(p.id, 96).writeUtf(p.who, 40), b -> new ShipPilot(b.readUtf(96), b.readUtf(40)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Guest -> server: put a ship (0) or a pad (1) down at pos/rot of stage, holding it in hand (0 main, 1 off; the
+     * host reads the modules from that item and uses it up), board a ship (2: id), or leave it (3: id, parked at pos/rot).
+     */
+    public record ShipDo(int kind, int hand, String id, double px, double py, double pz, double qx, double qy, double qz, double qw,
+            String stage) implements CustomPacketPayload {
+        public static final int PLACE_SHIP = 0, PLACE_PAD = 1, BOARD = 2, LEAVE = 3;
+        public static final Type<ShipDo> TYPE = typeOf("mp_ship_do");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ShipDo> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeByte(p.kind).writeByte(p.hand).writeUtf(p.id, 96);
+                    b.writeDouble(p.px).writeDouble(p.py).writeDouble(p.pz);
+                    b.writeDouble(p.qx).writeDouble(p.qy).writeDouble(p.qz).writeDouble(p.qw);
+                    b.writeUtf(p.stage, 96);
+                },
+                b -> new ShipDo(b.readByte(), b.readByte(), b.readUtf(96), b.readDouble(), b.readDouble(), b.readDouble(),
+                        b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readUtf(96)));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Where a flown ship is, ten times a second: the pilot -> server (checked), server -> the others. */
+    public record ShipPose(String id, double px, double py, double pz, double qx, double qy, double qz, double qw)
+            implements CustomPacketPayload {
+        public static final Type<ShipPose> TYPE = typeOf("mp_ship_pose");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ShipPose> CODEC = CustomPacketPayload.codec(
+                (p, b) -> {
+                    b.writeUtf(p.id, 96);
+                    b.writeDouble(p.px).writeDouble(p.py).writeDouble(p.pz);
+                    b.writeDouble(p.qx).writeDouble(p.qy).writeDouble(p.qz).writeDouble(p.qw);
+                },
+                b -> new ShipPose(b.readUtf(96), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(),
+                        b.readDouble(), b.readDouble()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /**
      * Guest -> server: the movement keys held while riding a minecart or boat (bits: 1 forward, 2 back, 4 left, 8 right,
      * 16 sneak = get off). Sent when they change and five times a second while any is held; the host counts a silence
@@ -566,6 +647,7 @@ public final class MpPayloads {
         PayloadTypeRegistry.serverboundPlay().register(Throw.TYPE, Throw.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(StationUpdate.TYPE, StationUpdate.CODEC);
         registerStars();
+        registerShips();
         registerRiding();
     }
 
@@ -574,6 +656,15 @@ public final class MpPayloads {
         PayloadTypeRegistry.clientboundPlay().register(StarPut.TYPE, StarPut.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(StarGone.TYPE, StarGone.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(StarDo.TYPE, StarDo.CODEC);
+    }
+
+    private static void registerShips() {
+        PayloadTypeRegistry.clientboundPlay().register(ShipList.TYPE, ShipList.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ShipPut.TYPE, ShipPut.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ShipPilot.TYPE, ShipPilot.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ShipPose.TYPE, ShipPose.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(ShipDo.TYPE, ShipDo.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(ShipPose.TYPE, ShipPose.CODEC);
     }
 
     private static void registerRiding() {

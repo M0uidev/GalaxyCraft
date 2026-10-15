@@ -460,11 +460,166 @@ public final class MpServer {
         srv.execute(() -> {
             ServerPlayer p = player(guest);
             if (p != null && !p.hasInfiniteMaterials() && dev.moui.galaxycraft.launchstar.LaunchStarBlocks.LAUNCH_STAR != null)
-                p.getInventory().add(new net.minecraft.world.item.ItemStack(dev.moui.galaxycraft.launchstar.LaunchStarBlocks.LAUNCH_STAR));
+                {
+                var star = new net.minecraft.world.item.ItemStack(dev.moui.galaxycraft.launchstar.LaunchStarBlocks.LAUNCH_STAR);
+                if (!p.getInventory().add(star)) p.spawnAtLocation((net.minecraft.server.level.ServerLevel) p.level(), star); // a full inventory drops it at the feet
+            }
+        });
+    }
+
+    // ---- Ships: the host's game owns the ShipStore and who flies what; this is the wire around it ----
+
+    /** The host's game, which owns the ships. Called on the server thread; it must hop to the client thread itself. */
+    public interface ShipSink {
+        /** A guest asks to put a ship or pad down (checked: member, rate, the item, bounded numbers; the item is already used up). */
+        void place(UUID guest, dev.moui.galaxycraft.ship.ShipOps.Request r);
+
+        /** A guest asks to board (kind BOARD) or leaves (kind LEAVE, parked at the pose). */
+        void board(UUID guest, String shipId);
+
+        void leave(UUID guest, String shipId, double[] pos, double[] rot);
+
+        /** The pilot says where the ship is. */
+        void pose(UUID guest, String shipId, double[] pos, double[] rot);
+
+        /** A guest entered the galaxy: it needs every ship and who flies them. */
+        void joined(UUID guest);
+
+        /** A guest left the game: whatever it flew is parked where it was. */
+        void left(UUID guest);
+    }
+
+    private static volatile ShipSink shipSink;
+    private static final Map<UUID, RateLimiter> shipLimits = new HashMap<>(), shipPoseLimits = new HashMap<>();
+
+    public static void setShipSink(ShipSink sink) {
+        shipSink = sink;
+    }
+
+    private static boolean sound(double[] v) {
+        for (double x : v) if (!Double.isFinite(x) || Math.abs(x) > dev.moui.galaxycraft.ship.ShipOps.MAX_COORD) return false;
+        return true;
+    }
+
+    private static void shipDo(ServerPlayer p, MpPayloads.ShipDo d) {
+        UUID id = p.getUUID();
+        ShipSink sink = shipSink;
+        if (sink == null || !members.contains(id)) return;
+        if (!shipLimits.computeIfAbsent(id, k -> new RateLimiter(5, 10)).allow(System.nanoTime())) return;
+        double[] pos = {d.px(), d.py(), d.pz()}, rot = {d.qx(), d.qy(), d.qz(), d.qw()};
+        if (!sound(pos) || !sound(rot) || d.id().length() > 96) return;
+        switch (d.kind()) {
+            case MpPayloads.ShipDo.PLACE_SHIP, MpPayloads.ShipDo.PLACE_PAD -> {
+                if (d.hand() != 0 && d.hand() != 1) return;
+                var stack = p.getItemInHand(d.hand() == 0 ? net.minecraft.world.InteractionHand.MAIN_HAND
+                        : net.minecraft.world.InteractionHand.OFF_HAND);
+                boolean ship = d.kind() == MpPayloads.ShipDo.PLACE_SHIP;
+                dev.moui.galaxycraft.ship.ShipModules mods = null;
+                if (ship) {
+                    mods = dev.moui.galaxycraft.ship.ToadShipItem.modules(stack).orElse(null);
+                    if (mods == null) return;
+                } else if (dev.moui.galaxycraft.ship.ShipBlocks.LANDING_PAD == null
+                        || !stack.is(dev.moui.galaxycraft.ship.ShipBlocks.LANDING_PAD))
+                    return;
+                if (!p.hasInfiniteMaterials()) stack.shrink(1);
+                sink.place(id, new dev.moui.galaxycraft.ship.ShipOps.Request(ship ? dev.moui.galaxycraft.ship.ShipOps.PLACE_SHIP
+                        : dev.moui.galaxycraft.ship.ShipOps.PLACE_PAD, pos, rot, d.stage(), mods));
+            }
+            case MpPayloads.ShipDo.BOARD -> sink.board(id, d.id());
+            case MpPayloads.ShipDo.LEAVE -> sink.leave(id, d.id(), pos, rot);
+            default -> {}
+        }
+    }
+
+    private static void shipPose(ServerPlayer p, MpPayloads.ShipPose m) {
+        UUID id = p.getUUID();
+        ShipSink sink = shipSink;
+        if (sink == null || !members.contains(id) || m.id().length() > 96) return;
+        if (!shipPoseLimits.computeIfAbsent(id, k -> new RateLimiter(20, 40)).allow(System.nanoTime())) return;
+        double[] pos = {m.px(), m.py(), m.pz()}, rot = {m.qx(), m.qy(), m.qz(), m.qw()};
+        if (!sound(pos) || !sound(rot)) return;
+        sink.pose(id, m.id(), pos, rot);
+    }
+
+    /** A ship or pad to every guest that entered (put down, or parked somewhere new), from any thread. */
+    public static void shipPut(dev.moui.galaxycraft.ship.ShipRecord r) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        byte[] data = ShipCodec.encode(r);
+        srv.execute(() -> {
+            for (UUID g : members) {
+                ServerPlayer p = player(g);
+                if (p != null) ServerPlayNetworking.send(p, new MpPayloads.ShipPut(data));
+            }
+        });
+    }
+
+    /** Who flies this ship now (empty: nobody), to every guest that entered, from any thread. */
+    public static void shipPilot(String shipId, String who) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            for (UUID g : members) {
+                ServerPlayer p = player(g);
+                if (p != null) ServerPlayNetworking.send(p, new MpPayloads.ShipPilot(shipId, who));
+            }
+        });
+    }
+
+    /** Who flies this ship, to one guest, from any thread. */
+    public static void shipPilotTo(UUID guest, String shipId, String who) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            ServerPlayer p = members.contains(guest) ? player(guest) : null;
+            if (p != null) ServerPlayNetworking.send(p, new MpPayloads.ShipPilot(shipId, who));
+        });
+    }
+
+    /** A flown ship's pose to every guest but one (the pilot, who made it; null: all), from any thread. */
+    public static void shipPoseOut(String shipId, double[] pos, double[] rot, UUID except) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        var m = new MpPayloads.ShipPose(shipId, pos[0], pos[1], pos[2], rot[0], rot[1], rot[2], rot[3]);
+        srv.execute(() -> {
+            for (UUID g : members) {
+                if (g.equals(except)) continue;
+                ServerPlayer p = player(g);
+                if (p != null) ServerPlayNetworking.send(p, m);
+            }
+        });
+    }
+
+    /** All the ships to one guest, from any thread. */
+    public static void shipList(UUID guest, java.util.List<dev.moui.galaxycraft.ship.ShipRecord> all) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        byte[] data = ShipCodec.encodeList(all);
+        srv.execute(() -> {
+            ServerPlayer p = members.contains(guest) ? player(guest) : null;
+            if (p != null) ServerPlayNetworking.send(p, new MpPayloads.ShipList(data));
+        });
+    }
+
+    /** The ship item (or pad) of a placing the host refused, back to the guest; none in creative. From any thread. */
+    public static void shipGive(UUID guest, dev.moui.galaxycraft.ship.ShipOps.Request r) {
+        MinecraftServer srv = server;
+        if (srv == null) return;
+        srv.execute(() -> {
+            ServerPlayer p = player(guest);
+            if (p == null || p.hasInfiniteMaterials()) return;
+            if (r.kind() == dev.moui.galaxycraft.ship.ShipOps.PLACE_SHIP && r.modules() != null)
+                p.getInventory().add(dev.moui.galaxycraft.ship.ToadShipItem.stack(r.modules()));
+            else if (dev.moui.galaxycraft.ship.ShipBlocks.LANDING_PAD != null)
+                p.getInventory().add(new net.minecraft.world.item.ItemStack(dev.moui.galaxycraft.ship.ShipBlocks.LANDING_PAD));
         });
     }
 
     private static void forget(UUID id) {
+        ShipSink ships = shipSink;
+        if (ships != null && members.contains(id)) ships.left(id);
+        shipLimits.remove(id);
+        shipPoseLimits.remove(id);
         starLimits.remove(id);
         useLimits.remove(id);
         usedUpLimits.remove(id);
@@ -573,6 +728,8 @@ public final class MpServer {
                 GalaxyCraft.LOG.info("[GalaxyCraft mp] {} entered the galaxy", ctx.player().getName().getString());
                 StarSink stars = starSink;
                 if (stars != null) stars.joined(id);
+                ShipSink ships = shipSink;
+                if (ships != null) ships.joined(id);
             }
         });
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.PlanetAsk.TYPE, (payload, ctx) -> ask(ctx.player(), payload));
@@ -593,6 +750,8 @@ public final class MpServer {
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.Steer.TYPE, (payload, ctx) -> steer(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.UsedUp.TYPE, (payload, ctx) -> usedUp(ctx.player(), payload));
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.StarDo.TYPE, (payload, ctx) -> starDo(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.ShipDo.TYPE, (payload, ctx) -> shipDo(ctx.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(MpPayloads.ShipPose.TYPE, (payload, ctx) -> shipPose(ctx.player(), payload));
         ServerTickEvents.END_SERVER_TICK.register(MpServer::pump);
         ServerPlayNetworking.registerGlobalReceiver(MpPayloads.State.TYPE, (payload, ctx) -> {
             if (relay != null) relay.state(ctx.player().getUUID(), payload.data(), System.nanoTime());
@@ -632,6 +791,8 @@ public final class MpServer {
             useLimits.clear();
             usedUpLimits.clear();
             starLimits.clear();
+            shipLimits.clear();
+            shipPoseLimits.clear();
             hub = newHub();
         });
         GalaxyCraft.LOG.info("Multiplayer ready (protocol {})", Protocol.VERSION);

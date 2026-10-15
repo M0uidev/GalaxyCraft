@@ -326,7 +326,10 @@ public final class LaunchStarClient {
         UUID id = player.getUUID();
         server.execute(() -> {
             var sp = server.getPlayerList().getPlayer(id);
-            if (sp != null) sp.getInventory().add(new ItemStack(LaunchStarBlocks.LAUNCH_STAR));
+            if (sp != null) {
+                ItemStack star = new ItemStack(LaunchStarBlocks.LAUNCH_STAR);
+                if (!sp.getInventory().add(star)) sp.spawnAtLocation((net.minecraft.server.level.ServerLevel) sp.level(), star); // a full inventory drops it at the feet
+            }
         });
     }
 

@@ -32,7 +32,7 @@ import net.minecraft.world.entity.player.Player;
  */
 final class MpMobs {
     /** The host sends this often (client ticks). */
-    private static final int EVERY = 4;
+    private static final int EVERY = 2;
     /** A mob not heard of for this long (client ticks) is gone. */
     private static final int STALE = 40;
 
@@ -44,6 +44,7 @@ final class MpMobs {
         float yawFrom, yawTo, headFrom, headTo, pitch, speed;
         int hurt, death;
         long at; // nanoTime the latest snapshot arrived
+        double glide = 0.1e9; // ns to glide over one snapshot: the time between the last ones, smoothed
         int heard;
 
         Remote(int id, Entity entity) {
@@ -81,7 +82,10 @@ final class MpMobs {
         for (Entity e : es.list()) {
             if (e.isRemoved() || e instanceof Player || ShadowToads.idOf(e) != null) continue;
             double[] f = es.map().frame(e.getX(), e.getY(), e.getZ());
-            if (f == null) continue;
+            if (f == null) {
+                if (TRACE && now % 40 == 0) GalaxyCraft.LOG.info("[mp mobs] skipped {}: no frame at {}", e, e.position());
+                continue;
+            }
             float[] frame = new float[12];
             for (int i = 0; i < 12; i++) frame[i] = (float) f[i];
             float yaw = e instanceof LivingEntity l ? l.yBodyRot : e.getYRot();
@@ -90,14 +94,19 @@ final class MpMobs {
             byte[] data;
             try {
                 RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), server.registryAccess());
-                for (SynchedEntityData.DataValue<?> v : e.getEntityData().getNonDefaultValues()) v.write(buf);
+                List<SynchedEntityData.DataValue<?>> changed = e.getEntityData().getNonDefaultValues(); // null when all are default
+                if (changed != null) for (SynchedEntityData.DataValue<?> v : changed) v.write(buf);
                 buf.writeByte(255); // the end, as in Minecraft's own data packet
                 data = new byte[buf.readableBytes()];
                 buf.readBytes(data);
             } catch (RuntimeException ex) {
+                if (TRACE && now % 40 == 0) GalaxyCraft.LOG.info("[mp mobs] skipped {}: data {}", e, ex.toString());
                 continue;
             }
-            if (data.length > MobsCodec.MAX_DATA) continue;
+            if (data.length > MobsCodec.MAX_DATA) {
+                if (TRACE && now % 40 == 0) GalaxyCraft.LOG.info("[mp mobs] skipped {}: data {} bytes", e, data.length);
+                continue;
+            }
             mobs.add(new MobsCodec.Mob(e.getId(), BuiltInRegistries.ENTITY_TYPE.getId(e.getType()), frame, yaw, e.getXRot(), head, speed,
                     e instanceof LivingEntity h ? h.hurtTime : 0, e instanceof LivingEntity h ? h.deathTime : 0, data));
         }
@@ -147,6 +156,7 @@ final class MpMobs {
             r.speed = m.walkSpeed();
             r.hurt = m.hurt();
             r.death = m.death();
+            if (r.at != 0) r.glide = Math.clamp(0.6 * r.glide + 0.4 * 1.1 * (nowNs - r.at), 0.06e9, 0.4e9);
             r.at = nowNs;
             r.heard = tick;
             try {
@@ -195,16 +205,18 @@ final class MpMobs {
 
     // ---- between snapshots (the host sends 5 a second; they glide over one)
 
-    private static final double GLIDE_NS = 0.2e9;
-
     private static float fraction(Remote r) {
-        return (float) Math.min(1, (System.nanoTime() - r.at) / GLIDE_NS);
+        return (float) Math.min(1, (System.nanoTime() - r.at) / r.glide);
     }
+
+    /** How far past the next snapshot a position may carry on at the last speed (1 = stops there). */
+    private static final float EXTRAPOLATE = 1.5f;
 
     static float[] now(Remote r) {
         float t = fraction(r);
+        float ahead = (float) Math.min(EXTRAPOLATE, (System.nanoTime() - r.at) / r.glide); // the position keeps going if the next snapshot is late
         float[] out = new float[12];
-        for (int i = 0; i < 12; i++) out[i] = r.from[i] + (r.to[i] - r.from[i]) * t;
+        for (int i = 0; i < 12; i++) out[i] = r.from[i] + (r.to[i] - r.from[i]) * (i < 3 ? ahead : t);
         return out;
     }
 

@@ -910,6 +910,7 @@ final class EntityClient {
                 ps.translate(offset.x, offset.y, offset.z);
                 capture.begin(new Matrix4d(), out);
                 r.submit(st, ps, capture, camera);
+                capture.nameTag(s.entity().getName(), s.crouching() ? 2.0 : 2.3);
             } catch (RuntimeException ex) {
                 remotesFailed = true;
                 GalaxyCraft.LOG.warn("Not drawing the other players in the game: {}", ex.toString());

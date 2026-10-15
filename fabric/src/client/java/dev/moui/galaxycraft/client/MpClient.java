@@ -91,6 +91,7 @@ final class MpClient {
         MpRide.register();
         MpMobs.register();
         MpStars.register();
+        MpShips.register();
         ClientPlayNetworking.registerGlobalReceiver(dev.moui.galaxycraft.net.MpPayloads.Drops.TYPE,
                 (m, ctx) -> ctx.client().execute(() -> PlanetClient.drops().receive(m)));
         ClientPlayNetworking.registerGlobalReceiver(MpPayloads.Skin.TYPE,

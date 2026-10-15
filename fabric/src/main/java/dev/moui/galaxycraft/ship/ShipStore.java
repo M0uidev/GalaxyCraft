@@ -25,6 +25,19 @@ public final class ShipStore {
         this.file = file;
     }
 
+    /** A store that is never saved: a guest's mirror of the host's ships. */
+    public static ShipStore memory() {
+        return new ShipStore(null);
+    }
+
+    /** Replaces every ship by these (a guest hearing the host's list). Holds are not shared: they start empty. */
+    public void replaceAll(List<ShipRecord> all) {
+        ships.clear();
+        cargo.clear();
+        savedCargo.clear();
+        ships.addAll(all);
+    }
+
     public static ShipStore load(Path file) {
         ShipStore s = new ShipStore(file);
         try {
@@ -82,6 +95,7 @@ public final class ShipStore {
     }
 
     public void save() throws IOException {
+        if (file == null) return;
         JsonArray a = new JsonArray();
         for (ShipRecord r : ships) {
             JsonObject o = new JsonObject();

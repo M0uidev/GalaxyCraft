@@ -328,7 +328,28 @@ final class EntityCapture implements SubmitNodeCollector {
             int skin = owner.fontSkin(page.getKey()), model = skin < 0 ? -1 : owner.customModel(page.getValue().done());
             if (model < 0) continue;
             if (light == FULL_BRIGHT) owner.glowing.add(out.size());
-            out.add(new EntityWire.Piece(model, skin, 0, -1, m));
+            out.add(new EntityWire.Piece(billboard ? model | EntityWire.BILLBOARD : model, skin, 0, -1, m));
+        }
+    }
+
+    /** True while a name tag is recorded: its text pieces face the camera. */
+    private boolean billboard;
+
+    /**
+     * A player's name over their head, facing the camera: white, shadowed, centred, lit as day.
+     * The entity's frame is in blocks with y up, text in its own pixels with y down, so the
+     * scale is positive: the model's own y down is what the camera-facing pieces expect.
+     */
+    void nameTag(Component name, double heightBlocks) {
+        Font font = net.minecraft.client.Minecraft.getInstance().font;
+        PoseStack ps = new PoseStack();
+        ps.translate(0, heightBlocks, 0);
+        ps.scale(0.025f, 0.025f, 0.025f);
+        billboard = true;
+        try {
+            submitText(ps, -font.width(name) / 2f, 0, name.getVisualOrderText(), true, Font.DisplayMode.NORMAL, FULL_BRIGHT, 0xFFFFFFFF, 0, 0);
+        } finally {
+            billboard = false;
         }
     }
 

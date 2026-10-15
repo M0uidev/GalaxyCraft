@@ -320,6 +320,7 @@ public final class ShadowWorld {
         ops.add(level -> {
             Entity target = level.getEntity(entityId);
             ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(player);
+            dev.moui.galaxycraft.GalaxyCraft.LOG.info("[ride] interact id {} -> {} player {} found {}", entityId, target, player, p != null);
             if (target == null || p == null || !target.isAlive()) return;
             if (target instanceof net.minecraft.world.entity.vehicle.minecart.AbstractMinecart
                     || target instanceof net.minecraft.world.entity.vehicle.boat.AbstractBoat) {
@@ -330,8 +331,10 @@ public final class ShadowWorld {
                     for (Run r : runs.values()) if (r.guestProxies.containsKey(player)) mine = r;
                 if (mine != null && (host || runAtZ(target.getZ()) == mine)) {
                     UUID key = host ? HOST : player;
-                    if (book.mount(key, target.getId())) mine.riders.put(key, target);
-                }
+                    boolean ok = book.mount(key, target.getId());
+                    if (ok) mine.riders.put(key, target);
+                    dev.moui.galaxycraft.GalaxyCraft.LOG.info("[ride] mount {} on {} host={} ok={}", key, target, host, ok);
+                } else dev.moui.galaxycraft.GalaxyCraft.LOG.info("[ride] no run for {} host={}", player, host);
                 return;
             }
             p.interactOn(target, InteractionHand.MAIN_HAND, target.position());
@@ -1009,6 +1012,7 @@ public final class ShadowWorld {
         // Gone, in another level, got off (sneak), dead, or the book says the player moved to another vehicle.
         if (riding != null && (riding.isRemoved() || riding.level() != level || s.sneak() || !p.isAlive()
                 || book.vehicleOf(id) != riding.getId())) {
+            dev.moui.galaxycraft.GalaxyCraft.LOG.info("[ride] off {}: removed={} sneak={} alive={} book={} vs {}", id, riding.isRemoved(), s.sneak(), p.isAlive(), book.vehicleOf(id), riding.getId());
             getOff(cur, id);
             riding = null;
         }

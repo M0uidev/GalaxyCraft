@@ -874,6 +874,7 @@ public final class PlanetClient {
             if (target == null && aim != null && pressed(buttons, MOUSE_MIDDLE)) pickBlock(player, session.planet().get(aim.cell()));
             ShadowWorld.steer(new ShadowWorld.Steer(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),
                     key(in, SC_LSHIFT) || key(in, SC_RSHIFT)));
+            if (!MpUse.guest()) sitHost(player, session, frame);
             if (MpUse.guest())
                 MpRide.tick(player, session, frame, dev.moui.galaxycraft.net.MpPayloads.Steer.pack(key(in, SC_W), key(in, SC_S), key(in, SC_A), key(in, SC_D),
                         key(in, SC_LSHIFT) || key(in, SC_RSHIFT)));
@@ -1148,6 +1149,29 @@ public final class PlanetClient {
 
     /** Extra planets removed whose GONE has not reached the game yet. */
     private static final java.util.List<PlanetSession> leaving = new java.util.ArrayList<>();
+
+    /** The player's own body is held on the vehicle's seat. */
+    private static boolean hostPinned;
+
+    /**
+     * Minecraft movement: the player's body is what the game draws, so on a minecart or boat it is put on the
+     * seat the shadow gives each tick (without gravity, as a guest's is by MpRide) and let go when he gets off.
+     */
+    private static void sitHost(LocalPlayer player, PlanetSession session, GravityFrame frame) {
+        ShadowWorld.Seat s = ShadowWorld.seat();
+        if (s == null || s.planet() != session.planet() || frame == null || !GalaxyCraftClient.ownPhysics()) {
+            if (hostPinned) player.setNoGravity(false);
+            hostPinned = false;
+            return;
+        }
+        Vector3d mc = frame.toMc(session.galOf(s.pos()));
+        player.setPos(mc.x, mc.y, mc.z);
+        player.setOldPosAndRot();
+        player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        player.setNoGravity(true);
+        player.resetFallDistance();
+        hostPinned = true;
+    }
 
     /** Mario sat on something last frame (the game is told once when he gets off). */
     private static boolean riding;

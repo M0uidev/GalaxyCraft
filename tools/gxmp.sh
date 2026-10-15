@@ -66,7 +66,11 @@ host() {
 }
 
 guest() {
-  mkdir -p "$GUEST_HOME/shm"
+  mkdir -p "$GUEST_HOME/shm" "$GUEST_HOME/galaxycraft"
+  # The SMG2 models (Kinopio, the Launch Star, the ship) are read from <data>/ship: without this link the guest
+  # draws no Toads and no stars (it has its own data folder).
+  HOST_DATA="${XDG_DATA_HOME:-$HOME/.local/share}/galaxycraft"
+  [ -e "$GUEST_HOME/galaxycraft/ship" ] || ln -sfn "$HOST_DATA/ship" "$GUEST_HOME/galaxycraft/ship"
   say "guest: Amigo, data folder $GUEST_HOME"
   GXC_KEEP_OTHERS=1 GXC_SHM_DIR="$GUEST_HOME/shm" XDG_DATA_HOME="$GUEST_HOME" GXC_OFFLINE_LAN=1 \
     GXC_MC_ARGS="--username Amigo --quickPlayMultiplayer localhost:$PORT" \
