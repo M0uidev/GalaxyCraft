@@ -28,6 +28,8 @@ abstract class MultiPlayerGameModeMixin {
     private void galaxycraft$guestInventoryDrop(int containerId, int slotNum, int buttonNum, ContainerInput input, Player player,
             CallbackInfo ci) {
         if (!(player instanceof LocalPlayer local) || containerId != player.containerMenu.containerId) return;
+        if (input == ContainerInput.THROW || slotNum == net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE)
+            dev.moui.galaxycraft.GalaxyCraft.LOG.info("[mp trace] container click {} slot {} button {}", input, slotNum, buttonNum);
         boolean outside = input == ContainerInput.PICKUP && slotNum == net.minecraft.world.inventory.AbstractContainerMenu.SLOT_CLICKED_OUTSIDE
                 && !player.containerMenu.getCarried().isEmpty();
         boolean key = input == ContainerInput.THROW && slotNum >= 0 && player.containerMenu.getSlot(slotNum).hasItem();

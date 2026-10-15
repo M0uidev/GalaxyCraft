@@ -215,8 +215,15 @@ public final class PlanetClient {
      */
     public static boolean guestThrow(LocalPlayer player, boolean all, int container, int slot) {
         if (!MpUse.guest() || throwSession == null || catalogIndex(throwSession) < 0 || !throwSession.active() || throwEye == null
-                || container < 0 && player.getMainHandItem().isEmpty() || player.isSpectator())
+                || container < 0 && player.getMainHandItem().isEmpty() || player.isSpectator()) {
+            if (container >= 0)
+                dev.moui.galaxycraft.GalaxyCraft.LOG.info("[mp trace] inventory drop left to Minecraft: guest {}, session {}, index {}, active {}, eye {}, spectator {}",
+                        MpUse.guest(), throwSession != null, throwSession == null ? -1 : catalogIndex(throwSession),
+                        throwSession != null && throwSession.active(), throwEye != null, player.isSpectator());
             return false;
+        }
+        if (container >= 0)
+            dev.moui.galaxycraft.GalaxyCraft.LOG.info("[mp trace] inventory drop sent: menu {}, slot {}, all {}", container, slot, all);
         Vector3d up = throwSession.planet().up(throwEye);
         Vector3d at = new Vector3d(throwEye).fma(-0.3, up), vel = new Vector3d(throwLook).mul(0.3);
         ClientPlayNetworking.send(new dev.moui.galaxycraft.net.MpPayloads.Throw(catalogIndex(throwSession), all, (float) at.x, (float) at.y,
