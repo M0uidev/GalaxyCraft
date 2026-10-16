@@ -65,6 +65,10 @@ const SCHEMA = [
     help: 'How far the far view stays fine past the blocks. Higher: finer farther out, more memory.',
   },
   {
+    key: 'warpCore', label: 'Warp Core Tier', type: 'range', min: 0, max: 3, step: 1, default: 3, unit: '',
+    help: 'Highest tier of a system you have not been to that you can warp to (3 = no limit).',
+  },
+  {
     key: 'particles', label: 'Game Particles', type: 'toggle', default: true,
     help: 'Minecraft\'s particles (explosions, broken blocks, hits) drawn in the game.',
   },
