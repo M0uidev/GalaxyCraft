@@ -29,6 +29,13 @@ public final class ToadEntityProbe implements FabricClientGameTest {
         if (!Boolean.getBoolean("galaxycraft.toadEntity")) return;
         try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
             ctx.waitTicks(20);
+            String carried = ctx.computeOnClient(mc -> {
+                StringBuilder sb = new StringBuilder();
+                var inv = mc.player.getInventory();
+                for (int i = 0; i < inv.getContainerSize(); i++) if (!inv.getItem(i).isEmpty()) sb.append(inv.getItem(i)).append(' ');
+                return sb.toString().strip();
+            });
+            check(carried.isEmpty(), "a new world starts with nothing in the inventory (" + carried + ")");
             ctx.runOnClient(mc -> {
                 blocks = McBlocks.create(mc);
                 s = new PlanetSession(1);

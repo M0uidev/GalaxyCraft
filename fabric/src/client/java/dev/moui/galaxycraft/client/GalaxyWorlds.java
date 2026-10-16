@@ -11,7 +11,7 @@ import net.minecraft.world.level.storage.LevelResource;
  * A Minecraft world is a galaxy: entering a single player world opens its galaxy (its planets and
  * where the player stood, in the world's folder), leaving it saves and closes it. A world entered
  * for the first time gets Mario's rules (no fall damage, the world as Minecraft runs it); the
- * hotbar starts empty.
+ * inventory starts empty.
  */
 final class GalaxyWorlds {
     /** A world younger than this (game ticks) was just made. */
@@ -72,8 +72,9 @@ final class GalaxyWorlds {
     }
 
     private static void firstVisit(MinecraftServer server) {
+        // A world just made starts with nothing in the inventory, whatever a data pack or another mod would hand out.
         String[] commands = {"gamerule fall_damage false", "gamerule spawn_mobs true", "gamerule advance_weather true",
-                "gamerule advance_time true"};
+                "gamerule advance_time true", "clear @a"};
         for (String c : commands) run(server, c);
     }
 
