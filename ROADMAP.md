@@ -15,7 +15,7 @@ customizable, destructible planets.
   the Inbox, and finished work moves to Done.
 - Details live in the specs (`docs/superpowers/specs/`); this file only links to them.
 
-Last updated: 2026-10-16 (multiplayer MP-3/MP-4 merged into master after a good two-game playtest)
+Last updated: 2026-10-19 (v0.1.5 published)
 
 ---
 
@@ -28,7 +28,7 @@ Last updated: 2026-10-16 (multiplayer MP-3/MP-4 merged into master after a good 
 | Panorama screenshots, and F2 that works | now | User 2026-10-08: F2 saved a blank blue picture (Dolphin draws the game): now Dolphin takes it. Ctrl+F2 or /panorama takes six 90° shots from the eyes (panorama_0..5 + one equirectangular picture); tools/set_panorama.py makes a capture the title screen's background. Branch feat/panorama, awaiting playtest. |
 | Soundtrack player and space/planet music | now | User 2026-10-09: a music player based on Soundtrack Player; music follows space or planet with a crossfade, a dwell time and a cooldown (all settings, can be turned off); Music Source: both games, SMG2 only, Minecraft only or random; a Station Core option to pick a station's music. Built on `feat/soundtrack` (engine, player screen, settings, Minecraft songs working; probe passes), awaiting your listening test. Your sorting (18 space, 15 planet songs from the 96 on the disc) ships as the default list; the launcher copies the songs from the player's own disc once into a shared folder at install and PLAY. [Spec](docs/superpowers/specs/2026-10-09-galaxycraft-soundtrack-design.md) |
 | Video quality while playing, cleaner menus | now | User 2026-10-11: changing the resolution, anti-aliasing and filtering in Super Minecraft Galaxy's settings applies at once (no restart). The pause menu loses the web, friends and reporting icons, the P key, Online and Telemetry; Minecraft's Video settings keeps only what matters here. Branch `feat/live-quality`, awaiting playtest. |
-| First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells; v0.1.3 pushed 2026-10-08 (fe6276a) with Export report and no empty Dolphin window, tested on Windows; v0.1.4 published 2026-10-09 (1.7 terrain, far planets, swimming, soundtrack, station polish), not yet checked on Windows (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
+| First release (Linux and Windows) | now | v0.1.1 published 2026-10-07; v0.1.2 pushed 2026-10-08 (c3932ba) with flat space stations, sneaking at edges and gravity shells; v0.1.3 pushed 2026-10-08 (fe6276a) with Export report and no empty Dolphin window, tested on Windows; v0.1.4 published 2026-10-09 (1.7 terrain, far planets, swimming, soundtrack, station polish), not yet checked on Windows; v0.1.5 published 2026-10-19 (8289dc8: multiplayer with friends, the Starshroom ship, Toads, Launch Stars, the 3D map, planet progression), not yet checked on Windows either (GitHub Release, launcher for Linux and Windows, the game for both). Next: a new player's INSTALL and PLAY from it on Windows, with the Minecraft Launcher. |
 
 ## Next
 
